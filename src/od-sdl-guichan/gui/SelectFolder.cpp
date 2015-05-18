@@ -27,7 +27,7 @@ static gcn::Button* cmdCancel;
 static gcn::ListBox* lstFolders;
 static gcn::ScrollArea* scrAreaFolders;
 static gcn::TextField *txtCurrent;
-
+std::string VolName;
 
 class ButtonActionListener : public gcn::ActionListener
 {
@@ -107,6 +107,7 @@ class ListBoxActionListener : public gcn::ActionListener
       strcpy(foldername, workingDir);
       strcat(foldername, "/");
       strcat(foldername, dirList.getElementAt(selected_item).c_str());
+      VolName=dirList.getElementAt(selected_item).c_str();
       checkfoldername(foldername);
     }
 };

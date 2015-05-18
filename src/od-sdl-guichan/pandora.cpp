@@ -35,6 +35,10 @@
 #include <SDL.h>
 #include "gp2x.h"
 
+#ifdef ANDROIDSDL
+#include <android/log.h>
+#endif
+
 extern void signal_segv(int signum, siginfo_t* info, void*ptr);
 
 extern int doStylusRightClick;
@@ -209,33 +213,33 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.autofire_button=%d\n", p->pandora_autofireButton1);
   cfgfile_write (f, "pandora.jump=%d\n", p->pandora_jump);
 #ifdef ANDROIDSDL
-  cfgfile_write (f, "android.onScreen=%d\n", p->onScreen);
-  cfgfile_write (f, "android.onScreen_textinput=%d\n", p->onScreen_textinput);
-  cfgfile_write (f, "android.onScreen_dpad=%d\n", p->onScreen_dpad);
-  cfgfile_write (f, "android.onScreen_button1=%d\n", p->onScreen_button1);
-  cfgfile_write (f, "android.onScreen_button2=%d\n", p->onScreen_button2);
-  cfgfile_write (f, "android.onScreen_button3=%d\n", p->onScreen_button3);
-  cfgfile_write (f, "android.onScreen_button4=%d\n", p->onScreen_button4);
-  cfgfile_write (f, "android.onScreen_button5=%d\n", p->onScreen_button5);
-  cfgfile_write (f, "android.onScreen_button6=%d\n", p->onScreen_button6);
-  cfgfile_write (f, "android.custom_position=%d\n", p->custom_position);
-  cfgfile_write (f, "android.pos_x_textinput=%d\n", p->pos_x_textinput);
-  cfgfile_write (f, "android.pos_y_textinput=%d\n", p->pos_y_textinput);
-  cfgfile_write (f, "android.pos_x_dpad=%d\n", p->pos_x_dpad);
-  cfgfile_write (f, "android.pos_y_dpad=%d\n", p->pos_y_dpad);
-  cfgfile_write (f, "android.pos_x_button1=%d\n", p->pos_x_button1);
-  cfgfile_write (f, "android.pos_y_button1=%d\n", p->pos_y_button1);
-  cfgfile_write (f, "android.pos_x_button2=%d\n", p->pos_x_button2);
-  cfgfile_write (f, "android.pos_y_button2=%d\n", p->pos_y_button2);
-  cfgfile_write (f, "android.pos_x_button3=%d\n", p->pos_x_button3);
-  cfgfile_write (f, "android.pos_y_button3=%d\n", p->pos_y_button3);
-  cfgfile_write (f, "android.pos_x_button4=%d\n", p->pos_x_button4);
-  cfgfile_write (f, "android.pos_y_button4=%d\n", p->pos_y_button4);
-  cfgfile_write (f, "android.pos_x_button5=%d\n", p->pos_x_button5);
-  cfgfile_write (f, "android.pos_y_button5=%d\n", p->pos_y_button5);
-  cfgfile_write (f, "android.pos_x_button6=%d\n", p->pos_x_button6);
-  cfgfile_write (f, "android.pos_y_button6=%d\n", p->pos_y_button6);
-  cfgfile_write (f, "android.FloatingJoystick=%d\n", p->FloatingJoystick);
+  cfgfile_write (f, "pandora.onscreen=%d\n", p->onScreen);
+  cfgfile_write (f, "pandora.onscreen_textinput=%d\n", p->onScreen_textinput);
+  cfgfile_write (f, "pandora.onscreen_dpad=%d\n", p->onScreen_dpad);
+  cfgfile_write (f, "pandora.onscreen_button1=%d\n", p->onScreen_button1);
+  cfgfile_write (f, "pandora.onscreen_button2=%d\n", p->onScreen_button2);
+  cfgfile_write (f, "pandora.onscreen_button3=%d\n", p->onScreen_button3);
+  cfgfile_write (f, "pandora.onscreen_button4=%d\n", p->onScreen_button4);
+  cfgfile_write (f, "pandora.onscreen_button5=%d\n", p->onScreen_button5);
+  cfgfile_write (f, "pandora.onscreen_button6=%d\n", p->onScreen_button6);
+  cfgfile_write (f, "pandora.custom_position=%d\n", p->custom_position);
+  cfgfile_write (f, "pandora.pos_x_textinput=%d\n", p->pos_x_textinput);
+  cfgfile_write (f, "pandora.pos_y_textinput=%d\n", p->pos_y_textinput);
+  cfgfile_write (f, "pandora.pos_x_dpad=%d\n", p->pos_x_dpad);
+  cfgfile_write (f, "pandora.pos_y_dpad=%d\n", p->pos_y_dpad);
+  cfgfile_write (f, "pandora.pos_x_button1=%d\n", p->pos_x_button1);
+  cfgfile_write (f, "pandora.pos_y_button1=%d\n", p->pos_y_button1);
+  cfgfile_write (f, "pandora.pos_x_button2=%d\n", p->pos_x_button2);
+  cfgfile_write (f, "pandora.pos_y_button2=%d\n", p->pos_y_button2);
+  cfgfile_write (f, "pandora.pos_x_button3=%d\n", p->pos_x_button3);
+  cfgfile_write (f, "pandora.pos_y_button3=%d\n", p->pos_y_button3);
+  cfgfile_write (f, "pandora.pos_x_button4=%d\n", p->pos_x_button4);
+  cfgfile_write (f, "pandora.pos_y_button4=%d\n", p->pos_y_button4);
+  cfgfile_write (f, "pandora.pos_x_button5=%d\n", p->pos_x_button5);
+  cfgfile_write (f, "pandora.pos_y_button5=%d\n", p->pos_y_button5);
+  cfgfile_write (f, "pandora.pos_x_button6=%d\n", p->pos_x_button6);
+  cfgfile_write (f, "pandora.pos_y_button6=%d\n", p->pos_y_button6);
+  cfgfile_write (f, "pandora.floating_joystick=%d\n", p->FloatingJoystick);
 #endif
 }
 
@@ -266,16 +270,15 @@ int target_parse_option (struct uae_prefs *p, char *option, char *value)
     || cfgfile_intval (option, value, "button2", &p->pandora_button2, 1)
     || cfgfile_intval (option, value, "autofire_button", &p->pandora_autofireButton1, 1)
     || cfgfile_intval (option, value, "jump", &p->pandora_jump, 1)
-#ifdef ANDROIDSDL
-    || cfgfile_intval (option, value, "onScreen", &p->onScreen, 1)
-    || cfgfile_intval (option, value, "onScreen_textinput", &p->onScreen_textinput, 1)
-    || cfgfile_intval (option, value, "onScreen_dpad", &p->onScreen_dpad, 1)
-    || cfgfile_intval (option, value, "onScreen_button1", &p->onScreen_button1, 1)
-    || cfgfile_intval (option, value, "onScreen_button2", &p->onScreen_button2, 1)
-    || cfgfile_intval (option, value, "onScreen_button3", &p->onScreen_button3, 1)
-    || cfgfile_intval (option, value, "onScreen_button4", &p->onScreen_button4, 1)
-    || cfgfile_intval (option, value, "onScreen_button5", &p->onScreen_button5, 1)
-    || cfgfile_intval (option, value, "onScreen_button6", &p->onScreen_button6, 1)
+    || cfgfile_intval (option, value, "onscreen", &p->onScreen, 1)
+    || cfgfile_intval (option, value, "onscreen_textinput", &p->onScreen_textinput, 1)
+    || cfgfile_intval (option, value, "onscreen_dpad", &p->onScreen_dpad, 1)
+    || cfgfile_intval (option, value, "onscreen_button1", &p->onScreen_button1, 1)
+    || cfgfile_intval (option, value, "onscreen_button2", &p->onScreen_button2, 1)
+    || cfgfile_intval (option, value, "onscreen_button3", &p->onScreen_button3, 1)
+    || cfgfile_intval (option, value, "onscreen_button4", &p->onScreen_button4, 1)
+    || cfgfile_intval (option, value, "onscreen_button5", &p->onScreen_button5, 1)
+    || cfgfile_intval (option, value, "onscreen_button6", &p->onScreen_button6, 1)
     || cfgfile_intval (option, value, "custom_position", &p->custom_position, 1)
     || cfgfile_intval (option, value, "pos_x_textinput", &p->pos_x_textinput, 1)
     || cfgfile_intval (option, value, "pos_y_textinput", &p->pos_y_textinput, 1)
@@ -293,8 +296,7 @@ int target_parse_option (struct uae_prefs *p, char *option, char *value)
     || cfgfile_intval (option, value, "pos_y_button5", &p->pos_y_button5, 1)
     || cfgfile_intval (option, value, "pos_x_button6", &p->pos_x_button6, 1)
     || cfgfile_intval (option, value, "pos_y_button6", &p->pos_y_button6, 1)
-    || cfgfile_intval (option, value, "FloatingJoystick", &p->FloatingJoystick, 1)
-#endif
+    || cfgfile_intval (option, value, "floating_joystick", &p->FloatingJoystick, 1)
     );
 }
 

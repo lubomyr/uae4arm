@@ -402,6 +402,34 @@ void inputdevice_copyconfig (struct uae_prefs *src, struct uae_prefs *dst)
   dst->pandora_button2 = src->pandora_button2;
   dst->pandora_autofireButton1 = src->pandora_autofireButton1;
   dst->pandora_jump = src->pandora_jump;
-
+#ifdef ANDROIDSDL
+  dst->onScreen = src->onScreen;
+  dst->onScreen_textinput = src->onScreen_textinput;
+  dst->onScreen_dpad = src->onScreen_dpad;
+  dst->onScreen_button1 = src->onScreen_button1;
+  dst->onScreen_button2 = src->onScreen_button2;
+  dst->onScreen_button3 = src->onScreen_button3;
+  dst->onScreen_button4 = src->onScreen_button4;
+  dst->onScreen_button5 = src->onScreen_button5;
+  dst->onScreen_button6 = src->onScreen_button6;
+  dst->custom_position = src->custom_position;
+  dst->pos_x_textinput = src->pos_x_textinput;
+  dst->pos_y_textinput = src->pos_y_textinput;
+  dst->pos_x_dpad = src->pos_x_dpad;
+  dst->pos_y_dpad = src->pos_y_dpad;
+  dst->pos_x_button1 = src->pos_x_button1;
+  dst->pos_y_button1 = src->pos_y_button1;
+  dst->pos_x_button2 = src->pos_x_button2;
+  dst->pos_y_button2 = src->pos_y_button2;
+  dst->pos_x_button3 = src->pos_x_button3;
+  dst->pos_y_button3 = src->pos_y_button3;
+  dst->pos_x_button4 = src->pos_x_button4;
+  dst->pos_y_button4 = src->pos_y_button4;
+  dst->pos_x_button5 = src->pos_x_button5;
+  dst->pos_y_button5 = src->pos_y_button5;
+  dst->pos_x_button6 = src->pos_x_button6;
+  dst->pos_y_button6 = src->pos_y_button6;
+  dst->FloatingJoystick = src->FloatingJoystick;
+#endif
   inputdevice_updateconfig (dst);
 }

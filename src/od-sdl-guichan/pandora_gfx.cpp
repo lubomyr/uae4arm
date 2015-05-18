@@ -35,10 +35,15 @@ extern int stylusClickOverride;
 SDL_Surface *prSDLScreen = NULL;
 
 /* Possible screen modes (x and y resolutions) */
+#ifdef ANDROID
+#define MAX_SCREEN_MODES 8
+static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 800, 1024, 1024, 1280, 1280 };
+static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480, 600, 768,  600,   720,  800 };
+#else
 #define MAX_SCREEN_MODES 6
 static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 1024, 1152, 1280 };
 static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480,  768,  864,  960 };
-
+#endif
 static int red_bits, green_bits, blue_bits;
 static int red_shift, green_shift, blue_shift;
 
@@ -147,7 +152,7 @@ static void CalcPandoraWidth(struct uae_prefs *p)
 void update_onscreen()
 {
 	SDL_ANDROID_SetScreenKeyboardFloatingJoystick(currprefs.FloatingJoystick);
-	if (currprefs.onScreen==0)
+	if (changed_prefs.onScreen==0)
 	{
 	  SDL_ANDROID_SetScreenKeyboardShown(0);
 	}
@@ -196,14 +201,14 @@ void update_onscreen()
 	    pos_button6.w=pos_button6.h;
 	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5, &pos_button6);
 
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_TEXT, currprefs.onScreen_textinput);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_DPAD, currprefs.onScreen_dpad);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_0, currprefs.onScreen_button1);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_1, currprefs.onScreen_button2);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_2, currprefs.onScreen_button3);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_3, currprefs.onScreen_button4);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_4, currprefs.onScreen_button5);
-	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5, currprefs.onScreen_button6);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_TEXT, changed_prefs.onScreen_textinput);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_DPAD, changed_prefs.onScreen_dpad);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_0, changed_prefs.onScreen_button1);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_1, changed_prefs.onScreen_button2);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_2, changed_prefs.onScreen_button3);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_3, changed_prefs.onScreen_button4);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_4, changed_prefs.onScreen_button5);
+	    SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5, changed_prefs.onScreen_button6);
 	}
 }
 #endif

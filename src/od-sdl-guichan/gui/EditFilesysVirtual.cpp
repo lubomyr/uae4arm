@@ -40,6 +40,7 @@ static gcn::UaeCheckBox* chkReadWrite;
 static gcn::Label *lblBootPri;
 static gcn::TextField *txtBootPri;
 
+extern std::string VolName;
 
 class FilesysVirtualActionListener : public gcn::ActionListener
 {
@@ -52,7 +53,10 @@ class FilesysVirtualActionListener : public gcn::ActionListener
         strncpy(tmp, txtPath->getText().c_str(), MAX_PATH);
         wndEditFilesysVirtual->releaseModalFocus();
         if(SelectFolder("Select folder", tmp))
+	{
           txtPath->setText(tmp);
+	  txtVolume->setText(VolName);
+	}
         wndEditFilesysVirtual->requestModalFocus();
         cmdPath->requestFocus();
       }
@@ -63,7 +67,7 @@ class FilesysVirtualActionListener : public gcn::ActionListener
           if(txtDevice->getText().length() <= 0)
           {
             // ToDo: Message to user
-            return;
+//            return;
           }
           if(txtVolume->getText().length() <= 0)
           {

@@ -71,7 +71,7 @@ class FilesysHardfileActionListener : public gcn::ActionListener
           if(txtDevice->getText().length() <= 0)
           {
             // ToDo: Message to user
-            return;
+ //           return;
           }
           dialogResult = true;
         }
