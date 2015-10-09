@@ -13,13 +13,16 @@
 #include <asm/sigcontext.h>
 #include <signal.h>
 #include <dlfcn.h>
-
+#ifndef ANDROID
+#include <execinfo.h>
+#endif
 #include "sysconfig.h"
 #include "sysdeps.h"
 #include "config.h"
 #include "autoconf.h"
 #include "uae.h"
 #include "options.h"
+#include "threaddep/thread.h"
 #include "gui.h"
 #include "events.h"
 #include "memory-uae.h"
@@ -32,12 +35,11 @@
 #include "joystick.h"
 #include "disk.h"
 #include "savestate.h"
+#include "newcpu.h"
+#include "traps.h"
+#include "native2amiga.h"
 #include <SDL.h>
 #include "gp2x.h"
-
-#ifdef ANDROIDSDL
-#include <android/log.h>
-#endif
 
 extern void signal_segv(int signum, siginfo_t* info, void*ptr);
 
@@ -74,6 +76,52 @@ static int lastCpuSpeed = 600;
 
 
 extern "C" int main( int argc, char *argv[] );
+
+
+void reinit_amiga(void)
+{
+  write_log("reinit_amiga() called\n");
+  DISK_free ();
+  memory_cleanup ();
+#ifdef FILESYS
+  filesys_cleanup ();
+#endif
+#ifdef AUTOCONFIG
+  expansion_cleanup ();
+#endif
+  
+  currprefs = changed_prefs;
+  /* force sound settings change */
+  currprefs.produce_sound = 0;
+
+  framecnt = 1;
+#ifdef AUTOCONFIG
+  rtarea_setup ();
+#endif
+#ifdef FILESYS
+  rtarea_init ();
+  hardfile_install();
+#endif
+
+#ifdef AUTOCONFIG
+  expansion_init ();
+#endif
+#ifdef FILESYS
+  filesys_install (); 
+#endif
+  memory_init ();
+  memory_reset ();
+
+#ifdef AUTOCONFIG
+  emulib_install ();
+  native2amiga_install ();
+#endif
+
+  custom_init (); /* Must come after memory_init */
+  DISK_init ();
+  
+  init_m68k();
+}
 
 
 void sleep_millis (int ms)
@@ -123,12 +171,27 @@ void logging_cleanup( void )
 }
 
 
+uae_u8 *target_load_keyfile (struct uae_prefs *p, char *path, int *sizep, char *name)
+{
+  return 0;
+}
+
+
+void target_quit (void)
+{
+}
+
+
+void target_fixup_options (struct uae_prefs *p)
+{
+}
+
+
 void target_default_options (struct uae_prefs *p, int type)
 {
   p->pandora_horizontal_offset = 0;
   p->pandora_vertical_offset = 0;
   p->pandora_cpu_speed = 600;
-  p->pandora_partial_blits = 0;
 
   p->pandora_joyConf = 0;
   p->pandora_joyPort = 0;
@@ -188,7 +251,6 @@ void target_default_options (struct uae_prefs *p, int type)
 
 void target_save_options (struct zfile *f, struct uae_prefs *p)
 {
-  cfgfile_write (f, "pandora.blitter_in_partial_mode=%d\n", p->pandora_partial_blits);
   cfgfile_write (f, "pandora.cpu_speed=%d\n", p->pandora_cpu_speed);
   cfgfile_write (f, "pandora.joy_conf=%d\n", p->pandora_joyConf);
   cfgfile_write (f, "pandora.joy_port=%d\n", p->pandora_joyPort);
@@ -246,8 +308,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
 
 int target_parse_option (struct uae_prefs *p, char *option, char *value)
 {
-  int result = (cfgfile_intval (option, value, "blitter_in_partial_mode", &p->pandora_partial_blits, 1)
-    || cfgfile_intval (option, value, "cpu_speed", &p->pandora_cpu_speed, 1)
+  int result = (cfgfile_intval (option, value, "cpu_speed", &p->pandora_cpu_speed, 1)
     || cfgfile_intval (option, value, "joy_conf", &p->pandora_joyConf, 1)
     || cfgfile_intval (option, value, "joy_port", &p->pandora_joyPort, 1)
     || cfgfile_intval (option, value, "stylus_offset", &p->pandora_stylusOffset, 1)
@@ -301,6 +362,13 @@ int target_parse_option (struct uae_prefs *p, char *option, char *value)
 }
 
 
+void fetch_saveimagepath (char *out, int size, int dir)
+{
+  strncpy(out, start_path_data, size);
+  strncat(out, "/savestates/", size);
+}
+
+
 void fetch_configurationpath (char *out, int size)
 {
   strncpy(out, config_path, size);
@@ -341,11 +409,14 @@ void fetch_screenshotpath(char *out, int size)
 
 int target_cfgfile_load (struct uae_prefs *p, char *filename, int type, int isdefault)
 {
+  int i;
   int result = 0;
 
-  while(nr_units(p->mountinfo) > 0)
-    kill_filesys_unit(p->mountinfo, 0);
-
+  filesys_prepare_reset();
+  while(p->mountitems > 0)
+    kill_filesys_unitconfig(p, 0);
+  discard_prefs(p, type);
+  
 	char *ptr = strstr(filename, ".uae");
   if(ptr > 0)
   {
@@ -354,7 +425,7 @@ int target_cfgfile_load (struct uae_prefs *p, char *filename, int type, int isde
   }
   if(result)
   {
-  	set_joyConf();
+  	set_joyConf(p);
     extractFileName(filename, last_loaded_config);
   }
   else 
@@ -362,8 +433,11 @@ int target_cfgfile_load (struct uae_prefs *p, char *filename, int type, int isde
 
   if(result)
   {
-    for(int i=0; i < p->nr_floppies; ++i)
+    for(i=0; i < p->nr_floppies; ++i)
     {
+      if(!DISK_validate_filename(p->df[i], 0, NULL, NULL))
+        p->df[i][0] = 0;
+      disk_insert(i, p->df[i]);
       if(strlen(p->df[i]) > 0)
         AddFileToDiskList(p->df[i], 1);
     }
@@ -662,6 +736,7 @@ int main (int argc, char *argv[])
   }
   
   alloc_AmigaMem();
+  RescanROMs();
   real_main (argc, argv);
   free_AmigaMem();
   

@@ -19,6 +19,9 @@
 #include "target.h"
 #include "gui_handling.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 
 #define DIALOG_WIDTH 520
 #define DIALOG_HEIGHT 202
@@ -37,6 +40,7 @@ static gcn::Label *lblPath;
 static gcn::TextField *txtPath;
 static gcn::Button* cmdPath;
 static gcn::UaeCheckBox* chkReadWrite;
+static gcn::UaeCheckBox* chkAutoboot;
 static gcn::Label *lblBootPri;
 static gcn::TextField *txtBootPri;
 
@@ -66,12 +70,12 @@ class FilesysVirtualActionListener : public gcn::ActionListener
         {
           if(txtDevice->getText().length() <= 0)
           {
-            // ToDo: Message to user
+            wndEditFilesysVirtual->setCaption("Please enter a device name.");
 //            return;
           }
           if(txtVolume->getText().length() <= 0)
           {
-            // ToDo: Message to user
+            wndEditFilesysVirtual->setCaption("Please enter a volume name.");
             return;
           }
           dialogResult = true;
@@ -85,8 +89,8 @@ static FilesysVirtualActionListener* filesysVirtualActionListener;
 
 static void InitEditFilesysVirtual(void)
 {
-	wndEditFilesysVirtual = new gcn::Window("Edit");
-	wndEditFilesysVirtual->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
+  wndEditFilesysVirtual = new gcn::Window("Edit");
+  wndEditFilesysVirtual->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
   wndEditFilesysVirtual->setPosition((GUI_WIDTH - DIALOG_WIDTH) / 2, (GUI_HEIGHT - DIALOG_HEIGHT) / 2);
   wndEditFilesysVirtual->setBaseColor(gui_baseCol + 0x202020);
   wndEditFilesysVirtual->setCaption("Volume settings");
@@ -94,16 +98,16 @@ static void InitEditFilesysVirtual(void)
   
   filesysVirtualActionListener = new FilesysVirtualActionListener();
   
-	cmdOK = new gcn::Button("Ok");
-	cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-	cmdOK->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdOK = new gcn::Button("Ok");
+  cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+  cmdOK->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdOK->setBaseColor(gui_baseCol + 0x202020);
   cmdOK->setId("virtOK");
   cmdOK->addActionListener(filesysVirtualActionListener);
   
-	cmdCancel = new gcn::Button("Cancel");
-	cmdCancel->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-	cmdCancel->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdCancel = new gcn::Button("Cancel");
+  cmdCancel->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+  cmdCancel->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdCancel->setBaseColor(gui_baseCol + 0x202020);
   cmdCancel->setId("virtCancel");
   cmdCancel->addActionListener(filesysVirtualActionListener);
@@ -137,6 +141,9 @@ static void InitEditFilesysVirtual(void)
 	chkReadWrite = new gcn::UaeCheckBox("Read/Write", true);
   chkReadWrite->setId("virtRW");
 
+	chkAutoboot = new gcn::UaeCheckBox("Bootable", true);
+  chkAutoboot->setId("virtAutoboot");
+
   lblBootPri = new gcn::Label("Boot priority:");
   lblBootPri->setSize(84, LABEL_HEIGHT);
   lblBootPri->setAlignment(gcn::Graphics::RIGHT);
@@ -147,12 +154,13 @@ static void InitEditFilesysVirtual(void)
   int posY = DISTANCE_BORDER;
   wndEditFilesysVirtual->add(lblDevice, DISTANCE_BORDER, posY);
   wndEditFilesysVirtual->add(txtDevice, DISTANCE_BORDER + lblDevice->getWidth() + 8, posY);
-  wndEditFilesysVirtual->add(chkReadWrite, 260, posY);
+  wndEditFilesysVirtual->add(chkReadWrite, 250, posY + 1);
   posY += txtDevice->getHeight() + DISTANCE_NEXT_Y;
   wndEditFilesysVirtual->add(lblVolume, DISTANCE_BORDER, posY);
   wndEditFilesysVirtual->add(txtVolume, DISTANCE_BORDER + lblDevice->getWidth() + 8, posY);
-  wndEditFilesysVirtual->add(lblBootPri, 260, posY);
-  wndEditFilesysVirtual->add(txtBootPri, 260 + lblBootPri->getWidth() + 8, posY);
+  wndEditFilesysVirtual->add(chkAutoboot, 250, posY + 1);
+  wndEditFilesysVirtual->add(lblBootPri, 374, posY);
+  wndEditFilesysVirtual->add(txtBootPri, 374 + lblBootPri->getWidth() + 8, posY);
   posY += txtDevice->getHeight() + DISTANCE_NEXT_Y;
   wndEditFilesysVirtual->add(lblPath, DISTANCE_BORDER, posY);
   wndEditFilesysVirtual->add(txtPath, DISTANCE_BORDER + lblDevice->getWidth() + 8, posY);
@@ -182,6 +190,7 @@ static void ExitEditFilesysVirtual(void)
   delete txtPath;
   delete cmdPath;
   delete chkReadWrite;
+  delete chkAutoboot;
   delete lblBootPri;
   delete txtBootPri;
   
@@ -240,7 +249,7 @@ static void EditFilesysVirtualLoop(void)
       //-------------------------------------------------
       // Send event to guichan-controls
       //-------------------------------------------------
-#ifdef ANDROID
+#ifdef ANDROIDSDL
             /*
              * Now that we are done polling and using SDL events we pass
              * the leftovers to the SDLInput object to later be handled by
@@ -317,10 +326,10 @@ static void EditFilesysVirtualLoop(void)
 
 bool EditFilesysVirtual(int unit_no)
 {
-  char *volname, *devname, *rootdir, *filesys;
-  int secspertrack, surfaces, cylinders, reserved, blocksize, readonly, bootpri;
-  uae_u64 size;
-  const char *failure;
+  struct mountedinfo mi;
+  struct uaedev_config_info *uci;
+  std::string strdevname, strvolname, strroot;
+  char tmp[32];
   
   dialogResult = false;
   dialogFinished = false;
@@ -329,24 +338,27 @@ bool EditFilesysVirtual(int unit_no)
 
   if(unit_no >= 0)
   {
-    char tmp[32];
+    uci = &changed_prefs.mountconfig[unit_no];
+    get_filesys_unitconfig(&changed_prefs, unit_no, &mi);
 
-    failure = get_filesys_unit(currprefs.mountinfo, unit_no, 
-      &devname, &volname, &rootdir, &readonly, &secspertrack, &surfaces, &reserved, 
-      &cylinders, &size, &blocksize, &bootpri, &filesys, 0);
-
-    txtDevice->setText(devname);
-    txtVolume->setText(volname);
-    txtPath->setText(rootdir);
-    chkReadWrite->setSelected(!readonly);
-    snprintf(tmp, 32, "%d", bootpri);
+    strdevname.assign(uci->devname);
+    txtDevice->setText(strdevname);
+    strvolname.assign(uci->volname);
+    txtVolume->setText(strvolname);
+    strroot.assign(uci->rootdir);
+    txtPath->setText(strroot);
+    chkReadWrite->setSelected(!uci->readonly);
+    chkAutoboot->setSelected(uci->bootpri != -128);
+    snprintf(tmp, 32, "%d", uci->bootpri >= -127 ? uci->bootpri : -127);
     txtBootPri->setText(tmp);
   }
   else
   {
-    txtDevice->setText("");
-    txtVolume->setText("");
-    txtPath->setText(currentDir);
+    CreateDefaultDevicename(tmp);
+    txtDevice->setText(tmp);
+    txtVolume->setText(tmp);
+    strroot.assign(currentDir);
+    txtPath->setText(strroot);
     chkReadWrite->setSelected(true);
     txtBootPri->setText("0");
   }
@@ -356,13 +368,13 @@ bool EditFilesysVirtual(int unit_no)
   
   if(dialogResult)
   {
-    if(unit_no >= 0)
-      kill_filesys_unit(currprefs.mountinfo, unit_no);
-    else
-      extractPath((char *) txtPath->getText().c_str(), currentDir);
-    failure = add_filesys_unit(currprefs.mountinfo, (char *) txtDevice->getText().c_str(), 
+    int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
+    extractPath((char *) txtPath->getText().c_str(), currentDir);
+    uci = add_filesys_config(&changed_prefs, unit_no, (char *) txtDevice->getText().c_str(), 
       (char *) txtVolume->getText().c_str(), (char *) txtPath->getText().c_str(), 
-      !chkReadWrite->isSelected(), 0, 0, 0, 0, atoi(txtBootPri->getText().c_str()), 0, 0);
+      !chkReadWrite->isSelected(), 0, 0, 0, 0, bp, 0, 0, 0);
+    if (uci)
+    	filesys_media_change (uci->rootdir, 1, uci);
   }
 
   return dialogResult;

@@ -37,7 +37,9 @@
 #include <asm/sigcontext.h>
 #include <signal.h>
 #include <dlfcn.h>
-
+#ifndef ANDROID
+#include <execinfo.h>
+#endif
 #include <SDL.h>
 
 #define DEBUG 0

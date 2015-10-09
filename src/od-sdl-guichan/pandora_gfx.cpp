@@ -15,10 +15,12 @@
 #include <png.h>
 #include <SDL.h>
 #include <SDL_image.h>
+#ifndef ANDROID
+#include <SDL_gfxPrimitives.h>
+#endif
 
 #include <sys/ioctl.h>
 #include <linux/fb.h>
-
 #ifndef ANDROID
 #include <linux/matroxfb.h>
 #endif
@@ -44,13 +46,11 @@ static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480, 600, 768,  600,   7
 static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 1024, 1152, 1280 };
 static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480,  768,  864,  960 };
 #endif
+
 static int red_bits, green_bits, blue_bits;
 static int red_shift, green_shift, blue_shift;
 
 int screen_is_picasso;
-static char picasso_invalid_lines[1201];
-static int picasso_has_invalid_lines;
-static int picasso_invalid_start, picasso_invalid_stop;
 static int picasso_maxw = 0, picasso_maxh = 0;
 
 static int bitdepth, bit_unit;
@@ -90,8 +90,8 @@ static inline void WaitForVSync(void)
 {
 	int arg = 0;
 #ifndef ANDROID
-      if(fbdevice != -1)
-          ioctl(fbdevice, FBIO_WAITFORVSYNC, &arg);
+  if(fbdevice != -1)
+    ioctl(fbdevice, FBIO_WAITFORVSYNC, &arg);
 #endif
 }
 
@@ -250,19 +250,19 @@ static void open_screen(struct uae_prefs *p)
 #ifdef ANDROIDSDL
   	  prSDLScreen = SDL_SetVideoMode(p->gfx_size.width, p->gfx_size.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN);
 #else
-  	  prSDLScreen = SDL_SetVideoMode(p->gfx_size.width, p->gfx_size.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN|SDL_DOUBLEBUF);
+  	  prSDLScreen = SDL_SetVideoMode(p->gfx_size.width, p->gfx_size.height, 16, SDL_HWSURFACE|SDL_FULLSCREEN|SDL_DOUBLEBUF);
 #endif
     }
   }
   else
   {
-    prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN);
+  	prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN);
     if(fbdevice == -1)
       fbdevice = open("/dev/fb0", O_RDWR); // We have to wait for vsync by hand when no SDL_DOUBLEBUF...
   }
   if(prSDLScreen != NULL)
   {
-    SDL_LockSurface(prSDLScreen);
+    InitAmigaVidMode(p);
     init_row_map();
   }
 }
@@ -274,7 +274,6 @@ void update_display(struct uae_prefs *p)
     
   SDL_ShowCursor(SDL_DISABLE);
 
-  InitAmigaVidMode(p);
   framecnt = 1; // Don't draw frame before reset done
 }
 
@@ -314,23 +313,17 @@ int check_prefs_changed_gfx (void)
 
 int lockscr (void)
 {
-  // We lock the surface directly after create and flip
-#ifdef ANDROIDSDL
-  SDL_LockSurface (prSDLScreen);
-#endif
+  SDL_LockSurface(prSDLScreen);
   return 1;
 }
 
 
 void unlockscr (void)
 {
-  // We lock the surface directly after create and flip, so no unlock here
-#ifdef ANDROIDSDL
-  SDL_UnlockSurface (prSDLScreen);
-#endif
+  SDL_UnlockSurface(prSDLScreen);
 }
 
-void flush_block ()
+void flush_screen ()
 {
 	if (show_inputmode)
 		inputmode_redraw();	
@@ -347,8 +340,6 @@ void flush_block ()
     }
   }
 
- 	SDL_UnlockSurface (prSDLScreen);
-
   unsigned long start = read_processor_time();
   if(start < next_synctime && next_synctime - start > time_per_frame - 1000)
     usleep((next_synctime - start) - 750);
@@ -362,6 +353,7 @@ void flush_block ()
   {
     SDL_Flip(prSDLScreen);
     last_synctime = read_processor_time();
+  	gfxvidinfo.bufmem = (uae_u8 *)prSDLScreen->pixels;
   }
   
   if(last_synctime - next_synctime > time_per_frame - 1000)
@@ -373,9 +365,7 @@ void flush_block ()
     next_synctime = last_synctime + time_per_frame * (1 + currprefs.gfx_framerate);
   else
     next_synctime = next_synctime + time_per_frame * (1 + currprefs.gfx_framerate);
-#ifndef ANDROIDSDL
-	SDL_LockSurface (prSDLScreen);
-#endif
+
 	init_row_map();
 
 	if(stylusClickOverride)
@@ -435,8 +425,6 @@ static void graphics_subinit (void)
 
     InitAmigaVidMode(&currprefs);
 	}
-	lastmx = lastmy = 0;
-	newmousecounters = 0;
 }
 
 STATIC_INLINE int bitsInMask (unsigned long mask)
@@ -479,6 +467,7 @@ static int init_colors (void)
 	green_shift = maskShift(prSDLScreen->format->Gmask);
 	blue_shift = maskShift(prSDLScreen->format->Bmask);
 	alloc_colors64k (red_bits, green_bits, blue_bits, red_shift, green_shift, blue_shift, 0);
+	notice_new_xcolors();
 	for (i = 0; i < 4096; i++)
 		xcolors[i] = xcolors[i] * 0x00010001;
 
@@ -642,21 +631,9 @@ static int save_thumb(char *path)
 uae_u16 picasso96_pixel_format = RGBFF_CHUNKY;
 
 
-void DX_Invalidate (int first, int last)
+void DX_Invalidate (int x, int y, int width, int height)
 {
-  if (first > last)
-	  return;
-
-  picasso_has_invalid_lines = 1;
-  if (first < picasso_invalid_start)
-  	picasso_invalid_start = first;
-  if (last > picasso_invalid_stop)
-	  picasso_invalid_stop = last;
-
-  while (first <= last) {
-  	picasso_invalid_lines[first] = 1;
-	  first++;
-  }
+  // We draw everything direct to the frame buffer
 }
 
 int DX_BitsPerCannon (void)
@@ -694,7 +671,7 @@ int DX_Fill (int dstx, int dsty, int width, int height, uae_u32 color, RGBFTYPE 
 	SDL_Rect rect = {dstx, dsty, width, height};
 
 	if (SDL_FillRect (prSDLScreen, &rect, color) == 0) {
-		DX_Invalidate (dsty, dsty + height);
+		DX_Invalidate (dstx, dsty, width, height);
 		result = 1;
 	}
 
@@ -738,12 +715,13 @@ int DX_FillResolutions (uae_u16 *ppixel_format)
 		    DisplayModes[count].res.width = x_size_table[i];
 		    DisplayModes[count].res.height = y_size_table[i];
 		    DisplayModes[count].depth = j == 1 ? 1 : bit_unit >> 3;
-        DisplayModes[count].refresh = 60;
+        DisplayModes[count].refresh = 50;
 
 		    count++;
 	    }
     }
   }
+  DisplayModes[count].depth = -1;
   
   return count;
 }
@@ -785,14 +763,14 @@ void gfx_set_picasso_state (int on)
 
 uae_u8 *gfx_lock_picasso (void)
 {
-  // We lock the surface directly after create and flip
+  SDL_LockSurface(prSDLScreen);
   picasso_vidinfo.rowbytes = prSDLScreen->pitch;
   return (uae_u8 *)prSDLScreen->pixels;
 }
 
 void gfx_unlock_picasso (void)
 {
-  // We lock the surface directly after create and flip, so no unlock here
+  SDL_UnlockSurface(prSDLScreen);
 }
 
 #endif // PICASSO96

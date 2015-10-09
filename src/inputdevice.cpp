@@ -208,7 +208,6 @@ void do_mouse_hack (void)
       //------------------------------------------
       // New stylus<->follow mouse mode
       //------------------------------------------
-      printf("do_mouse_hack: sprvbfl=%d\n", sprvbfl);
 	    if (sprvbfl && (sprvbfl-- > 1)) 
       {
         int stylusxpos, stylusypos;          
@@ -335,6 +334,10 @@ void inputdevice_vsync (void)
 
 void inputdevice_reset (void)
 {
+	lastmx = lastmy = 0;
+	newmousecounters = 0;
+  potgo_value = 0;
+  
   if (needmousehack ())
   	mousehack_set (mousehack_dontcare);
   else
@@ -361,6 +364,9 @@ void inputdevice_default_prefs (struct uae_prefs *p)
 
 void inputdevice_init (void)
 {
+  lastsampledmx = 0;
+  lastsampledmy = 0;
+  
   init_joystick ();
  	inputmode_init();
 }

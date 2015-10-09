@@ -75,7 +75,7 @@ static struct Trap  traps[MAX_TRAPS];
 static unsigned int trap_count;
 
 
-static const int trace_traps = 1;
+static const int trace_traps = 0;
 
 
 static void trap_HandleExtendedTrap (TrapHandler, int has_retval);
@@ -94,7 +94,7 @@ unsigned int define_trap (TrapHandler handler_func, int flags, const char *name)
     if (trap_count == MAX_TRAPS) {
 	write_log ("Ran out of emulator traps\n");
 	abort ();
-	return 0;
+	return -1;
     } else {
 	unsigned int trap_num = trap_count++;
 	struct Trap *trap = &traps[trap_num];
@@ -194,7 +194,7 @@ static uaecptr m68k_return_trapaddr;
 static uaecptr exit_trap_trapaddr;
 
 /* For IPC between main thread and trap context */
-static uae_sem_t trap_mutex;
+static uae_sem_t trap_mutex = 0;
 static ExtendedTrapContext *current_context;
 
 
@@ -240,6 +240,7 @@ static void *trap_thread (void *arg)
     /* Good bye, cruel world... */
 
     /* dummy return value */
+    write_log("trap_thread: exit (arg=0x%08X)\n", arg);
     return 0;
 }
 
@@ -262,7 +263,7 @@ static void trap_HandleExtendedTrap (TrapHandler handler_func, int has_retval)
 	context->saved_regs = regs; /* Copy of regs to be restored when trap is done */
 
 	/* Start thread to handle new trap context. */
-	uae_start_thread (trap_thread, (void *)context, &context->thread);
+	uae_start_thread_fast (trap_thread, (void *)context, &context->thread);
 
 	/* Switch to trap context to begin execution of
 	 * trap handler function.
@@ -368,7 +369,7 @@ static uae_u32 REGPARAM2 m68k_return_handler (struct regstruct *regs)
 
     /* Get trap context from 68k stack. */
     sp = m68k_areg (regs, 7);
-    context = (ExtendedTrapContext *) get_pointer(sp);
+    context = (struct ExtendedTrapContext *) get_pointer(sp);
     sp += sizeof (void *);
     m68k_areg (regs, 7) = sp;
 
@@ -444,6 +445,13 @@ uae_u32 CallLib (TrapContext *context, uaecptr base, uae_s16 offset)
     return retval;
 }
 
+/*
+ * Call 68k function from extended trap.
+ */
+uae_u32 CallFunc (TrapContext *context, uaecptr func)
+{
+    return trap_Call68k ((ExtendedTrapContext *)context, func);
+}
 
 /*
  * Initialize trap mechanism.
@@ -467,5 +475,8 @@ void init_extended_traps (void)
     exit_trap_trapaddr = here();
     calltrap (deftrap2 ((TrapHandler)exit_trap_handler, TRAPFLAG_NO_RETVAL, "exit_trap"));
 
+    if(trap_mutex != 0)
+      uae_sem_destroy(&trap_mutex);
+    trap_mutex = 0;
     uae_sem_init (&trap_mutex, 0, 1);
 }

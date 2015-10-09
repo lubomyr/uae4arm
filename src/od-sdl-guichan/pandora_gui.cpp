@@ -26,6 +26,8 @@
 #include "keyboard.h"
 #include "disk.h"
 #include "savestate.h"
+#include "filesys.h"
+#include "autoconf.h"
 #include <SDL.h>
 
 
@@ -56,8 +58,18 @@ struct gui_msg {
   const char *msg;
 };
 struct gui_msg gui_msglist[] = {
-  { NUMSG_KS68EC020, "Your Kickstart requires a 68EC020 or later CPU." },
-  { NUMSG_KS68020, "Your Kickstart requires a 68020 CPU or later CPU." },
+  { NUMSG_NEEDEXT2,       "The software uses a non-standard floppy disk format. You may need to use a custom floppy disk image file instead of a standard one. This message will not appear again." },
+  { NUMSG_NOROM,          "Could not load system ROM, trying system ROM replacement." },
+  { NUMSG_NOROMKEY,       "Could not find system ROM key file." },
+  { NUMSG_KSROMCRCERROR,  "System ROM checksum incorrect. The system ROM image file may be corrupt." },
+  { NUMSG_KSROMREADERROR, "Error while reading system ROM." },
+  { NUMSG_NOEXTROM,       "No extended ROM found." },
+  { NUMSG_KS68EC020,      "The selected system ROM requires a 68EC020 or later CPU." },
+  { NUMSG_KS68020,        "The selected system ROM requires a 68020 or later CPU." },
+  { NUMSG_KS68030,        "The selected system ROM requires a 68030 CPU." },
+  { NUMSG_STATEHD,        "WARNING: Current configuration is not fully compatible with state saves." },
+  { NUMSG_KICKREP,        "You need to have a floppy disk (image file) in DF0: to use the system ROM replacement." },
+  { NUMSG_KICKREPNO,      "The floppy disk (image file) in DF0: is not compatible with the system ROM replacement functionality." },
   { -1, "" }
 };
 
@@ -103,8 +115,10 @@ static void ClearAvailableROMList(void)
 static void addrom(struct romdata *rd, char *path)
 {
   AvailableROM *tmp;
+  char tmpName[MAX_DPATH];
   tmp = new AvailableROM();
-  strncpy(tmp->Name, rd->name, MAX_PATH);
+  getromname(rd, tmpName);
+  strncpy(tmp->Name, tmpName, MAX_PATH);
   strncpy(tmp->Path, path, MAX_PATH);
   tmp->ROMType = rd->type;
   lstAvailableROMs.push_back(tmp);
@@ -115,7 +129,7 @@ struct romscandata {
     int keysize;
 };
 
-static struct romdata *scan_single_rom_2 (struct zfile *f, uae_u8 *keybuf, int keysize)
+static struct romdata *scan_single_rom_2 (struct zfile *f)
 {
   uae_u8 buffer[20] = { 0 };
   uae_u8 *rombuf;
@@ -125,7 +139,7 @@ static struct romdata *scan_single_rom_2 (struct zfile *f, uae_u8 *keybuf, int k
   zfile_fseek (f, 0, SEEK_END);
   size = zfile_ftell (f);
   zfile_fseek (f, 0, SEEK_SET);
-  if (size > 1760 * 512) /* don't skip KICK disks */
+  if (size > 524288 * 2) /* don't skip KICK disks or 1M ROMs */
   	return 0;
   zfile_fread (buffer, 1, 11, f);
   if (!memcmp (buffer, "KICK", 4)) {
@@ -134,8 +148,6 @@ static struct romdata *scan_single_rom_2 (struct zfile *f, uae_u8 *keybuf, int k
 	    size = 262144;
   } else if (!memcmp (buffer, "AMIROMTYPE1", 11)) {
   	cl = 1;
-	  if (keybuf == 0)
-	    cl = -1;
 	  size -= 11;
   } else {
 	  zfile_fseek (f, 0, SEEK_SET);
@@ -145,8 +157,8 @@ static struct romdata *scan_single_rom_2 (struct zfile *f, uae_u8 *keybuf, int k
   	return 0;
   zfile_fread (rombuf, 1, size, f);
   if (cl > 0) {
-  	decode_cloanto_rom_do (rombuf, size, size, keybuf, keysize);
-	  cl = 0;
+  	if(decode_cloanto_rom_do (rombuf, size, size))
+	    cl = 0;
   }
   if (!cl)
   	rd = getromdatabydata (rombuf, size);
@@ -154,47 +166,90 @@ static struct romdata *scan_single_rom_2 (struct zfile *f, uae_u8 *keybuf, int k
   return rd;
 }
 
-static int scan_rom_2 (struct zfile *f, void *rsd)
+static struct romdata *scan_single_rom (char *path)
 {
-  struct romdata *rd = scan_single_rom_2(f, ((struct romscandata *)rsd)->keybuf, ((struct romscandata *)rsd)->keysize);
-  if (rd)
-    addrom (rd, zfile_getname(f));
-  return 1;
+    struct zfile *z;
+    char tmp[MAX_DPATH];
+    struct romdata *rd;
+
+    strcpy (tmp, path);
+    rd = getromdatabypath(path);
+    if (rd && rd->crc32 == 0xffffffff)
+	return rd;
+    z = zfile_fopen (path, "rb");
+    if (!z)
+	return 0;
+    return scan_single_rom_2 (z);
 }
 
-static void scan_rom(char *path, uae_u8 *keybuf, int keysize)
+static int isromext(char *path)
+{
+  char *ext;
+  int i;
+
+  if (!path)
+	  return 0;
+  ext = strrchr (path, '.');
+  if (!ext)
+  	return 0;
+  ext++;
+
+  if (!stricmp (ext, "rom") ||  !stricmp (ext, "adf") || !stricmp (ext, "key")
+	|| !stricmp (ext, "a500") || !stricmp (ext, "a1200") || !stricmp (ext, "a4000"))
+    return 1;
+  for (i = 0; uae_archive_extensions[i]; i++) {
+	  if (!stricmp (ext, uae_archive_extensions[i]))
+	    return 1;
+  }
+  return 0;
+}
+
+static int scan_rom_2 (struct zfile *f, void *dummy)
+{
+  char *path = zfile_getname(f);
+  struct romdata *rd;
+
+  if (!isromext(path))
+	  return 0;
+  rd = scan_single_rom_2(f);
+  if (rd)
+    addrom (rd, path);
+  return 0;
+}
+
+static void scan_rom(char *path)
 {
   struct romdata *rd;
-  struct romscandata rsd = { keybuf, keysize };
 
+    if (!isromext(path)) {
+	//write_log("ROMSCAN: skipping file '%s', unknown extension\n", path);
+	return;
+    }
   rd = getarcadiarombyname(path);
   if (rd) 
     addrom(rd, path);
   else
-    zfile_zopen (path, scan_rom_2, &rsd);
+    zfile_zopen (path, scan_rom_2, 0);
 }
 
 
 void RescanROMs(void)
 {
-  int keysize;
-  uae_u8 *keybuf;
   std::vector<std::string> files;
   char path[MAX_DPATH];
   
   ClearAvailableROMList();
   fetch_rompath(path, MAX_DPATH);
   
-  keybuf = load_keyfile (&changed_prefs, path, &keysize);
+  load_keyring(&changed_prefs, path);
   ReadDirectory(path, NULL, &files);
   for(int i=0; i<files.size(); ++i)
   {
     char tmppath[MAX_PATH];
     strncpy(tmppath, path, MAX_PATH);
     strncat(tmppath, files[i].c_str(), MAX_PATH);
-    scan_rom (tmppath, keybuf, keysize);
+    scan_rom (tmppath);
   }
-  free_keyfile (keybuf);
 }
 
 static void ClearConfigFileList(void)
@@ -271,10 +326,26 @@ ConfigFileInfo* SearchConfigInList(const char *name)
 }
 
 
+static void prefs_to_gui()
+{
+  /* filesys hack */
+  changed_prefs.mountitems = currprefs.mountitems;
+  memcpy(&changed_prefs.mountconfig, &currprefs.mountconfig, MOUNT_CONFIG_SIZE * sizeof (struct uaedev_config_info));
+}
+
+
+static void gui_to_prefs (void)
+{
+  /* filesys hack */
+  currprefs.mountitems = changed_prefs.mountitems;
+  memcpy(&currprefs.mountconfig, &changed_prefs.mountconfig, MOUNT_CONFIG_SIZE * sizeof (struct uaedev_config_info));
+}
+
+
 int gui_init (void)
 {
   int ret = 0;
-
+  
 #ifndef ANDROIDSDL
   SDL_JoystickEventState(SDL_ENABLE);
   SDL_JoystickOpen(0);
@@ -286,7 +357,9 @@ int gui_init (void)
     RescanROMs();
 
   graphics_subshutdown();
+  prefs_to_gui();
   run_gui();
+  gui_to_prefs();
   if(quit_program < 0)
     quit_program = -quit_program;
   if(quit_program == 1)
@@ -372,7 +445,9 @@ static void goMenu(void)
   if(lstAvailableROMs.size() == 0)
     RescanROMs();
   graphics_subshutdown();
+  prefs_to_gui();
   run_gui();
+  gui_to_prefs();
 	setCpuSpeed();
   update_display(&changed_prefs);
 
@@ -547,13 +622,7 @@ void gui_handle_events (void)
 
 	else if(triggerL)
 	{
-		if(keystate[SDLK_a])
-		{
-			keystate[SDLK_a]=0;
-			currprefs.m68k_speed == 2 ? changed_prefs.m68k_speed = 0 : changed_prefs.m68k_speed++;
-			check_prefs_changed_cpu();
-		}
-		else if(keystate[SDLK_c])
+		if(keystate[SDLK_c])
 		{
 			keystate[SDLK_c]=0;
 		  currprefs.pandora_customControls = !currprefs.pandora_customControls;
@@ -1313,4 +1382,51 @@ void FilterFiles(std::vector<std::string> *files, const char *filter[])
       --q;
     }
   }  
+}
+
+
+bool DevicenameExists(const char *name)
+{
+  int i;
+  struct uaedev_config_info *uci;
+    
+  for(i=0; i<MAX_HD_DEVICES; ++i)
+  {
+    uci = &changed_prefs.mountconfig[i];
+
+    if(uci->devname && uci->devname[0])
+    {
+      if(!strcmp(uci->devname, name))
+        return true;
+      if(uci->volname != 0 && !strcmp(uci->volname, name))
+        return true;
+    }
+  }
+  return false;
+}
+
+
+void CreateDefaultDevicename(char *name)
+{
+  int freeNum = 0;
+  bool foundFree = false;
+  
+  while(!foundFree && freeNum < 10)
+  {
+    sprintf(name, "DH%d", freeNum);
+    foundFree = !DevicenameExists(name);
+    ++freeNum;
+  }
+}
+
+
+int tweakbootpri (int bp, int ab, int dnm)
+{
+    if (dnm)
+	return -129;
+    if (!ab)
+	return -128;
+    if (bp < -127)
+	bp = -127;
+    return bp;
 }

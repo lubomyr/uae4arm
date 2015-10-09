@@ -5688,9 +5688,6 @@ unsigned long REGPARAM2 op_a79_0_comp_ff(uae_u32 opcode) /* EOR */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_2
 unsigned long REGPARAM2 op_a80_0_comp_ff(uae_u32 opcode) /* EOR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -5742,6 +5739,9 @@ unsigned long REGPARAM2 op_a90_0_comp_ff(uae_u32 opcode) /* EOR */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_2
 unsigned long REGPARAM2 op_a98_0_comp_ff(uae_u32 opcode) /* EOR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -11117,9 +11117,6 @@ unsigned long REGPARAM2 op_2148_0_comp_ff(uae_u32 opcode) /* MOVE */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_3
 unsigned long REGPARAM2 op_2150_0_comp_ff(uae_u32 opcode) /* MOVE */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -11312,6 +11309,9 @@ unsigned long REGPARAM2 op_2178_0_comp_ff(uae_u32 opcode) /* MOVE */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_3
 unsigned long REGPARAM2 op_2179_0_comp_ff(uae_u32 opcode) /* MOVE */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -17056,9 +17056,6 @@ unsigned long REGPARAM2 op_4290_0_comp_ff(uae_u32 opcode) /* CLR */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_4
 unsigned long REGPARAM2 op_4298_0_comp_ff(uae_u32 opcode) /* CLR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -17197,6 +17194,9 @@ unsigned long REGPARAM2 op_42b9_0_comp_ff(uae_u32 opcode) /* CLR */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_4
 unsigned long REGPARAM2 op_4400_0_comp_ff(uae_u32 opcode) /* NEG */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -19913,7 +19913,7 @@ unsigned long REGPARAM2 op_4c90_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=dodgy?scratchie++:dstreg+8;
 	if (dodgy) 
 		mov_l_rr(srca,dstreg+8);
@@ -19952,7 +19952,7 @@ unsigned long REGPARAM2 op_4c98_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,dstreg+8);
 	if (1 && !special_mem) {
@@ -19992,7 +19992,7 @@ unsigned long REGPARAM2 op_4ca8_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,8+dstreg);
 	lea_l_brr(srca,srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
@@ -20031,7 +20031,7 @@ unsigned long REGPARAM2 op_4cb0_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	calc_disp_ea_020(dstreg+8,comp_get_iword((m68k_pc_offset+=2)-2),srca,scratchie);
 	if (1 && !special_mem) {
@@ -20064,7 +20064,7 @@ unsigned long REGPARAM2 op_4cb8_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
 	if (1 && !special_mem) {
@@ -20097,7 +20097,7 @@ unsigned long REGPARAM2 op_4cb9_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,comp_get_ilong((m68k_pc_offset+=4)-4)); /* absl */
 	if (1 && !special_mem) {
@@ -20131,7 +20131,7 @@ unsigned long REGPARAM2 op_4cba_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
 	uae_s32 PC16off = (uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2);
@@ -20167,7 +20167,7 @@ unsigned long REGPARAM2 op_4cbb_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int pctmp=scratchie++;
 	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
@@ -20208,7 +20208,7 @@ unsigned long REGPARAM2 op_4cd0_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=dodgy?scratchie++:dstreg+8;
 	if (dodgy) 
 		mov_l_rr(srca,dstreg+8);
@@ -20246,7 +20246,7 @@ unsigned long REGPARAM2 op_4cd8_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,dstreg+8);
 	if (1 && !special_mem) {
@@ -20285,7 +20285,7 @@ unsigned long REGPARAM2 op_4ce8_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,8+dstreg);
 	lea_l_brr(srca,srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
@@ -20323,7 +20323,7 @@ unsigned long REGPARAM2 op_4cf0_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	calc_disp_ea_020(dstreg+8,comp_get_iword((m68k_pc_offset+=2)-2),srca,scratchie);
 	if (1 && !special_mem) {
@@ -20355,7 +20355,7 @@ unsigned long REGPARAM2 op_4cf8_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
 	if (1 && !special_mem) {
@@ -20387,7 +20387,7 @@ unsigned long REGPARAM2 op_4cf9_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,comp_get_ilong((m68k_pc_offset+=4)-4)); /* absl */
 	if (1 && !special_mem) {
@@ -20420,7 +20420,7 @@ unsigned long REGPARAM2 op_4cfa_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
 	uae_s32 PC16off = (uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2);
@@ -20455,7 +20455,7 @@ unsigned long REGPARAM2 op_4cfb_0_comp_ff(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int pctmp=scratchie++;
 	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
@@ -21091,9 +21091,6 @@ if (!(needed_flags & FLAG_CZNV)) dont_care_flags();
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_5
 unsigned long REGPARAM2 op_5039_0_comp_ff(uae_u32 opcode) /* ADD */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -21439,6 +21436,9 @@ if (!(needed_flags & FLAG_CZNV)) dont_care_flags();
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_5
 unsigned long REGPARAM2 op_5088_0_comp_ff(uae_u32 opcode) /* ADDA */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -25264,9 +25264,6 @@ unsigned long REGPARAM2 op_5ff8_0_comp_ff(uae_u32 opcode) /* Scc */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_6
 unsigned long REGPARAM2 op_5ff9_0_comp_ff(uae_u32 opcode) /* Scc */
 {
 	uae_u32 dodgy=0;
@@ -25491,6 +25488,9 @@ unsigned long REGPARAM2 op_6300_0_comp_ff(uae_u32 opcode) /* Bcc */
 }}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_6
 unsigned long REGPARAM2 op_6301_0_comp_ff(uae_u32 opcode) /* Bcc */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -30964,9 +30964,6 @@ if (!(needed_flags & FLAG_CZNV)) dont_care_flags();
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_7
 unsigned long REGPARAM2 op_b048_0_comp_ff(uae_u32 opcode) /* CMP */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -31460,6 +31457,9 @@ if (!(needed_flags & FLAG_CZNV)) dont_care_flags();
 }}}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_7
 unsigned long REGPARAM2 op_b0b0_0_comp_ff(uae_u32 opcode) /* CMP */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -38105,9 +38105,6 @@ unsigned long REGPARAM2 op_d1d8_0_comp_ff(uae_u32 opcode) /* ADDA */
 }}}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_8
 unsigned long REGPARAM2 op_d1e0_0_comp_ff(uae_u32 opcode) /* ADDA */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -38709,6 +38706,9 @@ unsigned long REGPARAM2 op_e058_0_comp_ff(uae_u32 opcode) /* ROR */
 	if (failure)  m68k_pc_offset=m68k_pc_offset_thisinst;
 return 0;
 }
+#endif
+
+#ifdef PART_8
 unsigned long REGPARAM2 op_e060_0_comp_ff(uae_u32 opcode) /* ASR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -45382,9 +45382,6 @@ unsigned long REGPARAM2 op_a79_0_comp_nf(uae_u32 opcode) /* EOR */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_2
 unsigned long REGPARAM2 op_a80_0_comp_nf(uae_u32 opcode) /* EOR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -45430,6 +45427,9 @@ unsigned long REGPARAM2 op_a90_0_comp_nf(uae_u32 opcode) /* EOR */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_2
 unsigned long REGPARAM2 op_a98_0_comp_nf(uae_u32 opcode) /* EOR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -49951,9 +49951,6 @@ unsigned long REGPARAM2 op_2148_0_comp_nf(uae_u32 opcode) /* MOVE */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_3
 unsigned long REGPARAM2 op_2150_0_comp_nf(uae_u32 opcode) /* MOVE */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -50116,6 +50113,9 @@ unsigned long REGPARAM2 op_2178_0_comp_nf(uae_u32 opcode) /* MOVE */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_3
 unsigned long REGPARAM2 op_2179_0_comp_nf(uae_u32 opcode) /* MOVE */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -54682,9 +54682,6 @@ unsigned long REGPARAM2 op_4290_0_comp_nf(uae_u32 opcode) /* CLR */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_4
 unsigned long REGPARAM2 op_4298_0_comp_nf(uae_u32 opcode) /* CLR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -54793,6 +54790,9 @@ unsigned long REGPARAM2 op_42b9_0_comp_nf(uae_u32 opcode) /* CLR */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_4
 unsigned long REGPARAM2 op_4400_0_comp_nf(uae_u32 opcode) /* NEG */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -57536,7 +57536,7 @@ unsigned long REGPARAM2 op_4c90_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=dodgy?scratchie++:dstreg+8;
 	if (dodgy) 
 		mov_l_rr(srca,dstreg+8);
@@ -57575,7 +57575,7 @@ unsigned long REGPARAM2 op_4c98_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,dstreg+8);
 	if (1 && !special_mem) {
@@ -57615,7 +57615,7 @@ unsigned long REGPARAM2 op_4ca8_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,8+dstreg);
 	lea_l_brr(srca,srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
@@ -57654,7 +57654,7 @@ unsigned long REGPARAM2 op_4cb0_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	calc_disp_ea_020(dstreg+8,comp_get_iword((m68k_pc_offset+=2)-2),srca,scratchie);
 	if (1 && !special_mem) {
@@ -57687,7 +57687,7 @@ unsigned long REGPARAM2 op_4cb8_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
 	if (1 && !special_mem) {
@@ -57720,7 +57720,7 @@ unsigned long REGPARAM2 op_4cb9_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,comp_get_ilong((m68k_pc_offset+=4)-4)); /* absl */
 	if (1 && !special_mem) {
@@ -57754,7 +57754,7 @@ unsigned long REGPARAM2 op_4cba_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
 	uae_s32 PC16off = (uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2);
@@ -57790,7 +57790,7 @@ unsigned long REGPARAM2 op_4cbb_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int pctmp=scratchie++;
 	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
@@ -57831,7 +57831,7 @@ unsigned long REGPARAM2 op_4cd0_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=dodgy?scratchie++:dstreg+8;
 	if (dodgy) 
 		mov_l_rr(srca,dstreg+8);
@@ -57869,7 +57869,7 @@ unsigned long REGPARAM2 op_4cd8_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,dstreg+8);
 	if (1 && !special_mem) {
@@ -57908,7 +57908,7 @@ unsigned long REGPARAM2 op_4ce8_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	mov_l_rr(srca,8+dstreg);
 	lea_l_brr(srca,srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
@@ -57946,7 +57946,7 @@ unsigned long REGPARAM2 op_4cf0_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	calc_disp_ea_020(dstreg+8,comp_get_iword((m68k_pc_offset+=2)-2),srca,scratchie);
 	if (1 && !special_mem) {
@@ -57978,7 +57978,7 @@ unsigned long REGPARAM2 op_4cf8_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,(uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2));
 	if (1 && !special_mem) {
@@ -58010,7 +58010,7 @@ unsigned long REGPARAM2 op_4cf9_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca = scratchie++;
 	mov_l_ri(srca,comp_get_ilong((m68k_pc_offset+=4)-4)); /* absl */
 	if (1 && !special_mem) {
@@ -58043,7 +58043,7 @@ unsigned long REGPARAM2 op_4cfa_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
 	uae_s32 PC16off = (uae_s32)(uae_s16)comp_get_iword((m68k_pc_offset+=2)-2);
@@ -58078,7 +58078,7 @@ unsigned long REGPARAM2 op_4cfb_0_comp_nf(uae_u32 opcode) /* MVMEL */
 	uae_u16 mask = comp_get_iword((m68k_pc_offset+=2)-2);
 	int native=scratchie++;
 	int i;
-	signed char offset=0;
+	int offset=0;
 {	int pctmp=scratchie++;
 	int srca=scratchie++;
 	uae_u32 address=start_pc+((char *)comp_pc_p-(char *)start_pc_p)+m68k_pc_offset;
@@ -58679,9 +58679,6 @@ unsigned long REGPARAM2 op_5038_0_comp_nf(uae_u32 opcode) /* ADD */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_5
 unsigned long REGPARAM2 op_5039_0_comp_nf(uae_u32 opcode) /* ADD */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -58977,6 +58974,9 @@ unsigned long REGPARAM2 op_5080_0_comp_nf(uae_u32 opcode) /* ADD */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_5
 unsigned long REGPARAM2 op_5088_0_comp_nf(uae_u32 opcode) /* ADDA */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -62647,9 +62647,6 @@ unsigned long REGPARAM2 op_5ff8_0_comp_nf(uae_u32 opcode) /* Scc */
 }}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_6
 unsigned long REGPARAM2 op_5ff9_0_comp_nf(uae_u32 opcode) /* Scc */
 {
 	uae_u32 dodgy=0;
@@ -62874,6 +62871,9 @@ unsigned long REGPARAM2 op_6300_0_comp_nf(uae_u32 opcode) /* Bcc */
 }}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_6
 unsigned long REGPARAM2 op_6301_0_comp_nf(uae_u32 opcode) /* Bcc */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -67920,9 +67920,6 @@ unsigned long REGPARAM2 op_b040_0_comp_nf(uae_u32 opcode) /* CMP */
 }}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_7
 unsigned long REGPARAM2 op_b048_0_comp_nf(uae_u32 opcode) /* CMP */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -68348,6 +68345,9 @@ unsigned long REGPARAM2 op_b0a8_0_comp_nf(uae_u32 opcode) /* CMP */
 }}}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
+#endif
+
+#ifdef PART_7
 unsigned long REGPARAM2 op_b0b0_0_comp_nf(uae_u32 opcode) /* CMP */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -74425,9 +74425,6 @@ unsigned long REGPARAM2 op_d1d8_0_comp_nf(uae_u32 opcode) /* ADDA */
 }}}}}	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
-#endif
-
-#ifdef PART_8
 unsigned long REGPARAM2 op_d1e0_0_comp_nf(uae_u32 opcode) /* ADDA */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED
@@ -74942,6 +74939,9 @@ unsigned long REGPARAM2 op_e058_0_comp_nf(uae_u32 opcode) /* ROR */
 	if (failure)  m68k_pc_offset=m68k_pc_offset_thisinst;
 return 0;
 }
+#endif
+
+#ifdef PART_8
 unsigned long REGPARAM2 op_e060_0_comp_nf(uae_u32 opcode) /* ASR */
 {
 #ifdef HAVE_GET_WORD_UNSWAPPED

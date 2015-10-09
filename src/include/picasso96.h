@@ -540,6 +540,7 @@ struct picasso96_state_struct
     // support NO direct access all the time to gfx Card
     // everytime windows can remove your surface from card so the mainrender place
     // must be in memory
+    long		XYOffset;
 };
 
 extern void InitPicasso96 (void);
@@ -569,14 +570,14 @@ extern uae_u16 picasso96_pixel_format;
 extern void DX_SetPalette (int start, int count);
 extern int DX_FillResolutions (uae_u16 *);
 extern int DX_BitsPerCannon (void);
-extern void DX_Invalidate (int first, int last);
+extern void DX_Invalidate (int x, int y, int width, int height);
 extern int DX_Blit (int srcx, int srcy, int dstx, int dsty, int w, int h, BLIT_OPCODE opcode);
 extern int DX_Fill (int dstx, int dsty, int width, int height, uae_u32 color, RGBFTYPE rgbtype);
 extern void picasso_enablescreen (int on);
 extern void picasso_refresh (int);
 extern void picasso_handle_vsync (void);
 extern void init_hz_p96 (void);
-static inline void picasso_handle_hsync (void)
+static __inline__ void picasso_handle_hsync (void)
 {
 }
 

@@ -33,8 +33,6 @@
 #include <android/log.h>
 #endif
 
-extern unsigned long next_sample_evtime;
-
 int produce_sound=0;
 int changed_produce_sound=0;
 
@@ -74,15 +72,22 @@ void uae4all_resume_music(void) { }
 
 
 static int have_sound = 0;
+static int lastfreq;
 
-static __inline__ void sound_default_evtime(void)
+extern unsigned int new_beamcon0;
+
+static __inline__ void sound_default_evtime(int freq)
 {
-	int pal = beamcon0 & 0x20;
+	int pal = new_beamcon0 & 0x20;
+
+  if (freq < 0)
+  	freq = lastfreq;
+  lastfreq = freq;
 
 			if (pal)
-				scaled_sample_evtime = (MAXHPOS_PAL*313*VBLANK_HZ_PAL*CYCLE_UNIT)/currprefs.sound_freq;
+				scaled_sample_evtime = (MAXHPOS_PAL * MAXVPOS_PAL * freq * CYCLE_UNIT + currprefs.sound_freq - 1) / currprefs.sound_freq;
 			else
-				scaled_sample_evtime = (MAXHPOS_NTSC*MAXVPOS_NTSC*VBLANK_HZ_NTSC*CYCLE_UNIT)/currprefs.sound_freq + 1;
+				scaled_sample_evtime = (MAXHPOS_NTSC * MAXVPOS_NTSC * freq * CYCLE_UNIT + currprefs.sound_freq - 1) / currprefs.sound_freq;
 }
 
 
@@ -226,7 +231,7 @@ int setup_sound (void)
 
 void update_sound (int freq)
 {
-  sound_default_evtime();
+  sound_default_evtime(freq);
 }
 
 static int open_sound (void)

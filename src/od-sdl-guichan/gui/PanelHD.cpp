@@ -20,7 +20,6 @@
 #include "gui_handling.h"
 
 
-#define MAX_HD_DEVICES 5
 enum { COL_DEVICE, COL_VOLUME, COL_PATH, COL_READWRITE, COL_SIZE, COL_BOOTPRI, COL_COUNT };
 
 static const char *column_caption[] = {
@@ -41,6 +40,22 @@ static gcn::Button* listCmdProps[MAX_HD_DEVICES];
 static gcn::ImageButton* listCmdDelete[MAX_HD_DEVICES];
 static gcn::Button* cmdAddDirectory;
 static gcn::Button* cmdAddHardfile;
+static gcn::Button* cmdCreateHardfile;
+  
+
+static int GetHDType(int index)
+{
+  int type;
+  struct uaedev_config_info *uci;
+  struct mountedinfo mi;
+
+  type = get_filesys_unitconfig(&changed_prefs, index, &mi);
+  if (type < 0) {
+    uci = &changed_prefs.mountconfig[index];
+		type = uci->ishdf ? FILESYS_HARDFILE : FILESYS_VIRTUAL;
+  }
+  return type;
+}
 
 
 class HDRemoveActionListener : public gcn::ActionListener
@@ -52,7 +67,7 @@ class HDRemoveActionListener : public gcn::ActionListener
       {
         if (actionEvent.getSource() == listCmdDelete[i])
         {
-          kill_filesys_unit(currprefs.mountinfo, i);
+          kill_filesys_unitconfig(&changed_prefs, i);
           break;
         }
       }
@@ -72,8 +87,7 @@ class HDEditActionListener : public gcn::ActionListener
       {
         if (actionEvent.getSource() == listCmdProps[i])
         {
-          int type = is_hardfile (currprefs.mountinfo, i);
-          if(type == FILESYS_VIRTUAL)
+          if (GetHDType(i) == FILESYS_VIRTUAL)
             EditFilesysVirtual(i);
           else
             EditFilesysHardfile(i);
@@ -113,6 +127,19 @@ class AddHardfileActionListener : public gcn::ActionListener
 AddHardfileActionListener* addHardfileActionListener;
 
 
+class CreateHardfileActionListener : public gcn::ActionListener
+{
+  public:
+    void action(const gcn::ActionEvent& actionEvent)
+    {
+      CreateFilesysHardfile();
+      cmdCreateHardfile->requestFocus();
+      RefreshPanelHD();
+    }
+};
+CreateHardfileActionListener* createHardfileActionListener;
+
+
 void InitPanelHD(const struct _ConfigCategory& category)
 {
   int row, col;
@@ -124,6 +151,7 @@ void InitPanelHD(const struct _ConfigCategory& category)
   hdEditActionListener = new HDEditActionListener();
   addVirtualHDActionListener = new AddVirtualHDActionListener();
   addHardfileActionListener = new AddHardfileActionListener();
+  createHardfileActionListener = new CreateHardfileActionListener();
   
   for(col=0; col<COL_COUNT; ++col)
     lblList[col] = new gcn::Label(column_caption[col]);
@@ -169,6 +197,12 @@ void InitPanelHD(const struct _ConfigCategory& category)
   cmdAddHardfile->setSize(BUTTON_WIDTH + 20, BUTTON_HEIGHT);
   cmdAddHardfile->setId("cmdAddHDF");
   cmdAddHardfile->addActionListener(addHardfileActionListener);
+
+  cmdCreateHardfile = new gcn::Button("Create Hardfile");
+  cmdCreateHardfile->setBaseColor(gui_baseCol);
+  cmdCreateHardfile->setSize(BUTTON_WIDTH + 20, BUTTON_HEIGHT);
+  cmdCreateHardfile->setId("cmdCreateHDF");
+  cmdCreateHardfile->addActionListener(createHardfileActionListener);
   
   posX = DISTANCE_BORDER + 2 + SMALL_BUTTON_WIDTH + 34;
   for(col=0; col<COL_COUNT; ++col)
@@ -197,6 +231,7 @@ void InitPanelHD(const struct _ConfigCategory& category)
   posY = category.panel->getHeight() - DISTANCE_BORDER - BUTTON_HEIGHT;
   category.panel->add(cmdAddDirectory, DISTANCE_BORDER, posY);
   category.panel->add(cmdAddHardfile, DISTANCE_BORDER + cmdAddDirectory->getWidth() + DISTANCE_NEXT_X, posY);
+  category.panel->add(cmdCreateHardfile, cmdAddHardfile->getX() + cmdAddHardfile->getWidth() + DISTANCE_NEXT_X, posY);
   
   RefreshPanelHD();
 }
@@ -220,11 +255,13 @@ void ExitPanelHD(void)
   
   delete cmdAddDirectory;
   delete cmdAddHardfile;
+  delete cmdCreateHardfile;
   
   delete hdRemoveActionListener;
   delete hdEditActionListener;
   delete addVirtualHDActionListener;
   delete addHardfileActionListener;
+  delete createHardfileActionListener;
 }
 
 
@@ -232,49 +269,49 @@ void RefreshPanelHD(void)
 {
   int row, col;
   char tmp[32];
-  char *volname, *devname, *rootdir, *filesys;
-  int secspertrack, surfaces, cylinders, reserved, blocksize, readonly, type, bootpri;
-  uae_u64 size;
-  const char *failure;
-  int units = nr_units(currprefs.mountinfo);
+  struct mountedinfo mi;
+  struct uaedev_config_info *uci;
+  int nosize = 0, type;
   
   for(row=0; row<MAX_HD_DEVICES; ++row)
   {
-    if(row < units)
+    uci = &changed_prefs.mountconfig[row];
+    if(uci->devname && uci->devname[0])
     {
-      failure = get_filesys_unit(currprefs.mountinfo, row, 
-        &devname, &volname, &rootdir, &readonly, &secspertrack, &surfaces, &reserved, 
-        &cylinders, &size, &blocksize, &bootpri, &filesys, 0);
-      type = is_hardfile (currprefs.mountinfo, row);
+      type = get_filesys_unitconfig(&changed_prefs, row, &mi);
+	    if (type < 0) {
+    		type = uci->ishdf ? FILESYS_HARDFILE : FILESYS_VIRTUAL;
+    		nosize = 1;
+	    }
       
       if(type == FILESYS_VIRTUAL)
       {
-        listCells[row][COL_DEVICE]->setText(devname);
-        listCells[row][COL_VOLUME]->setText(volname);
-        listCells[row][COL_PATH]->setText(rootdir);
-        if(readonly)
+        listCells[row][COL_DEVICE]->setText(uci->devname);
+        listCells[row][COL_VOLUME]->setText(uci->volname);
+        listCells[row][COL_PATH]->setText(uci->rootdir);
+        if(uci->readonly)
           listCells[row][COL_READWRITE]->setText("no");
         else
           listCells[row][COL_READWRITE]->setText("yes");
         listCells[row][COL_SIZE]->setText("n/a");
-        snprintf(tmp, 32, "%d", bootpri);
+        snprintf(tmp, 32, "%d", uci->bootpri);
         listCells[row][COL_BOOTPRI]->setText(tmp);
       }
       else
       {
-        listCells[row][COL_DEVICE]->setText(devname);
+        listCells[row][COL_DEVICE]->setText(uci->devname);
         listCells[row][COL_VOLUME]->setText("n/a");
-        listCells[row][COL_PATH]->setText(rootdir);
-        if(readonly)
+        listCells[row][COL_PATH]->setText(uci->rootdir);
+        if(uci->readonly)
           listCells[row][COL_READWRITE]->setText("no");
         else
           listCells[row][COL_READWRITE]->setText("yes");
-  	    if (size >= 1024 * 1024 * 1024)
-	        snprintf (tmp, 32, "%.1fG", ((double)(uae_u32)(size / (1024 * 1024))) / 1024.0);
+  	    if (mi.size >= 1024 * 1024 * 1024)
+	        snprintf (tmp, 32, "%.1fG", ((double)(uae_u32)(mi.size / (1024 * 1024))) / 1024.0);
   	    else
-	        snprintf (tmp, 32, "%.1fM", ((double)(uae_u32)(size / (1024))) / 1024.0);
+	        snprintf (tmp, 32, "%.1fM", ((double)(uae_u32)(mi.size / (1024))) / 1024.0);
         listCells[row][COL_SIZE]->setText(tmp);
-        snprintf(tmp, 32, "%d", bootpri);
+        snprintf(tmp, 32, "%d", uci->bootpri);
         listCells[row][COL_BOOTPRI]->setText(tmp);
       }
       listCmdProps[row]->setEnabled(true);
@@ -289,4 +326,23 @@ void RefreshPanelHD(void)
       listCmdDelete[row]->setEnabled(false);
     }
   }
+}
+
+
+int count_HDs(struct uae_prefs *p)
+{
+  int row;
+  struct uaedev_config_info *uci;
+  int cnt = 0;
+  
+  for(row=0; row<MAX_HD_DEVICES; ++row)
+  {
+    uci = &p->mountconfig[row];
+    if(uci->devname && uci->devname[0])
+    {
+      ++cnt;
+    }
+  }
+
+  return cnt;
 }

@@ -135,7 +135,7 @@ static void ShowMessageLoop(void)
       //-------------------------------------------------
       // Send event to guichan-controls
       //-------------------------------------------------
-#ifdef ANDROID
+#ifdef ANDROIDSDL
             /*
              * Now that we are done polling and using SDL events we pass
              * the leftovers to the SDLInput object to later be handled by

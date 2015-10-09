@@ -19,14 +19,18 @@
 #include "target.h"
 #include "gui_handling.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 
-#define DIALOG_WIDTH 520
+#define DIALOG_WIDTH 620
 #define DIALOG_HEIGHT 242
 
 static const char *harddisk_filter[] = { ".hdf", "\0" };
 
 static bool dialogResult = false;
 static bool dialogFinished = false;
+static bool fileSelected = false;
 
 static gcn::Window *wndEditFilesysHardfile;
 static gcn::Button* cmdOK;
@@ -34,6 +38,7 @@ static gcn::Button* cmdCancel;
 static gcn::Label *lblDevice;
 static gcn::TextField *txtDevice;
 static gcn::UaeCheckBox* chkReadWrite;
+static gcn::UaeCheckBox* chkAutoboot;
 static gcn::Label *lblBootPri;
 static gcn::TextField *txtBootPri;
 static gcn::Label *lblPath;
@@ -48,7 +53,6 @@ static gcn::TextField *txtSectors;
 static gcn::Label *lblBlocksize;
 static gcn::TextField *txtBlocksize;
 
-
 class FilesysHardfileActionListener : public gcn::ActionListener
 {
   public:
@@ -60,7 +64,10 @@ class FilesysHardfileActionListener : public gcn::ActionListener
         strncpy(tmp, txtPath->getText().c_str(), MAX_PATH);
         wndEditFilesysHardfile->releaseModalFocus();
         if(SelectFile("Select harddisk file", tmp, harddisk_filter))
+        {
           txtPath->setText(tmp);
+          fileSelected = true;
+        }
         wndEditFilesysHardfile->requestModalFocus();
         cmdPath->requestFocus();
       }
@@ -70,8 +77,13 @@ class FilesysHardfileActionListener : public gcn::ActionListener
         {
           if(txtDevice->getText().length() <= 0)
           {
-            // ToDo: Message to user
- //           return;
+            wndEditFilesysHardfile->setCaption("Please enter a device name.");
+            return;
+          }
+          if(!fileSelected)
+          {
+            wndEditFilesysHardfile->setCaption("Please select a filename.");
+//            return;
           }
           dialogResult = true;
         }
@@ -84,8 +96,8 @@ static FilesysHardfileActionListener* filesysHardfileActionListener;
 
 static void InitEditFilesysHardfile(void)
 {
-	wndEditFilesysHardfile = new gcn::Window("Edit");
-	wndEditFilesysHardfile->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
+  wndEditFilesysHardfile = new gcn::Window("Edit");
+  wndEditFilesysHardfile->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
   wndEditFilesysHardfile->setPosition((GUI_WIDTH - DIALOG_WIDTH) / 2, (GUI_HEIGHT - DIALOG_HEIGHT) / 2);
   wndEditFilesysHardfile->setBaseColor(gui_baseCol + 0x202020);
   wndEditFilesysHardfile->setCaption("Volume settings");
@@ -93,16 +105,16 @@ static void InitEditFilesysHardfile(void)
   
   filesysHardfileActionListener = new FilesysHardfileActionListener();
   
-	cmdOK = new gcn::Button("Ok");
-	cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-	cmdOK->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdOK = new gcn::Button("Ok");
+  cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+  cmdOK->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdOK->setBaseColor(gui_baseCol + 0x202020);
   cmdOK->setId("hdfOK");
   cmdOK->addActionListener(filesysHardfileActionListener);
   
-	cmdCancel = new gcn::Button("Cancel");
-	cmdCancel->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-	cmdCancel->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdCancel = new gcn::Button("Cancel");
+  cmdCancel->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+  cmdCancel->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdCancel->setBaseColor(gui_baseCol + 0x202020);
   cmdCancel->setId("hdfCancel");
   cmdCancel->addActionListener(filesysHardfileActionListener);
@@ -114,39 +126,42 @@ static void InitEditFilesysHardfile(void)
   txtDevice->setSize(80, TEXTFIELD_HEIGHT);
   txtDevice->setId("hdfDev");
 
-	chkReadWrite = new gcn::UaeCheckBox("Read/Write", true);
+  chkReadWrite = new gcn::UaeCheckBox("Read/Write", true);
   chkReadWrite->setId("hdfRW");
 
+  chkAutoboot = new gcn::UaeCheckBox("Bootable", true);
+  chkAutoboot->setId("hdfAutoboot");
+
   lblBootPri = new gcn::Label("Boot priority:");
-  lblBootPri->setSize(84, LABEL_HEIGHT);
+  lblBootPri->setSize(100, LABEL_HEIGHT);
   lblBootPri->setAlignment(gcn::Graphics::RIGHT);
   txtBootPri = new gcn::TextField();
   txtBootPri->setSize(40, TEXTFIELD_HEIGHT);
   txtBootPri->setId("hdfBootPri");
 
   lblSurfaces = new gcn::Label("Surfaces:");
-  lblSurfaces->setSize(84, LABEL_HEIGHT);
+  lblSurfaces->setSize(100, LABEL_HEIGHT);
   lblSurfaces->setAlignment(gcn::Graphics::RIGHT);
   txtSurfaces = new gcn::TextField();
   txtSurfaces->setSize(40, TEXTFIELD_HEIGHT);
   txtSurfaces->setId("hdfSurface");
 
   lblReserved = new gcn::Label("Reserved:");
-  lblReserved->setSize(84, LABEL_HEIGHT);
+  lblReserved->setSize(100, LABEL_HEIGHT);
   lblReserved->setAlignment(gcn::Graphics::RIGHT);
   txtReserved = new gcn::TextField();
   txtReserved->setSize(40, TEXTFIELD_HEIGHT);
   txtReserved->setId("hdfReserved");
 
   lblSectors = new gcn::Label("Sectors:");
-  lblSectors->setSize(84, LABEL_HEIGHT);
+  lblSectors->setSize(100, LABEL_HEIGHT);
   lblSectors->setAlignment(gcn::Graphics::RIGHT);
   txtSectors = new gcn::TextField();
   txtSectors->setSize(40, TEXTFIELD_HEIGHT);
   txtSectors->setId("hdfSectors");
 
   lblBlocksize = new gcn::Label("Blocksize:");
-  lblBlocksize->setSize(84, LABEL_HEIGHT);
+  lblBlocksize->setSize(100, LABEL_HEIGHT);
   lblBlocksize->setAlignment(gcn::Graphics::RIGHT);
   txtBlocksize = new gcn::TextField();
   txtBlocksize->setSize(40, TEXTFIELD_HEIGHT);
@@ -156,7 +171,7 @@ static void InitEditFilesysHardfile(void)
   lblPath->setSize(100, LABEL_HEIGHT);
   lblPath->setAlignment(gcn::Graphics::RIGHT);
   txtPath = new gcn::TextField();
-  txtPath->setSize(338, TEXTFIELD_HEIGHT);
+  txtPath->setSize(438, TEXTFIELD_HEIGHT);
   txtPath->setEnabled(false);
   cmdPath = new gcn::Button("...");
   cmdPath->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
@@ -167,9 +182,10 @@ static void InitEditFilesysHardfile(void)
   int posY = DISTANCE_BORDER;
   wndEditFilesysHardfile->add(lblDevice, DISTANCE_BORDER, posY);
   wndEditFilesysHardfile->add(txtDevice, DISTANCE_BORDER + lblDevice->getWidth() + 8, posY);
-  wndEditFilesysHardfile->add(chkReadWrite, 240, posY);
-  wndEditFilesysHardfile->add(lblBootPri, 374, posY);
-  wndEditFilesysHardfile->add(txtBootPri, 374 + lblBootPri->getWidth() + 8, posY);
+  wndEditFilesysHardfile->add(chkReadWrite, 235, posY + 1);
+  wndEditFilesysHardfile->add(chkAutoboot, 360, posY + 1);
+  wndEditFilesysHardfile->add(lblBootPri, 460, posY);
+  wndEditFilesysHardfile->add(txtBootPri, 460 + lblBootPri->getWidth() + 8, posY);
   posY += txtDevice->getHeight() + DISTANCE_NEXT_Y;
   wndEditFilesysHardfile->add(lblPath, DISTANCE_BORDER, posY);
   wndEditFilesysHardfile->add(txtPath, DISTANCE_BORDER + lblPath->getWidth() + 8, posY);
@@ -204,6 +220,7 @@ static void ExitEditFilesysHardfile(void)
   delete lblDevice;
   delete txtDevice;
   delete chkReadWrite;
+  delete chkAutoboot;
   delete lblBootPri;
   delete txtBootPri;
   delete lblPath;
@@ -273,7 +290,7 @@ static void EditFilesysHardfileLoop(void)
       //-------------------------------------------------
       // Send event to guichan-controls
       //-------------------------------------------------
-#ifdef ANDROID
+#ifdef ANDROIDSDL
             /*
              * Now that we are done polling and using SDL events we pass
              * the leftovers to the SDLInput object to later be handled by
@@ -350,11 +367,11 @@ static void EditFilesysHardfileLoop(void)
 
 bool EditFilesysHardfile(int unit_no)
 {
-  char *volname, *devname, *rootdir, *filesys;
-  int secspertrack, surfaces, cylinders, reserved, blocksize, readonly, bootpri;
-  uae_u64 size;
-  const char *failure;
-  
+  struct mountedinfo mi;
+  struct uaedev_config_info *uci = &changed_prefs.mountconfig[unit_no];
+  std::string strdevname, strroot;
+  char tmp[32];
+    
   dialogResult = false;
   dialogFinished = false;
 
@@ -362,30 +379,34 @@ bool EditFilesysHardfile(int unit_no)
 
   if(unit_no >= 0)
   {
-    char tmp[32];
+    get_filesys_unitconfig(&changed_prefs, unit_no, &mi);
+    strdevname.assign(uci->devname);
+    txtDevice->setText(strdevname);
+    strroot.assign(uci->rootdir);
+    txtPath->setText(strroot);
+    fileSelected = true;
 
-    failure = get_filesys_unit(currprefs.mountinfo, unit_no, 
-      &devname, &volname, &rootdir, &readonly, &secspertrack, &surfaces, &reserved, 
-      &cylinders, &size, &blocksize, &bootpri, &filesys, 0);
-
-    txtDevice->setText(devname);
-    txtPath->setText(rootdir);
-    chkReadWrite->setSelected(!readonly);
-    snprintf(tmp, 32, "%d", bootpri);
+    chkReadWrite->setSelected(!uci->readonly);
+    chkAutoboot->setSelected(uci->bootpri != -128);
+    snprintf(tmp, 32, "%d", uci->bootpri >= -127 ? uci->bootpri : -127);
     txtBootPri->setText(tmp);
-    snprintf(tmp, 32, "%d", surfaces);
+    snprintf(tmp, 32, "%d", uci->surfaces);
     txtSurfaces->setText(tmp);
-    snprintf(tmp, 32, "%d", reserved);
+    snprintf(tmp, 32, "%d", uci->reserved);
     txtReserved->setText(tmp);
-    snprintf(tmp, 32, "%d", secspertrack);
+    snprintf(tmp, 32, "%d", uci->sectors);
     txtSectors->setText(tmp);
-    snprintf(tmp, 32, "%d", blocksize);
+    snprintf(tmp, 32, "%d", uci->blocksize);
     txtBlocksize->setText(tmp);
   }
   else
   {
-    txtDevice->setText("");
-    txtPath->setText(currentDir);
+    CreateDefaultDevicename(tmp);
+    txtDevice->setText(tmp);
+    strroot.assign(currentDir);
+    txtPath->setText(strroot);
+    fileSelected = false;
+    
     chkReadWrite->setSelected(true);
     txtBootPri->setText("0");
     txtSurfaces->setText("1");
@@ -399,15 +420,16 @@ bool EditFilesysHardfile(int unit_no)
   
   if(dialogResult)
   {
-    if(unit_no >= 0)
-      kill_filesys_unit(currprefs.mountinfo, unit_no);
-    else
-      extractPath((char *) txtPath->getText().c_str(), currentDir);
-    failure = add_filesys_unit(currprefs.mountinfo, (char *) txtDevice->getText().c_str(), 
+    int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
+    extractPath((char *) txtPath->getText().c_str(), currentDir);
+    
+    uci = add_filesys_config(&changed_prefs, unit_no, (char *) txtDevice->getText().c_str(), 
       0, (char *) txtPath->getText().c_str(), !chkReadWrite->isSelected(), 
       atoi(txtSectors->getText().c_str()), atoi(txtSurfaces->getText().c_str()), 
       atoi(txtReserved->getText().c_str()), atoi(txtBlocksize->getText().c_str()), 
-      atoi(txtBootPri->getText().c_str()), 0, 0);
+      bp, 0, 0, 0);
+    if (uci)
+    	hardfile_do_disk_change (uci->configoffset, 1);
   }
 
   return dialogResult;

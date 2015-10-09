@@ -52,8 +52,8 @@ typedef uae_u32 uintptr;
 
 #define USE_ALIAS 1
 #define USE_F_ALIAS 1
-#define USE_OFFSET 1
-#define COMP_DEBUG 1
+#define USE_OFFSET 0
+#define COMP_DEBUG 0
 
 #if COMP_DEBUG
 #define Dif(x) if (x)
@@ -149,7 +149,6 @@ extern void* pushall_call_handler;
 typedef struct {
   uae_u32* mem;
   uae_u32 val;
-  uae_u8 is_swapped;
   uae_u8 status;
   uae_s8 realreg; /* gb-- realreg can hold -1 */
   uae_u8 realind; /* The index in the holds[] array */
@@ -246,12 +245,6 @@ typedef struct {
     freg_status fate[VFREGS];
     fn_status   fat[N_FREGS];
 #endif
-#ifdef USE_JIT_FPU
-    /* x86 FPU part */
-    uae_s8 spos[N_FREGS];
-    uae_s8 onstack[6];
-    uae_s8 tos;
-#endif
 } bigstate;
 
 typedef struct {
@@ -329,7 +322,7 @@ extern void register_branch(uae_u32 not_taken, uae_u32 taken, uae_u8 cond);
 #define comp_get_ilong(o) do_get_mem_long((uae_u32 *)(comp_pc_p + (o)))
 
 /* Preferences handling */
-void check_prefs_changed_comp (void);
+int check_prefs_changed_comp (void);
 
 struct blockinfo_t;
 

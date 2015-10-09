@@ -29,7 +29,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define USE_MATCH 0
 
 #define writemem_special writemem
 #define readmem_special  readmem
@@ -684,12 +683,16 @@ STATIC_INLINE void alloc_blockinfos(void)
 /********************************************************************
  * Preferences handling. This is just a convenient place to put it  *
  ********************************************************************/
-void check_prefs_changed_comp (void)
+int check_prefs_changed_comp (void)
 {
+    int changed = 0;
+
     if (currprefs.cachesize!=changed_prefs.cachesize) {
 	currprefs.cachesize = changed_prefs.cachesize;
 	alloc_cache();
+	changed = 1;
     }
+    return changed;
 }
 
 /********************************************************************
@@ -849,11 +852,10 @@ int start_trace = 0;
 void trace_func(void)
 {
   TRACE_Start();
-  printf("r0 =0x%08x, r1 =0x%08x, r2 =0x%08x, r3 =0x%08x\n", (&TRACE_mem)[0], (&TRACE_mem)[1], (&TRACE_mem)[2], (&TRACE_mem)[3]);
-  printf("r4 =0x%08x, r5 =0x%08x, r6 =0x%08x, r7 =0x%08x\n", (&TRACE_mem)[4], (&TRACE_mem)[5], (&TRACE_mem)[6], (&TRACE_mem)[7]);
-  printf("r8 =0x%08x, r9 =0x%08x, r10=0x%08x, r11=0x%08x\n", (&TRACE_mem)[8], (&TRACE_mem)[9], (&TRACE_mem)[10], (&TRACE_mem)[11]);
-  printf("r12=0x%08x, r13=0x%08x, r14=0x%08x, r15=0x%08x\n", (&TRACE_mem)[12], (&TRACE_mem)[13], (&TRACE_mem)[14], (&TRACE_mem)[15]);
-  printf("\n");
+  write_log("r0 =0x%08x, r1 =0x%08x, r2 =0x%08x, r3 =0x%08x\n", (&TRACE_mem)[0], (&TRACE_mem)[1], (&TRACE_mem)[2], (&TRACE_mem)[3]);
+  write_log("r4 =0x%08x, r5 =0x%08x, r6 =0x%08x, r7 =0x%08x\n", (&TRACE_mem)[4], (&TRACE_mem)[5], (&TRACE_mem)[6], (&TRACE_mem)[7]);
+  write_log("r8 =0x%08x, r9 =0x%08x, r10=0x%08x, r11=0x%08x\n", (&TRACE_mem)[8], (&TRACE_mem)[9], (&TRACE_mem)[10], (&TRACE_mem)[11]);
+  write_log("r12=0x%08x, r13=0x%08x, r14=0x%08x, r15=0x%08x\n", (&TRACE_mem)[12], (&TRACE_mem)[13], (&TRACE_mem)[14], (&TRACE_mem)[15]);
 }
 
 void emit_trace(void)
@@ -976,39 +978,6 @@ static uae_s8 nstate[N_REGS];
 #define L_NEEDED -2
 #define L_UNNEEDED -3
 
-STATIC_INLINE void big_to_small_state(bigstate* b, smallstate* s)
-{
-    int i;
-
-  for (i = 0; i < VREGS; i++)
-	s->virt[i] = vstate[i];
-  for (i = 0; i < N_REGS; i++)
-	s->nat[i] = nstate[i];
-	}
-
-STATIC_INLINE int callers_need_recompile(bigstate * b, smallstate * s)
-{
-  int i;
-  int reverse = 0;
-
-  for (i = 0; i < VREGS; i++) {
-	if (vstate[i] != L_UNNEEDED && s->virt[i] == L_UNNEEDED)
-	  return 1;
-	if (vstate[i] == L_UNNEEDED && s->virt[i] != L_UNNEEDED)
-	  reverse++;
-  }
-  for (i = 0; i < N_REGS; i++) {
-	if (nstate[i] >= 0 && nstate[i] != s->nat[i])
-	  return 1;
-	if (nstate[i] < 0 && s->nat[i] >= 0)
-	  reverse++;
-  }
-  if (reverse >= 2 && USE_MATCH)
-	return 1;	/* In this case, it might be worth recompiling the
-				 * callers */
-  return 0;
-}
-
 STATIC_INLINE void log_startblock(void)
 {
     int i;
@@ -1057,15 +1026,12 @@ STATIC_INLINE void log_vwrite(int r)
 /* Using an n-reg to hold a v-reg */
 STATIC_INLINE void log_isreg(int n, int r)
 {
-  if (nstate[n] == L_UNKNOWN && r < 16 && !vwritten[r] && USE_MATCH)
-	nstate[n] = r;
-  else {
-	do_load_reg(n, r);
-    if (nstate[n]==L_UNKNOWN)
+ 	do_load_reg(n, r);
+  if (nstate[n]==L_UNKNOWN)
 	  nstate[n] = L_UNAVAIL;
-  }
-    if (vstate[r]==L_UNKNOWN)
-	vstate[r]=L_NEEDED;
+
+  if (vstate[r]==L_UNKNOWN)
+  	vstate[r]=L_NEEDED;
 }
 
 STATIC_INLINE void log_clobberreg(int r)
@@ -1086,11 +1052,6 @@ STATIC_INLINE void log_flush(void)
     for (i=0;i<N_REGS;i++)
 	if (nstate[i]==L_UNKNOWN)
 	    nstate[i]=L_UNAVAIL;
-}
-
-STATIC_INLINE void log_dump(void)
-{
-    return;
 }
 
 /********************************************************************
@@ -2883,8 +2844,6 @@ void alloc_cache(void)
     }
 }
 
-extern void op_illg_1 (uae_u32 opcode) REGPARAM;
-
 static void calc_checksum(blockinfo* bi, uae_u32* c1, uae_u32* c2)
 {
     uae_u32 k1=0;
@@ -2923,33 +2882,6 @@ static void calc_checksum(blockinfo* bi, uae_u32* c1, uae_u32* c2)
 	*c1=k1;
 	*c2=k2;
 }
-
-#if 0
-static void show_checksum(CSI_TYPE* csi)
-{
-    uae_u32 k1=0;
-    uae_u32 k2=0;
-    uae_s32 len=CSI_LENGTH(csi);
-    uae_u32 tmp=(uintptr)CSI_START_P(csi);
-    uae_u32* pos;
-
-    len+=(tmp&3);
-    tmp&=(~3);
-    pos=(uae_u32*)tmp;
-
-    if (len<0 || len>MAX_CHECKSUM_LEN) {
-	return;
-    }
-    else {
-	while (len>0) {
-	    D(panicbug("%08x ",*pos));
-	    pos++;
-	    len-=4;
-	}
-	D(panicbug(" bla"));
-    }
-}
-#endif
 
 
 int check_for_cache_miss(void)
@@ -2993,17 +2925,19 @@ static void cache_miss(void)
 	execute_normal(); /* Compile this block now */
 	return;
     }
+#if COMP_DEBUG
     Dif (!bi2 || bi==bi2) {
 	D(panicbug("Unexplained cache miss %p %p\n",bi,bi2));
 	abort();
     }
+#endif
     raise_in_cl_list(bi);
     return;
 }
 
 static int called_check_checksum(blockinfo* bi);
 
-STATIC_INLINE int block_check_checksum(blockinfo* bi) 
+static int block_check_checksum(blockinfo* bi) 
 {
     uae_u32     c1,c2;
     int        isgood;
@@ -3287,9 +3221,9 @@ void build_comp(void)
     const struct comptbl* nftbl=op_smalltbl_0_comp_nf;
     int count;
 #ifdef NOFLAGS_SUPPORT
-    struct cputbl *nfctbl = (currprefs.cpu_level >= 4 ? op_smalltbl_0_nf
-			     : currprefs.cpu_level == 3 ? op_smalltbl_1_nf
-			     : currprefs.cpu_level == 2 ? op_smalltbl_2_nf
+    struct cputbl *nfctbl = (currprefs.cpu_level >= 5 ? op_smalltbl_0_nf
+			     : currprefs.cpu_level == 4 ? op_smalltbl_1_nf
+			     : (currprefs.cpu_level == 2 || currprefs.cpu_level == 3) ? op_smalltbl_2_nf
 			     : currprefs.cpu_level == 1 ? op_smalltbl_3_nf
 			     : ! currprefs.cpu_compatible ? op_smalltbl_4_nf
 			     : op_smalltbl_5_nf);
@@ -3299,9 +3233,6 @@ void build_comp(void)
 
     for (opcode = 0; opcode < 65536; opcode++) {
 		reset_compop(opcode);
-#ifdef NOFLAGS_SUPPORT
-	nfcpufunctbl[opcode] = op_illg_1;
-#endif
 	prop[opcode].use_flags = 0x1f;
 	prop[opcode].set_flags = 0x1f;
 		prop[opcode].cflow = fl_trap; // ILLEGAL instructions do trap
@@ -3347,8 +3278,12 @@ void build_comp(void)
 	cpuop_func *nfcf;
 #endif
 	int isaddx,cflow;
+	int lvl;
 
-	if (table68k[opcode].mnemo == i_ILLG || table68k[opcode].clev > currprefs.cpu_level)
+	lvl = (currprefs.cpu_model - 68000) / 10;
+	if (lvl > 4)
+	    lvl--;
+	if (table68k[opcode].mnemo == i_ILLG || table68k[opcode].clev > lvl)
 	    continue;
 
 	if (table68k[opcode].handler != -1) {
@@ -3505,13 +3440,6 @@ STATIC_INLINE void flush_icache_lazy(int n)
     active=NULL;
 }
 
-/*
-static void catastrophe(void)
-{
-    abort();
-}
-*/
-
 int failure;
 
 #ifdef JIT_DEBUG
@@ -3549,7 +3477,7 @@ void compiler_dumpstate(void)
 
 void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 {
-    if (letit && compiled_code && currprefs.cpu_level>=2) {
+    if (letit && compiled_code && currprefs.cpu_model>=68020) {
 #ifdef PROFILE_COMPILE_TIME
 	compile_count++;
 	clock_t start_time = clock();
@@ -3919,14 +3847,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	    }
 	}
 
-#if USE_MATCH	
-	if (callers_need_recompile(&live,&(bi->env))) {
-	    mark_callers_recompile(bi);
-	}
-
-	big_to_small_state(&live,&(bi->env));
-#endif
-
 #if USE_CHECKSUM_INFO
 	remove_from_list(bi);
 	if (trace_in_rom) {
@@ -3968,7 +3888,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 		bi->direct_handler_size = get_target() - (uae_u8 *)current_block_start_target;
 #endif
 
-	log_dump();
 #ifndef ALIGN_NOT_NEEDED
 	align_target(align_jumps);
 #endif
@@ -4001,7 +3920,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 #ifdef PROFILE_COMPILE_TIME
 	compile_time += (clock() - start_time);
 #endif
-	do_extra_cycles(totcycles); /* for the compilation time */
     }
 }
 

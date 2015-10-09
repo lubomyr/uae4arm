@@ -13,6 +13,9 @@
 #include "uae.h"
 #include "gui_handling.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 
 #define DIALOG_WIDTH 520
 #define DIALOG_HEIGHT 400
@@ -116,8 +119,8 @@ static ListBoxActionListener* listBoxActionListener;
 
 static void InitSelectFolder(const char *title)
 {
-	wndSelectFolder = new gcn::Window("Load");
-	wndSelectFolder->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
+  wndSelectFolder = new gcn::Window("Load");
+  wndSelectFolder->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
   wndSelectFolder->setPosition((GUI_WIDTH - DIALOG_WIDTH) / 2, (GUI_HEIGHT - DIALOG_HEIGHT) / 2);
   wndSelectFolder->setBaseColor(gui_baseCol + 0x202020);
   wndSelectFolder->setCaption(title);
@@ -125,15 +128,15 @@ static void InitSelectFolder(const char *title)
   
   buttonActionListener = new ButtonActionListener();
   
-	cmdOK = new gcn::Button("Ok");
-	cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-	cmdOK->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdOK = new gcn::Button("Ok");
+  cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+  cmdOK->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdOK->setBaseColor(gui_baseCol + 0x202020);
   cmdOK->addActionListener(buttonActionListener);
   
-	cmdCancel = new gcn::Button("Cancel");
-	cmdCancel->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-	cmdCancel->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdCancel = new gcn::Button("Cancel");
+  cmdCancel->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+  cmdCancel->setPosition(DIALOG_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdCancel->setBaseColor(gui_baseCol + 0x202020);
   cmdCancel->addActionListener(buttonActionListener);
 
@@ -243,7 +246,7 @@ static void SelectFolderLoop(void)
       //-------------------------------------------------
       // Send event to guichan-controls
       //-------------------------------------------------
-#ifdef ANDROID
+#ifdef ANDROIDSDL
             /*
              * Now that we are done polling and using SDL events we pass
              * the leftovers to the SDLInput object to later be handled by
