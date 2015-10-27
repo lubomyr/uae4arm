@@ -81,11 +81,12 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   posY += chkStatusLine->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkShowGUI, DISTANCE_BORDER, posY);
   posY += chkShowGUI->getHeight() + DISTANCE_NEXT_Y;
+#ifndef ANDROID  
   category.panel->add(lblPandoraSpeed, DISTANCE_BORDER, posY);
   category.panel->add(sldPandoraSpeed, DISTANCE_BORDER + lblPandoraSpeed->getWidth() + 8, posY);
   category.panel->add(lblPandoraSpeedInfo, sldPandoraSpeed->getX() + sldPandoraSpeed->getWidth() + 12, posY);
   posY += sldPandoraSpeed->getHeight() + DISTANCE_NEXT_Y;
-  
+#endif  
   RefreshPanelMisc();
 }
 

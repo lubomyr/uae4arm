@@ -9,7 +9,7 @@ O      = o
 RM     = rm -f
 #CC     = gcc
 #CXX    = g++
-#STRIP  = strip
+STRIP  = strip
 #AS     = as
 
 PROG   = $(NAME)
@@ -21,24 +21,22 @@ PANDORA=1
 #USE_XFD=1
 
 DEFAULT_CFLAGS = `$(SDL_BASE)sdl-config --cflags`
-LDFLAGS = -lSDL -lpthread  -lz -lSDL_image -lpng -lrt
 
-MORE_CFLAGS += -DGP2X -DPANDORA -DDOUBLEBUFFER -DARMV6_ASSEMBLY -DUSE_ARMNEON
+LDFLAGS = -lSDL -lpthread  -lz -lSDL_image -lpng -lrt
+LDFLAGS +=  -lSDL_ttf -lguichan_sdl -lguichan
+
+MORE_CFLAGS += -DGP2X -DPANDORA -DARMV6_ASSEMBLY -DUSE_ARMNEON
+MORE_CFLAGS += -DCPU_arm -DARM_ASSEMBLY
 #MORE_CFLAGS += -DWITH_LOGGING
 #MORE_CFLAGS += -DDEBUG_M68K
 
-MORE_CFLAGS += -DCPU_arm -DARM_ASSEMBLY
-
-MORE_CFLAGS += -Isrc -Isrc/gp2x -Isrc/menu -Isrc/include -Isrc/gp2x/menu -fomit-frame-pointer -Wno-unused -Wno-format -DUSE_SDL -DGCCCONSTFUNC="__attribute__((const))" -DUSE_UNDERSCORE -DUNALIGNED_PROFITABLE -DOPTIMIZED_FLAGS
-LDFLAGS +=  -lSDL_ttf -lguichan_sdl -lguichan
+MORE_CFLAGS += -Isrc -Isrc/include -fomit-frame-pointer -Wno-unused -Wno-format -Wno-write-strings -DUSE_SDL
 MORE_CFLAGS += -fexceptions
+MORE_CFLAGS += -msoft-float -ffast-math -D_GLIBCXX_USE_CXX11_ABI=0
 
-MORE_CFLAGS += -DROM_PATH_PREFIX=\"./\" -DDATA_PREFIX=\"./data/\" -DSAVE_PREFIX=\"./saves/\"
-
-MORE_CFLAGS += -msoft-float -ffast-math
 ifndef DEBUG
-MORE_CFLAGS += -O3
-MORE_CFLAGS += -fstrict-aliasing -mstructure-size-boundary=32 -fexpensive-optimizations
+MORE_CFLAGS += -O3 -fexpensive-optimizations
+MORE_CFLAGS += -fstrict-aliasing -mstructure-size-boundary=32
 MORE_CFLAGS += -fweb -frename-registers -fomit-frame-pointer
 #MORE_CFLAGS += -falign-functions=32 -falign-loops -falign-labels -falign-jumps
 MORE_CFLAGS += -falign-functions=32
@@ -47,8 +45,6 @@ MORE_CFLAGS += -finline -finline-functions -fno-builtin
 else
 MORE_CFLAGS += -ggdb
 endif
-
-ASFLAGS += -mfloat-abi=soft
 
 CFLAGS  = $(DEFAULT_CFLAGS) $(MORE_CFLAGS)
 
@@ -82,6 +78,7 @@ OBJS =	\
 	src/savestate.o \
 	src/traps.o \
 	src/uaelib.o \
+	src/uaeresource.o \
 	src/zfile.o \
 	src/zfile_archive.o \
 	src/archivers/7z/7zAlloc.o \
@@ -180,15 +177,15 @@ OBJS += src/cpustbl.o
 OBJS += src/cpuemu_0.o
 OBJS += src/cpuemu_4.o
 OBJS += src/cpuemu_11.o
-OBJS += src/compemu.o
-OBJS += src/compemu_fpp.o
-OBJS += src/compstbl.o
-OBJS += src/compemu_support.o
+OBJS += src/jit/compemu.o
+OBJS += src/jit/compemu_fpp.o
+OBJS += src/jit/compstbl.o
+OBJS += src/jit/compemu_support.o
 
 CPPFLAGS  = $(CFLAGS)
 
 src/osdep/neon_helper.o: src/osdep/neon_helper.s
-	$(CXX) -O3 -pipe -falign-functions=32 -march=armv7-a -mcpu=cortex-a8 -mtune=cortex-a8 -mfpu=neon -mfloat-abi=softfp -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
+	$(CXX) -falign-functions=32 -march=armv7-a -mcpu=cortex-a8 -mtune=cortex-a8 -mfpu=neon -mfloat-abi=softfp -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
 
 $(PROG): $(OBJS)
 	$(CXX) $(CFLAGS) -o $(PROG) $(OBJS) $(LDFLAGS)

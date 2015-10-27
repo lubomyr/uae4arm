@@ -45,6 +45,7 @@ static gcn::Label *lblBootPri;
 static gcn::TextField *txtBootPri;
 
 extern std::string VolName;
+char correct_path[MAX_PATH];
 
 class FilesysVirtualActionListener : public gcn::ActionListener
 {
@@ -59,6 +60,7 @@ class FilesysVirtualActionListener : public gcn::ActionListener
         if(SelectFolder("Select folder", tmp))
 	{
           txtPath->setText(tmp);
+	  strcpy(correct_path, tmp);
 	  txtVolume->setText(VolName);
 	}
         wndEditFilesysVirtual->requestModalFocus();
@@ -338,6 +340,7 @@ bool EditFilesysVirtual(int unit_no)
 
   if(unit_no >= 0)
   {
+    strcpy(correct_path,"");
     uci = &changed_prefs.mountconfig[unit_no];
     get_filesys_unitconfig(&changed_prefs, unit_no, &mi);
 
@@ -370,8 +373,10 @@ bool EditFilesysVirtual(int unit_no)
   {
     int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
     extractPath((char *) txtPath->getText().c_str(), currentDir);
+    if (strlen(correct_path) == 0)
+      strcpy(correct_path, txtPath->getText().c_str());
     uci = add_filesys_config(&changed_prefs, unit_no, (char *) txtDevice->getText().c_str(), 
-      (char *) txtVolume->getText().c_str(), (char *) txtPath->getText().c_str(), 
+      (char *) txtVolume->getText().c_str(), correct_path, 
       !chkReadWrite->isSelected(), 0, 0, 0, 0, bp, 0, 0, 0);
     if (uci)
     	filesys_media_change (uci->rootdir, 1, uci);

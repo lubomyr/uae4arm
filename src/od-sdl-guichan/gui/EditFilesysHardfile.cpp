@@ -53,6 +53,8 @@ static gcn::TextField *txtSectors;
 static gcn::Label *lblBlocksize;
 static gcn::TextField *txtBlocksize;
 
+extern char correct_path[MAX_PATH];
+
 class FilesysHardfileActionListener : public gcn::ActionListener
 {
   public:
@@ -66,6 +68,7 @@ class FilesysHardfileActionListener : public gcn::ActionListener
         if(SelectFile("Select harddisk file", tmp, harddisk_filter))
         {
           txtPath->setText(tmp);
+	  strcpy(correct_path, tmp);
           fileSelected = true;
         }
         wndEditFilesysHardfile->requestModalFocus();
@@ -379,6 +382,7 @@ bool EditFilesysHardfile(int unit_no)
 
   if(unit_no >= 0)
   {
+    strcpy(correct_path,"");
     get_filesys_unitconfig(&changed_prefs, unit_no, &mi);
     strdevname.assign(uci->devname);
     txtDevice->setText(strdevname);
@@ -422,14 +426,15 @@ bool EditFilesysHardfile(int unit_no)
   {
     int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
     extractPath((char *) txtPath->getText().c_str(), currentDir);
-    
+    if (strlen(correct_path) == 0)
+      strcpy(correct_path, txtPath->getText().c_str());
     uci = add_filesys_config(&changed_prefs, unit_no, (char *) txtDevice->getText().c_str(), 
-      0, (char *) txtPath->getText().c_str(), !chkReadWrite->isSelected(), 
+      0, correct_path, !chkReadWrite->isSelected(), 
       atoi(txtSectors->getText().c_str()), atoi(txtSurfaces->getText().c_str()), 
       atoi(txtReserved->getText().c_str()), atoi(txtBlocksize->getText().c_str()), 
       bp, 0, 0, 0);
     if (uci)
-    	hardfile_do_disk_change (uci->configoffset, 1);
+    	hardfile_do_disk_change (uci, 1);
   }
 
   return dialogResult;

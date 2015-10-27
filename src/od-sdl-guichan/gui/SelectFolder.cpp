@@ -327,7 +327,9 @@ bool SelectFolder(const char *title, char *value)
   dialogFinished = false;
   InitSelectFolder(title);
   checkfoldername(value);
+  __android_log_print(ANDROID_LOG_INFO, "SDL", "FIXME folderloop start");
   SelectFolderLoop();
+  __android_log_print(ANDROID_LOG_INFO, "SDL", "FIXME folderloop end");
   ExitSelectFolder();
   if(dialogResult)
   {

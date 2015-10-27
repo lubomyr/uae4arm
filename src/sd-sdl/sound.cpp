@@ -74,7 +74,7 @@ void uae4all_resume_music(void) { }
 static int have_sound = 0;
 static int lastfreq;
 
-extern unsigned int new_beamcon0;
+extern uae_u16 new_beamcon0;
 
 static __inline__ void sound_default_evtime(int freq)
 {
@@ -289,5 +289,8 @@ void reset_sound (void)
   memset(sndbuffer, 0, 2 * 4 * (SNDBUFFER_LEN+32)*DEFAULT_SOUND_CHANNELS);
 }
 
+void sound_volume (int dir)
+{
+}
 #endif
 
