@@ -167,6 +167,7 @@ namespace sdl
         {
           switch(event.key.keysym.sym)
           {
+#ifndef ANDROIDSDL
             case SDLK_q:
               //-------------------------------------------------
               // Quit entire program via Q on keyboard
@@ -184,7 +185,7 @@ namespace sdl
         			gui_running = false;
         			break;
 
-            case SDLK_LCTRL:
+            case SDLK_F12:
     			    if(emulating && widgets::cmdStart->isEnabled())
     		      {
                 //------------------------------------------------
@@ -201,7 +202,7 @@ namespace sdl
           			gui_running = false;
               }
               break;              
-
+#endif
             case SDLK_PAGEDOWN:
             case SDLK_HOME:
               //------------------------------------------------

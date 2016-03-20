@@ -524,10 +524,15 @@ void gui_handle_events (void)
 	buttonB = keystate[SDLK_END];
 	buttonX = keystate[SDLK_PAGEDOWN];
 	buttonY = keystate[SDLK_PAGEUP];
+#ifndef ANDROIDSDL 
 	triggerL = keystate[SDLK_RSHIFT];
 	triggerR = keystate[SDLK_RCTRL];
+#else
+	triggerL = keystate[SDLK_F13];
+	triggerR = keystate[SDLK_F14];
+#endif
 
-	if(keystate[SDLK_LCTRL])
+	if(keystate[SDLK_F12])
 		goMenu();
 
 	//L + R
