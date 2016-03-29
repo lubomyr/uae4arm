@@ -4,7 +4,7 @@
  * Copyright 1996-1998 Bernd Schmidt
  */
 
-#include "osdep/inputmode.h"
+#include "od-pandora/inputmode.h"
 
 #define MAX_PLANES 8
 
@@ -70,7 +70,8 @@ struct color_entry {
 
 /* convert 24 bit AGA Amiga RGB to native color */
 /* warning: this is still ugly, but now works with either byte order */
-#ifndef PANDORA
+//#ifndef PANDORA
+#if !defined(PANDORA) || !defined(USE_ARMNEON)  // Well not really since ubfx is arm6t2...
 #define CONVERT_RGB(c) \
     ( xbluecolors[((uae_u8*)(&c))[0]] | xgreencolors[((uae_u8*)(&c))[1]] | xredcolors[((uae_u8*)(&c))[2]] )
 #else

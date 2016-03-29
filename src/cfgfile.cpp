@@ -26,7 +26,7 @@
 #include "filesys.h"
 #include "fsdb.h"
 #include "disk.h"
-#include "sounddep/sound.h"
+#include "sd-pandora/sound.h"
 
 static int config_newfilesystem;
 static struct strlist *temp_lines;
@@ -414,6 +414,10 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
     cfgfile_write (f, "gfx_lores=%s\n", p->gfx_resolution == 0 ? "true" : "false");
     cfgfile_write (f, "gfx_resolution=%s\n", lorestype1[p->gfx_resolution]);
 
+#ifdef RASPBERRY
+    cfgfile_dwrite (f, "gfx_correct_aspect=%d\n", p->gfx_correct_aspect);
+#endif
+
     cfgfile_write (f, "immediate_blits=%s\n", p->immediate_blits ? "true" : "false");
     cfgfile_write (f, "fast_copper=%s\n", p->fast_copper ? "true" : "false");
     cfgfile_write (f, "ntsc=%s\n", p->ntscmode ? "true" : "false");
@@ -628,6 +632,13 @@ static int cfgfile_parse_host (struct uae_prefs *p, char *option, char *value)
 	|| cfgfile_intval (option, value, "gfx_height_fullscreen", &p->gfx_size_fs.height, 1))
 
 	    return 1;
+
+#ifdef RASPBERRY
+    if (cfgfile_intval (option, value, "gfx_correct_aspect", &p->gfx_correct_aspect, 1))
+	    return 1;   
+#endif
+
+
 
 	if (cfgfile_string (option, value, "config_info", p->info, sizeof p->info)
 	|| cfgfile_string (option, value, "config_description", p->description, sizeof p->description))
@@ -1615,7 +1626,7 @@ void default_prefs (struct uae_prefs *p, int type)
   p->sound_filter_type = 0;
   p->sound_auto = 1;
 
-  p->cachesize = 0;
+  p->cachesize = DEFAULT_JIT_CACHE_SIZE;
 
   for (i = 0;i < 10; i++)
 	  p->optcount[i] = -1;
@@ -1627,13 +1638,21 @@ void default_prefs (struct uae_prefs *p, int type)
   p->optcount[5] = 0;
 
   p->gfx_framerate = 0;
+#ifdef RASPBERRY
+  p->gfx_size.width = 640;
+  p->gfx_size.height = 256;
+#else
   p->gfx_size.width = 320;
   p->gfx_size.height = 240;
+#endif
   p->gfx_size_win.width = 320;
   p->gfx_size_win.height = 240;
   p->gfx_size_fs.width = 640;
   p->gfx_size_fs.height = 480;
   p->gfx_resolution = 0;
+#ifdef RASPBERRY
+  p->gfx_correct_aspect = 1;
+#endif
   
   p->immediate_blits = 0;
   p->chipset_refreshrate = 50;
@@ -1653,7 +1672,15 @@ void default_prefs (struct uae_prefs *p, int type)
   strcpy (p->df[2], "");
   strcpy (p->df[3], "");
 
+  #ifdef RASPBERRY
+  // Choose automatically first rom.
+  if (lstAvailableROMs.size() >= 1)
+    strncpy(currprefs.romfile,lstAvailableROMs[0]->Path,255);
+  else
+    strcpy (p->romfile, "kick.rom");
+  #else
   strcpy (p->romfile, "kick.rom");
+  #endif
   strcpy (p->romextfile, "");
 
   sprintf (p->path_rom, "%s/kickstarts/", start_path_data);

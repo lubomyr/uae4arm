@@ -66,6 +66,7 @@ static uae_u32 lowbits (int v, int shift, int lsize)
     return v;
 }
 
+#ifdef PICASSO96
 void alloc_colors_picasso (int rw, int gw, int bw, int rs, int gs, int bs, int rgbfmt)
 {
     int byte_swap = 0;
@@ -155,6 +156,7 @@ void alloc_colors_picasso (int rw, int gw, int bw, int rs, int gs, int bs, int r
 	}
     }
 }
+#endif
 
 void alloc_colors64k (int rw, int gw, int bw, int rs, int gs, int bs, int byte_swap)
 {

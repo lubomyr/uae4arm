@@ -39,7 +39,7 @@ uae_u32 allocated_bogomem;
 uae_u32 allocated_gfxmem;
 uae_u32 allocated_z3fastmem;
 
-uae_u32 max_z3fastmem = 32 * 1024 * 1024;
+uae_u32 max_z3fastmem = 64 * 1024 * 1024;
 
 static size_t bootrom_filepos, chip_filepos, bogo_filepos, rom_filepos, a3000lmem_filepos, a3000hmem_filepos;
 

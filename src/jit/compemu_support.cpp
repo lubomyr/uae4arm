@@ -847,7 +847,9 @@ int start_trace = 0;
 
 void trace_func(void)
 {
+#ifdef USE_ARMNEON
   TRACE_Start();
+#endif
   write_log("r0 =0x%08x, r1 =0x%08x, r2 =0x%08x, r3 =0x%08x\n", (&TRACE_mem)[0], (&TRACE_mem)[1], (&TRACE_mem)[2], (&TRACE_mem)[3]);
   write_log("r4 =0x%08x, r5 =0x%08x, r6 =0x%08x, r7 =0x%08x\n", (&TRACE_mem)[4], (&TRACE_mem)[5], (&TRACE_mem)[6], (&TRACE_mem)[7]);
   write_log("r8 =0x%08x, r9 =0x%08x, r10=0x%08x, r11=0x%08x\n", (&TRACE_mem)[8], (&TRACE_mem)[9], (&TRACE_mem)[10], (&TRACE_mem)[11]);

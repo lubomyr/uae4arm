@@ -276,7 +276,9 @@ static void REGPARAM2 expamem_wput (uaecptr addr, uae_u32 value)
   		p2 = z3fastmem_start >> 16;
 		} else {
 		    // Z3 P96 RAM
+#ifdef PICASSO96
 		    p2 = p96ram_start >> 16;
+#endif
 		}
 		put_word (regs.regs[11] + 0x20, p2);
 		put_word (regs.regs[11] + 0x28, p2);
@@ -913,7 +915,9 @@ static void allocate_expamem (void)
 
     z3fastmem_bank.baseaddr = z3fastmem;
     fastmem_bank.baseaddr = fastmemory;
+#ifdef PICASSO96
     gfxmem_bankx.baseaddr = gfxmemory;
+#endif
 
 #ifdef SAVESTATE
     if (savestate_state == STATE_RESTORE) {
@@ -980,12 +984,12 @@ void expamem_next(void)
     else
         expamem_init_clear2 ();
 }
-
+#ifdef PICASSO96
 void p96memstart(void)
 {
     p96ram_start = 0x3000000;
 }
-
+#endif
 void expamem_reset (void)
 {
    int do_mount = 1;

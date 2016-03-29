@@ -17,7 +17,7 @@
 #include "memory-uae.h"
 #include "custom.h"
 #include "newcpu.h"
-#include "threaddep/thread.h"
+#include "td-sdl/thread.h"
 #include "autoconf.h"
 #include "traps.h"
 

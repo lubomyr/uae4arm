@@ -16,7 +16,7 @@
 #include "uae.h"
 #include "gensound.h"
 #include "audio.h"
-#include "sounddep/sound.h"
+#include "sd-pandora/sound.h"
 #include "events.h"
 #include "memory-uae.h"
 #include "custom.h"

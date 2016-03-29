@@ -10,11 +10,11 @@
 #include "sysdeps.h"
 #include <assert.h>
 #include "options.h"
-#include "threaddep/thread.h"
+#include "td-sdl/thread.h"
 #include "uae.h"
 #include "gensound.h"
 #include "audio.h"
-#include "sounddep/sound.h"
+#include "sd-pandora/sound.h"
 #include "events.h"
 #include "memory-uae.h"
 #include "custom.h"
@@ -431,6 +431,9 @@ void leave_program (void)
 
 static void real_main2 (int argc, char **argv)
 {
+#ifdef RASPBERRY
+  printf("Uae4arm v0.4 for Raspberry Pi by Chips\n");
+#endif
 #ifdef PANDORA
   SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_NOPARACHUTE | SDL_INIT_VIDEO);
 #else 

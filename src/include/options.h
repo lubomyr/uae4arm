@@ -19,6 +19,8 @@ struct strlist {
     int unknown;
 };
 
+#define DEFAULT_JIT_CACHE_SIZE 8192
+
 #define CONFIG_TYPE_HARDWARE 1
 #define CONFIG_TYPE_HOST 2
 #define CONFIG_BLEN 2560
@@ -75,6 +77,10 @@ struct uae_prefs {
     struct wh gfx_size;
     int gfx_resolution;
  
+#ifdef RASPBERRY
+    int gfx_correct_aspect;
+#endif
+
     int immediate_blits;
     unsigned int chipset_mask;
     int ntscmode;

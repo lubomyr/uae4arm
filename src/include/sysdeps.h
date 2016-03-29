@@ -394,7 +394,11 @@ extern void gui_message (const char *,...);
 
 #ifndef STATIC_INLINE
 #if __GNUC__ - 1 > 1 && __GNUC_MINOR__ - 1 >= 0
+#ifdef RASPBERRY
+#define STATIC_INLINE static __inline__
+#else
 #define STATIC_INLINE static __inline__ __attribute__ ((always_inline))
+#endif
 #define NOINLINE __attribute__ ((noinline))
 #define NORETURN __attribute__ ((noreturn))
 #elif _MSC_VER

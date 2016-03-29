@@ -500,7 +500,9 @@ void restore_state (const char *filename)
     }
     restore_disk_finish();
     restore_blitter_finish();
+#ifdef PICASSO96
     restore_p96_finish ();
+#endif
     return;
 
   error:

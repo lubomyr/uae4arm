@@ -197,6 +197,9 @@ void do_mouse_hack (void)
       //------------------------------------------
       // New stylus<->follow mouse mode
       //------------------------------------------
+      #ifndef RASPBERRY
+      printf("do_mouse_hack: sprvbfl=%d\n", sprvbfl);
+      #endif
 	    if (sprvbfl && (sprvbfl-- > 1)) 
       {
         int stylusxpos, stylusypos;          
@@ -239,7 +242,14 @@ void do_mouse_hack (void)
 uae_u16 JOY0DAT (void)
 {
     do_mouse_hack ();
+#ifdef RASPBERRY
+    if (currprefs.pandora_custom_dpad == 0)
+        return joy0dir;
+    if (currprefs.pandora_custom_dpad == 1)
+        return ((uae_u8)mouse_x) | ((uae_u16)mouse_y << 8);
+#else
     return ((uae_u8)mouse_x) + ((uae_u16)mouse_y << 8) + joy0dir;
+#endif
 }
 
 uae_u16 JOY1DAT (void)
@@ -342,8 +352,7 @@ void inputdevice_updateconfig (struct uae_prefs *prefs)
 void inputdevice_default_prefs (struct uae_prefs *p)
 {
   inputdevice_init ();
-
-  p->input_joymouse_multiplier = 20;
+  p->input_joymouse_multiplier = 2;
   p->input_autofire_framecnt = 8;
 }
 

@@ -242,6 +242,7 @@ gettz()
 #if !defined(TZSET) && defined(FTIME)
 {
 	struct timeb    buf;
+
 //FIXME: Android - undefined reference to 'ftime'
 #ifndef ANDROID
 	ftime(&buf);
