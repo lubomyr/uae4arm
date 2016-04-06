@@ -413,7 +413,7 @@ bool EditFilesysHardfile(int unit_no)
     txtBlocksize->setText("512");
   }
   EditFilesysHardfileLoop();
-  ExitEditFilesysHardfile();
+
   if(dialogResult)
   {
     int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
@@ -427,5 +427,7 @@ bool EditFilesysHardfile(int unit_no)
     if (uci)
     	hardfile_do_disk_change (uci, 1);
   }
+  ExitEditFilesysHardfile();
+  
   return dialogResult;
 }

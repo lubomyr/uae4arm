@@ -1,0 +1,11 @@
+--- src/od-pandora/menu/menu_config.cpp	2015-09-29 16:35:14.000000000 +0300
++++ src/od-pandora/menu/menu_config.cpp	2015-12-04 09:35:06.000000000 +0200
+@@ -7,6 +7,8 @@
+ #include "options.h"
+ #include "gui.h"
+ #include "sounddep/sound.h"
++#include "memory-uae.h"
++#include "newcpu.h"
+ #include "custom.h"
+ #include "osdep/gp2x.h"
+ #include "uae.h"

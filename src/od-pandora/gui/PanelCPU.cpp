@@ -48,7 +48,7 @@ class CPUButtonActionListener : public gcn::ActionListener
   		  changed_prefs.fpu_model = 0;
   		  changed_prefs.address_space_24 = true;
   		  changed_prefs.z3fastmem_size = 0;
-  		  changed_prefs.gfxmem_size = 0;
+  		  changed_prefs.rtgmem_size = 0;
       }
       else if (actionEvent.getSource() == optCPU68010)
       {
@@ -56,7 +56,7 @@ class CPUButtonActionListener : public gcn::ActionListener
   		  changed_prefs.fpu_model = 0;
   		  changed_prefs.address_space_24 = true;
   		  changed_prefs.z3fastmem_size = 0;
-  		  changed_prefs.gfxmem_size = 0;
+  		  changed_prefs.rtgmem_size = 0;
   		  changed_prefs.cpu_compatible = 0;
       }
       else if (actionEvent.getSource() == optCPU68020)
@@ -173,7 +173,7 @@ class JITActionListener : public gcn::ActionListener
 	    if (chkJIT->isSelected())
       {
 	      changed_prefs.cpu_compatible = 0;
-	      changed_prefs.cachesize = DEFAULT_JIT_CACHE_SIZE;
+	      changed_prefs.cachesize = 8192;
       }
       else
       {

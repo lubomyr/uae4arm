@@ -24,8 +24,8 @@
 #include "options.h"
 #include "td-sdl/thread.h"
 #include "gui.h"
-#include "events.h"
 #include "memory-uae.h"
+#include "newcpu.h"
 #include "custom.h"
 #include "xwin.h"
 #include "drawing.h"
@@ -35,15 +35,68 @@
 #include "joystick.h"
 #include "disk.h"
 #include "savestate.h"
-#include "newcpu.h"
 #include "traps.h"
+#include "bsdsocket.h"
 #include "native2amiga.h"
 #include "rtgmodes.h"
 #include "uaeresource.h"
+#include "rommgr.h"
 #include <SDL.h>
 #include "gp2x.h"
 
+/*
+#define DBG_MAX_THREADS 128
+uae_thread_id running_threads[DBG_MAX_THREADS];
+char running_threads_name[DBG_MAX_THREADS][64];
+
+void dbg_add_thread(uae_thread_id id, const char *name)
+{
+  int i;
+  for(i=0; i<DBG_MAX_THREADS; ++i)
+  {
+    if(running_threads[i] == 0)
+    {
+      running_threads[i] = id;
+      if(name != NULL)
+        strncpy(running_threads_name[i], name, 64);
+      else
+        strncpy(running_threads_name[i], "<empty>", 64);
+      write_log("dbg_add_thread: id = %d, name = %s, pos = %d\n", id, running_threads_name[i], i);
+      return;
+    }
+  }
+  write_log("dbg_add_thread: no more free entries\n");
+}
+
+void dbg_rem_thread(uae_thread_id id)
+{
+  int i;
+  for(i=0; i<DBG_MAX_THREADS; ++i)
+  {
+    if(running_threads[i] == id)
+    {
+      write_log("dbg_rem_thread: id = %d, name = %s, pos = %d\n", id, running_threads_name[i], i);
+      running_threads[i] = 0;
+      return;
+    }
+  }
+}
+
+void dbg_list_threads(void)
+{
+  int i;
+  for(i=0; i<DBG_MAX_THREADS; ++i)
+  {
+    if(running_threads[i] != 0)
+    {
+      write_log("dbg_list_threads: id = %d, name = %s, pos = %d\n", running_threads[i], running_threads_name[i], i);
+    }
+  }
+}
+*/
+
 extern void signal_segv(int signum, siginfo_t* info, void*ptr);
+extern void gui_force_rtarea_hdchange(void);
 
 extern int doStylusRightClick;
 extern int mouseMoving;
@@ -55,6 +108,8 @@ extern int loadconfig_old(struct uae_prefs *p, const char *orgpath);
 extern void SetLastActiveConfig(const char *filename);
 
 /* Keyboard and mouse */
+int buttonstate[3];
+
 /* Keyboard */
 int uae4all_keystate[256];
 #ifdef PANDORA
@@ -84,14 +139,22 @@ void reinit_amiga(void)
 {
   write_log("reinit_amiga() called\n");
   DISK_free ();
-  memory_cleanup ();
 #ifdef FILESYS
   filesys_cleanup ();
+  hardfile_reset();
 #endif
 #ifdef AUTOCONFIG
+#if defined (BSDSOCKET)
+  bsdlib_reset();
+#endif
   expansion_cleanup ();
 #endif
+  memory_cleanup ();
   
+  /* At this point, there might run some threads from bsdsocket.*/
+//  write_log("Threads in reinit_amiga():\n");
+//  dbg_list_threads();
+
   currprefs = changed_prefs;
   /* force sound settings change */
   currprefs.produce_sound = 0;
@@ -105,6 +168,7 @@ void reinit_amiga(void)
   uaeres_install ();
   hardfile_install();
 #endif
+  keybuf_init();
 
 #ifdef AUTOCONFIG
   expansion_init ();
@@ -116,6 +180,9 @@ void reinit_amiga(void)
   memory_reset ();
 
 #ifdef AUTOCONFIG
+#if defined (BSDSOCKET)
+	bsdlib_install ();
+#endif
   emulib_install ();
   native2amiga_install ();
 #endif
@@ -123,6 +190,7 @@ void reinit_amiga(void)
   custom_init (); /* Must come after memory_init */
   DISK_init ();
   
+  reset_frame_rate_hack ();
   init_m68k();
 }
 
@@ -155,12 +223,12 @@ void logging_init( void )
     debugfile = 0;
   }
 
-	sprintf(debugfilename, "%s/uae4all_log.txt", start_path_data);
+	sprintf(debugfilename, "%s/uae4arm_log.txt", start_path_data);
 	if(!debugfile)
     debugfile = fopen(debugfilename, "wt");
 
   first++;
-  write_log ( "UAE4ALL Logfile\n\n");
+  write_log ( "UAE4ARM Logfile\n\n");
 #endif
 }
 
@@ -174,12 +242,48 @@ void logging_cleanup( void )
 }
 
 
-uae_u8 *target_load_keyfile (struct uae_prefs *p, char *path, int *sizep, char *name)
+void stripslashes (TCHAR *p)
+{
+	while (_tcslen (p) > 0 && (p[_tcslen (p) - 1] == '\\' || p[_tcslen (p) - 1] == '/'))
+		p[_tcslen (p) - 1] = 0;
+}
+void fixtrailing (TCHAR *p)
+{
+	if (_tcslen(p) == 0)
+		return;
+	if (p[_tcslen(p) - 1] == '/' || p[_tcslen(p) - 1] == '\\')
+		return;
+	_tcscat(p, "/");
+}
+
+void getpathpart (TCHAR *outpath, int size, const TCHAR *inpath)
+{
+	_tcscpy (outpath, inpath);
+	TCHAR *p = _tcsrchr (outpath, '/');
+	if (p)
+		p[0] = 0;
+	fixtrailing (outpath);
+}
+void getfilepart (TCHAR *out, int size, const TCHAR *path)
+{
+	out[0] = 0;
+	const TCHAR *p = _tcsrchr (path, '/');
+	if (p)
+		_tcscpy (out, p + 1);
+	else
+		_tcscpy (out, path);
+}
+
+
+uae_u8 *target_load_keyfile (struct uae_prefs *p, const char *path, int *sizep, char *name)
 {
   return 0;
 }
 
 
+void target_run (void)
+{
+}
 void target_quit (void)
 {
 }
@@ -187,6 +291,13 @@ void target_quit (void)
 
 void target_fixup_options (struct uae_prefs *p)
 {
+	p->rtgmem_type = 1;
+  gfxmem_start = rtg_start_adr;
+  if (p->z3fastmem_start != z3_start_adr)
+  	p->z3fastmem_start = z3_start_adr;
+
+	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
+  p->gfx_resolution = p->gfx_size.width > 600 ? 1 : 0;
 }
 
 
@@ -199,7 +310,6 @@ void target_default_options (struct uae_prefs *p, int type)
   p->pandora_joyConf = 0;
   p->pandora_joyPort = 0;
   p->pandora_tapDelay = 10;
-  p->pandora_stylusOffset = 0;
   
 	p->pandora_customControls = 0;
 #ifdef RASPBERRY
@@ -222,6 +332,8 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->pandora_button2 = GP2X_BUTTON_A;
 	p->pandora_autofireButton1 = GP2X_BUTTON_B;
 	p->pandora_jump = -1;
+	
+	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
 #ifdef ANDROIDSDL
 	p->onScreen = 1;
 	p->onScreen_textinput = 1;
@@ -259,67 +371,70 @@ void target_default_options (struct uae_prefs *p, int type)
 
 void target_save_options (struct zfile *f, struct uae_prefs *p)
 {
-  cfgfile_write (f, "pandora.cpu_speed=%d\n", p->pandora_cpu_speed);
-  cfgfile_write (f, "pandora.joy_conf=%d\n", p->pandora_joyConf);
-  cfgfile_write (f, "pandora.joy_port=%d\n", p->pandora_joyPort);
-  cfgfile_write (f, "pandora.stylus_offset=%d\n", p->pandora_stylusOffset);
-  cfgfile_write (f, "pandora.tap_delay=%d\n", p->pandora_tapDelay);
-  cfgfile_write (f, "pandora.custom_controls=%d\n", p->pandora_customControls);
-  cfgfile_write (f, "pandora.custom_dpad=%d\n", p->pandora_custom_dpad);
-  cfgfile_write (f, "pandora.custom_up=%d\n", p->pandora_custom_up);
-  cfgfile_write (f, "pandora.custom_down=%d\n", p->pandora_custom_down);
-  cfgfile_write (f, "pandora.custom_left=%d\n", p->pandora_custom_left);
-  cfgfile_write (f, "pandora.custom_right=%d\n", p->pandora_custom_right);
-  cfgfile_write (f, "pandora.custom_a=%d\n", p->pandora_custom_A);
-  cfgfile_write (f, "pandora.custom_b=%d\n", p->pandora_custom_B);
-  cfgfile_write (f, "pandora.custom_x=%d\n", p->pandora_custom_X);
-  cfgfile_write (f, "pandora.custom_y=%d\n", p->pandora_custom_Y);
-  cfgfile_write (f, "pandora.custom_l=%d\n", p->pandora_custom_L);
-  cfgfile_write (f, "pandora.custom_r=%d\n", p->pandora_custom_R);
-  cfgfile_write (f, "pandora.move_x=%d\n", p->pandora_horizontal_offset);
-  cfgfile_write (f, "pandora.move_y=%d\n", p->pandora_vertical_offset);
-  cfgfile_write (f, "pandora.button1=%d\n", p->pandora_button1);
-  cfgfile_write (f, "pandora.button2=%d\n", p->pandora_button2);
-  cfgfile_write (f, "pandora.autofire_button=%d\n", p->pandora_autofireButton1);
-  cfgfile_write (f, "pandora.jump=%d\n", p->pandora_jump);
+  cfgfile_write (f, "pandora.cpu_speed", "%d", p->pandora_cpu_speed);
+  cfgfile_write (f, "pandora.joy_conf", "%d", p->pandora_joyConf);
+  cfgfile_write (f, "pandora.joy_port", "%d", p->pandora_joyPort);
+  cfgfile_write (f, "pandora.tap_delay", "%d", p->pandora_tapDelay);
+  cfgfile_write (f, "pandora.custom_controls", "%d", p->pandora_customControls);
+  cfgfile_write (f, "pandora.custom_dpad", "%d", p->pandora_custom_dpad);
+  cfgfile_write (f, "pandora.custom_up", "%d", p->pandora_custom_up);
+  cfgfile_write (f, "pandora.custom_down", "%d", p->pandora_custom_down);
+  cfgfile_write (f, "pandora.custom_left", "%d", p->pandora_custom_left);
+  cfgfile_write (f, "pandora.custom_right", "%d", p->pandora_custom_right);
+  cfgfile_write (f, "pandora.custom_a", "%d", p->pandora_custom_A);
+  cfgfile_write (f, "pandora.custom_b", "%d", p->pandora_custom_B);
+  cfgfile_write (f, "pandora.custom_x", "%d", p->pandora_custom_X);
+  cfgfile_write (f, "pandora.custom_y", "%d", p->pandora_custom_Y);
+  cfgfile_write (f, "pandora.custom_l", "%d", p->pandora_custom_L);
+  cfgfile_write (f, "pandora.custom_r", "%d", p->pandora_custom_R);
+  cfgfile_write (f, "pandora.move_x", "%d", p->pandora_horizontal_offset);
+  cfgfile_write (f, "pandora.move_y", "%d", p->pandora_vertical_offset);
+  cfgfile_write (f, "pandora.button1", "%d", p->pandora_button1);
+  cfgfile_write (f, "pandora.button2", "%d", p->pandora_button2);
+  cfgfile_write (f, "pandora.autofire_button", "%d", p->pandora_autofireButton1);
+  cfgfile_write (f, "pandora.jump", "%d", p->pandora_jump);
 #ifdef ANDROIDSDL
-  cfgfile_write (f, "pandora.onscreen=%d\n", p->onScreen);
-  cfgfile_write (f, "pandora.onscreen_textinput=%d\n", p->onScreen_textinput);
-  cfgfile_write (f, "pandora.onscreen_dpad=%d\n", p->onScreen_dpad);
-  cfgfile_write (f, "pandora.onscreen_button1=%d\n", p->onScreen_button1);
-  cfgfile_write (f, "pandora.onscreen_button2=%d\n", p->onScreen_button2);
-  cfgfile_write (f, "pandora.onscreen_button3=%d\n", p->onScreen_button3);
-  cfgfile_write (f, "pandora.onscreen_button4=%d\n", p->onScreen_button4);
-  cfgfile_write (f, "pandora.onscreen_button5=%d\n", p->onScreen_button5);
-  cfgfile_write (f, "pandora.onscreen_button6=%d\n", p->onScreen_button6);
-  cfgfile_write (f, "pandora.custom_position=%d\n", p->custom_position);
-  cfgfile_write (f, "pandora.pos_x_textinput=%d\n", p->pos_x_textinput);
-  cfgfile_write (f, "pandora.pos_y_textinput=%d\n", p->pos_y_textinput);
-  cfgfile_write (f, "pandora.pos_x_dpad=%d\n", p->pos_x_dpad);
-  cfgfile_write (f, "pandora.pos_y_dpad=%d\n", p->pos_y_dpad);
-  cfgfile_write (f, "pandora.pos_x_button1=%d\n", p->pos_x_button1);
-  cfgfile_write (f, "pandora.pos_y_button1=%d\n", p->pos_y_button1);
-  cfgfile_write (f, "pandora.pos_x_button2=%d\n", p->pos_x_button2);
-  cfgfile_write (f, "pandora.pos_y_button2=%d\n", p->pos_y_button2);
-  cfgfile_write (f, "pandora.pos_x_button3=%d\n", p->pos_x_button3);
-  cfgfile_write (f, "pandora.pos_y_button3=%d\n", p->pos_y_button3);
-  cfgfile_write (f, "pandora.pos_x_button4=%d\n", p->pos_x_button4);
-  cfgfile_write (f, "pandora.pos_y_button4=%d\n", p->pos_y_button4);
-  cfgfile_write (f, "pandora.pos_x_button5=%d\n", p->pos_x_button5);
-  cfgfile_write (f, "pandora.pos_y_button5=%d\n", p->pos_y_button5);
-  cfgfile_write (f, "pandora.pos_x_button6=%d\n", p->pos_x_button6);
-  cfgfile_write (f, "pandora.pos_y_button6=%d\n", p->pos_y_button6);
-  cfgfile_write (f, "pandora.floating_joystick=%d\n", p->FloatingJoystick);
+  cfgfile_write (f, "pandora.onscreen", "%d", p->onScreen);
+  cfgfile_write (f, "pandora.onscreen_textinput", "%d", p->onScreen_textinput);
+  cfgfile_write (f, "pandora.onscreen_dpad", "%d", p->onScreen_dpad);
+  cfgfile_write (f, "pandora.onscreen_button1", "%d", p->onScreen_button1);
+  cfgfile_write (f, "pandora.onscreen_button2", "%d", p->onScreen_button2);
+  cfgfile_write (f, "pandora.onscreen_button3", "%d", p->onScreen_button3);
+  cfgfile_write (f, "pandora.onscreen_button4", "%d", p->onScreen_button4);
+  cfgfile_write (f, "pandora.onscreen_button5", "%d", p->onScreen_button5);
+  cfgfile_write (f, "pandora.onscreen_button6", "%d", p->onScreen_button6);
+  cfgfile_write (f, "pandora.custom_position", "%d", p->custom_position);
+  cfgfile_write (f, "pandora.pos_x_textinput", "%d", p->pos_x_textinput);
+  cfgfile_write (f, "pandora.pos_y_textinput", "%d", p->pos_y_textinput);
+  cfgfile_write (f, "pandora.pos_x_dpad", "%d", p->pos_x_dpad);
+  cfgfile_write (f, "pandora.pos_y_dpad", "%d", p->pos_y_dpad);
+  cfgfile_write (f, "pandora.pos_x_button1", "%d", p->pos_x_button1);
+  cfgfile_write (f, "pandora.pos_y_button1", "%d", p->pos_y_button1);
+  cfgfile_write (f, "pandora.pos_x_button2", "%d", p->pos_x_button2);
+  cfgfile_write (f, "pandora.pos_y_button2", "%d", p->pos_y_button2);
+  cfgfile_write (f, "pandora.pos_x_button3", "%d", p->pos_x_button3);
+  cfgfile_write (f, "pandora.pos_y_button3", "%d", p->pos_y_button3);
+  cfgfile_write (f, "pandora.pos_x_button4", "%d", p->pos_x_button4);
+  cfgfile_write (f, "pandora.pos_y_button4", "%d", p->pos_y_button4);
+  cfgfile_write (f, "pandora.pos_x_button5", "%d", p->pos_x_button5);
+  cfgfile_write (f, "pandora.pos_y_button5", "%d", p->pos_y_button5);
+  cfgfile_write (f, "pandora.pos_x_button6", "%d", p->pos_x_button6);
+  cfgfile_write (f, "pandora.pos_y_button6", "%d", p->pos_y_button6);
+  cfgfile_write (f, "pandora.floating_joystick", "%d", p->FloatingJoystick);
 #endif
 }
 
 
-int target_parse_option (struct uae_prefs *p, char *option, char *value)
+TCHAR *target_expand_environment (const TCHAR *path)
+{
+  return strdup(path);
+}
+
+int target_parse_option (struct uae_prefs *p, const char *option, const char *value)
 {
   int result = (cfgfile_intval (option, value, "cpu_speed", &p->pandora_cpu_speed, 1)
     || cfgfile_intval (option, value, "joy_conf", &p->pandora_joyConf, 1)
     || cfgfile_intval (option, value, "joy_port", &p->pandora_joyPort, 1)
-    || cfgfile_intval (option, value, "stylus_offset", &p->pandora_stylusOffset, 1)
     || cfgfile_intval (option, value, "tap_delay", &p->pandora_tapDelay, 1)
     || cfgfile_intval (option, value, "custom_controls", &p->pandora_customControls, 1)
     || cfgfile_intval (option, value, "custom_dpad", &p->pandora_custom_dpad, 1)
@@ -417,21 +532,18 @@ void fetch_screenshotpath(char *out, int size)
 }
 
 
-int target_cfgfile_load (struct uae_prefs *p, char *filename, int type, int isdefault)
+int target_cfgfile_load (struct uae_prefs *p, const char *filename, int type, int isdefault)
 {
   int i;
   int result = 0;
 
-  filesys_prepare_reset();
-  while(p->mountitems > 0)
-    kill_filesys_unitconfig(p, 0);
   discard_prefs(p, type);
   
 	char *ptr = strstr(filename, ".uae");
   if(ptr > 0)
   {
     int type = CONFIG_TYPE_HARDWARE | CONFIG_TYPE_HOST;
-    result = cfgfile_load(p, filename, &type, 0);
+    result = cfgfile_load(p, filename, &type, 0, 1);
   }
   if(result)
   {
@@ -445,16 +557,19 @@ int target_cfgfile_load (struct uae_prefs *p, char *filename, int type, int isde
   {
     for(i=0; i < p->nr_floppies; ++i)
     {
-      if(!DISK_validate_filename(p->df[i], 0, NULL, NULL))
-        p->df[i][0] = 0;
-      disk_insert(i, p->df[i]);
-      if(strlen(p->df[i]) > 0)
-        AddFileToDiskList(p->df[i], 1);
+      if(!DISK_validate_filename(p, p->floppyslots[i].df, 0, NULL, NULL, NULL))
+        p->floppyslots[i].df[0] = 0;
+      disk_insert(i, p->floppyslots[i].df);
+      if(strlen(p->floppyslots[i].df) > 0)
+        AddFileToDiskList(p->floppyslots[i].df, 1);
     }
 
     inputdevice_updateconfig (p);
 
     SetLastActiveConfig(filename);
+  
+    if(count_HDs(p) > 0) // When loading a config with HDs, always do a hardreset
+      gui_force_rtarea_hdchange();
   }
 
   return result;
@@ -726,6 +841,27 @@ void resetCpuSpeed(void)
 }
 
 
+void target_reset (void)
+{
+}
+
+uae_u32 emulib_target_getcpurate (uae_u32 v, uae_u32 *low)
+{
+  *low = 0;
+  if (v == 1) {
+    *low = 1e+9; /* We have nano seconds */
+    return 0;
+  } else if (v == 2) {
+    int64_t time;
+    struct timespec ts;
+    clock_gettime (CLOCK_MONOTONIC, &ts);
+    time = (((int64_t) ts.tv_sec) * 1000000000) + ts.tv_nsec;
+    *low = (uae_u32) (time & 0xffffffff);
+    return (uae_u32)(time >> 32);
+  }
+  return 0;
+}
+
 int main (int argc, char *argv[])
 {
   struct sigaction action;
@@ -755,25 +891,19 @@ int main (int argc, char *argv[])
   alloc_AmigaMem();
   RescanROMs();
   real_main (argc, argv);
+  
+  ClearAvailableROMList();
+  free_keyring();
   free_AmigaMem();
+  lstMRUDiskList.clear();
   
   logging_cleanup();
   
+//  printf("Threads at exit:\n");
+//  dbg_list_threads();
+  
   return 0;
 }
-
-
-int needmousehack (void)
-{
-    return 1;
-}
-
-
-int mousehack_allowed (void)
-{
-    return 1;
-}
-
 
 void keyboard_init(void)
 {
@@ -794,8 +924,15 @@ void handle_events (void)
 
   /* Handle GUI events */
   gui_handle_events ();
-  handle_joymouse();
-    
+	if (currprefs.pandora_custom_dpad == 1)
+    handle_joymouse();
+  else if(currprefs.input_tablet > TABLET_OFF) {
+    int x, y;
+    SDL_GetMouseState(&x, &y);
+	  setmousestate(0, 0, x, 1);
+	  setmousestate(0, 1, y, 1);
+  }
+  
   while (SDL_PollEvent(&rEvent))
   {
 		switch (rEvent.type)
@@ -840,7 +977,7 @@ void handle_events (void)
 #endif
   			{
 					// state moves thus:
-					// joystick mode (with virt keyboard on L and R)
+					// joystick mode
 					// mouse mode (with mouse buttons on L and R)
 					// remapping mode (with whatever's been supplied)
 					// back to start of state
@@ -853,10 +990,6 @@ void handle_events (void)
 #endif
 					  currprefs.pandora_custom_dpad = 0;
           changed_prefs.pandora_custom_dpad = currprefs.pandora_custom_dpad;
-          if(currprefs.pandora_custom_dpad == 2)
-          	mousehack_set(mousehack_follow);
-          else
-      	    mousehack_set (mousehack_dontcare);
             
   				show_inputmode = 1;
   			}
@@ -1016,49 +1149,55 @@ void handle_events (void)
   			break;
 
   		case SDL_MOUSEMOTION:
-  			if(currprefs.pandora_custom_dpad == 2)
-  			{
-  				lastmx = rEvent.motion.x*2 - currprefs.pandora_stylusOffset + stylusAdjustX >> 1;
-  				lastmy = rEvent.motion.y*2 - currprefs.pandora_stylusOffset + stylusAdjustY >> 1;
-  				//mouseMoving = 1;
-  			}
-  			else if(slow_mouse)
-  			{
-  				lastmx += rEvent.motion.xrel;
-  				lastmy += rEvent.motion.yrel;
-  				if(rEvent.motion.x == 0)
-  					lastmx -= 2;
-  				if(rEvent.motion.y == 0)
-  					lastmy -= 2;
-  				if(rEvent.motion.x == currprefs.gfx_size.width - 1)
-  					lastmx += 2;
-  				if(rEvent.motion.y == currprefs.gfx_size.height - 1)
-  					lastmy += 2;
-  			}
-  			else
-  			{
-				  int mouseScale = currprefs.input_joymouse_multiplier / 2;
-#ifndef RASPBERRY
-				  if(rEvent.motion.xrel > 20 || rEvent.motion.xrel < -20 || rEvent.motion.yrel > 20 || rEvent.motion.yrel < -20)
-				    break;
-#endif
-  				lastmx += rEvent.motion.xrel * mouseScale;
-  				lastmy += rEvent.motion.yrel * mouseScale;
-  				if(rEvent.motion.x == 0)
-  					lastmx -= mouseScale * 4;
-  				if(rEvent.motion.y == 0)
-  					lastmy -= mouseScale * 4;
-  				if(rEvent.motion.x == currprefs.gfx_size.width - 1)
-  					lastmx += mouseScale * 4;
-  				if(rEvent.motion.y == currprefs.gfx_size.height - 1)
-  					lastmy += mouseScale * 4;
-  			}
-  			newmousecounters = 1;
-  			break;
+  		  if(currprefs.input_tablet == TABLET_OFF) {
+			    int x, y;
+  		    int mouseScale = slow_mouse ? 1 : currprefs.input_joymouse_multiplier / 2;
+          x = rEvent.motion.xrel;
+  				y = rEvent.motion.yrel;
+  				if(rEvent.motion.x == 0 && x > -4)
+  					x = -4;
+  				if(rEvent.motion.y == 0 && y > -4)
+  					y = -4;
+  				if(rEvent.motion.x == currprefs.gfx_size.width - 1 && x < 4)
+  					x = 4;
+  				if(rEvent.motion.y == currprefs.gfx_size.height - 1 && y < 4)
+  					y = 4;
+				  setmousestate(0, 0, x * mouseScale, 0);
+      	  setmousestate(0, 1, y * mouseScale, 0);
+  		  }
+  		  break;
 		}
   }
 }
 
-void uae_set_thread_priority (int pri)
+static uaecptr clipboard_data;
+
+void amiga_clipboard_die (void)
+{
+}
+
+void amiga_clipboard_init (void)
+{
+}
+
+void amiga_clipboard_task_start (uaecptr data)
+{
+  clipboard_data = data;
+}
+
+uae_u32 amiga_clipboard_proc_start (void)
+{
+  return clipboard_data;
+}
+
+void amiga_clipboard_got_data (uaecptr data, uae_u32 size, uae_u32 actual)
+{
+}
+
+void amiga_clipboard_want_data (void)
+{
+}
+
+void clipboard_vsync (void)
 {
 }
