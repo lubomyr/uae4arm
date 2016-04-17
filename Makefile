@@ -23,11 +23,12 @@ else ifeq ($(PLATFORM),rpi1)
 	DEFS += -DRASPBERRY
 else ifeq ($(PLATFORM),generic-sdl)
 	HAVE_SDL_DISPLAY = 1
+	HAVE_NEON = 1
+	USE_PICASSO96 = 1
 else ifeq ($(PLATFORM),gles)
-	# For Raspberry Pi uncomment below line
-	#LDFLAGS += -lbcm_host
 	HAVE_GLES_DISPLAY = 1
 	HAVE_NEON = 1
+	USE_PICASSO96 = 1
 endif
 
 NAME   = uae4arm
@@ -46,7 +47,7 @@ PANDORA=1
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DGP2X -DPANDORA -DSIX_AXIS_WORKAROUND
+DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DGP2X -DPANDORA -DSIX_AXIS_WORKAROUND -DWITH_INGAME_WARNING
 DEFS += -DROM_PATH_PREFIX=\"./\" -DDATA_PREFIX=\"./data/\" -DSAVE_PREFIX=\"./saves/\"
 DEFS += -DUSE_SDL
 
@@ -60,17 +61,17 @@ endif
 
 MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
 
-MORE_CFLAGS += -Isrc -Isrc/include -Isrc/od-pandora -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
+MORE_CFLAGS += -Isrc -Isrc/include -Isrc/od-pandora -fomit-frame-pointer -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
 MORE_CFLAGS += -fexceptions -fpermissive
 
-LDFLAGS +=  -lm -lz -lpng -lSDL_ttf -lguichan_sdl -lguichan -L/opt/vc/lib 
+LDFLAGS +=  -lm -lz -lpng -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
 
 ifndef DEBUG
 MORE_CFLAGS += -Ofast -pipe -ftree-vectorize -fsingle-precision-constant -fuse-ld=gold -fdiagnostics-color=auto
 MORE_CFLAGS += -mstructure-size-boundary=32
-MORE_CFLAGS += -falign-functions=32 
+MORE_CFLAGS += -falign-functions=32
 MORE_CFLAGS += -fno-builtin -fweb -frename-registers
-MORE_CFLAGS += -fipa-pta 
+MORE_CFLAGS += -fipa-pta
 else
 MORE_CFLAGS += -ggdb
 endif
@@ -156,6 +157,7 @@ OBJS =	\
 	src/md-pandora/support.o \
 	src/od-pandora/bsdsocket_host.o \
 	src/od-pandora/fsdb_host.o \
+	src/od-pandora/hardfile_pandora.o \
 	src/od-pandora/joystick.o \
 	src/od-pandora/keyboard.o \
 	src/od-pandora/inputmode.o \
@@ -163,6 +165,7 @@ OBJS =	\
 	src/od-pandora/pandora.o \
 	src/od-pandora/pandora_filesys.o \
 	src/od-pandora/pandora_gui.o \
+	src/od-pandora/pandora_rp9.o \
 	src/od-pandora/pandora_mem.o \
 	src/od-pandora/sigsegv_handler.o \
 	src/od-pandora/menu/menu_config.o \

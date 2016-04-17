@@ -103,7 +103,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 #ifdef RASPBERRY
   category.panel->add(chkAspect, DISTANCE_BORDER, posY);
   posY += chkAspect->getHeight() + DISTANCE_NEXT_Y;
-#else
+#endif
+#if !(defined(RASPBERRY) || defined (ANDROID))
   category.panel->add(lblPandoraSpeed, DISTANCE_BORDER, posY);
   category.panel->add(sldPandoraSpeed, DISTANCE_BORDER + lblPandoraSpeed->getWidth() + 8, posY);
   category.panel->add(lblPandoraSpeedInfo, sldPandoraSpeed->getX() + sldPandoraSpeed->getWidth() + 12, posY);
