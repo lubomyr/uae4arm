@@ -1,0 +1,7 @@
+Bugs:
+
+Sound works slower on Picasso96 mode (global).
+Left mouse click (via tap on touchscreen) works not correct in relative mouse mode (android-sdl).
+Mouse stops & stutters in workbench sometimes (android-sdl, reported by liveevil).
+OCS/ECS mouse bug. if I choose ECS or OCS chipset then it stretches the mouse pointer and I can't move it to the left half of the screen. It only works properly in AGA. (reported by liveevil).
+Warning 'uae4arm has stopped working' when quiting (android, reported by liveevil).
