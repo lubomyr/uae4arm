@@ -185,10 +185,17 @@ void read_joystick(int nr, unsigned int *dir, int *button)
 	else
 	{
 	  // get joystick button via ABXY or joystick
+#ifdef ANDROID
+ 		*button |= ((currprefs.pandora_button1==GP2X_BUTTON_B && buttonA) || (currprefs.pandora_button1==GP2X_BUTTON_X && buttonX) || (currprefs.pandora_button1==GP2X_BUTTON_Y && buttonY)) & 1;
+#else
  		*button |= ((currprefs.pandora_button1==GP2X_BUTTON_B && buttonA) || (currprefs.pandora_button1==GP2X_BUTTON_X && buttonX) || (currprefs.pandora_button1==GP2X_BUTTON_Y && buttonY) || SDL_JoystickGetButton(joy, currprefs.pandora_button1)) & 1;
+#endif
 		delay++;
-
+#ifdef ANDROID
+		*button |= ((buttonB) & 1) << 1;
+#else
 		*button |= ((buttonB || SDL_JoystickGetButton(joy, currprefs.pandora_button2)) & 1) << 1;
+#endif
 	}
 
   #ifdef RASPBERRY
