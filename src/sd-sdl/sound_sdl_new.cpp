@@ -3,37 +3,21 @@
   * (c) 2015
   */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <semaphore.h>
-#include <pthread.h>
-#include <errno.h>
-
 #include "sysconfig.h"
 #include "sysdeps.h"
-#include "uae.h"
 #include "options.h"
 #include "memory-uae.h"
 #include "newcpu.h"
 #include "custom.h"
-#include "audio.h"
 #include "gensound.h"
 #include "sounddep/sound.h"
-#include "savestate.h"
+#include <semaphore.h>
 #include <SDL.h>
 
-#ifdef ANDROIDSDL
+#ifdef ANDROID
 #include <android/log.h>
 #endif
 
-extern unsigned long next_sample_evtime;
-
-int produce_sound=0;
-int changed_produce_sound=0;
-
-#define SOUND_USE_SEMAPHORES
 #define SOUND_BUFFERS_COUNT 4
 uae_u16 sndbuffer[SOUND_BUFFERS_COUNT][(SNDBUFFER_LEN+32)*DEFAULT_SOUND_CHANNELS];
 unsigned n_callback_sndbuff, n_render_sndbuff;
@@ -64,7 +48,6 @@ void reset_sound (void) { }
 void restart_sound_buffer(void) { }
 
 #else 
-
 
 static int have_sound = 0;
 static int lastfreq;
@@ -183,7 +166,6 @@ void pandora_stop_sound(void)
 		printf("stopping sound thread..\n");
 		sound_thread_exit = 1;
 		sem_post(&sound_sem);
-		//usleep(100*1000);
 	}
 	SDL_PauseAudio (1);
 }
@@ -191,7 +173,7 @@ void pandora_stop_sound(void)
 static int wrcnt = 0;
 void finish_sound_buffer (void)
 {
-  output_cnt = wrcnt;
+	output_cnt = wrcnt;
 
 	sem_post(&sound_sem);
 	sem_wait(&sound_out_sem);
@@ -203,7 +185,6 @@ void finish_sound_buffer (void)
 	else
 	  finish_sndbuff = sndbufpt + SNDBUFFER_LEN/2;	  
 }
-
 
 void restart_sound_buffer(void)
 {
@@ -253,7 +234,7 @@ void close_sound (void)
 
 int init_sound (void)
 {
-    have_sound=open_sound();
+    have_sound = open_sound();
     return have_sound;
 }
 
