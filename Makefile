@@ -12,7 +12,7 @@ ifeq ($(PLATFORM),android)
 else ifeq ($(PLATFORM),rpi2)
 	CPU_FLAGS += -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
 	LDFLAGS += -lbcm_host
-	DEFS += -DRASPBERRY
+	DEFS += -DRASPBERRY -DSIX_AXIS_WORKAROUND
 	HAVE_NEON = 1
 	HAVE_DISPMANX = 1
 	USE_PICASSO96 = 1
@@ -20,7 +20,7 @@ else ifeq ($(PLATFORM),rpi1)
 	CPU_FLAGS += -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard
 	LDFLAGS += -lbcm_host
 	HAVE_DISPMANX = 1
-	DEFS += -DRASPBERRY
+	DEFS += -DRASPBERRY -DSIX_AXIS_WORKAROUND
 else ifeq ($(PLATFORM),generic-sdl)
 	HAVE_SDL_DISPLAY = 1
 	HAVE_NEON = 1
@@ -47,7 +47,6 @@ PANDORA=1
 SDL_CFLAGS = `sdl-config --cflags`
 
 DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DGP2X -DPANDORA -DWITH_INGAME_WARNING
-#DEFS += -DSIX_AXIS_WORKAROUND
 DEFS += -DROM_PATH_PREFIX=\"./\" -DDATA_PREFIX=\"./data/\" -DSAVE_PREFIX=\"./saves/\"
 DEFS += -DUSE_SDL
 
@@ -169,7 +168,7 @@ OBJS =	\
 	src/od-pandora/pandora_mem.o \
 	src/od-pandora/sigsegv_handler.o \
 	src/od-pandora/menu/menu_config.o \
-	src/sd-sdl/sound_sdl_new.o \
+	src/sd-sdl/sound.o \
 	src/od-pandora/gui/UaeRadioButton.o \
 	src/od-pandora/gui/UaeDropDown.o \
 	src/od-pandora/gui/UaeCheckBox.o \
