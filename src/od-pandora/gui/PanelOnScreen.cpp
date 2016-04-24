@@ -24,7 +24,7 @@ static gcn::UaeCheckBox* checkBox_onscreen_button4;
 static gcn::UaeCheckBox* checkBox_onscreen_button5;
 static gcn::UaeCheckBox* checkBox_onscreen_button6;
 static gcn::UaeCheckBox* checkBox_onscreen_custompos;
-static gcn::UaeCheckBox* checkBox_FloatingJoystick;
+static gcn::UaeCheckBox* checkBox_floatingJoystick;
 static gcn::Button* button_onscreen_pos;
 static gcn::Button* button_onscreen_ok;
 static gcn::Button* button_onscreen_reset;
@@ -104,11 +104,11 @@ class OnScreenActionListener : public gcn::ActionListener
             else
                 changed_prefs.custom_position=0;
         }
-        if (actionEvent.getSource() == checkBox_FloatingJoystick)
-            if (checkBox_FloatingJoystick->isSelected())
-                changed_prefs.FloatingJoystick=1;
+        if (actionEvent.getSource() == checkBox_floatingJoystick)
+            if (checkBox_floatingJoystick->isSelected())
+                changed_prefs.floatingJoystick=1;
             else
-                changed_prefs.FloatingJoystick=0;
+                changed_prefs.floatingJoystick=0;
         RefreshPanelOnScreen();
     }
 };
@@ -214,10 +214,10 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     checkBox_onscreen_custompos->setPosition(170,140);
     checkBox_onscreen_custompos->setId("CustomPos");
     checkBox_onscreen_custompos->addActionListener(onScreenActionListener);
-    checkBox_FloatingJoystick = new gcn::UaeCheckBox("Floating Joystick");
-    checkBox_FloatingJoystick->setPosition(10,180);
-    checkBox_FloatingJoystick->setId("FloatJoy");
-    checkBox_FloatingJoystick->addActionListener(onScreenActionListener);
+    checkBox_floatingJoystick = new gcn::UaeCheckBox("Floating Joystick");
+    checkBox_floatingJoystick->setPosition(10,180);
+    checkBox_floatingJoystick->setId("FloatJoy");
+    checkBox_floatingJoystick->addActionListener(onScreenActionListener);
 
     button_onscreen_pos = new gcn::Button("Position Setup");
     button_onscreen_pos->setPosition(170,180);
@@ -298,7 +298,7 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     category.panel->add(checkBox_onscreen_button5);
     category.panel->add(checkBox_onscreen_button6);
     category.panel->add(checkBox_onscreen_custompos);
-    category.panel->add(checkBox_FloatingJoystick);
+    category.panel->add(checkBox_floatingJoystick);
     category.panel->add(button_onscreen_pos);
     category.panel->add(window_setup_position);
     
@@ -318,7 +318,7 @@ void ExitPanelOnScreen(void)
     delete checkBox_onscreen_button5;
     delete checkBox_onscreen_button6;
     delete checkBox_onscreen_custompos;
-    delete checkBox_FloatingJoystick;
+    delete checkBox_floatingJoystick;
     delete button_onscreen_pos;
     delete button_onscreen_ok;
     delete button_onscreen_reset;
@@ -380,10 +380,10 @@ void RefreshPanelOnScreen(void)
         checkBox_onscreen_custompos->setSelected(false);
     else if (changed_prefs.custom_position==1)
         checkBox_onscreen_custompos->setSelected(true);
-    if (changed_prefs.FloatingJoystick)
-        checkBox_FloatingJoystick->setSelected(true);
+    if (changed_prefs.floatingJoystick)
+        checkBox_floatingJoystick->setSelected(true);
     else
-        checkBox_FloatingJoystick->setSelected(false);
+        checkBox_floatingJoystick->setSelected(false);
     
     window_pos_textinput->setX(changed_prefs.pos_x_textinput);
     window_pos_textinput->setY(changed_prefs.pos_y_textinput);

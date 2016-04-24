@@ -524,7 +524,7 @@ int loadconfig_old(struct uae_prefs *p, const char *orgpath)
 		fscanf(f,"pos_y_button5=%d\n",&p->pos_y_button5);
 		fscanf(f,"pos_x_button6=%d\n",&p->pos_x_button6);
 		fscanf(f,"pos_y_button6=%d\n",&p->pos_y_button6);
-		fscanf(f,"FloatingJoystick=%d\n",&p->FloatingJoystick);
+		fscanf(f,"floatingJoystick=%d\n",&p->floatingJoystick);
 #endif
 		fscanf(f,"cpu=%d\n", &cpu_level);
 		if(cpu_level > 0) // M68000

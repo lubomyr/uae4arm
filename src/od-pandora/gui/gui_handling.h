@@ -89,6 +89,7 @@ void ExitPanelOnScreen(void);
 void RefreshPanelOnScreen(void);
 #endif
 void RefreshAllPanels(void);
+void RegisterRefreshFunc(void (*func)(void));
 
 void DisableResume(void);
 

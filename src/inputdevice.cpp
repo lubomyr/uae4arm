@@ -442,7 +442,7 @@ void inputdevice_copyconfig (struct uae_prefs *src, struct uae_prefs *dst)
   dst->pos_y_button5 = src->pos_y_button5;
   dst->pos_x_button6 = src->pos_x_button6;
   dst->pos_y_button6 = src->pos_y_button6;
-  dst->FloatingJoystick = src->FloatingJoystick;
+  dst->floatingJoystick = src->floatingJoystick;
 #endif
   inputdevice_updateconfig (dst);
 }

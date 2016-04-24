@@ -85,11 +85,11 @@ struct uae_prefs {
   struct wh gfx_size_fs;
   struct wh gfx_size;
   int gfx_resolution;
-  
+ 
 #ifdef RASPBERRY
     int gfx_correct_aspect;
-#endif
- 
+#endif 
+  
   bool immediate_blits;
   unsigned int chipset_mask;
   bool ntscmode;
@@ -192,7 +192,7 @@ int pos_x_button6;
 int pos_y_button6;
 int extfilter;
 int quickSwitch;
-int FloatingJoystick;
+int floatingJoystick;
 #endif
 };
 

@@ -177,7 +177,7 @@ static void CalcPandoraWidth(struct uae_prefs *p)
 #ifdef ANDROIDSDL
 void update_onscreen()
 {
-	SDL_ANDROID_SetScreenKeyboardFloatingJoystick(changed_prefs.FloatingJoystick);
+	SDL_ANDROID_SetScreenKeyboardFloatingJoystick(changed_prefs.floatingJoystick);
 	if (changed_prefs.onScreen==0)
 	{
 	  SDL_ANDROID_SetScreenKeyboardShown(0);
