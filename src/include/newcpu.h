@@ -257,11 +257,12 @@ STATIC_INLINE int bitset_count16(uae_u16 data)
   unsigned int const MASK1  = 0x5555;
   unsigned int const MASK2  = 0x3333;
   unsigned int const MASK4  = 0x0f0f;
+  unsigned int const MASK6  = 0x003f;
 
   unsigned int const w = (data & MASK1) + ((data >> 1) & MASK1);
   unsigned int const x = (w & MASK2) + ((w >> 2) & MASK2);
   unsigned int const y = ((x + (x >> 4)) & MASK4);
-  unsigned int const z = (y + (y >> 8));
+  unsigned int const z = (y + (y >> 8)) & MASK6;
 
   return z;
 }
