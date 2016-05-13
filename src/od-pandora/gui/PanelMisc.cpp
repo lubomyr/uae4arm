@@ -21,6 +21,7 @@
 
 
 static gcn::UaeCheckBox* chkStatusLine;
+static gcn::UaeCheckBox* chkHideIdleLed;
 static gcn::UaeCheckBox* chkShowGUI;
 #ifdef RASPBERRY
 static gcn::UaeCheckBox* chkAspect;
@@ -39,6 +40,9 @@ class MiscActionListener : public gcn::ActionListener
       if (actionEvent.getSource() == chkStatusLine)
         changed_prefs.leds_on_screen = chkStatusLine->isSelected();
       
+      else if (actionEvent.getSource() == chkHideIdleLed)
+        changed_prefs.pandora_hide_idle_led = chkHideIdleLed->isSelected();
+
       else if (actionEvent.getSource() == chkShowGUI)
         changed_prefs.start_gui = chkShowGUI->isSelected();
       
@@ -70,8 +74,13 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   miscActionListener = new MiscActionListener();
 
   chkStatusLine = new gcn::UaeCheckBox("Status Line");
+  chkStatusLine->setId("StatusLine");
   chkStatusLine->addActionListener(miscActionListener);
 
+  chkHideIdleLed = new gcn::UaeCheckBox("Hide idle led");
+  chkHideIdleLed->setId("HideIdle");
+  chkHideIdleLed->addActionListener(miscActionListener);
+  
   chkShowGUI = new gcn::UaeCheckBox("Show GUI on startup");
   chkShowGUI->setId("ShowGUI");
   chkShowGUI->addActionListener(miscActionListener);
@@ -98,6 +107,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   int posY = DISTANCE_BORDER;
   category.panel->add(chkStatusLine, DISTANCE_BORDER, posY);
   posY += chkStatusLine->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkHideIdleLed, DISTANCE_BORDER, posY);
+  posY += chkHideIdleLed->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkShowGUI, DISTANCE_BORDER, posY);
   posY += chkShowGUI->getHeight() + DISTANCE_NEXT_Y;
 #ifdef RASPBERRY
@@ -119,6 +130,7 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 void ExitPanelMisc(void)
 {
   delete chkStatusLine;
+  delete chkHideIdleLed;
   delete chkShowGUI;
 #ifdef RASPBERRY
   delete chkAspect;
@@ -137,6 +149,7 @@ void RefreshPanelMisc(void)
   char tmp[20];
 
   chkStatusLine->setSelected(changed_prefs.leds_on_screen);
+  chkHideIdleLed->setSelected(changed_prefs.pandora_hide_idle_led);
   chkShowGUI->setSelected(changed_prefs.start_gui);
 #ifdef RASPBERRY
   chkAspect->setSelected(changed_prefs.gfx_correct_aspect);

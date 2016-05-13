@@ -37,7 +37,7 @@ static NavigationMap navMap[] =
   { "Display",        "sldWidth",       "sldWidth",       "Hard drives",    "Sound" },
   { "Sound",          "sndDisable",     "sndDisable",     "Display",        "Input" },
   { "Input",          "cboCtrlConfig",  "cboCtrlConfig",  "Sound",          "Miscellaneous" },
-  { "Miscellaneous",  "Status Line",    "Status Line",    "Input",          "Savestates" },
+  { "Miscellaneous",  "StatusLine",     "StatusLine",     "Input",          "Savestates" },
   { "Savestates",     "State0",         "State0",         "Miscellaneous",  "Reset" },
   { "Reset",          "Start",          "Quit",           "Savestates",     "Paths" },
   { "Quit",           "Reset",          "Start",          "Savestates",     "Paths" },
@@ -186,10 +186,11 @@ static NavigationMap navMap[] =
   { "cboRight",       "cboLeft",        "Input",          "cboDown",        "cboCtrlConfig" },
 
 // PanelMisc
-  { "Status Line",    "Miscellaneous",  "Miscellaneous",  "BSDSocket",      "ShowGUI" },
-  { "ShowGUI",        "Miscellaneous",  "Miscellaneous",  "Status Line",    "PandSpeed" },
+  { "StatusLine",     "Miscellaneous",  "Miscellaneous",  "BSDSocket",      "HideIdle" },
+  { "HideIdle",       "Miscellaneous",  "Miscellaneous",  "StatusLine",     "ShowGUI" },
+  { "ShowGUI",        "Miscellaneous",  "Miscellaneous",  "HideIdle",       "PandSpeed" },
   { "PandSpeed",      "",               "",               "ShowGUI",        "BSDSocket" },
-  { "BSDSocket",      "Miscellaneous",  "Miscellaneous",  "PandSpeed",      "Status Line" },
+  { "BSDSocket",      "Miscellaneous",  "Miscellaneous",  "PandSpeed",      "StatusLine" },
   
 // PanelSavestate
   { "State0",         "Savestates",     "Savestates",     "LoadState",      "State1" },

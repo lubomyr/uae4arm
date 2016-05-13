@@ -132,6 +132,7 @@ static bool slow_mouse = false;
 
 static bool cpuSpeedChanged = false;
 static int lastCpuSpeed = 600;
+int defaultCpuSpeed = 600;
 
 
 extern "C" int main( int argc, char *argv[] );
@@ -307,8 +308,9 @@ void target_default_options (struct uae_prefs *p, int type)
 {
   p->pandora_horizontal_offset = 0;
   p->pandora_vertical_offset = 0;
-  p->pandora_cpu_speed = 600;
-
+  p->pandora_cpu_speed = defaultCpuSpeed;
+  p->pandora_hide_idle_led = 0;
+  
   p->pandora_joyConf = 0;
   p->pandora_joyPort = 2;
   p->pandora_tapDelay = 10;
@@ -374,6 +376,7 @@ void target_default_options (struct uae_prefs *p, int type)
 void target_save_options (struct zfile *f, struct uae_prefs *p)
 {
   cfgfile_write (f, "pandora.cpu_speed", "%d", p->pandora_cpu_speed);
+  cfgfile_write (f, "pandora.hide_idle_led", "%d", p->pandora_hide_idle_led);
   cfgfile_write (f, "pandora.joy_conf", "%d", p->pandora_joyConf);
   cfgfile_write (f, "pandora.joy_port", "%d", p->pandora_joyPort);
   cfgfile_write (f, "pandora.tap_delay", "%d", p->pandora_tapDelay);
@@ -435,6 +438,7 @@ TCHAR *target_expand_environment (const TCHAR *path)
 int target_parse_option (struct uae_prefs *p, const char *option, const char *value)
 {
   int result = (cfgfile_intval (option, value, "cpu_speed", &p->pandora_cpu_speed, 1)
+    || cfgfile_intval (option, value, "hide_idle_led", &p->pandora_hide_idle_led, 1)
     || cfgfile_intval (option, value, "joy_conf", &p->pandora_joyConf, 1)
     || cfgfile_intval (option, value, "joy_port", &p->pandora_joyPort, 1)
     || cfgfile_intval (option, value, "tap_delay", &p->pandora_tapDelay, 1)
@@ -812,11 +816,11 @@ void loadAdfDir(void)
 void setCpuSpeed()
 {
 	char speedCmd[128];
-
-#ifdef RASPBERRY
+	
+#ifdef ANDROID
 	return;
 #endif
-
+	
   currprefs.pandora_cpu_speed = changed_prefs.pandora_cpu_speed;
 
 	if(currprefs.pandora_cpu_speed != lastCpuSpeed)
@@ -836,35 +840,40 @@ void setCpuSpeed()
 }
 
 
-void resetCpuSpeed(void)
+int getDefaultCpuSpeed(void)
 {
-#ifdef RASPBERRY
-	return;
-#endif
-  if(cpuSpeedChanged)
+  int speed = 600;
+  FILE* f = fopen ("/etc/pandora/conf/cpu.conf", "rt");
+  if(f)
   {
-    FILE* f = fopen ("/etc/pandora/conf/cpu.conf", "rt");
-    if(f)
+    char line[128];
+    for(int i=0; i<6; ++i)
     {
-      char line[128];
-      for(int i=0; i<6; ++i)
+      fscanf(f, "%s\n", &line);
+      if(strncmp(line, "default:", 8) == 0)
       {
-        fscanf(f, "%s\n", &line);
-        if(strncmp(line, "default:", 8) == 0)
+        int value = 0;
+        sscanf(line, "default:%d", &value);
+        if(value > 500 && value < 1200)
         {
-          int value = 0;
-          sscanf(line, "default:%d", &value);
-          if(value > 500 && value < 1200)
-          {
-            lastCpuSpeed = value - 10;
-            currprefs.pandora_cpu_speed = changed_prefs.pandora_cpu_speed = value;
-            setCpuSpeed();
-            printf("CPU speed reset to %d\n", value);
-          }
+          speed = value;
         }
       }
-      fclose(f);
     }
+    fclose(f);
+  }
+  return speed;
+}
+
+
+void resetCpuSpeed(void)
+{
+  if(cpuSpeedChanged)
+  {
+    lastCpuSpeed = defaultCpuSpeed - 10;
+    currprefs.pandora_cpu_speed = changed_prefs.pandora_cpu_speed = defaultCpuSpeed;
+    setCpuSpeed();
+    printf("CPU speed reset to %d\n", defaultCpuSpeed);
   }
 }
 
@@ -894,6 +903,8 @@ int main (int argc, char *argv[])
 {
   struct sigaction action;
 
+  defaultCpuSpeed = getDefaultCpuSpeed();
+  
   // Get startup path
 	getcwd(start_path_data, MAX_DPATH);
 	loadAdfDir();
@@ -928,7 +939,7 @@ int main (int argc, char *argv[])
   rp9_cleanup();
   
   logging_cleanup();
-  
+
 //  printf("Threads at exit:\n");
 //  dbg_list_threads();
   

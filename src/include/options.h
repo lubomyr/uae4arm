@@ -86,10 +86,6 @@ struct uae_prefs {
   struct wh gfx_size;
   int gfx_resolution;
  
-#ifdef RASPBERRY
-    int gfx_correct_aspect;
-#endif 
-  
   bool immediate_blits;
   unsigned int chipset_mask;
   bool ntscmode;
@@ -133,6 +129,7 @@ struct uae_prefs {
   int pandora_horizontal_offset;
   int pandora_vertical_offset;
   int pandora_cpu_speed;
+  int pandora_hide_idle_led;
   
   int pandora_joyConf;
   int pandora_joyPort;

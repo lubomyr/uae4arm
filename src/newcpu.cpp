@@ -46,11 +46,9 @@
 #include "gui.h"
 #include "savestate.h"
 #include "blitter.h"
-
 #ifndef ANDROID
 #include "ar.h"
 #endif
-
 #include "cia.h"
 #include <SDL.h>
 
@@ -1745,7 +1743,7 @@ static void m68k_run_2p (void)
 static void m68k_run_2 (void)
 {
   struct regstruct &r = regs;
-  
+
   for (;;) {
 		r.instruction_pc = m68k_getpc (r);
 	  uae_u16 opcode = get_iword2 (r, 0);
