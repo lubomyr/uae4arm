@@ -10,36 +10,32 @@
 #include "xwin.h"
 #include "drawing.h"
 #include "inputdevice.h"
-#include "osdep/inputmode.h"
 #include "savestate.h"
 #include "picasso96.h"
 
 #include <png.h>
 #include <SDL.h>
-#include <SDL_image.h>
+#include <SDL/SDL_image.h>
+#ifndef ANDROID
+#include <SDL/SDL_gfxPrimitives.h>
+#endif
 #include <SDL/SDL_ttf.h>
 
-#ifdef ANDROIDSDL
-#include <SDL_screenkeyboard.h>
+#ifdef ANDROID
 #include <android/log.h>
 #endif
 
-extern int stylusClickOverride;
-
+#ifdef ANDROIDSDL
+#include <SDL_screenkeyboard.h>
+#endif
 
 /* SDL variable for output of emulation */
 SDL_Surface *prSDLScreen = NULL;
 
 /* Possible screen modes (x and y resolutions) */
-#ifdef ANDROID
-#define MAX_SCREEN_MODES 10
-static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 800, 960, 1024, 1024, 1280, 1280, 1920 };
-static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480, 600, 540,  768,  600,  720,  800, 1080 };
-#else
 #define MAX_SCREEN_MODES 6
 static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 1024, 1152, 1280 };
 static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480,  768,  864,  960 };
-#endif
 
 static int red_bits, green_bits, blue_bits;
 static int red_shift, green_shift, blue_shift;
@@ -48,8 +44,6 @@ struct PicassoResolution *DisplayModes;
 struct MultiDisplay Displays[MAX_DISPLAYS];
 
 int screen_is_picasso = 0;
-
-static int curr_layer_width = 0;
 
 static SDL_Surface *current_screenshot = NULL;
 static char screenshot_filename_default[255]={
@@ -68,11 +62,6 @@ int delay_savestate_frame = 0;
 #define VIDEO_FLAGS VIDEO_FLAGS_INIT | SDL_DOUBLEBUF
 #endif
 
-
-int justClicked = 0;
-int mouseMoving = 0;
-int fcounter = 0;
-int doStylusRightClick = 0;
 
 static unsigned long previous_synctime = 0;
 static unsigned long next_synctime = 0;
@@ -239,15 +228,6 @@ void update_onscreen()
 }
 #endif
 
-void getgfxoffset (int *dxp, int *dyp, int *mxp, int *myp)
-{
-  *dxp = 0;
-  *dyp = 0;
-  *mxp = 1;
-  *myp = 1;
-}
-
-
 static void open_screen(struct uae_prefs *p)
 {
   char layersize[20];
@@ -257,22 +237,18 @@ static void open_screen(struct uae_prefs *p)
   if(!screen_is_picasso)
   {
     CalcPandoraWidth(p);
-  	if(curr_layer_width != p->gfx_size_fs.width)
-  	{
-  	  snprintf(layersize, 20, "%dx480", p->gfx_size_fs.width);
+
+	  snprintf(layersize, 20, "%dx480", p->gfx_size_fs.width);
 #ifndef WIN32
-    	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
+  	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
 #endif
-    }
   }
   else
   {
-#ifdef PICASSO96
     if(picasso_vidinfo.height < 480)
 	    snprintf(layersize, 20, "%dx480", picasso_vidinfo.width);
 	  else
 	    snprintf(layersize, 20, "%dx%d", picasso_vidinfo.width, picasso_vidinfo.height);
-#endif
 #ifndef WIN32
   	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
 #endif
@@ -307,8 +283,6 @@ static void open_screen(struct uae_prefs *p)
   {
     InitAmigaVidMode(p);
     init_row_map();
-    
-    inputdevice_mouselimit(prSDLScreen->w, prSDLScreen->h);
   }
 }
 
@@ -374,9 +348,6 @@ void unlockscr (void)
 
 void flush_screen ()
 {
-	if (show_inputmode)
-		inputmode_redraw();	
-
 	if (savestate_state == STATE_DOSAVE)
 	{
     if(delay_savestate_frame > 0)
@@ -414,40 +385,6 @@ void flush_screen ()
     next_synctime = next_synctime + time_per_frame * (1 + currprefs.gfx_framerate);
 
 	init_row_map();
-
-	if(stylusClickOverride)
-	{
-		justClicked = 0;
-		mouseMoving = 0;
-	}
-	else
-	{
-		if(justClicked)
-		{
-			buttonstate[0] = 0;
-			buttonstate[2] = 0;
-			justClicked = 0;
-		}
-
-		if(mouseMoving)
-		{
-			if(fcounter >= currprefs.pandora_tapDelay)
-			{
-				if(doStylusRightClick)
-			  {
-					buttonstate[2] = 1;
-        }
-				else
-			  {
-					buttonstate[0] = 1;
-  				mouseMoving = 0;
-  				justClicked = 1;
-  				fcounter = 0;
-				}
-			}
-			fcounter++;
-		}
-	}
 }
 
 
@@ -559,15 +496,10 @@ int GetSurfacePixelFormat(void)
 
 int graphics_init (void)
 {
-	int i,j;
-
 	graphics_subinit ();
 
   if (!init_colors ())
 		return 0;
-
-  buttonstate[0] = buttonstate[1] = buttonstate[2] = 0;
-  keyboard_init();
     
   return 1;
 }

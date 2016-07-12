@@ -15,7 +15,7 @@
 uae_u8* natmem_offset = 0;
 uae_u32 natmem_size;
 static uae_u64 totalAmigaMemSize;
-#define MAXAMIGAMEM 0x6000000 // 64 MB (16 MB for standard Amiga stuff, 16 MG RTG, 64 MB Z3 fast)
+#define MAXAMIGAMEM 0x4000000 // 64 MB (16 MB for standard Amiga stuff, 16 MG RTG, 32 MB Z3 fast)
 
 /* JIT can access few bytes outside of memory block of it executes code at the very end of memory block */
 #define BARRIER 32
@@ -174,13 +174,13 @@ uae_u8 *mapped_malloc (size_t s, const char *file)
     p96ram_start = rtg_start_adr;
     return natmem_offset + p96ram_start;
   }
-#ifdef PICASSO96
+
   if(!strcmp(file, "z2_gfx"))
   {
     p96ram_start = getz2rtgaddr();
     return natmem_offset + p96ram_start;
   }
-#endif
+
   if(!strcmp(file, "rtarea"))
     return natmem_offset + rtarea_base;
 

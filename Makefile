@@ -3,7 +3,7 @@ ifeq ($(PLATFORM),)
 endif
 
 ifeq ($(PLATFORM),android)
-	CPU_FLAGS += -mfpu=neon-vfpv4 -mfloat-abi=soft
+	CPU_FLAGS += -mfpu=neon -mfloat-abi=soft
 	DEFS += -DANDROIDSDL
 	ANDROID = 1
 	HAVE_NEON = 1
@@ -46,7 +46,7 @@ PANDORA=1
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DGP2X -DPANDORA -DWITH_INGAME_WARNING
+DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DARMV6T2 -DGP2X -DPANDORA -DWITH_INGAME_WARNING
 DEFS += -DROM_PATH_PREFIX=\"./\" -DDATA_PREFIX=\"./data/\" -DSAVE_PREFIX=\"./saves/\"
 DEFS += -DUSE_SDL
 
@@ -60,10 +60,10 @@ endif
 
 MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
 
-MORE_CFLAGS += -Isrc -Isrc/include -Isrc/od-pandora -fomit-frame-pointer -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
+MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/od-pandora -fomit-frame-pointer -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
 MORE_CFLAGS += -fexceptions -fpermissive
 
-LDFLAGS +=  -lm -lz -lpng -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
+LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
 
 ifndef DEBUG
 MORE_CFLAGS += -Ofast -pipe -ftree-vectorize -fsingle-precision-constant -fuse-ld=gold -fdiagnostics-color=auto
@@ -78,15 +78,20 @@ endif
 ASFLAGS += $(CPU_FLAGS)
 
 CXXFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
+CFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
 
 OBJS =	\
+	src/akiko.o \
 	src/aros.rom.o \
 	src/audio.o \
 	src/autoconf.o \
 	src/blitfunc.o \
 	src/blittable.o \
 	src/blitter.o \
+	src/blkdev.o \
+	src/blkdev_cdimage.o \
 	src/bsdsocket.o \
+	src/cdrom.o \
 	src/cfgfile.o \
 	src/cia.o \
 	src/crc32.o \
@@ -153,52 +158,53 @@ OBJS =	\
 	src/archivers/lzx/unlzx.o \
 	src/archivers/wrp/warp.o \
 	src/archivers/zip/unzip.o \
-	src/md-pandora/support.o \
-	src/od-pandora/bsdsocket_host.o \
-	src/od-pandora/fsdb_host.o \
-	src/od-pandora/hardfile_pandora.o \
-	src/od-pandora/joystick.o \
-	src/od-pandora/keyboard.o \
-	src/od-pandora/inputmode.o \
-	src/od-pandora/writelog.o \
-	src/od-pandora/pandora.o \
-	src/od-pandora/pandora_filesys.o \
-	src/od-pandora/pandora_gui.o \
-	src/od-pandora/pandora_rp9.o \
-	src/od-pandora/pandora_mem.o \
-	src/od-pandora/sigsegv_handler.o \
-	src/od-pandora/menu/menu_config.o \
-	src/sd-sdl/sound.o \
-	src/od-pandora/gui/UaeRadioButton.o \
-	src/od-pandora/gui/UaeDropDown.o \
-	src/od-pandora/gui/UaeCheckBox.o \
-	src/od-pandora/gui/UaeListBox.o \
-	src/od-pandora/gui/InGameMessage.o \
-	src/od-pandora/gui/SelectorEntry.o \
-	src/od-pandora/gui/ShowMessage.o \
-	src/od-pandora/gui/SelectFolder.o \
-	src/od-pandora/gui/SelectFile.o \
-	src/od-pandora/gui/CreateFilesysHardfile.o \
-	src/od-pandora/gui/EditFilesysVirtual.o \
-	src/od-pandora/gui/EditFilesysHardfile.o \
-	src/od-pandora/gui/PanelPaths.o \
-	src/od-pandora/gui/PanelConfig.o \
-	src/od-pandora/gui/PanelCPU.o \
-	src/od-pandora/gui/PanelChipset.o \
-	src/od-pandora/gui/PanelROM.o \
-	src/od-pandora/gui/PanelRAM.o \
-	src/od-pandora/gui/PanelFloppy.o \
-	src/od-pandora/gui/PanelHD.o \
-	src/od-pandora/gui/PanelDisplay.o \
-	src/od-pandora/gui/PanelSound.o \
-	src/od-pandora/gui/PanelInput.o \
-	src/od-pandora/gui/PanelMisc.o \
-	src/od-pandora/gui/PanelSavestate.o \
-	src/od-pandora/gui/main_window.o \
-	src/od-pandora/gui/Navigation.o
+	src/machdep/support.o \
+	src/osdep/bsdsocket_host.o \
+	src/osdep/cda_play.o \
+	src/osdep/fsdb_host.o \
+	src/osdep/hardfile_pandora.o \
+	src/osdep/keyboard.o \
+	src/osdep/mp3decoder.o \
+	src/osdep/writelog.o \
+	src/osdep/pandora.o \
+	src/osdep/pandora_filesys.o \
+	src/osdep/pandora_input.o \
+	src/osdep/pandora_gui.o \
+	src/osdep/pandora_rp9.o \
+	src/osdep/pandora_mem.o \
+	src/osdep/sigsegv_handler.o \
+	src/osdep/menu/menu_config.o \
+	src/sounddep/sound.o \
+	src/osdep/gui/UaeRadioButton.o \
+	src/osdep/gui/UaeDropDown.o \
+	src/osdep/gui/UaeCheckBox.o \
+	src/osdep/gui/UaeListBox.o \
+	src/osdep/gui/InGameMessage.o \
+	src/osdep/gui/SelectorEntry.o \
+	src/osdep/gui/ShowMessage.o \
+	src/osdep/gui/SelectFolder.o \
+	src/osdep/gui/SelectFile.o \
+	src/osdep/gui/CreateFilesysHardfile.o \
+	src/osdep/gui/EditFilesysVirtual.o \
+	src/osdep/gui/EditFilesysHardfile.o \
+	src/osdep/gui/PanelPaths.o \
+	src/osdep/gui/PanelConfig.o \
+	src/osdep/gui/PanelCPU.o \
+	src/osdep/gui/PanelChipset.o \
+	src/osdep/gui/PanelROM.o \
+	src/osdep/gui/PanelRAM.o \
+	src/osdep/gui/PanelFloppy.o \
+	src/osdep/gui/PanelHD.o \
+	src/osdep/gui/PanelDisplay.o \
+	src/osdep/gui/PanelSound.o \
+	src/osdep/gui/PanelInput.o \
+	src/osdep/gui/PanelMisc.o \
+	src/osdep/gui/PanelSavestate.o \
+	src/osdep/gui/main_window.o \
+	src/osdep/gui/Navigation.o
 	
 ifeq ($(ANDROID), 1)
-OBJS += src/od-pandora/gui/PanelOnScreen.o
+OBJS += src/osdep/gui/PanelOnScreen.o
 endif
 
 ifeq ($(HAVE_DISPMANX), 1)
@@ -206,7 +212,7 @@ OBJS += src/od-rasp/rasp_gfx.o
 endif
 
 ifeq ($(HAVE_SDL_DISPLAY), 1)
-OBJS += src/od-pandora/pandora_gfx.o
+OBJS += src/osdep/pandora_gfx.o
 endif
 
 ifeq ($(HAVE_GLES_DISPLAY), 1)
@@ -220,15 +226,15 @@ endif
 
 
 ifdef PANDORA
-OBJS += src/od-pandora/gui/sdltruetypefont.o
+OBJS += src/osdep/gui/sdltruetypefont.o
 endif
 
 ifeq ($(USE_PICASSO96), 1)
-	OBJS += src/od-pandora/picasso96.o
+	OBJS += src/osdep/picasso96.o
 endif
 
 ifeq ($(HAVE_NEON), 1)
-	OBJS += src/od-pandora/neon_helper.o
+	OBJS += src/osdep/neon_helper.o
 endif
 
 OBJS += src/newcpu.o
@@ -244,7 +250,7 @@ OBJS += src/jit/compstbl.o
 OBJS += src/jit/compemu_support.o
 
 src/osdep/neon_helper.o: src/osdep/neon_helper.s
-	$(CXX) $(CPU_FLAGS) -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
+	$(CXX) $(CPU_FLAGS) -falign-functions=32 -mcpu=cortex-a8 -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
 
 $(PROG): $(OBJS)
 	$(CXX) -o $(PROG) $(OBJS) $(LDFLAGS)

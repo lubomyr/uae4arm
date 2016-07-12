@@ -32,14 +32,14 @@ ConfigCategory categories[] = {
   { "ROM",              "data/chip.ico",      NULL, NULL, InitPanelROM,       ExitPanelROM,     RefreshPanelROM },
   { "RAM",              "data/chip.ico",      NULL, NULL, InitPanelRAM,       ExitPanelRAM,     RefreshPanelRAM },
   { "Floppy drives",    "data/35floppy.ico",  NULL, NULL, InitPanelFloppy,    ExitPanelFloppy,  RefreshPanelFloppy },
-  { "Hard drives",      "data/drive.ico",     NULL, NULL, InitPanelHD,        ExitPanelHD,      RefreshPanelHD },
+  { "Hard drives / CD", "data/drive.ico",     NULL, NULL, InitPanelHD,        ExitPanelHD,      RefreshPanelHD },
   { "Display",          "data/screen.ico",    NULL, NULL, InitPanelDisplay,   ExitPanelDisplay, RefreshPanelDisplay },
   { "Sound",            "data/sound.ico",     NULL, NULL, InitPanelSound,     ExitPanelSound,   RefreshPanelSound },
   { "Input",            "data/joystick.ico",  NULL, NULL, InitPanelInput,     ExitPanelInput,   RefreshPanelInput },
   { "Miscellaneous",    "data/misc.ico",      NULL, NULL, InitPanelMisc,      ExitPanelMisc,    RefreshPanelMisc },
   { "Savestates",       "data/savestate.png", NULL, NULL, InitPanelSavestate, ExitPanelSavestate, RefreshPanelSavestate },
 #ifdef ANDROIDSDL  
-  { "OnScreen",       "data/screen.ico", NULL, NULL, InitPanelOnScreen, ExitPanelOnScreen, RefreshPanelOnScreen },
+  { "OnScreen",         "data/screen.ico",    NULL, NULL, InitPanelOnScreen,  ExitPanelOnScreen, RefreshPanelOnScreen },
 #endif
   { NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 };
@@ -140,15 +140,14 @@ namespace sdl
     //-------------------------------------------------
     // Create new screen for GUI
     //-------------------------------------------------
-    #if defined (RASPBERRY)
-    const SDL_VideoInfo* videoInfo = SDL_GetVideoInfo ();
-    printf("Current resolution: %d x %d %d bpp\n",videoInfo->current_w, videoInfo->current_h, videoInfo->vfmt->BitsPerPixel);
-    gui_screen = SDL_SetVideoMode(videoInfo->current_w,videoInfo->current_h,16,SDL_SWSURFACE |SDL_FULLSCREEN);
-    #else
     gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE);
-    #endif
     SDL_EnableUNICODE(1);
     SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
+#ifdef ANDROIDSDL
+    // Enable Android multitouch
+    SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+    SDL_JoystickOpen(0);
+#endif
     SDL_ShowCursor(SDL_ENABLE);
 
     //-------------------------------------------------
@@ -202,7 +201,7 @@ namespace sdl
         {
           gcn::FocusHandler* focusHdl;
           gcn::Widget* activeWidget;
-	  
+            
           switch(event.key.keysym.sym)
           {
 #ifndef ANDROID
@@ -482,8 +481,7 @@ namespace widgets
     // Create container for main page
     //-------------------------------------------------
     gui_top = new gcn::Container();
-    //gui_top->setDimension(gcn::Rectangle(0, 0, GUI_WIDTH, GUI_HEIGHT));
-    gui_top->setDimension(gcn::Rectangle((gui_screen->w - GUI_WIDTH) / 2, (gui_screen->h - GUI_HEIGHT) / 2, GUI_WIDTH, GUI_HEIGHT));
+    gui_top->setDimension(gcn::Rectangle(0, 0, GUI_WIDTH, GUI_HEIGHT));
     gui_top->setBaseColor(gui_baseCol);
     uae_gui->setTop(gui_top);
 

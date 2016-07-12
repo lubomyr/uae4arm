@@ -24,25 +24,33 @@ typedef struct
 
 static NavigationMap navMap[] = 
 {
-//  active            move left         move right        move up           move down
+//  active              move left         move right        move up             move down
 // main_window
-  { "Paths",          "SystemROMs",     "SystemROMs",     "Reset",          "Configurations" },
-  { "Configurations", "ConfigList",     "ConfigList",     "Paths",          "CPU and FPU" },
-  { "CPU and FPU",    "7 Mhz",          "68000",          "Configurations", "Chipset" },
-  { "Chipset",        "Fast copper",    "OCS",            "CPU and FPU",    "ROM" },
-  { "ROM",            "MainROM",        "cboMainROM",     "Chipset",        "RAM" },
-  { "RAM",            "Chipmem",        "Chipmem",        "ROM",            "Floppy drives" },
-  { "Floppy drives",  "cmdSel0",        "DF0:",           "RAM",            "Hard drives" },
-  { "Hard drives",    "cmdDel0",        "cmdProp0",       "Floppy drives",  "Display" },
-  { "Display",        "sldWidth",       "sldWidth",       "Hard drives",    "Sound" },
-  { "Sound",          "sndDisable",     "sndDisable",     "Display",        "Input" },
-  { "Input",          "cboCtrlConfig",  "cboCtrlConfig",  "Sound",          "Miscellaneous" },
-  { "Miscellaneous",  "StatusLine",     "StatusLine",     "Input",          "Savestates" },
-  { "Savestates",     "State0",         "State0",         "Miscellaneous",  "Reset" },
-  { "Reset",          "Start",          "Quit",           "Savestates",     "Paths" },
-  { "Quit",           "Reset",          "Start",          "Savestates",     "Paths" },
-  { "Start",          "Quit",           "Reset",          "Savestates",     "Paths" },
-
+  { "Paths",            "SystemROMs",     "SystemROMs",     "Reset",            "Configurations" },
+  { "Configurations",   "ConfigList",     "ConfigList",     "Paths",            "CPU and FPU" },
+  { "CPU and FPU",      "7 Mhz",          "68000",          "Configurations",   "Chipset" },
+  { "Chipset",          "Fast copper",    "OCS",            "CPU and FPU",      "ROM" },
+  { "ROM",              "MainROM",        "cboMainROM",     "Chipset",          "RAM" },
+  { "RAM",              "Chipmem",        "Chipmem",        "ROM",              "Floppy drives" },
+  { "Floppy drives",    "cmdSel0",        "DF0:",           "RAM",              "Hard drives / CD" },
+  { "Hard drives / CD", "cmdCreateHDF",   "cmdAddDir",      "Floppy drives",    "Display" },
+  { "Display",          "sldWidth",       "sldWidth",       "Hard drives / CD", "Sound" },
+  { "Sound",            "sndDisable",     "sndDisable",     "Display",          "Input" },
+  { "Input",            "cboPort0",       "cboPort0",       "Sound",            "Miscellaneous" },
+  { "Miscellaneous",    "StatusLine",     "StatusLine",     "Input",            "Savestates" },
+#ifdef ANDROIDSDL
+  { "Savestates",       "State0",         "State0",         "Miscellaneous",  "OnScreen" },
+  { "OnScreen",         "OnScrButton3",   "OnScrCtrl",      "Savestates",     "Reset" },
+  { "Reset",            "Start",          "Quit",           "OnScreen",       "Paths" },
+  { "Quit",             "Reset",          "Start",          "OnScreen",       "Paths" },
+  { "Start",            "Quit",           "Reset",          "OnScreen",       "Paths" },
+#else
+  { "Savestates",       "State0",         "State0",         "Miscellaneous",    "Reset" },
+  { "Reset",            "Start",          "Quit",           "Savestates",       "Paths" },
+  { "Quit",             "Reset",          "Start",          "Savestates",       "Paths" },
+  { "Start",            "Quit",           "Reset",          "Savestates",       "Paths" },
+#endif
+  
 // PanelPaths
   { "SystemROMs",     "Paths",          "Paths",          "RescanROMs",     "ConfigPath" },
   { "ConfigPath",     "Paths",          "Paths",          "SystemROMs",     "RescanROMs" },
@@ -130,22 +138,27 @@ static NavigationMap navMap[] =
   { "CreateDD",       "SaveForDisk",    "CreateHD",       "DriveSpeed",     "cboType0" },
   { "CreateHD",       "CreateDD",       "Floppy drives",  "DriveSpeed",     "cmdEject0" },
 
-//  active            move left         move right        move up           move down
+//  active            move left           move right          move up           move down
 // PanelHD
-  { "cmdProp0",       "Hard drives",    "cmdDel0",        "cmdAddDir",      "cmdProp1" },
-  { "cmdDel0",        "cmdProp0",       "Hard drives",    "cmdAddHDF",      "cmdDel1" },
-  { "cmdProp1",       "Hard drives",    "cmdDel1",        "cmdProp0",       "cmdProp2" },
-  { "cmdDel1",        "cmdProp1",       "Hard drives",    "cmdDel0",        "cmdDel2" },
-  { "cmdProp2",       "Hard drives",    "cmdDel2",        "cmdProp1",       "cmdProp3" },
-  { "cmdDel2",        "cmdProp2",       "Hard drives",    "cmdDel1",        "cmdDel3" },
-  { "cmdProp3",       "Hard drives",    "cmdDel3",        "cmdProp2",       "cmdProp4" },
-  { "cmdDel3",        "cmdProp3",       "Hard drives",    "cmdDel2",        "cmdDel4" },
-  { "cmdProp4",       "Hard drives",    "cmdDel4",        "cmdProp3",       "cmdAddDir" },
-  { "cmdDel4",        "cmdProp4",       "Hard drives",    "cmdDel3",        "cmdAddHDF" },
-  { "cmdAddDir",      "Hard drives",    "cmdAddHDF",      "cmdProp4",       "cmdProp0" },
-  { "cmdAddHDF",      "cmdAddDir",      "cmdCreateHDF",   "cmdDel4",        "cmdDel0" },
-  { "cmdCreateHDF",   "cmdAddHDF",      "Hard drives",    "cmdDel4",        "cmdDel0" },
-
+  { "cmdProp0",       "Hard drives / CD", "cmdDel0",          "CDVol",          "cmdProp1" },
+  { "cmdDel0",        "cmdProp0",         "Hard drives / CD", "CDVol",          "cmdDel1" },
+  { "cmdProp1",       "Hard drives / CD", "cmdDel1",          "cmdProp0",       "cmdProp2" },
+  { "cmdDel1",        "cmdProp1",         "Hard drives / CD", "cmdDel0",        "cmdDel2" },
+  { "cmdProp2",       "Hard drives / CD", "cmdDel2",          "cmdProp1",       "cmdProp3" },
+  { "cmdDel2",        "cmdProp2",         "Hard drives / CD", "cmdDel1",        "cmdDel3" },
+  { "cmdProp3",       "Hard drives / CD", "cmdDel3",          "cmdProp2",       "cmdProp4" },
+  { "cmdDel3",        "cmdProp3",         "Hard drives / CD", "cmdDel2",        "cmdDel4" },
+  { "cmdProp4",       "Hard drives / CD", "cmdDel4",          "cmdProp3",       "cmdAddDir" },
+  { "cmdDel4",        "cmdProp4",         "Hard drives / CD", "cmdDel3",        "cmdAddHDF" },
+  { "cmdAddDir",      "Hard drives / CD", "cmdAddHDF",        "cmdProp4",       "CD drive" },
+  { "cmdAddHDF",      "cmdAddDir",        "cmdCreateHDF",     "cmdDel4",        "CD drive" },
+  { "cmdCreateHDF",   "cmdAddHDF",        "Hard drives / CD", "cmdDel4",        "CD drive" },
+  { "CD drive",       "Hard drives / CD", "cdEject",          "cmdAddDir",      "cboCD" },
+  { "cdEject",        "CD drive",         "CDSelect",         "cmdCreateHDF",   "cboCD" },
+  { "CDSelect",       "cdEject",          "Hard drives / CD", "cmdCreateHDF",   "cboCD" },
+  { "cboCD",          "Hard drives / CD", "Hard drives / CD", "CD drive",       "CDVol" },
+  { "CDVol",          "",                 "",                 "cboCD",          "cmdProp0" },
+  
 // PanelDisplay
   { "sldWidth",       "",               "",               "Frameskip",      "sldHeight" },
   { "sldHeight",      "",               "",               "sldWidth",       "sldVertPos" },
@@ -165,25 +178,25 @@ static NavigationMap navMap[] =
   { "sldSeparation",  "",               "",               "cboFilter",      "sldStereoDelay" },
   { "sldStereoDelay", "",               "",               "sldSeparation",  "sndDisable" },
 
+//  active            move left           move right          move up           move down
 // PanelInput
-  { "cboCtrlConfig",  "Input",          "Input",          "cboLeft",        "cboJoystick" },
-  { "cboJoystick",    "Input",          "cboAutofire",    "cboCtrlConfig",  "cboTapDelay" },
-  { "cboAutofire",    "cboJoystick",    "Input",          "cboCtrlConfig",  "cboTapDelay" },
-  { "cboTapDelay",    "Input",          "Input",          "cboJoystick",    "MouseSpeed" },
-  { "MouseSpeed",     "",               "",               "cboTapDelay",    "cboDPAD" },
-  { "MouseHack",      "MouseSpeed",     "Input",          "cboTapDelay",    "CustomCtrl" },
-  { "cboDPAD",        "Input",          "CustomCtrl",     "MouseSpeed",     "cboA" },
-  { "CustomCtrl",     "cboDPAD",        "Input",          "MouseHack",      "cboB" },
-  { "cboA",           "Input",          "cboB",           "cboDPAD",        "cboX" },
-  { "cboB",           "cboA",           "Input",          "CustomCtrl",     "cboY" },
+  { "cboPort0",       "Input",          "Input",          "cboLeft",        "cboPort1" },
+  { "cboPort1",       "Input",          "cboAutofire",    "cboPort0",       "MouseSpeed" },
+  { "cboAutofire",    "cboPort1",       "Input",          "cboPort0",       "cboTapDelay" },
+  { "MouseSpeed",     "",               "",               "cboPort1",       "MouseHack" },
+  { "MouseHack",      "Input",          "cboTapDelay",    "MouseSpeed",     "CustomCtrl" },
+  { "cboTapDelay",    "MouseHack",      "Input",          "cboAutofire",    "cboB" },
+  { "CustomCtrl",     "Input",          "Input",          "MouseHack",      "cboA" },
+  { "cboA",           "Input",          "cboB",           "CustomCtrl",     "cboX" },
+  { "cboB",           "cboA",           "Input",          "cboTapDelay",    "cboY" },
   { "cboX",           "Input",          "cboY",           "cboA",           "cboL" },
   { "cboY",           "cboX",           "Input",          "cboB",           "cboR" },
   { "cboL",           "Input",          "cboR",           "cboX",           "cboUp" },
   { "cboR",           "cboL",           "Input",          "cboY",           "cboDown" },
   { "cboUp",          "Input",          "cboDown",        "cboL",           "cboLeft" },
   { "cboDown",        "cboUp",          "Input",          "cboR",           "cboRight" },
-  { "cboLeft",        "Input",          "cboRight",       "cboUp",          "cboCtrlConfig" },
-  { "cboRight",       "cboLeft",        "Input",          "cboDown",        "cboCtrlConfig" },
+  { "cboLeft",        "Input",          "cboRight",       "cboUp",          "cboPort0" },
+  { "cboRight",       "cboLeft",        "Input",          "cboDown",        "cboPort0" },
 
 // PanelMisc
   { "StatusLine",     "Miscellaneous",  "Miscellaneous",  "BSDSocket",      "HideIdle" },
@@ -200,6 +213,20 @@ static NavigationMap navMap[] =
   { "LoadState",      "Savestates",     "SaveState",      "State3",         "State0" },
   { "SaveState",      "LoadState",      "Savestates",     "State3",         "State0" },
 
+#ifdef ANDROIDSDL
+// PanelOnScreen
+  { "OnScrCtrl",      "OnScreen",       "OnScrButton3", "FloatJoy",     "OnScrTextInput" },
+  { "OnScrButton3",   "OnScrCtrl",      "OnScreen",     "CustomPos",     "OnScrButton4" },
+  { "OnScrTextInput", "OnScreen",       "OnScrButton4", "OnScrCtrl",      "OnScrDpad" },
+  { "OnScrButton4",   "OnScrTextInput", "OnScreen",     "OnScrButton3",   "OnScrButton5" },
+  { "OnScrDpad",      "OnScreen",       "OnScrButton5", "OnScrTextInput", "OnScrButton1" },
+  { "OnScrButton5",   "OnScrDpad",      "OnScreen",     "OnScrButton4",   "OnScrButton6" },
+  { "OnScrButton1",   "OnScreen",       "OnScrButton6", "OnScrDpad",      "OnScrButton2" },
+  { "OnScrButton6",   "OnScrButton1",   "OnScreen",     "OnScrButton5",   "CustomPos" },
+  { "OnScrButton2",   "OnScreen",       "CustomPos",    "OnScrButton1",   "FloatJoy" },
+  { "CustomPos",      "OnScrButton2",   "OnScreen",     "OnScrButton6",   "Reset" },
+  { "FloatJoy",       "OnScreen",       "CustomPos",    "OnScrButton2",   "Reset" },
+#endif
 
 //  active            move left         move right        move up           move down
 // EditFilesysVirtual

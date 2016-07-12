@@ -23,14 +23,11 @@
 static gcn::UaeCheckBox* chkStatusLine;
 static gcn::UaeCheckBox* chkHideIdleLed;
 static gcn::UaeCheckBox* chkShowGUI;
-#ifdef RASPBERRY
-static gcn::UaeCheckBox* chkAspect;
-#else
 static gcn::Label* lblPandoraSpeed;
 static gcn::Label* lblPandoraSpeedInfo;
 static gcn::Slider* sldPandoraSpeed;
-#endif
 static gcn::UaeCheckBox* chkBSDSocket;
+
 
 class MiscActionListener : public gcn::ActionListener
 {
@@ -45,14 +42,10 @@ class MiscActionListener : public gcn::ActionListener
 
       else if (actionEvent.getSource() == chkShowGUI)
         changed_prefs.start_gui = chkShowGUI->isSelected();
-      
+
       else if (actionEvent.getSource() == chkBSDSocket)
         changed_prefs.socket_emu = chkBSDSocket->isSelected();
-      
-#ifdef RASPBERRY
-      else if (actionEvent.getSource() == chkAspect)
-        changed_prefs.gfx_correct_aspect = chkAspect->isSelected();
-#else
+        
       else if (actionEvent.getSource() == sldPandoraSpeed)
       {
         int newspeed = (int) sldPandoraSpeed->getValue();
@@ -63,7 +56,6 @@ class MiscActionListener : public gcn::ActionListener
           RefreshPanelMisc();
         }
       }
-#endif
     }
 };
 MiscActionListener* miscActionListener;
@@ -73,49 +65,42 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 {
   miscActionListener = new MiscActionListener();
 
-  chkStatusLine = new gcn::UaeCheckBox("Status Line");
-  chkStatusLine->setId("StatusLine");
+	chkStatusLine = new gcn::UaeCheckBox("Status Line");
+	chkStatusLine->setId("StatusLine");
   chkStatusLine->addActionListener(miscActionListener);
 
-  chkHideIdleLed = new gcn::UaeCheckBox("Hide idle led");
-  chkHideIdleLed->setId("HideIdle");
+	chkHideIdleLed = new gcn::UaeCheckBox("Hide idle led");
+	chkHideIdleLed->setId("HideIdle");
   chkHideIdleLed->addActionListener(miscActionListener);
-  
-  chkShowGUI = new gcn::UaeCheckBox("Show GUI on startup");
-  chkShowGUI->setId("ShowGUI");
+
+	chkShowGUI = new gcn::UaeCheckBox("Show GUI on startup");
+	chkShowGUI->setId("ShowGUI");
   chkShowGUI->addActionListener(miscActionListener);
-  
-#ifdef RASPBERRY
-  chkAspect = new gcn::UaeCheckBox("4/3 ratio shrink");
-  chkAspect->addActionListener(miscActionListener);
-#else
-  lblPandoraSpeed = new gcn::Label("Pandora Speed:");
+
+	lblPandoraSpeed = new gcn::Label("Pandora Speed:");
   lblPandoraSpeed->setSize(110, LABEL_HEIGHT);
   lblPandoraSpeed->setAlignment(gcn::Graphics::RIGHT);
   sldPandoraSpeed = new gcn::Slider(500, 1260);
   sldPandoraSpeed->setSize(200, SLIDER_HEIGHT);
   sldPandoraSpeed->setBaseColor(gui_baseCol);
-  sldPandoraSpeed->setMarkerLength(20);
-  sldPandoraSpeed->setStepLength(20);
-  sldPandoraSpeed->setId("PandSpeed");
+	sldPandoraSpeed->setMarkerLength(20);
+	sldPandoraSpeed->setStepLength(20);
+	sldPandoraSpeed->setId("PandSpeed");
   sldPandoraSpeed->addActionListener(miscActionListener);
   lblPandoraSpeedInfo = new gcn::Label("1000 MHz");
-#endif
-  chkBSDSocket = new gcn::UaeCheckBox("bsdsocket.library");
+
+	chkBSDSocket = new gcn::UaeCheckBox("bsdsocket.library");
   chkBSDSocket->setId("BSDSocket");
   chkBSDSocket->addActionListener(miscActionListener);
-  int posY = DISTANCE_BORDER;
+  
+	int posY = DISTANCE_BORDER;
   category.panel->add(chkStatusLine, DISTANCE_BORDER, posY);
   posY += chkStatusLine->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkHideIdleLed, DISTANCE_BORDER, posY);
   posY += chkHideIdleLed->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkShowGUI, DISTANCE_BORDER, posY);
   posY += chkShowGUI->getHeight() + DISTANCE_NEXT_Y;
-#ifdef RASPBERRY
-  category.panel->add(chkAspect, DISTANCE_BORDER, posY);
-  posY += chkAspect->getHeight() + DISTANCE_NEXT_Y;
-#endif
-#if !(defined(RASPBERRY) || defined (ANDROID))
+#ifndef ANDROID
   category.panel->add(lblPandoraSpeed, DISTANCE_BORDER, posY);
   category.panel->add(sldPandoraSpeed, DISTANCE_BORDER + lblPandoraSpeed->getWidth() + 8, posY);
   category.panel->add(lblPandoraSpeedInfo, sldPandoraSpeed->getX() + sldPandoraSpeed->getWidth() + 12, posY);
@@ -123,6 +108,7 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 #endif
   category.panel->add(chkBSDSocket, DISTANCE_BORDER, posY);
   posY += chkBSDSocket->getHeight() + DISTANCE_NEXT_Y;
+  
   RefreshPanelMisc();
 }
 
@@ -132,13 +118,9 @@ void ExitPanelMisc(void)
   delete chkStatusLine;
   delete chkHideIdleLed;
   delete chkShowGUI;
-#ifdef RASPBERRY
-  delete chkAspect;
-#else
   delete lblPandoraSpeed;
   delete sldPandoraSpeed;
   delete lblPandoraSpeedInfo;
-#endif
   delete chkBSDSocket;
   delete miscActionListener;
 }
@@ -151,13 +133,10 @@ void RefreshPanelMisc(void)
   chkStatusLine->setSelected(changed_prefs.leds_on_screen);
   chkHideIdleLed->setSelected(changed_prefs.pandora_hide_idle_led);
   chkShowGUI->setSelected(changed_prefs.start_gui);
-#ifdef RASPBERRY
-  chkAspect->setSelected(changed_prefs.gfx_correct_aspect);
-#else
+
   sldPandoraSpeed->setValue(changed_prefs.pandora_cpu_speed);
   snprintf(tmp, 20, "%d MHz", changed_prefs.pandora_cpu_speed);
   lblPandoraSpeedInfo->setCaption(tmp);
-#endif
   
   chkBSDSocket->setSelected(changed_prefs.socket_emu);
 }
