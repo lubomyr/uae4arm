@@ -33,9 +33,15 @@
 SDL_Surface *prSDLScreen = NULL;
 
 /* Possible screen modes (x and y resolutions) */
+#ifdef ANDROID
+#define MAX_SCREEN_MODES 10
+static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 800, 960, 1024, 1024, 1280, 1280, 1920 };
+static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480, 600, 540,  768,  600,  720,  800, 1080 };
+#else
 #define MAX_SCREEN_MODES 6
 static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 1024, 1152, 1280 };
 static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 480,  768,  864,  960 };
+#endif
 
 static int red_bits, green_bits, blue_bits;
 static int red_shift, green_shift, blue_shift;
