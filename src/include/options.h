@@ -236,6 +236,7 @@ int pos_y_button6;
 int extfilter;
 int quickSwitch;
 int floatingJoystick;
+int disableMenuVKeyb;
 #endif
 	
 	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];

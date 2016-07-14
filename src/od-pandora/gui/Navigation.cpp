@@ -215,7 +215,7 @@ static NavigationMap navMap[] =
 
 #ifdef ANDROIDSDL
 // PanelOnScreen
-  { "OnScrCtrl",      "OnScreen",       "OnScrButton3", "FloatJoy",     "OnScrTextInput" },
+  { "OnScrCtrl",      "OnScreen",       "OnScrButton3", "DisableMenuVKeyb", "OnScrTextInput" },
   { "OnScrButton3",   "OnScrCtrl",      "OnScreen",     "CustomPos",     "OnScrButton4" },
   { "OnScrTextInput", "OnScreen",       "OnScrButton4", "OnScrCtrl",      "OnScrDpad" },
   { "OnScrButton4",   "OnScrTextInput", "OnScreen",     "OnScrButton3",   "OnScrButton5" },
@@ -225,7 +225,8 @@ static NavigationMap navMap[] =
   { "OnScrButton6",   "OnScrButton1",   "OnScreen",     "OnScrButton5",   "CustomPos" },
   { "OnScrButton2",   "OnScreen",       "CustomPos",    "OnScrButton1",   "FloatJoy" },
   { "CustomPos",      "OnScrButton2",   "OnScreen",     "OnScrButton6",   "Reset" },
-  { "FloatJoy",       "OnScreen",       "CustomPos",    "OnScrButton2",   "Reset" },
+  { "FloatJoy",       "OnScreen",       "CustomPos",    "OnScrButton2",   "DisableMenuVKeyb" },
+  { "DisableMenuVKeyb","OnScreen",       "CustomPos",    "FloatJoy",       "Reset" },
 #endif
 
 //  active            move left         move right        move up           move down

@@ -25,7 +25,11 @@ static gcn::Button *cmdLoadFrom;
 static gcn::Button *cmdSaveAs;
 static gcn::Button *cmdDelete;
 static gcn::Label *lblName;
+#ifdef ANDROID
+gcn::TextField *txtName;
+#else
 static gcn::TextField *txtName;
+#endif
 static gcn::Label *lblDesc;
 static gcn::TextField *txtDesc;
 static gcn::UaeListBox* lstConfigs;
@@ -265,7 +269,11 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   cmdDelete->addActionListener(configButtonActionListener);
 
   int buttonX = DISTANCE_BORDER;
+#ifdef ANDROID
+  int buttonY = (DISTANCE_BORDER + BUTTON_HEIGHT) * 2;
+#else
   int buttonY = category.panel->getHeight() - DISTANCE_BORDER - BUTTON_HEIGHT;
+#endif
   category.panel->add(cmdLoad, buttonX, buttonY);
   buttonX += BUTTON_WIDTH + DISTANCE_NEXT_X;
   category.panel->add(cmdSave, buttonX, buttonY);
@@ -282,6 +290,9 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   txtName = new gcn::TextField();
   txtName->setSize(300, TEXTFIELD_HEIGHT);
   txtName->setId("ConfigName");
+#ifdef ANDROID
+  txtName->disableVirtualKeyboard(changed_prefs.disableMenuVKeyb);
+#endif
 
   lblDesc = new gcn::Label("Description:");
   lblDesc->setSize(90, LABEL_HEIGHT);
@@ -309,7 +320,11 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   
   scrAreaConfigs = new gcn::ScrollArea(lstConfigs);
   scrAreaConfigs->setFrameSize(1);
+#ifdef ANDROID
+  scrAreaConfigs->setPosition(DISTANCE_BORDER, DISTANCE_BORDER + buttonY + BUTTON_HEIGHT);
+#else
   scrAreaConfigs->setPosition(DISTANCE_BORDER, DISTANCE_BORDER);
+#endif
   scrAreaConfigs->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER - 2, 252);
   scrAreaConfigs->setScrollbarWidth(20);
   scrAreaConfigs->setBaseColor(gui_baseCol);

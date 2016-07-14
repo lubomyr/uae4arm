@@ -25,6 +25,7 @@ static gcn::UaeCheckBox* checkBox_onscreen_button5;
 static gcn::UaeCheckBox* checkBox_onscreen_button6;
 static gcn::UaeCheckBox* checkBox_onscreen_custompos;
 static gcn::UaeCheckBox* checkBox_floatingJoystick;
+static gcn::UaeCheckBox* checkBox_disableMenuVKeyb;
 static gcn::Button* button_onscreen_pos;
 static gcn::Button* button_onscreen_ok;
 static gcn::Button* button_onscreen_reset;
@@ -38,6 +39,7 @@ static gcn::Window *window_pos_button4;
 static gcn::Window *window_pos_button5;
 static gcn::Window *window_pos_button6;
 static gcn::Label* label_setup_onscreen;
+extern gcn::TextField *txtName;
 
 class OnScreenActionListener : public gcn::ActionListener
 {
@@ -109,6 +111,11 @@ class OnScreenActionListener : public gcn::ActionListener
                 changed_prefs.floatingJoystick=1;
             else
                 changed_prefs.floatingJoystick=0;
+        if (actionEvent.getSource() == checkBox_disableMenuVKeyb)
+            if (checkBox_disableMenuVKeyb->isSelected())
+                changed_prefs.disableMenuVKeyb=1;
+            else
+                changed_prefs.disableMenuVKeyb=0;
         RefreshPanelOnScreen();
     }
 };
@@ -218,6 +225,10 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     checkBox_floatingJoystick->setPosition(10,180);
     checkBox_floatingJoystick->setId("FloatJoy");
     checkBox_floatingJoystick->addActionListener(onScreenActionListener);
+    checkBox_disableMenuVKeyb = new gcn::UaeCheckBox("Disable virtual keyboard in menu");
+    checkBox_disableMenuVKeyb->setPosition(10,210);
+    checkBox_disableMenuVKeyb->setId("DisableMenuVKeyb");
+    checkBox_disableMenuVKeyb->addActionListener(onScreenActionListener);
 
     button_onscreen_pos = new gcn::Button("Position Setup");
     button_onscreen_pos->setPosition(170,180);
@@ -299,6 +310,7 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     category.panel->add(checkBox_onscreen_button6);
     category.panel->add(checkBox_onscreen_custompos);
     category.panel->add(checkBox_floatingJoystick);
+    category.panel->add(checkBox_disableMenuVKeyb);
     category.panel->add(button_onscreen_pos);
     category.panel->add(window_setup_position);
     
@@ -319,6 +331,7 @@ void ExitPanelOnScreen(void)
     delete checkBox_onscreen_button6;
     delete checkBox_onscreen_custompos;
     delete checkBox_floatingJoystick;
+    delete checkBox_disableMenuVKeyb;
     delete button_onscreen_pos;
     delete button_onscreen_ok;
     delete button_onscreen_reset;
@@ -384,6 +397,12 @@ void RefreshPanelOnScreen(void)
         checkBox_floatingJoystick->setSelected(true);
     else
         checkBox_floatingJoystick->setSelected(false);
+    if (changed_prefs.disableMenuVKeyb)
+        checkBox_disableMenuVKeyb->setSelected(true);
+    else
+        checkBox_disableMenuVKeyb->setSelected(false);
+    
+    txtName->disableVirtualKeyboard(changed_prefs.disableMenuVKeyb);
     
     window_pos_textinput->setX(changed_prefs.pos_x_textinput);
     window_pos_textinput->setY(changed_prefs.pos_y_textinput);

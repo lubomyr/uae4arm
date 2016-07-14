@@ -4390,6 +4390,7 @@ void inputdevice_copyconfig (const struct uae_prefs *src, struct uae_prefs *dst)
   dst->pos_x_button6 = src->pos_x_button6;
   dst->pos_y_button6 = src->pos_y_button6;
   dst->floatingJoystick = src->floatingJoystick;
+  dst->disableMenuVKeyb = src->disableMenuVKeyb;
 #endif 
 	copyjport (src, dst, 0);
 	copyjport (src, dst, 1);

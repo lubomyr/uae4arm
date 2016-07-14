@@ -334,9 +334,10 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->pos_y_button5 = 142;
 	p->pos_x_button6 = 378;
 	p->pos_y_button6 = 142;
-	p->extfilter=1;
-	p->quickSwitch=0;
-	p->floatingJoystick=0;
+	p->extfilter = 1;
+	p->quickSwitch = 0;
+	p->floatingJoystick = 0;
+	p->disableMenuVKeyb = 0;
 #endif
 	memset(customControlMap, 0, sizeof(customControlMap));
 }
@@ -393,6 +394,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.pos_x_button6", "%d", p->pos_x_button6);
   cfgfile_write (f, "pandora.pos_y_button6", "%d", p->pos_y_button6);
   cfgfile_write (f, "pandora.floating_joystick", "%d", p->floatingJoystick);
+  cfgfile_write (f, "pandora.disable_menu_vkeyb", "%d", p->disableMenuVKeyb);
 #endif
 }
 
@@ -453,6 +455,7 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "pos_x_button6", &p->pos_x_button6, 1)
     || cfgfile_intval (option, value, "pos_y_button6", &p->pos_y_button6, 1)
     || cfgfile_intval (option, value, "floating_joystick", &p->floatingJoystick, 1)
+    || cfgfile_intval (option, value, "disable_menu_vkeyb", &p->disableMenuVKeyb, 1)
 #endif
     );
 }

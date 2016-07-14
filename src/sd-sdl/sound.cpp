@@ -150,6 +150,7 @@ static int pandora_start_sound(int rate, int bits, int stereo)
 	{
 		// init sem, start sound thread
 		printf("starting sound thread..\n");
+		init_soundbuffer_usage();
 		ret = sem_init(&sound_sem, 0, 0);
 		sem_init(&sound_out_sem, 0, 0);
 		if (ret != 0) printf("sem_init() failed: %i, errno=%i\n", ret, errno);
