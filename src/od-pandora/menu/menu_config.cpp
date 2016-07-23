@@ -495,11 +495,10 @@ int loadconfig_old(struct uae_prefs *p, const char *orgpath)
 		fscanf(f,"custom_Y=%d\n",&customControlMap[SDLK_PAGEUP]);
 #ifdef ANDROIDSDL
 		fscanf(f,"custom_L=%d\n",&customControlMap[SDLK_F13]);
-		fscanf(f,"custom_R=%d\n",&customControlMap[SDLK_F14]);
 #else
 		fscanf(f,"custom_L=%d\n",&customControlMap[SDLK_RSHIFT]);
-		fscanf(f,"custom_R=%d\n",&customControlMap[SDLK_RCTRL]);
 #endif
+		fscanf(f,"custom_R=%d\n",&customControlMap[SDLK_RCTRL]);
 #ifdef ANDROIDSDL		
 		fscanf(f,"onscreen=%d\n",&p->onScreen);
 		fscanf(f,"onScreen_textinput=%d\n",&p->onScreen_textinput);

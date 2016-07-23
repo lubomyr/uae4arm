@@ -582,11 +582,11 @@ void gui_handle_events (void)
 	Uint8 *keystate = SDL_GetKeyState(NULL);
 #ifdef ANDROIDSDL 
 	int triggerL = keystate[SDLK_F13];
-	int triggerR = keystate[SDLK_F14];
 #else
 	int triggerL = keystate[SDLK_RSHIFT];
-	int triggerR = keystate[SDLK_RCTRL];
 #endif
+	int triggerR = keystate[SDLK_RCTRL];
+
 	// L + R
 	if(triggerL && triggerR)
 	{

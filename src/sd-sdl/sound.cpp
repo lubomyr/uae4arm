@@ -36,6 +36,8 @@ bool cdaudio_active = false;
 static int cdwrcnt = 0;
 static int cdrdcnt = 0;
 
+extern int screen_is_picasso;
+
 #ifdef NO_SOUND
 
 void finish_sound_buffer (void) {  }
@@ -77,8 +79,11 @@ void update_sound (int freq, int lof)
 		lines += 0.5;
   }
 
-  evtime = hpos * lines * freq * CYCLE_UNIT / (float)currprefs.sound_freq;
-	scaled_sample_evtime = (int)evtime;
+  if (!screen_is_picasso)
+        evtime = hpos * lines * freq * CYCLE_UNIT / (float)currprefs.sound_freq;
+  else
+        evtime = (312.0 * 50 * CYCLE_UNIT) / (float)(currprefs.sound_freq / 227.0);
+  scaled_sample_evtime = (int)evtime;
 }
 
 

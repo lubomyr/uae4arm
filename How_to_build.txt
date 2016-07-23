@@ -8,9 +8,9 @@ for run android environment i create and use simple script setenv-android.sh
 
 #!/bin/sh
 
-export PATH=~/android/android-ndk-r11c:$PATH
+export PATH=~/android/android-ndk-r12b:$PATH
 export PATH=~/android/android-sdk-linux/tools:$PATH
-export PATH=~/android/android-sdk-linux/build-tools/23.0.3:$PATH
+export PATH=~/android/android-sdk-linux/build-tools/24.0.0:$PATH
 
 now we can run android build environment via console
 . setenv-android.sh

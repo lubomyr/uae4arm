@@ -359,11 +359,10 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.custom_y", "%d", customControlMap[SDLK_PAGEUP]);
 #ifdef ANDROIDSDL
   cfgfile_write (f, "pandora.custom_l", "%d", customControlMap[SDLK_F13]);
-  cfgfile_write (f, "pandora.custom_r", "%d", customControlMap[SDLK_F14]);
 #else
   cfgfile_write (f, "pandora.custom_l", "%d", customControlMap[SDLK_RSHIFT]);
-  cfgfile_write (f, "pandora.custom_r", "%d", customControlMap[SDLK_RCTRL]);
 #endif
+  cfgfile_write (f, "pandora.custom_r", "%d", customControlMap[SDLK_RCTRL]);
   cfgfile_write (f, "pandora.move_x", "%d", p->pandora_horizontal_offset);
   cfgfile_write (f, "pandora.move_y", "%d", p->pandora_vertical_offset);
 #ifdef ANDROIDSDL
@@ -420,11 +419,10 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "custom_y", &customControlMap[SDLK_PAGEUP], 1)
 #ifdef ANDROIDSDL
     || cfgfile_intval (option, value, "custom_l", &customControlMap[SDLK_F13], 1)
-    || cfgfile_intval (option, value, "custom_r", &customControlMap[SDLK_F14], 1)
 #else
     || cfgfile_intval (option, value, "custom_l", &customControlMap[SDLK_RSHIFT], 1)
-    || cfgfile_intval (option, value, "custom_r", &customControlMap[SDLK_RCTRL], 1)
 #endif
+    || cfgfile_intval (option, value, "custom_r", &customControlMap[SDLK_RCTRL], 1)
     || cfgfile_intval (option, value, "move_x", &p->pandora_horizontal_offset, 1)
     || cfgfile_intval (option, value, "move_y", &p->pandora_vertical_offset, 1)
 #ifdef ANDROIDSDL
@@ -980,16 +978,50 @@ int handle_msgpump (void)
   		      inputdevice_add_inputcode (AKS_ENTERGUI, 1);
   		      break;
 
-				  case SDLK_LSHIFT: // Shift key
-            inputdevice_do_keyboard(AK_LSH, 1);
-            break;
+		    case SDLK_LSHIFT: // Shift key
+                        inputdevice_do_keyboard(AK_LSH, 1);
+                        break;
+#ifdef ANDROID
+		    case SDLK_LCTRL:
+                        inputdevice_do_keyboard(AK_CTRL, 1);
+                        break;
+		    case SDLK_RSHIFT:
+                        inputdevice_do_keyboard(AK_RSH, 1);
+                        break;
+		    case SDLK_LALT:
+                        inputdevice_do_keyboard(AK_LALT, 1);
+                        break;
+		    case SDLK_RALT:
+                        inputdevice_do_keyboard(AK_RALT, 1);
+                        break;
+		    case SDLK_LMETA:
+                        inputdevice_do_keyboard(AK_LAMI, 1);
+                        break;
+		    case SDLK_RMETA:
+                        inputdevice_do_keyboard(AK_RAMI, 1);
+                        break;
+		    case SDLK_CAPSLOCK:
+                        inputdevice_do_keyboard(AK_CAPSLOCK, 1);
+                        break;
+		    case SDLK_INSERT:
+                        inputdevice_do_keyboard(AK_HELP, 1);
+                        break;
+		    case SDLK_KP_DIVIDE:
+                        inputdevice_do_keyboard(AK_NPDIV, 1);
+                        break;
+		    case SDLK_KP_MINUS:
+                        inputdevice_do_keyboard(AK_NPSUB, 1);
+                        break;
+		    case SDLK_KP_ENTER:
+                        inputdevice_do_keyboard(AK_ENT, 1);
+                        break;
+#endif
 #ifdef ANDROIDSDL
 				  case SDLK_F13: // Left shoulder button
-				  case SDLK_F14:  // Right shoulder button
 #else
 				  case SDLK_RSHIFT: // Left shoulder button
-				  case SDLK_RCTRL:  // Right shoulder button
 #endif
+				  case SDLK_RCTRL:  // Right shoulder button
   					if(currprefs.input_tablet > TABLET_OFF) {
   					  // Holding left or right shoulder button -> stylus does right mousebutton
   					  doStylusRightClick = 1;
@@ -1038,16 +1070,51 @@ int handle_msgpump (void)
 #endif
   		      break;
 
-				  case SDLK_LSHIFT: // Shift key
-            inputdevice_do_keyboard(AK_LSH, 0);
-            break;
+		    case SDLK_LSHIFT: // Shift key
+                        inputdevice_do_keyboard(AK_LSH, 0);
+                        break;
+#ifdef ANDROID
+		    case SDLK_LCTRL:
+                        inputdevice_do_keyboard(AK_CTRL, 0);
+                        break;
+		    case SDLK_RSHIFT:
+                        inputdevice_do_keyboard(AK_RSH, 0);
+                        break;
+		    case SDLK_LALT:
+                        inputdevice_do_keyboard(AK_LALT, 0);
+                        break;
+		    case SDLK_RALT:
+                        inputdevice_do_keyboard(AK_RALT, 0);
+                        break;
+		    case SDLK_LMETA:
+                        inputdevice_do_keyboard(AK_LAMI, 0);
+                        break;
+		    case SDLK_RMETA:
+                        inputdevice_do_keyboard(AK_RAMI, 0);
+                        break;
+		    case SDLK_CAPSLOCK:
+                        inputdevice_do_keyboard(AK_CAPSLOCK, 0);
+                        break;
+		    case SDLK_INSERT:
+                        inputdevice_do_keyboard(AK_HELP, 0);
+                        break;
+		    case SDLK_KP_DIVIDE:
+                        inputdevice_do_keyboard(AK_NPDIV, 0);
+                        break;
+		    case SDLK_KP_MINUS:
+                        inputdevice_do_keyboard(AK_NPSUB, 0);
+                        break;
+		    case SDLK_KP_ENTER:
+                        inputdevice_do_keyboard(AK_ENT, 0);
+                        break;
+#endif
 #ifdef ANDROIDSDL
 				  case SDLK_F13: // Left shoulder button
-				  case SDLK_F14:  // Right shoulder button
 #else
 				  case SDLK_RSHIFT: // Left shoulder button
-				  case SDLK_RCTRL:  // Right shoulder button
 #endif
+				  case SDLK_RCTRL:  // Right shoulder button
+
   					if(currprefs.input_tablet > TABLET_OFF) {
   					  // Release left or right shoulder button -> stylus does left mousebutton
     					doStylusRightClick = 0;

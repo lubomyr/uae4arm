@@ -6,7 +6,7 @@ ifeq ($(PLATFORM),android)
 	CPU_FLAGS += -mfpu=neon -mfloat-abi=soft
 	DEFS += -DANDROIDSDL
 	ANDROID = 1
-	HAVE_NEON = 1
+#	HAVE_NEON = 1
 	HAVE_SDL_DISPLAY = 1
 	USE_PICASSO96 = 1
 else ifeq ($(PLATFORM),rpi2)
@@ -165,6 +165,7 @@ OBJS =	\
 	src/osdep/hardfile_pandora.o \
 	src/osdep/keyboard.o \
 	src/osdep/mp3decoder.o \
+	src/osdep/neon_helper_p96.o \
 	src/osdep/writelog.o \
 	src/osdep/pandora.o \
 	src/osdep/pandora_filesys.o \
@@ -250,7 +251,7 @@ OBJS += src/jit/compstbl.o
 OBJS += src/jit/compemu_support.o
 
 src/osdep/neon_helper.o: src/osdep/neon_helper.s
-	$(CXX) $(CPU_FLAGS) -falign-functions=32 -mcpu=cortex-a8 -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
+	$(CXX) $(CPU_FLAGS) -fpic -falign-functions=32 -mcpu=cortex-a8 -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
 
 $(PROG): $(OBJS)
 	$(CXX) -o $(PROG) $(OBJS) $(LDFLAGS)
