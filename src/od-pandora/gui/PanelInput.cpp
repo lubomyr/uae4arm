@@ -222,16 +222,13 @@ class InputActionListener : public gcn::ActionListener
 #ifdef ANDROIDSDL
  	    else if (actionEvent.getSource() == cboL)
         customControlMap[SDLK_F13] = amigaKey[cboL->getSelected()];
-
- 	    else if (actionEvent.getSource() == cboR)
-        customControlMap[SDLK_F14] = amigaKey[cboR->getSelected()];
 #else
  	    else if (actionEvent.getSource() == cboL)
         customControlMap[SDLK_RSHIFT] = amigaKey[cboL->getSelected()];
-
+#endif
  	    else if (actionEvent.getSource() == cboR)
         customControlMap[SDLK_RCTRL] = amigaKey[cboR->getSelected()];
-#endif
+
  	    else if (actionEvent.getSource() == cboUp)
         customControlMap[SDLK_UP] = amigaKey[cboUp->getSelected()];
 
@@ -569,11 +566,10 @@ void RefreshPanelInput(void)
   cboY->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_PAGEUP]));
 #ifdef ANDROIDSDL
   cboL->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_F13]));
-  cboR->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_F14]));
 #else
   cboL->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_RSHIFT]));
-  cboR->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_RCTRL]));
 #endif
+  cboR->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_RCTRL]));
   cboUp->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_UP]));
   cboDown->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_DOWN]));
   cboLeft->setSelected(GetAmigaKeyIndex(customControlMap[SDLK_LEFT]));
