@@ -1015,6 +1015,39 @@ int handle_msgpump (void)
 		    case SDLK_KP_ENTER:
                         inputdevice_do_keyboard(AK_ENT, 1);
                         break;
+		    case SDLK_KP_PERIOD:
+                        inputdevice_do_keyboard(AK_NPDEL, 1);
+                        break;
+		    case SDLK_KP0:
+                        inputdevice_do_keyboard(AK_NP0, 1);
+                        break;
+		    case SDLK_KP1:
+                        inputdevice_do_keyboard(AK_NP1, 1);
+                        break;
+		    case SDLK_KP2:
+                        inputdevice_do_keyboard(AK_NP2, 1);
+                        break;
+		    case SDLK_KP3:
+                        inputdevice_do_keyboard(AK_NP3, 1);
+                        break;
+		    case SDLK_KP4:
+                        inputdevice_do_keyboard(AK_NP4, 1);
+                        break;
+		    case SDLK_KP5:
+                        inputdevice_do_keyboard(AK_NP5, 1);
+                        break;
+		    case SDLK_KP6:
+                        inputdevice_do_keyboard(AK_NP6, 1);
+                        break;
+		    case SDLK_KP7:
+                        inputdevice_do_keyboard(AK_NP7, 1);
+                        break;
+		    case SDLK_KP8:
+                        inputdevice_do_keyboard(AK_NP8, 1);
+                        break;
+		    case SDLK_KP9:
+                        inputdevice_do_keyboard(AK_NP9, 1);
+                        break;
 #endif
 #ifdef ANDROIDSDL
 				  case SDLK_F13: // Left shoulder button
@@ -1106,6 +1139,39 @@ int handle_msgpump (void)
                         break;
 		    case SDLK_KP_ENTER:
                         inputdevice_do_keyboard(AK_ENT, 0);
+                        break;
+		    case SDLK_KP_PERIOD:
+                        inputdevice_do_keyboard(AK_NPDEL, 0);
+                        break;
+		    case SDLK_KP0:
+                        inputdevice_do_keyboard(AK_NP0, 0);
+                        break;
+		    case SDLK_KP1:
+                        inputdevice_do_keyboard(AK_NP1, 0);
+                        break;
+		    case SDLK_KP2:
+                        inputdevice_do_keyboard(AK_NP2, 0);
+                        break;
+		    case SDLK_KP3:
+                        inputdevice_do_keyboard(AK_NP3, 0);
+                        break;
+		    case SDLK_KP4:
+                        inputdevice_do_keyboard(AK_NP4, 0);
+                        break;
+		    case SDLK_KP5:
+                        inputdevice_do_keyboard(AK_NP5, 0);
+                        break;
+		    case SDLK_KP6:
+                        inputdevice_do_keyboard(AK_NP6, 0);
+                        break;
+		    case SDLK_KP7:
+                        inputdevice_do_keyboard(AK_NP7, 0);
+                        break;
+		    case SDLK_KP8:
+                        inputdevice_do_keyboard(AK_NP8, 0);
+                        break;
+		    case SDLK_KP9:
+                        inputdevice_do_keyboard(AK_NP9, 0);
                         break;
 #endif
 #ifdef ANDROIDSDL
