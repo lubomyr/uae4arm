@@ -76,7 +76,6 @@ void update_sound (int freq, int lof)
   lastfreq = freq;
 
   if (currprefs.ntscmode || screen_is_picasso) {
-        freq = 60;
         hpos += 0.5;
         lines += 0.5;
   } else {
