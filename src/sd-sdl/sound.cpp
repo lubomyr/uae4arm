@@ -75,14 +75,18 @@ void update_sound (int freq, int lof)
   	freq = lastfreq;
   lastfreq = freq;
 
-	if (lof < 0) {
-		lines += 0.5;
-  }
+  if (currprefs.ntscmode || screen_is_picasso) {
+        freq = 60;
+        hpos += 0.5;
+        lines += 0.5;
+  } else {
+    if (lof < 0)
+          lines += 0.5;
+    else if(lof > 0)
+          lines += 1.0;
+  } 
 
-  if (!screen_is_picasso)
         evtime = hpos * lines * freq * CYCLE_UNIT / (float)currprefs.sound_freq;
-  else
-        evtime = (312.0 * 50 * CYCLE_UNIT) / (float)(currprefs.sound_freq / 227.0);
   scaled_sample_evtime = (int)evtime;
 }
 
