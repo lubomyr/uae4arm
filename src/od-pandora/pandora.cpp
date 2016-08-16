@@ -742,7 +742,11 @@ void loadAdfDir(void)
 
 	strcpy(currentDir, start_path_data);
 	snprintf(config_path, MAX_DPATH, "%s/conf/", start_path_data);
+#ifdef ANDROID
+	snprintf(rom_path, MAX_DPATH, "%s/Android/data/com.cloanto.amigaforever.essentials/files/rom/", getenv("SDCARD"));
+#else
 	snprintf(rom_path, MAX_DPATH, "%s/kickstarts/", start_path_data);
+#endif
 	snprintf(rp9_path, MAX_DPATH, "%s/rp9/", start_path_data);
 
 	snprintf(path, MAX_DPATH, "%s/conf/adfdir.conf", start_path_data);
