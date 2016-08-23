@@ -14,7 +14,6 @@
 #include "memory-uae.h"
 #include "uae.h"
 #include "gui.h"
-#include "target.h"
 #include "gui_handling.h"
 
 
@@ -77,7 +76,11 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   amigaScreenActionListener = new AmigaScreenActionListener();
 
 	lblAmigaWidth = new gcn::Label("Width:");
+#ifdef ANDROID
+	lblAmigaWidth->setSize(90, LABEL_HEIGHT);
+#else
 	lblAmigaWidth->setSize(80, LABEL_HEIGHT);
+#endif
   lblAmigaWidth->setAlignment(gcn::Graphics::RIGHT);
   sldAmigaWidth = new gcn::Slider(0, 5);
   sldAmigaWidth->setSize(160, SLIDER_HEIGHT);
@@ -89,7 +92,11 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   lblAmigaWidthInfo = new gcn::Label("320");
 
 	lblAmigaHeight = new gcn::Label("Height:");
+#ifdef ANDROID
+	lblAmigaHeight->setSize(90, LABEL_HEIGHT);
+#else
 	lblAmigaHeight->setSize(80, LABEL_HEIGHT);
+#endif
   lblAmigaHeight->setAlignment(gcn::Graphics::RIGHT);
   sldAmigaHeight = new gcn::Slider(0, 5);
   sldAmigaHeight->setSize(160, SLIDER_HEIGHT);
@@ -101,7 +108,11 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   lblAmigaHeightInfo = new gcn::Label("200");
 
 	lblVertPos = new gcn::Label("Vert. offset:");
+#ifdef ANDROID
+	lblVertPos->setSize(90, LABEL_HEIGHT);
+#else
 	lblVertPos->setSize(80, LABEL_HEIGHT);
+#endif
   lblVertPos->setAlignment(gcn::Graphics::RIGHT);
   sldVertPos = new gcn::Slider(-16, 16);
   sldVertPos->setSize(160, SLIDER_HEIGHT);
@@ -119,21 +130,29 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
 	grpAmigaScreen->setPosition(DISTANCE_BORDER, DISTANCE_BORDER);
   
 	int posY = 10;
+	int labelWidth = 100;
+#ifdef ANDROID
+	labelWidth = 110;
+#endif
 	grpAmigaScreen->add(lblAmigaWidth, 8, posY);
-	grpAmigaScreen->add(sldAmigaWidth, 100, posY);
-	grpAmigaScreen->add(lblAmigaWidthInfo, 100 + sldAmigaWidth->getWidth() + 12, posY);
+	grpAmigaScreen->add(sldAmigaWidth, labelWidth, posY);
+	grpAmigaScreen->add(lblAmigaWidthInfo, labelWidth + sldAmigaWidth->getWidth() + 12, posY);
 	posY += sldAmigaWidth->getHeight() + DISTANCE_NEXT_Y;
 	grpAmigaScreen->add(lblAmigaHeight, 8, posY);
-	grpAmigaScreen->add(sldAmigaHeight, 100, posY);
-	grpAmigaScreen->add(lblAmigaHeightInfo, 100 + sldAmigaHeight->getWidth() + 12, posY);
+	grpAmigaScreen->add(sldAmigaHeight, labelWidth, posY);
+	grpAmigaScreen->add(lblAmigaHeightInfo, labelWidth + sldAmigaHeight->getWidth() + 12, posY);
 	posY += sldAmigaHeight->getHeight() + DISTANCE_NEXT_Y;
 	grpAmigaScreen->add(lblVertPos, 8, posY);
-	grpAmigaScreen->add(sldVertPos, 100, posY);
-	grpAmigaScreen->add(lblVertPosInfo, 100 + sldVertPos->getWidth() + 12, posY);
+	grpAmigaScreen->add(sldVertPos, labelWidth, posY);
+	grpAmigaScreen->add(lblVertPosInfo, labelWidth + sldVertPos->getWidth() + 12, posY);
 	posY += sldVertPos->getHeight() + DISTANCE_NEXT_Y;
   
 	grpAmigaScreen->setMovable(false);
+#ifdef ANDROID
+	grpAmigaScreen->setSize(330, posY + DISTANCE_BORDER);
+#else
 	grpAmigaScreen->setSize(320, posY + DISTANCE_BORDER);
+#endif
   grpAmigaScreen->setBaseColor(gui_baseCol);
 
   category.panel->add(grpAmigaScreen);

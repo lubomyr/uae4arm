@@ -17,7 +17,6 @@
 #include "filesys.h"
 #include "blkdev.h"
 #include "gui.h"
-#include "target.h"
 #include "gui_handling.h"
 
 
@@ -393,7 +392,11 @@ void InitPanelHD(const struct _ConfigCategory& category)
   cboCDFile->addActionListener(cdFileActionListener);
 
 	lblCDVol = new gcn::Label("CD Volume:");
+#ifdef ANDROID
+  lblCDVol->setSize(85, LABEL_HEIGHT);
+#else
   lblCDVol->setSize(80, LABEL_HEIGHT);
+#endif
   lblCDVol->setAlignment(gcn::Graphics::RIGHT);
   sldCDVol = new gcn::Slider(0, 100);
   sldCDVol->setSize(200, SLIDER_HEIGHT);

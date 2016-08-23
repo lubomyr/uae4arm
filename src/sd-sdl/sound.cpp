@@ -228,6 +228,11 @@ void finish_sound_buffer (void)
 	  finish_sndbuff = sndbufpt + SNDBUFFER_LEN/2;	  
 }
 
+void pause_sound_buffer (void)
+{
+	reset_sound ();
+}
+
 void restart_sound_buffer(void)
 {
 	sndbufpt = render_sndbuff = sndbuffer[wrcnt&3];

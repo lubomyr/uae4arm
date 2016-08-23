@@ -32,7 +32,6 @@
 #include "inputdevice.h"
 #include "keybuf.h"
 #include "keyboard.h"
-#include "joystick.h"
 #include "disk.h"
 #include "savestate.h"
 #include "traps.h"
@@ -398,6 +397,11 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
 }
 
 
+void target_restart (void)
+{
+}
+
+
 TCHAR *target_expand_environment (const TCHAR *path)
 {
   return strdup(path);
@@ -562,7 +566,7 @@ int target_cfgfile_load (struct uae_prefs *p, const char *filename, int type, in
     }
 
     if(!isdefault)
-      inputdevice_updateconfig (p);
+      inputdevice_updateconfig (NULL, p);
   
     SetLastActiveConfig(filename);
 
@@ -813,6 +817,21 @@ void loadAdfDir(void)
 }
 
 
+int currVSyncRate = 0;
+bool SetVSyncRate(int hz)
+{
+	char cmd[64];
+  
+  if(currVSyncRate != hz)
+  {
+    snprintf((char*)cmd, 64, "sudo /usr/pandora/scripts/op_lcdrate.sh %d", hz);
+    system(cmd);
+    currVSyncRate = hz;
+    return true;
+  }
+  return false;
+}
+
 void setCpuSpeed()
 {
 	char speedCmd[128];
@@ -833,9 +852,9 @@ void setCpuSpeed()
 	if(changed_prefs.ntscmode != currprefs.ntscmode)
 	{
 		if(changed_prefs.ntscmode)
-			system("sudo /usr/pandora/scripts/op_lcdrate.sh 60");
+			SetVSyncRate(60);
 		else
-			system("sudo /usr/pandora/scripts/op_lcdrate.sh 50");
+			SetVSyncRate(50);
 	}
 }
 
@@ -901,7 +920,7 @@ uae_u32 emulib_target_getcpurate (uae_u32 v, uae_u32 *low)
 int main (int argc, char *argv[])
 {
   struct sigaction action;
-
+  
   defaultCpuSpeed = getDefaultCpuSpeed();
   
   // Get startup path
@@ -1302,8 +1321,9 @@ void amiga_clipboard_got_data (uaecptr data, uae_u32 size, uae_u32 actual)
 {
 }
 
-void amiga_clipboard_want_data (void)
+int amiga_clipboard_want_data (void)
 {
+  return 0;
 }
 
 void clipboard_vsync (void)

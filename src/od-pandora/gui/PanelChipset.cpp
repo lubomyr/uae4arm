@@ -15,7 +15,6 @@
 #include "memory-uae.h"
 #include "newcpu.h"
 #include "custom.h"
-#include "target.h"
 #include "gui_handling.h"
 
 
@@ -28,6 +27,7 @@ static gcn::UaeCheckBox* chkNTSC;
 static gcn::Window *grpBlitter;
 static gcn::UaeRadioButton* optBlitNormal;
 static gcn::UaeRadioButton* optBlitImmed;
+static gcn::UaeRadioButton* optBlitWait;
 static gcn::Window *grpCopper;
 static gcn::UaeCheckBox* chkFastCopper;
 static gcn::Window *grpCollisionLevel;
@@ -92,6 +92,7 @@ class BlitterButtonActionListener : public gcn::ActionListener
     void action(const gcn::ActionEvent& actionEvent)
     {
       changed_prefs.immediate_blits = optBlitImmed->isSelected();
+      changed_prefs.waiting_blits = optBlitWait->isSelected();
     }
 };
 static BlitterButtonActionListener* blitterButtonActionListener;
@@ -143,7 +144,11 @@ void InitPanelChipset(const struct _ConfigCategory& category)
 	grpChipset->add(optAGA, 5, 100);
 	grpChipset->add(chkNTSC, 5, 140);
 	grpChipset->setMovable(false);
+#ifdef ANDROID
+	grpChipset->setSize(125, 185);
+#else
 	grpChipset->setSize(120, 185);
+#endif
   grpChipset->setBaseColor(gui_baseCol);
   
   category.panel->add(grpChipset);
@@ -157,12 +162,21 @@ void InitPanelChipset(const struct _ConfigCategory& category)
 	optBlitImmed = new gcn::UaeRadioButton("Immediate", "radiocblittergroup");
 	optBlitImmed->addActionListener(blitterButtonActionListener);
 
+	optBlitWait = new gcn::UaeRadioButton("Wait for blit.", "radiocblittergroup");
+	optBlitWait->setId("BlitWait");
+	optBlitWait->addActionListener(blitterButtonActionListener);
+
 	grpBlitter = new gcn::Window("Blitter");
 	grpBlitter->setPosition(DISTANCE_BORDER + grpChipset->getWidth() + DISTANCE_NEXT_X, DISTANCE_BORDER);
 	grpBlitter->add(optBlitNormal, 5, 10);
 	grpBlitter->add(optBlitImmed, 5, 40);
+	grpBlitter->add(optBlitWait, 5, 70);
 	grpBlitter->setMovable(false);
-	grpBlitter->setSize(120, 85);
+#ifdef ANDROID
+	grpBlitter->setSize(125, 115);
+#else
+	grpBlitter->setSize(120, 115);
+#endif
   grpBlitter->setBaseColor(gui_baseCol);
   
   category.panel->add(grpBlitter);
@@ -176,7 +190,11 @@ void InitPanelChipset(const struct _ConfigCategory& category)
 	grpCopper->setPosition(grpBlitter->getX() + grpBlitter->getWidth() + DISTANCE_NEXT_X, DISTANCE_BORDER);
 	grpCopper->add(chkFastCopper, 5, 10);
 	grpCopper->setMovable(false);
+#ifdef ANDROID
+	grpCopper->setSize(130, 55);
+#else
 	grpCopper->setSize(120, 55);
+#endif
   grpCopper->setBaseColor(gui_baseCol);
 
   category.panel->add(grpCopper);
@@ -205,7 +223,11 @@ void InitPanelChipset(const struct _ConfigCategory& category)
 	grpCollisionLevel->add(optCollPlayfield, 5, 70);
 	grpCollisionLevel->add(optCollFull, 5, 100);
 	grpCollisionLevel->setMovable(false);
+#ifdef ANDROID
+	grpCollisionLevel->setSize(270, 145);
+#else
 	grpCollisionLevel->setSize(250, 145);
+#endif
   grpCollisionLevel->setBaseColor(gui_baseCol);
   
   category.panel->add(grpCollisionLevel);
@@ -227,6 +249,7 @@ void ExitPanelChipset(void)
 
   delete optBlitNormal;
   delete optBlitImmed;
+  delete optBlitWait;
   delete grpBlitter;
   delete blitterButtonActionListener;
   
@@ -258,6 +281,8 @@ void RefreshPanelChipset(void)
   
   if(changed_prefs.immediate_blits)
     optBlitImmed->setSelected(true);
+  else if(changed_prefs.waiting_blits)
+    optBlitWait->setSelected(true);
   else
     optBlitNormal->setSelected(true);
   

@@ -16,7 +16,6 @@
 #include "memory-uae.h"
 #include "newcpu.h"
 #include "custom.h"
-#include "target.h"
 #include "gui_handling.h"
 #include "sounddep/sound.h"
 
@@ -257,7 +256,11 @@ void InitPanelSound(const struct _ConfigCategory& category)
 	grpSound->add(optSoundEmulated, 5, 70);
 	grpSound->add(optSoundEmulatedBest, 5, 100);
 	grpSound->setMovable(false);
+#ifdef ANDROID
+	grpSound->setSize(210, 150);
+#else
 	grpSound->setSize(200, 150);
+#endif
   grpSound->setBaseColor(gui_baseCol);
 
 	lblFrequency = new gcn::Label("Frequency:");
