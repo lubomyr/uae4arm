@@ -40,14 +40,16 @@ PROG   = $(NAME)
 
 all: $(PROG)
 
-PANDORA=1
+#DEBUG=1
+#TRACER=1
 
-#USE_XFD=1
+PANDORA=1
+#GEN_PROFILE=1
+#USE_PROFILE=1
 
 SDL_CFLAGS = `sdl-config --cflags`
 
 DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DARMV6T2 -DGP2X -DPANDORA -DWITH_INGAME_WARNING
-DEFS += -DROM_PATH_PREFIX=\"./\" -DDATA_PREFIX=\"./data/\" -DSAVE_PREFIX=\"./saves/\"
 DEFS += -DUSE_SDL
 
 ifeq ($(USE_PICASSO96), 1)
@@ -60,25 +62,41 @@ endif
 
 MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
 
-MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/od-pandora -fomit-frame-pointer -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
-MORE_CFLAGS += -fexceptions -fpermissive
+MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/od-pandora -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
+#LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
-MORE_CFLAGS += -Ofast -pipe -ftree-vectorize -fsingle-precision-constant -fuse-ld=gold -fdiagnostics-color=auto
-MORE_CFLAGS += -mstructure-size-boundary=32
-MORE_CFLAGS += -falign-functions=32
-MORE_CFLAGS += -fno-builtin -fweb -frename-registers
-MORE_CFLAGS += -fipa-pta
+MORE_CFLAGS += -Ofast -pipe -ftree-vectorize -fsingle-precision-constant
+MORE_CFLAGS += -fweb -frename-registers
+MORE_CFLAGS += -fipa-pta -fgcse-las
+
+# Using -flto and -fipa-pta generates an error with gcc5.2 (??? and -lto alone generates slower code ???)
+#MORE_CFLAGS += -flto=4 -fuse-linker-plugin
+
 else
-MORE_CFLAGS += -ggdb
+MORE_CFLAGS += -g -DDEBUG -Wl,--export-dynamic
+
+ifdef TRACER
+TRACE_CFLAGS = -DTRACER -finstrument-functions -Wall -rdynamic
+endif
+
+endif
+
+ifdef GEN_PROFILE
+MORE_CFLAGS += -fprofile-generate=/storage/sdcard0/profile/ -fprofile-arcs
+endif
+ifdef USE_PROFILE
+MORE_CFLAGS += -fprofile-use -fbranch-probabilities -fvpt -funroll-loops -fpeel-loops -ftracer -ftree-loop-distribute-patterns
 endif
 
 ASFLAGS += $(CPU_FLAGS)
 
 CXXFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
 CFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
+
+MY_CFLAGS  = $(CFLAGS)
 
 OBJS =	\
 	src/akiko.o \
@@ -91,6 +109,7 @@ OBJS =	\
 	src/blkdev.o \
 	src/blkdev_cdimage.o \
 	src/bsdsocket.o \
+	src/calc.o \
 	src/cdrom.o \
 	src/cfgfile.o \
 	src/cia.o \
@@ -115,6 +134,7 @@ OBJS =	\
 	src/native2amiga.o \
 	src/rommgr.o \
 	src/savestate.o \
+	src/statusline.o \
 	src/traps.o \
 	src/uaelib.o \
 	src/uaeresource.o \
@@ -161,6 +181,7 @@ OBJS =	\
 	src/machdep/support.o \
 	src/osdep/bsdsocket_host.o \
 	src/osdep/cda_play.o \
+	src/osdep/charset.o \
 	src/osdep/fsdb_host.o \
 	src/osdep/hardfile_pandora.o \
 	src/osdep/keyboard.o \
@@ -253,11 +274,73 @@ OBJS += src/jit/compemu_support.o
 src/osdep/neon_helper.o: src/osdep/neon_helper.s
 	$(CXX) $(CPU_FLAGS) -fpic -falign-functions=32 -mcpu=cortex-a8 -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
 
-$(PROG): $(OBJS)
+src/trace.o: src/trace.c
+	$(CC) $(MY_CFLAGS) -std=c99 -c src/trace.c -o src/trace.o
+
+.cpp.o:
+	$(CXX) $(MY_CFLAGS) $(TRACE_CFLAGS) -c $< -o $@
+
+.cpp.s:
+	$(CXX) $(MY_CFLAGS) -S -c $< -o $@
+
+$(PROG): $(OBJS) src/trace.o
 	$(CXX) -o $(PROG) $(OBJS) $(LDFLAGS)
 ifndef DEBUG
 	$(STRIP) $(PROG)
 endif
 
+ASMS = \
+	src/audio.s \
+	src/autoconf.s \
+	src/blitfunc.s \
+	src/blitter.s \
+	src/cia.s \
+	src/custom.s \
+	src/disk.s \
+	src/drawing.s \
+	src/events.s \
+	src/expansion.s \
+	src/filesys.s \
+	src/fpp.s \
+	src/fsdb.s \
+	src/fsdb_unix.s \
+	src/fsusage.s \
+	src/gfxutil.s \
+	src/hardfile.s \
+	src/inputdevice.s \
+	src/keybuf.s \
+	src/main.s \
+	src/memory.s \
+	src/native2amiga.s \
+	src/traps.s \
+	src/uaelib.s \
+	src/uaeresource.s \
+	src/zfile.s \
+	src/zfile_archive.s \
+	src/machdep/support.s \
+	src/osdep/picasso96.s \
+	src/osdep/pandora.s \
+	src/osdep/pandora_gfx.s \
+	src/osdep/pandora_mem.s \
+	src/osdep/sigsegv_handler.s \
+	src/sounddep/sound.s \
+	src/newcpu.s \
+	src/readcpu.s \
+	src/cpudefs.s \
+	src/cpustbl.s \
+	src/cpuemu_0.s \
+	src/cpuemu_4.s \
+	src/cpuemu_11.s \
+	src/jit/compemu.s \
+	src/jit/compemu_fpp.s \
+	src/jit/compstbl.s \
+	src/jit/compemu_support.s
+
+genasm: $(ASMS)
+
+
 clean:
-	$(RM) $(PROG) $(OBJS)
+	$(RM) $(PROG) $(OBJS) $(ASMS)
+
+delasm:
+	$(RM) $(ASMS)
