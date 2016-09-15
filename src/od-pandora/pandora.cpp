@@ -685,6 +685,7 @@ void saveAdfDir(void)
 	  return;
 	  
 	char buffer[MAX_DPATH];
+    
 	snprintf(buffer, MAX_DPATH, "path=%s\n", currentDir);
 	fputs(buffer,f);
 
@@ -743,11 +744,22 @@ void loadAdfDir(void)
 {
 	char path[MAX_DPATH];
   int i;
-
+#ifdef ANDROID
+	strcpy(currentDir, "/storage/");
+#else
 	strcpy(currentDir, start_path_data);
+#endif
 	snprintf(config_path, MAX_DPATH, "%s/conf/", start_path_data);
 #ifdef ANDROID
-	snprintf(rom_path, MAX_DPATH, "%s/Android/data/com.cloanto.amigaforever.essentials/files/rom/", getenv("SDCARD"));
+    char afepath[MAX_DPATH];
+    snprintf(afepath, MAX_DPATH, "%s/Android/data/com.cloanto.amigaforever.essentials/files/rom/", getenv("SDCARD"));
+    DIR *afedir = opendir(afepath);
+    if (afedir) {
+        snprintf(rom_path, MAX_DPATH, afepath);
+        closedir(afedir);
+    }
+	else
+        snprintf(rom_path, MAX_DPATH, "%s/kickstarts/", start_path_data);
 #else
 	snprintf(rom_path, MAX_DPATH, "%s/kickstarts/", start_path_data);
 #endif
