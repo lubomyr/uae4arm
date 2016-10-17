@@ -9,15 +9,6 @@
 #include "sysconfig.h"
 #include "sysdeps.h"
 #include <ctype.h>
-#include <SDL.h>
-
-#ifndef abort
-#define abort() \
-  do { \
-    printf ("Internal error; file %s, line %d\n", __FILE__, __LINE__); \
-    (abort) (); \
-} while (0)
-#endif
 
 #include "readcpu.h"
 
@@ -229,13 +220,19 @@ static void build_insn (int insn)
 
   for (i = 0, n = 4; i < 5; i++, n--) {
   	switch (id.flaginfo[i].flagset) {
-	    case fa_unset: case fa_isjmp: break;
-	    default: flags_set |= (1 << n);
+	    case fa_unset: 
+      case fa_isjmp: 
+        break;
+	    default: 
+        flags_set |= (1 << n);
   	}
 
   	switch (id.flaginfo[i].flaguse) {
-	    case fu_unused: case fu_isjmp: break;
-	    default: flags_used |= (1 << n);
+	    case fu_unused: 
+      case fu_isjmp: 
+        break;
+	    default: 
+        flags_used |= (1 << n);
   	}
   }
 
@@ -274,7 +271,9 @@ out2:
 		int pos = 0;
 		int mnp = 0;
 		int bitno = 0;
+		int unsized = 1;
 		TCHAR mnemonic[64];
+		int mnemo;
 
 		wordsizes sz = sz_long;
 		int srcgather = 0, dstgather = 0;
@@ -326,6 +325,7 @@ out2:
 		while (opcstr[pos] && !_istspace(opcstr[pos])) {
 			if (opcstr[pos] == '.') {
 				pos++;
+				unsized = 0;
 				switch (opcstr[pos]) {
 
 				case 'B': sz = sz_byte; break;
@@ -746,14 +746,22 @@ endofline:
 			table68k[opc].mnemo = lookuptab[find].mnemo;
 		}
 		table68k[opc].cc = bitval[bitc];
-		if (table68k[opc].mnemo == i_BTST
-			|| table68k[opc].mnemo == i_BSET
-			|| table68k[opc].mnemo == i_BCLR
-			|| table68k[opc].mnemo == i_BCHG)
+		mnemo = table68k[opc].mnemo;
+		if (mnemo == i_BTST
+			|| mnemo == i_BSET
+			|| mnemo == i_BCLR
+			|| mnemo == i_BCHG)
 		{
 			sz = destmode == Dreg ? sz_long : sz_byte;
+			unsized = 0;
 		}
+		if (mnemo == i_JSR || mnemo == i_JMP) {
+			unsized = 1;
+		}
+
 		table68k[opc].size = sz;
+		table68k[opc].unsized = unsized;
+		table68k[opc].sduse = id.sduse;
 		table68k[opc].sreg = srcreg;
 		table68k[opc].dreg = destreg;
 		table68k[opc].smode = srcmode;
@@ -766,6 +774,10 @@ endofline:
 		table68k[opc].plev = id.plevel;
 		table68k[opc].clev = id.cpulevel;
 		table68k[opc].unimpclev = id.unimpcpulevel;
+		table68k[opc].head = id.head;
+		table68k[opc].tail = id.tail;
+		table68k[opc].clocks = id.clocks;
+		table68k[opc].fetchmode = id.fetchmode;
 
 #if 0
 		for (i = 0; i < 5; i++) {
@@ -781,24 +793,24 @@ endofline:
 		||	table68k[opc].mnemo == i_TRAPcc
 		)	{
 		switch (table68k[opc].cc) {
-		// CC mask:	XNZVC
-		// 			 8421
-		case 0: flags_used = 0x00; break;	/*  T */
-		case 1: flags_used = 0x00; break;	/*  F */
-		case 2: flags_used = 0x05; break;	/* HI */
-		case 3: flags_used = 0x05; break;	/* LS */
-		case 4: flags_used = 0x01; break;	/* CC */
-		case 5: flags_used = 0x01; break;	/* CS */
-		case 6: flags_used = 0x04; break;	/* NE */
-		case 7: flags_used = 0x04; break;	/* EQ */
-		case 8: flags_used = 0x02; break;	/* VC */
-		case 9: flags_used = 0x02; break;	/* VS */
-		case 10:flags_used = 0x08; break;	/* PL */
-		case 11:flags_used = 0x08; break;	/* MI */
-		case 12:flags_used = 0x0A; break;	/* GE */
-		case 13:flags_used = 0x0A; break;	/* LT */
-		case 14:flags_used = 0x0E; break;	/* GT */
-		case 15:flags_used = 0x0E; break;	/* LE */
+		  // CC mask:	XNZVC
+		  // 			     8421
+		  case 0: flags_used = 0x00; break;	/*  T */
+		  case 1: flags_used = 0x00; break;	/*  F */
+		  case 2: flags_used = 0x05; break;	/* HI */
+		  case 3: flags_used = 0x05; break;	/* LS */
+		  case 4: flags_used = 0x01; break;	/* CC */
+		  case 5: flags_used = 0x01; break;	/* CS */
+		  case 6: flags_used = 0x04; break;	/* NE */
+		  case 7: flags_used = 0x04; break;	/* EQ */
+		  case 8: flags_used = 0x02; break;	/* VC */
+		  case 9: flags_used = 0x02; break;	/* VS */
+		  case 10:flags_used = 0x08; break;	/* PL */
+		  case 11:flags_used = 0x08; break;	/* MI */
+		  case 12:flags_used = 0x0A; break;	/* GE */
+		  case 13:flags_used = 0x0A; break;	/* LT */
+		  case 14:flags_used = 0x0E; break;	/* GT */
+		  case 15:flags_used = 0x0E; break;	/* LE */
 		}
 	}
 

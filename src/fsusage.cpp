@@ -20,7 +20,10 @@
 
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/statfs.h>
+
+#if HAVE_SYS_STATFS_H
+# include <sys/statfs.h>
+#endif
 
 #include "fsusage.h"
 

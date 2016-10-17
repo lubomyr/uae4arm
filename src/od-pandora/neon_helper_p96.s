@@ -4,7 +4,9 @@
 
 .global copy_screen_8bit
 .global copy_screen_16bit_swap
+.global copy_screen_16bit_swap_arm
 .global copy_screen_32bit_to_16bit_neon
+.global copy_screen_32bit_to_16bit_arm
 
 .text
 
@@ -81,6 +83,16 @@ copy_screen_16bit_swap:
   bx        lr
 
 
+@ Note: this one isn't optimized...
+copy_screen_16bit_swap_arm:
+  ldr       r3, [r1], #4
+  rev16     r3, r3
+  str       r3, [r0], #4
+  subs      r2, r2, #4
+  bne       copy_screen_16bit_swap_arm
+  bx        lr
+  
+
 @----------------------------------------------------------------
 @ copy_screen_32bit_to_16bit_neon
 @
@@ -108,3 +120,22 @@ copy_screen_32bit_to_16bit_neon:
   bne       copy_screen_32bit_to_16bit_neon
   bx        lr
 
+
+@ Note: this one isn't optimized...
+copy_screen_32bit_to_16bit_arm:
+  stmdb     sp!, {r4-r6, lr}
+copy_screen_32bit_to_16bit_arm_loop:
+  ldr       r3, [r1], #4
+  rev       r3, r3
+  lsr       r4, r3, #3
+  lsr       r5, r3, #18
+  and       r5, r5, #63
+  lsr       r6, r3, #11
+  and       r6, r6, #31
+  orr       r6, r6, r5, lsl #5
+  orr       r6, r6, r4, lsl #11
+  strh      r6, [r0], #2
+  subs      r2, r2, #4
+  bne       copy_screen_32bit_to_16bit_arm_loop
+  ldmia     sp!, {r4-r6, pc}
+  

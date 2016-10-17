@@ -15,10 +15,8 @@ extern void start_program (void);
 extern void leave_program (void);
 extern void real_main (int, TCHAR **);
 extern void virtualdevice_init (void);
-extern void usage (void);
 extern void sleep_millis (int ms);
 extern void sleep_millis_main (int ms);
-extern void sleep_millis_busy (int ms);
 
 #define UAE_QUIT 1
 #define UAE_RESET 2
@@ -59,6 +57,7 @@ struct bstring {
 
 extern void fetch_saveimagepath (TCHAR*, int, int);
 extern void fetch_datapath (TCHAR *out, int size);
+extern void fetch_rompath (TCHAR *out, int size);
 #define uaerand() rand()
 
 #endif //UAE_UAE_H

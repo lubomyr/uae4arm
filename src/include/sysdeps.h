@@ -222,6 +222,8 @@ extern TCHAR *my_strdup (const TCHAR*s);
 #endif
 
 extern TCHAR *my_strdup_ansi (const char*);
+extern void my_trim (TCHAR*);
+extern TCHAR *my_strdup_trim (const TCHAR*);
 extern TCHAR *au (const char*);
 extern char *ua (const TCHAR*);
 extern TCHAR *au_fs (const char*);

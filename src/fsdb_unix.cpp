@@ -19,6 +19,7 @@
 #define NUM_EVILCHARS 7
 static TCHAR evilchars[NUM_EVILCHARS] = { '\\', '*', '?', '\"', '<', '>', '|' };
 
+/* Return nonzero for any name we can't create on the native filesystem.  */
 static int fsdb_name_invalid_2 (const TCHAR *n, int dir)
 {
   int i;

@@ -9,15 +9,9 @@
 #include "sysconfig.h"
 #include "sysdeps.h"
 #include "options.h"
-#include "config.h"
-#include "uae.h"
-#include "memory-uae.h"
-#include "newcpu.h"
 #include "custom.h"
 #include "rtgmodes.h"
-#include "keyboard.h"
 #include "xwin.h"
-#include "keybuf.h"
 
 #define	RED 	0
 #define	GRN	1
@@ -75,8 +69,8 @@ void alloc_colors64k (int rw, int gw, int bw, int rs, int gs, int bs, int byte_s
 	int i;
 	for (i = 0; i < 4096; i++) {
 		int r = i >> 8;
-		int g = (i >> 4) & 0xF;
-		int b = i & 0xF;
+		int g = (i >> 4) & 0xf;
+		int b = i & 0xf;
 		xcolors[i] = doMask(r, rw, rs) | doMask(g, gw, gs) | doMask(b, bw, bs);
 	}
 }

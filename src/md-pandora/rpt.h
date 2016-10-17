@@ -18,7 +18,7 @@ static __inline__ frame_time_t read_processor_time (void)
 {
   int64_t time;
   struct timespec ts;
-  
+
   clock_gettime (CLOCK_MONOTONIC, &ts);
 
   time = (((int64_t) ts.tv_sec) * 1000000) + (ts.tv_nsec / 1000);

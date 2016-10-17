@@ -325,7 +325,7 @@ static void EditFilesysVirtualLoop(void)
 bool EditFilesysVirtual(int unit_no)
 {
   struct mountedinfo mi;
-  struct uaedev_config_info *uci;
+  struct uaedev_config_data *uci;
   std::string strdevname, strvolname, strroot;
   char tmp[32];
   
@@ -336,18 +336,21 @@ bool EditFilesysVirtual(int unit_no)
 
   if(unit_no >= 0)
   {
+    struct uaedev_config_info *ci;
+
     uci = &changed_prefs.mountconfig[unit_no];
+    ci = &uci->ci;
     get_filesys_unitconfig(&changed_prefs, unit_no, &mi);
 
-    strdevname.assign(uci->devname);
+    strdevname.assign(ci->devname);
     txtDevice->setText(strdevname);
-    strvolname.assign(uci->volname);
+    strvolname.assign(ci->volname);
     txtVolume->setText(strvolname);
-    strroot.assign(uci->rootdir);
+    strroot.assign(ci->rootdir);
     txtPath->setText(strroot);
-    chkReadWrite->setSelected(!uci->readonly);
-    chkAutoboot->setSelected(uci->bootpri != -128);
-    snprintf(tmp, 32, "%d", uci->bootpri >= -127 ? uci->bootpri : -127);
+    chkReadWrite->setSelected(!ci->readonly);
+    chkAutoboot->setSelected(ci->bootpri != BOOTPRI_NOAUTOBOOT);
+    snprintf(tmp, 32, "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
     txtBootPri->setText(tmp);
   }
   else
@@ -365,14 +368,23 @@ bool EditFilesysVirtual(int unit_no)
   
   if(dialogResult)
   {
+    struct uaedev_config_info ci;
     int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
     extractPath((char *) txtPath->getText().c_str(), currentDir);
     
-    uci = add_filesys_config(&changed_prefs, unit_no, (char *) txtDevice->getText().c_str(), 
-      (char *) txtVolume->getText().c_str(), (char *) txtPath->getText().c_str(), 
-      !chkReadWrite->isSelected(), 0, 0, 0, 0, 0, bp, 0, 0, 0, 0, 0, 0);
-    if (uci)
-    	filesys_media_change (uci->rootdir, 1, uci);
+    uci_set_defaults(&ci, true);
+    strcpy(ci.devname, (char *) txtDevice->getText().c_str());
+    strcpy(ci.volname, (char *) txtVolume->getText().c_str());
+    strcpy(ci.rootdir, (char *) txtPath->getText().c_str());
+    ci.type = UAEDEV_DIR;
+    ci.readonly = !chkReadWrite->isSelected();
+    ci.bootpri = bp;
+    
+    uci = add_filesys_config(&changed_prefs, unit_no, &ci);
+    if (uci) {
+  		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
+      hardfile_media_change (hfd, &ci, true, false);
+    }
   }
 
   ExitEditFilesysVirtual();

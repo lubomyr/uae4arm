@@ -19,15 +19,14 @@
 #include "options.h"
 #include "keybuf.h"
 #include "keyboard.h"
-#include "memory-uae.h"
-#include "newcpu.h"
 #include "inputdevice.h"
 #include "custom.h"
 #include "savestate.h"
 
 static int kpb_first, kpb_last;
 
-static int keybuf[256];
+#define KEYBUF_SIZE 256
+static int keybuf[KEYBUF_SIZE];
 
 int keys_available (void)
 {
@@ -42,7 +41,7 @@ int get_next_key (void)
   assert (kpb_first != kpb_last);
 
   key = keybuf[kpb_last];
-  if (++kpb_last == 256)
+	if (++kpb_last == KEYBUF_SIZE)
   	kpb_last = 0;
   return key;
 }
@@ -51,7 +50,7 @@ int record_key (int kc)
 {
   int kpb_next = kpb_first + 1;
 
-  if (kpb_next == 256)
+  if (kpb_next == KEYBUF_SIZE)
   	kpb_next = 0;
   if (kpb_next == kpb_last) {
 		write_log (_T("Keyboard buffer overrun. Congratulations.\n"));

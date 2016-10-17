@@ -159,7 +159,7 @@ static void setid_af (struct uae_input_device *uid, int i, int slot, int sub, in
     uid[i].flags[slot][sub] |= ID_FLAG_AUTOFIRE;
 }
 
-int input_get_default_mouse (struct uae_input_device *uid, int i, int port, int af, bool gp)
+int input_get_default_mouse (struct uae_input_device *uid, int i, int port, int af, bool gp, bool wheel, bool joymouseswap)
 {
   setid (uid, i, ID_AXIS_OFFSET + 0, 0, port, port ? INPUTEVENT_MOUSE2_HORIZ : INPUTEVENT_MOUSE1_HORIZ, gp);
   setid (uid, i, ID_AXIS_OFFSET + 1, 0, port, port ? INPUTEVENT_MOUSE2_VERT : INPUTEVENT_MOUSE1_VERT, gp);
@@ -407,7 +407,7 @@ struct inputdevice_functions inputdevicefunc_joystick = {
 	get_joystick_flags
 };
 
-int input_get_default_joystick (struct uae_input_device *uid, int num, int port, int af, int mode, bool gp)
+int input_get_default_joystick (struct uae_input_device *uid, int num, int port, int af, int mode, bool gp, bool joymouseswap)
 {
   int h, v;
 
@@ -436,7 +436,7 @@ int input_get_default_joystick (struct uae_input_device *uid, int num, int port,
   return 0;
 }
 
-int input_get_default_joystick_analog (struct uae_input_device *uid, int num, int port, int af) 
+int input_get_default_joystick_analog (struct uae_input_device *uid, int num, int port, int af, bool joymouseswap) 
 {
   return 0;
 }

@@ -172,12 +172,12 @@ static blockinfo* dormant;
 
 #ifdef PANDORA
 
-void cache_free (void *cache, int size)
+void cache_free (uae_u8 *cache, int size)
 {
   munmap(cache, size);
 }
 
-void *cache_alloc (int size)
+uae_u8 *cache_alloc (int size)
 {
   size = size < getpagesize() ? getpagesize() : size;
 
@@ -2019,11 +2019,10 @@ static void align_target(uae_u32 a)
 }
 #endif
 
-extern uae_u8* kickmemory;
 STATIC_INLINE int isinrom(uintptr addr)
 {
-  return (addr >= (uae_u32)kickmemory &&
-    addr < (uae_u32)kickmemory + 8 * 65536);
+  return (addr >= (uae_u32)kickmem_bank.baseaddr &&
+    addr < (uae_u32)kickmem_bank.baseaddr + 8 * 65536);
 }
 
 static void flush_all(void)
@@ -2365,7 +2364,7 @@ void alloc_cache(void)
   	return;
 
   while (!compiled_code && currprefs.cachesize) {
-  	compiled_code = (uae_u8*)cache_alloc(currprefs.cachesize * 1024);
+  	compiled_code = cache_alloc(currprefs.cachesize * 1024);
   	if (!compiled_code)
 	    currprefs.cachesize /= 2;
   }
@@ -2600,7 +2599,7 @@ STATIC_INLINE void create_popalls(void)
   int i, r;
 
   if (popallspace == NULL)
-  	popallspace = (uae_u8*)cache_alloc (POPALLSPACE_SIZE);
+  	popallspace = cache_alloc (POPALLSPACE_SIZE);
 
   int stack_space = STACK_OFFSET;
   for (i = 0; i< N_REGS; i++) {

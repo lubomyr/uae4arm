@@ -56,7 +56,6 @@ class CPUButtonActionListener : public gcn::ActionListener
   		  changed_prefs.address_space_24 = true;
   		  changed_prefs.z3fastmem_size = 0;
   		  changed_prefs.rtgmem_size = 0;
-  		  changed_prefs.cpu_compatible = 0;
       }
       else if (actionEvent.getSource() == optCPU68020)
       {
@@ -343,7 +342,7 @@ void RefreshPanelCPU(void)
   chk24Bit->setSelected(changed_prefs.address_space_24);
   chk24Bit->setEnabled(changed_prefs.cpu_model == 68020);
   chkCPUCompatible->setSelected(changed_prefs.cpu_compatible > 0);
-  chkCPUCompatible->setEnabled(changed_prefs.cpu_model == 68000);
+  chkCPUCompatible->setEnabled(changed_prefs.cpu_model <= 68010);
   chkJIT->setSelected(changed_prefs.cachesize > 0);
 
   switch(changed_prefs.fpu_model)

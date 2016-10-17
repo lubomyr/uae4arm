@@ -66,7 +66,7 @@ extern int pissoff_value;
 extern struct ev eventtab[ev_max];
 extern struct ev2 eventtab2[ev2_max];
 
-STATIC_INLINE void cycles_do_special (struct regstruct &regs)
+STATIC_INLINE void cycles_do_special (void)
 {
 #ifdef JIT
 	if (currprefs.cachesize) {
@@ -90,9 +90,16 @@ STATIC_INLINE void set_cycles (unsigned long int x)
 	eventtab[ev_hsync].oldcycles = x;
 }
 
+STATIC_INLINE int current_hpos_safe (void)
+{
+  int hp = (get_cycles () - eventtab[ev_hsync].oldcycles) / CYCLE_UNIT;
+	return hp;
+}
+
 STATIC_INLINE int current_hpos (void)
 {
-  return (get_cycles () - eventtab[ev_hsync].oldcycles) / CYCLE_UNIT;
+  int hp = (get_cycles () - eventtab[ev_hsync].oldcycles) / CYCLE_UNIT;
+	return hp;
 }
 
 STATIC_INLINE bool cycles_in_range (unsigned long endcycles)

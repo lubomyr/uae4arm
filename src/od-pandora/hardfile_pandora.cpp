@@ -32,6 +32,7 @@ struct uae_driveinfo {
 
 #define HDF_HANDLE_FILE  1
 #define HDF_HANDLE_ZFILE 2
+#define HDF_HANDLE_UNKNOWN 3
 
 #define CACHE_SIZE 16384
 #define CACHE_FLUSH_TIME 5
@@ -69,27 +70,32 @@ int hdf_open_target (struct hardfiledata *hfd, const TCHAR *pname)
 				zmode = 1;
 		}
 	}
-	f = fopen(name, (hfd->readonly ? "rb" : "r+b"));
+	f = fopen(name, (hfd->ci.readonly ? "rb" : "r+b"));
+  if (f == NULL && !hfd->ci.readonly) {
+    f = fopen(name, "rb");
+    if(f != NULL)
+      hfd->ci.readonly = true;
+  }
 	hfd->handle->f = f;
 	i = _tcslen (name) - 1;
 	while (i >= 0) {
 		if ((i > 0 && (name[i - 1] == '/' || name[i - 1] == '\\')) || i == 0) {
-			_tcscpy (hfd->vendor_id, _T("UAE"));
 			_tcsncpy (hfd->product_id, name + i, 15);
-			_tcscpy (hfd->product_rev, _T("0.3"));
 			break;
 		}
 		i--;
 	}
+  _tcscpy (hfd->vendor_id, _T("UAE"));
+  _tcscpy (hfd->product_rev, _T("0.4"));
 	if (f != NULL) {
     uae_s64 pos = ftell(f);
     fseek(f, 0, SEEK_END);
     uae_s64 size = ftell(f);
     fseek(f, pos, SEEK_SET);
 
-		size &= ~(hfd->blocksize - 1);
+		size &= ~(hfd->ci.blocksize - 1);
 		hfd->physsize = hfd->virtsize = size;
-		if (hfd->physsize < hfd->blocksize || hfd->physsize == 0) {
+		if (hfd->physsize < hfd->ci.blocksize || hfd->physsize == 0) {
 			write_log (_T("HDF '%s' is too small\n"), name);
 			goto end;
 		}
@@ -163,13 +169,13 @@ static int hdf_seek (struct hardfiledata *hfd, uae_u64 offset)
 		abort();
 	}
 	if (offset >= hfd->physsize - hfd->virtual_size) {
-		gui_message (_T("hd: tried to seek out of bounds! (%I64X >= %I64X)\n"), offset, hfd->physsize);
+		gui_message (_T("hd: tried to seek out of bounds! (%I64X >= %I64X - %I64X)\n"), offset, hfd->physsize, hfd->virtual_size);
 		abort ();
 	}
 	offset += hfd->offset;
-	if (offset & (hfd->blocksize - 1)) {
+	if (offset & (hfd->ci.blocksize - 1)) {
 		gui_message (_T("hd: poscheck failed, offset=%I64X not aligned to blocksize=%d! (%I64X & %04X = %04X)\n"),
-			offset, hfd->blocksize, offset, hfd->blocksize, offset & (hfd->blocksize - 1));
+			offset, hfd->ci.blocksize, offset, hfd->ci.blocksize, offset & (hfd->ci.blocksize - 1));
 		abort ();
 	}
 	if (hfd->handle_valid == HDF_HANDLE_FILE) {
@@ -207,8 +213,8 @@ static void poscheck (struct hardfiledata *hfd, int len)
 		gui_message (_T("hd: poscheck failed, offset out of bounds! (%I64d >= %I64d, LEN=%d)"), pos, hfd->offset + hfd->physsize, len);
 		abort ();
 	}
-	if (pos & (hfd->blocksize - 1)) {
-		gui_message (_T("hd: poscheck failed, offset not aligned to blocksize! (%I64X & %04X = %04X\n"), pos, hfd->blocksize, pos & hfd->blocksize);
+	if (pos & (hfd->ci.blocksize - 1)) {
+		gui_message (_T("hd: poscheck failed, offset not aligned to blocksize! (%I64X & %04X = %04X\n"), pos, hfd->ci.blocksize, pos & hfd->ci.blocksize);
 		abort ();
 	}
 }
@@ -304,7 +310,7 @@ static int hdf_write_2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, 
 {
 	int outlen = 0;
 
-	if (hfd->readonly)
+	if (hfd->ci.readonly)
 		return 0;
 	if (hfd->dangerous)
 		return 0;

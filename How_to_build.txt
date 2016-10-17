@@ -1,4 +1,4 @@
-1) At first for building we need linux-console
+1) You need 64bit linux
 
 2) Install Android sdk&ndk (i unpacked it into ~/android directory)
 http://developer.android.com/ndk/downloads/index.html
@@ -8,14 +8,14 @@ for run android environment i create and use simple script setenv-android.sh
 
 #!/bin/sh
 
-export PATH=~/android/android-ndk-r12b:$PATH
+export PATH=~/android/android-ndk-r13:$PATH
 export PATH=~/android/android-sdk-linux/tools:$PATH
-export PATH=~/android/android-sdk-linux/build-tools/24.0.0:$PATH
+export PATH=~/android/android-sdk-linux/build-tools/24.0.3:$PATH
 
-now we can run android build environment via console
+now you can run android build environment via console
 . setenv-android.sh
 
-Now via Android SDK Manager (for call sdk manager via console type android). We need download latest version:
+Now via Android SDK Manager (for call sdk manager via console type android). You need to download latest version:
 Android SDK Tools
 Android SDK Platform-tools
 Android SDL Build tools
@@ -32,6 +32,6 @@ git clone https://github.com/lubomyr/uae4arm
 cd uae4arm
 . link_android_dirs.sh
 
-// Now we can build project (apk)
+// Now you can build project (apk)
 cd ~/androidsdl
 ./build.sh uae4arm

@@ -344,28 +344,35 @@ static void parse_boot(struct uae_prefs *p, xmlNode *node)
             FILE *f = fopen(target_file, "rb");
             if(f != NULL)
             {
-              char dhx[8];
-              struct uaedev_config_info *uci;
-              int readonly = 0;
+              struct uaedev_config_data *uci;
+            	struct uaedev_config_info ci;
               
               fclose(f);
+
+              if(hardfile_testrdb (target_file))                        
+                uci_set_defaults(&ci, true);
+              else
+                uci_set_defaults(&ci, false);
+              
+              ci.type = UAEDEV_HDF;
+              sprintf(ci.devname, "DH%d", add_HDF_DHnum);
+              ++add_HDF_DHnum;
+              strcpy(ci.rootdir, target_file);
               
               xmlChar *ro = xmlGetProp(curr_node, (const xmlChar *) _T("readonly"));
               if(ro != NULL)
               {
                 if(strcmp((const char *) ro, "true") == 0)
-                  readonly = 1;
+                  ci.readonly = 1;
                 xmlFree(ro);
               }
-
-              sprintf(dhx, "DH%d", add_HDF_DHnum);
-              ++add_HDF_DHnum;
-              if(hardfile_testrdb (target_file))                        
-                uci = add_filesys_config(p, -1, dhx, 0, target_file, readonly, 0, 0, 0, 0, 512, 127, 0, 0, 0, 0, 0, 0);
-              else
-                uci = add_filesys_config(p, -1, dhx, 0, target_file, readonly, 0, 32, 1, 2, 512, 127, 0, 0, 0, 0, 0, 0);
-              if (uci)
-                hardfile_do_disk_change (uci, 1);
+              ci.bootpri = 127;
+              
+              uci = add_filesys_config(p, -1, &ci);
+              if (uci) {
+            		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
+                hardfile_media_change (hfd, &ci, true, false);
+              }
               gui_force_rtarea_hdchange();
             }
             xmlFree(content);
@@ -454,17 +461,27 @@ static void extract_media(struct uae_prefs *p, unzFile uz, xmlNode *node)
                       else
                       {
                         // Add hardfile
-                        struct uaedev_config_info *uci;
-                        char dhx[8];
-
-                        sprintf(dhx, "DH%d", add_HDF_DHnum);
-                        ++add_HDF_DHnum;
+                        struct uaedev_config_data *uci;
+                      	struct uaedev_config_info ci;
+          
                         if(hardfile_testrdb (target_file))                        
-                          uci = add_filesys_config(p, -1, dhx, 0, target_file, 0, 0, 0, 0, 0, 512, 0, 0, 0, 0, 0, 0, 0);
+                          uci_set_defaults(&ci, true);
                         else
-                          uci = add_filesys_config(p, -1, dhx, 0, target_file, 0, 0, 32, 1, 2, 512, 0, 0, 0, 0, 0, 0, 0);
-                        if (uci)
-    	                    hardfile_do_disk_change (uci, 1);
+                          uci_set_defaults(&ci, false);
+                        
+                        ci.type = UAEDEV_HDF;
+                        sprintf(ci.devname, "DH%d", add_HDF_DHnum);
+                        ++add_HDF_DHnum;
+                        strcpy(ci.rootdir, target_file);
+                        
+                        ci.bootpri = 0;
+                        
+                        uci = add_filesys_config(p, -1, &ci);
+                        if (uci) {
+                      		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
+                          hardfile_media_change (hfd, &ci, true, false);
+                        }
+
     	                  gui_force_rtarea_hdchange();
                       }
                       lstTmpRP9Files.push_back(target_file);

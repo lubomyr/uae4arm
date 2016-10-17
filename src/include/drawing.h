@@ -17,6 +17,7 @@
 
 #define PIXEL_XPOS(HPOS) (((HPOS)*2 - DISPLAY_LEFT_SHIFT + DIW_DDF_OFFSET - 1) )
 
+#define min_diwlastword (0)
 #define max_diwlastword   (PIXEL_XPOS(0x1d4>> 1))
 
 #define lores_shift 0
@@ -25,7 +26,7 @@ extern bool aga_mode;
 STATIC_INLINE int coord_hw_to_window_x (int x)
 {
   x -= DISPLAY_LEFT_SHIFT;
-  return x;
+	return x;
 }
 
 STATIC_INLINE int coord_window_to_hw_x (int x)
@@ -35,7 +36,7 @@ STATIC_INLINE int coord_window_to_hw_x (int x)
 
 STATIC_INLINE int coord_diw_to_window_x (int x)
 {
-  return (x - DISPLAY_LEFT_SHIFT + DIW_DDF_OFFSET - 1);
+	return (x - DISPLAY_LEFT_SHIFT + DIW_DDF_OFFSET - 1);
 }
 
 STATIC_INLINE int coord_window_to_diw_x (int x)
@@ -56,7 +57,7 @@ struct color_entry {
   uae_u16 color_regs_ecs[32];
   xcolnr acolors[256];
   uae_u32 color_regs_aga[256];
-	bool borderblank;
+	bool borderblank, bordersprite;
 };
 
 /* convert 24 bit AGA Amiga RGB to native color */
@@ -179,6 +180,7 @@ struct decision {
   uae_u8 bplres;
   bool ham_seen;
   bool ham_at_start;
+	bool bordersprite_seen;
 };
 
 /* Anything related to changes in hw registers during the DDF for one
@@ -212,7 +214,6 @@ extern void adjust_idletime(unsigned long ns_waited);
 #define IHF_SCROLLLOCK 0
 #define IHF_QUIT_PROGRAM 1
 #define IHF_PICASSO 2
-#define IHF_SOUNDADJUST 3
 
 extern int inhibit_frame;
 

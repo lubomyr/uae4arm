@@ -359,13 +359,15 @@ static uae_u8 GetBytesPerPixel (uae_u32 RGBfmt)
 
 static int CopyRenderInfoStructureA2U (uaecptr amigamemptr, struct RenderInfo *ri)
 {
-  uaecptr memp = get_long (amigamemptr + PSSO_RenderInfo_Memory);
-
-  if (valid_address (memp, PSSO_RenderInfo_sizeof)) {
+  if (valid_address (amigamemptr, PSSO_RenderInfo_sizeof)) {
+    uaecptr memp = get_long (amigamemptr + PSSO_RenderInfo_Memory);
+		ri->AMemory = memp;
   	ri->Memory = get_real_address (memp);
   	ri->BytesPerRow = get_word (amigamemptr + PSSO_RenderInfo_BytesPerRow);
   	ri->RGBFormat = (RGBFTYPE)get_long (amigamemptr + PSSO_RenderInfo_RGBFormat);
-  	return 1;
+		// Can't really validate this better at this point, no height.
+		if (valid_address (memp, ri->BytesPerRow))
+  	  return 1;
   }
 	write_log (_T("ERROR - Invalid RenderInfo memory area...\n"));
   return 0;
@@ -373,8 +375,8 @@ static int CopyRenderInfoStructureA2U (uaecptr amigamemptr, struct RenderInfo *r
 
 static int CopyPatternStructureA2U (uaecptr amigamemptr, struct Pattern *pattern)
 {
-  uaecptr memp = get_long (amigamemptr + PSSO_Pattern_Memory);
-  if (valid_address (memp, PSSO_Pattern_sizeof)) {
+  if (valid_address (amigamemptr, PSSO_Pattern_sizeof)) {
+    uaecptr memp = get_long (amigamemptr + PSSO_Pattern_Memory);
   	pattern->Memory = get_real_address (memp);
   	pattern->XOffset = get_word (amigamemptr + PSSO_Pattern_XOffset);
   	pattern->YOffset = get_word (amigamemptr + PSSO_Pattern_YOffset);
@@ -382,7 +384,8 @@ static int CopyPatternStructureA2U (uaecptr amigamemptr, struct Pattern *pattern
   	pattern->BgPen = get_long (amigamemptr + PSSO_Pattern_BgPen);
   	pattern->Size = get_byte (amigamemptr + PSSO_Pattern_Size);
   	pattern->DrawMode = get_byte (amigamemptr + PSSO_Pattern_DrawMode);
-  	return 1;
+		if (valid_address (memp, 2))
+  	  return 1;
   }
 	write_log (_T("ERROR - Invalid Pattern memory area...\n"));
   return 0;
@@ -509,13 +512,13 @@ static void do_fillrect_frame_buffer (struct RenderInfo *ri, int X, int Y,
   }
 }
 
-static int framecnt;
+static int pframecnt;
 int p96skipmode = -1;
 static int doskip (void)
 {
-  if (framecnt >= currprefs.gfx_framerate)
-  	framecnt = 0;
-  return framecnt > 0;
+  if (pframecnt >= currprefs.gfx_framerate)
+  	pframecnt = 0;
+  return pframecnt > 0;
 }
 
 void picasso_trigger_vblank (void)
@@ -536,7 +539,7 @@ void picasso_handle_vsync (void)
 		return;
 	}
 
-  framecnt++;
+  pframecnt++;
 
   if (doskip () && p96skipmode == 0) {
   	;
@@ -709,7 +712,7 @@ void picasso_refresh (void)
    */
   if (picasso96_state.Address) {
   	/* blit the stuff from our static frame-buffer to the gfx-card */
-  	ri.Memory = gfxmemory + (picasso96_state.Address - gfxmem_start);
+  	ri.Memory = gfxmem_bank.baseaddr + (picasso96_state.Address - gfxmem_bank.start);
   	ri.BytesPerRow = picasso96_state.BytesPerRow;
   	ri.RGBFormat = (RGBFTYPE)picasso96_state.RGBFormat;
 
@@ -1160,7 +1163,7 @@ static uae_u32 REGPARAM2 picasso_FindCard (TrapContext *ctx)
 {
   uaecptr AmigaBoardInfo = m68k_areg (regs, 0);
   /* NOTES: See BoardInfo struct definition in Picasso96 dev info */
-	if (!uaegfx_active || !gfxmem_start)
+	if (!uaegfx_active || !gfxmem_bank.start)
   	return 0;
 	if (uaegfx_base) {
     put_long (uaegfx_base + CARD_BOARDINFO, AmigaBoardInfo);
@@ -1169,10 +1172,10 @@ static uae_u32 REGPARAM2 picasso_FindCard (TrapContext *ctx)
 	}
   boardinfo = AmigaBoardInfo;
 
-  if (allocated_gfxmem && !picasso96_state.CardFound) {
+  if (gfxmem_bank.allocated && !picasso96_state.CardFound) {
   	/* Fill in MemoryBase, MemorySize */
-  	put_long (AmigaBoardInfo + PSSO_BoardInfo_MemoryBase, gfxmem_start);
-  	put_long (AmigaBoardInfo + PSSO_BoardInfo_MemorySize, allocated_gfxmem - reserved_gfxmem);
+  	put_long (AmigaBoardInfo + PSSO_BoardInfo_MemoryBase, gfxmem_bank.start);
+  	put_long (AmigaBoardInfo + PSSO_BoardInfo_MemorySize, gfxmem_bank.allocated - reserved_gfxmem);
   	picasso96_state.CardFound = 1;	/* mark our "card" as being found */
   	return -1;
   } else
@@ -1339,7 +1342,7 @@ static void init_alloc (TrapContext *ctx, int size)
 	  picasso96_amem = get_long (uaegfx_base + CARD_RESLIST);
 	} else if (uaegfx_active) {
 		reserved_gfxmem = size;
-		picasso96_amem = gfxmem_start + allocated_gfxmem - size;
+		picasso96_amem = gfxmem_bank.start + gfxmem_bank.allocated - size;
 	}
 	picasso96_amemend = picasso96_amem + size;
 	write_log(_T("P96 RESINFO: %08X-%08X (%d,%d)\n"), picasso96_amem, picasso96_amemend, size / PSSO_ModeInfo_sizeof, size);
@@ -1375,7 +1378,7 @@ static void picasso96_alloc2 (TrapContext *ctx)
   xfree (newmodes);
   newmodes = NULL;
   picasso96_amem = picasso96_amemend = 0;
-  if (allocated_gfxmem == 0)
+  if (gfxmem_bank.allocated == 0)
   	return;
   misscnt = 0;
   newmodes = xmalloc (struct PicassoResolution, MAX_PICASSO_MODES);
@@ -1549,11 +1552,15 @@ static void inituaegfx (uaecptr ABI)
   inituaegfxfuncs (uaegfx_rom, ABI);
 }
 
-static void addmode (uaecptr AmigaBoardInfo, uaecptr *amem, struct LibResolution *res, int w, int h, const TCHAR *name, int id, int *unkcnt)
+static void addmode (uaecptr AmigaBoardInfo, uaecptr *amem, struct LibResolution *res, int w, int h, const TCHAR *name, int display, int *unkcnt)
 {
   int depth;
 
-  res->DisplayID = id > 0 ? id : AssignModeID (w, h, unkcnt);
+	if (display > 0) {
+		res->DisplayID = 0x51000000 + display * 0x100000;
+	} else {
+		res->DisplayID = AssignModeID (w, h, unkcnt);
+	}
   res->BoardInfo = AmigaBoardInfo;
   res->Width = w;
   res->Height = h;
@@ -1570,7 +1577,7 @@ static void addmode (uaecptr AmigaBoardInfo, uaecptr *amem, struct LibResolution
   for (depth = 8; depth <= 32; depth++) {
     if (!p96depth (depth))
 	    continue;
-  	if(allocated_gfxmem >= w * h * (depth + 7) / 8) {
+  	if(gfxmem_bank.allocated >= w * h * (depth + 7) / 8) {
 	    FillBoardInfo (*amem, res, w, h, depth);
 	    *amem += PSSO_ModeInfo_sizeof;
   	}
@@ -2269,7 +2276,6 @@ static uae_u32 REGPARAM2 picasso_BlitPattern (TrapContext *ctx)
 
   if (NOBLITTER)
   	return 0;
-
   if (CopyRenderInfoStructureA2U (rinf, &ri) && CopyPatternStructureA2U (pinf, &pattern)) {
   	Bpp = GetBytesPerPixel (ri.RGBFormat);
   	uae_mem = ri.Memory + Y*ri.BytesPerRow + X*Bpp; /* offset with address */
@@ -2429,7 +2435,6 @@ static uae_u32 REGPARAM2 picasso_BlitTemplate (TrapContext *ctx)
 
   if (NOBLITTER)
   	return 0;
-
   if (CopyRenderInfoStructureA2U (rinf, &ri) && CopyTemplateStructureA2U (tmpl, &tmp)) {
 	  Bpp = GetBytesPerPixel (ri.RGBFormat);
 	  uae_mem = ri.Memory + Y*ri.BytesPerRow + X*Bpp; /* offset into address */
@@ -2880,20 +2885,28 @@ static void statusline (uae_u8 *dst)
 static void copyall (uae_u8 *src, uae_u8 *dst)
 {
   if (picasso96_state.RGBFormat == RGBFB_R5G6B5)
+#ifdef USE_ARMNEON
     copy_screen_16bit_swap(dst, src, picasso96_state.Width * picasso96_state.Height * 2);
+#else
+    copy_screen_16bit_swap_arm(dst, src, picasso96_state.Width * picasso96_state.Height * 2);
+#endif
   else if(picasso96_state.RGBFormat == RGBFB_CLUT)
   {
     int pixels = picasso96_state.Width * picasso96_state.Height;
     copy_screen_8bit(dst, src, pixels, picasso_vidinfo.clut);
   }
   else
+#ifdef USE_ARMNEON
     copy_screen_32bit_to_16bit_neon(dst, src, picasso96_state.Width * picasso96_state.Height * 4);
+#else
+    copy_screen_32bit_to_16bit_arm(dst, src, picasso96_state.Width * picasso96_state.Height * 4);
+#endif
 }
 
 static void flushpixels (void)
 {
-  uae_u8 *src = p96ram_start + natmem_offset;
-  int off = picasso96_state.XYOffset - gfxmem_start;
+  uae_u8 *src = gfxmem_bank.start + natmem_offset;
+  int off = picasso96_state.XYOffset - gfxmem_bank.start;
   uae_u8 *src_start = src + off;
   uae_u8 *src_end = src + off + picasso96_state.BytesPerRow * picasso96_state.Height;
   uae_u8 *dst = NULL;
@@ -2916,76 +2929,13 @@ static void flushpixels (void)
   gfx_unlock_picasso ();
 }
 
-static uae_u32 REGPARAM2 gfxmem_lgetx (uaecptr addr)
-{
-  uae_u32 *m;
-
-  addr -= gfxmem_start & gfxmem_mask;
-  addr &= gfxmem_mask;
-  m = (uae_u32 *)(gfxmemory + addr);
-  return do_get_mem_long(m);
-}
-
-static uae_u32 REGPARAM2 gfxmem_wgetx (uaecptr addr)
-{
-  uae_u16 *m;
-  addr -= gfxmem_start & gfxmem_mask;
-  addr &= gfxmem_mask;
-  m = (uae_u16 *)(gfxmemory + addr);
-  return do_get_mem_word(m);
-}
-
-static uae_u32 REGPARAM2 gfxmem_bgetx (uaecptr addr)
-{
-  addr -= gfxmem_start & gfxmem_mask;
-  addr &= gfxmem_mask;
-  return gfxmemory[addr];
-}
-
-static void REGPARAM2 gfxmem_lputx (uaecptr addr, uae_u32 l)
-{
-  uae_u32 *m;
-  addr -= gfxmem_start & gfxmem_mask;
-  addr &= gfxmem_mask;
-  m = (uae_u32 *)(gfxmemory + addr);
-  do_put_mem_long(m, l);
-}
-
-static void REGPARAM2 gfxmem_wputx (uaecptr addr, uae_u32 w)
-{
-  uae_u16 *m;
-  addr -= gfxmem_start & gfxmem_mask;
-  addr &= gfxmem_mask;
-  m = (uae_u16 *)(gfxmemory + addr);
-  do_put_mem_word(m, (uae_u16)w);
-}
-
-static void REGPARAM2 gfxmem_bputx (uaecptr addr, uae_u32 b)
-{
-  addr -= gfxmem_start & gfxmem_mask;
-  addr &= gfxmem_mask;
-  gfxmemory[addr] = b;
-}
-
-static int REGPARAM2 gfxmem_check (uaecptr addr, uae_u32 size)
-{
-  addr -= gfxmem_start;
-  addr &= gfxmem_mask;
-  return (addr + size) < allocated_gfxmem;
-}
-
-static uae_u8 *REGPARAM2 gfxmem_xlate (uaecptr addr)
-{
-  addr -= gfxmem_start;
-  addr &= gfxmem_mask;
-  return gfxmemory + addr;
-}
+MEMORY_FUNCTIONS(gfxmem);
 
 addrbank gfxmem_bank = {
-  gfxmem_lgetx, gfxmem_wgetx, gfxmem_bgetx,
-  gfxmem_lputx, gfxmem_wputx, gfxmem_bputx,
+	gfxmem_lget, gfxmem_wget, gfxmem_bget,
+	gfxmem_lput, gfxmem_wput, gfxmem_bput,
 	gfxmem_xlate, gfxmem_check, NULL, _T("RTG RAM"),
-  dummy_lgeti, dummy_wgeti, ABFLAG_RAM
+	dummy_lgeti, dummy_wgeti, ABFLAG_RAM
 };
 
 /* Call this function first, near the beginning of code flow
@@ -3314,8 +3264,8 @@ static uaecptr uaegfx_card_install (TrapContext *ctx, uae_u32 extrasize)
   uaecptr findcardfunc, initcardfunc;
   uaecptr exec = get_long (4);
 
-	if (uaegfx_old || !gfxmem_start)
-	  return 0;
+	if (uaegfx_old || !gfxmem_bank.start)
+		return NULL;
 
 	uaegfx_resid = ds (_T("UAE Graphics Card 3.3"));
 	uaegfx_vblankname = ds (_T("UAE Graphics Card VBLANK"));
@@ -3415,7 +3365,7 @@ uae_u32 picasso_demux (uae_u32 arg, TrapContext *ctx)
      case 31: return picasso_InvertRect (ctx);
      case 32: return picasso_BlitPlanar2Direct (ctx);
      //case 34: return picasso_WaitVerticalSync (ctx);
-     case 35: return allocated_gfxmem ? 1 : 0;
+     case 35: return gfxmem_bank.allocated ? 1 : 0;
 	  case 36: return picasso_SetSprite (ctx);
 	  case 37: return picasso_SetSpritePosition (ctx);
 	  case 38: return picasso_SetSpriteImage (ctx);

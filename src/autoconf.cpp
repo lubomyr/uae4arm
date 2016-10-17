@@ -13,8 +13,8 @@
 #include "options.h"
 #include "uae.h"
 #include "memory-uae.h"
-#include "newcpu.h"
 #include "custom.h"
+#include "newcpu.h"
 #include "autoconf.h"
 #include "traps.h"
 
@@ -228,7 +228,7 @@ static uae_u32 REGPARAM2 getchipmemsize (TrapContext *context)
 {
 	m68k_dreg (regs, 1) = 0;
 	m68k_areg (regs, 1) = 0;
-  return allocated_chipmem;
+  return chipmem_bank.allocated;
 }
 
 static uae_u32 REGPARAM2 uae_puts (TrapContext *context)

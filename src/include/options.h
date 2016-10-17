@@ -7,8 +7,11 @@
   * Copyright 1995-2001 Bernd Schmidt
   */
 
+#ifndef OPTIONS_H
+#define OPTIONS_H
+
 #define UAEMAJOR 2
-#define UAEMINOR 5
+#define UAEMINOR 8
 #define UAESUBREV 1
 
 extern long int version;
@@ -53,6 +56,7 @@ struct jport {
 	int autofire;
 	TCHAR name[MAX_JPORTNAME];
 	TCHAR configname[MAX_JPORTNAME];
+	bool nokeyboardoverride;
 };
 #define JPORT_NONE -1
 #define JPORT_CUSTOM -2
@@ -79,6 +83,7 @@ struct floppyslot
 {
 	TCHAR df[MAX_DPATH];
 	int dfxtype;
+	bool forcedwriteprotect;
 };
 
 struct wh {
@@ -87,25 +92,53 @@ struct wh {
 };
 
 #define MOUNT_CONFIG_SIZE 30
+#define UAEDEV_DIR 0
+#define UAEDEV_HDF 1
+#define UAEDEV_CD 2
+#define UAEDEV_TAPE 3
+
+#define BOOTPRI_NOAUTOBOOT -128
+#define BOOTPRI_NOAUTOMOUNT -129
+#define ISAUTOBOOT(ci) ((ci)->bootpri > BOOTPRI_NOAUTOBOOT)
+#define ISAUTOMOUNT(ci) ((ci)->bootpri > BOOTPRI_NOAUTOMOUNT)
 struct uaedev_config_info {
+	int type;
   TCHAR devname[MAX_DPATH];
   TCHAR volname[MAX_DPATH];
   TCHAR rootdir[MAX_DPATH];
-  bool ishdf;
   bool readonly;
   int bootpri;
-  bool autoboot;
-  bool donotmount;
   TCHAR filesys[MAX_DPATH];
-	int cyls; // zero if detected from size
+	int lowcyl;
+	int highcyl; // zero if detected from size
+	int cyls; // calculated/corrected highcyl
   int surfaces;
   int sectors;
   int reserved;
   int blocksize;
-  int configoffset;
   int controller;
 	// zero if default
 	int pcyls, pheads, psecs;
+	int flags;
+	int buffers;
+	int bufmemtype;
+	int stacksize;
+	int priority;
+	uae_u32 mask;
+	int maxtransfer;
+	uae_u32 dostype;
+	int unit;
+	int interleave;
+	int sectorsperblock;
+	int forceload;
+	int device_emu_unit;
+};
+
+struct uaedev_config_data
+{
+	struct uaedev_config_info ci;
+	int configoffset; // HD config entry index
+	int unitnum; // scsi unit number (if tape currently)
 };
 
 struct uae_prefs {
@@ -150,6 +183,7 @@ struct uae_prefs {
   int floppy_write_length;
   bool tod_hack;
 	int filesys_limit;
+	int filesys_max_name;
 
 	bool cs_cd32cd;
 	bool cs_cd32c2p;
@@ -181,7 +215,7 @@ struct uae_prefs {
   int rtgmem_type;
 
   int mountitems;
-  struct uaedev_config_info mountconfig[MOUNT_CONFIG_SIZE];
+  struct uaedev_config_data mountconfig[MOUNT_CONFIG_SIZE];
 
   int nr_floppies;
   struct floppyslot floppyslots[4];
@@ -266,11 +300,13 @@ extern void cfgfile_dwrite_str (struct zfile *f, const TCHAR *option, const TCHA
 extern void cfgfile_target_write_str (struct zfile *f, const TCHAR *option, const TCHAR *value);
 extern void cfgfile_target_dwrite_str (struct zfile *f, const TCHAR *option, const TCHAR *value);
 
-extern struct uaedev_config_info *add_filesys_config (struct uae_prefs *p, int index,
-	const TCHAR *devname, const TCHAR *volname, const TCHAR *rootdir, bool readonly,
-	int cyls, int secspertrack, int surfaces, int reserved,
-	int blocksize, int bootpri, const TCHAR *filesysdir, int hdc, int flags,
-	int pcyls, int pheads, int psecs);
+extern struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int index, struct uaedev_config_info*);
+extern bool get_hd_geometry (struct uaedev_config_info *);
+extern void uci_set_defaults (struct uaedev_config_info *uci, bool rdb);
+
+extern void error_log (const TCHAR*, ...);
+extern TCHAR *get_error_log (void);
+extern bool is_error_log (void);
 
 extern void default_prefs (struct uae_prefs *, int);
 extern void discard_prefs (struct uae_prefs *, int);
@@ -321,3 +357,5 @@ extern struct uae_prefs currprefs, changed_prefs;
 
 extern int machdep_init (void);
 extern void machdep_free (void);
+
+#endif /* OPTIONS_H */

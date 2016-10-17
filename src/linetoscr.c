@@ -20,21 +20,21 @@ STATIC_INLINE uae_u32 double_word(uae_u32 val)
   return val;
 }
  
-static int NOINLINE linetoscr_16 (int spix, int dpix, int stoppos)
+static int NOINLINE linetoscr_16 (int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
 
-    if (dp_for_drawing->ham_seen) {
+    if (bplham) {
         int rem;
         if (((long)&buf[dpix]) & 2) {
             buf[dpix++] = ham_linebuf[spix++];
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 out_val;
         
             out_val = *((uae_u32 *)&ham_linebuf[spix]);
@@ -53,12 +53,12 @@ static int NOINLINE linetoscr_16 (int spix, int dpix, int stoppos)
             spix_val = pixdata.apixels[spix++];
             buf[dpix++] = colors_for_drawing.acolors[lookup[spix_val]];
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -87,12 +87,12 @@ static int NOINLINE linetoscr_16 (int spix, int dpix, int stoppos)
                 dpix_val = xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -127,12 +127,12 @@ static int NOINLINE linetoscr_16 (int spix, int dpix, int stoppos)
             spix_val = pixdata.apixels[spix++];
             buf[dpix++] = colors_for_drawing.acolors[spix_val];
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -154,19 +154,19 @@ static int NOINLINE linetoscr_16 (int spix, int dpix, int stoppos)
     return spix;
 }
 
-static int NOINLINE linetoscr_16_stretch1 (int spix, int dpix, int stoppos)
+static int NOINLINE linetoscr_16_stretch1 (int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
 
-    if (dp_for_drawing->ham_seen) {
-        while (dpix < stoppos) {
+    if (bplham) {
+        while (dpix < dpix_end) {
             uae_u32 out_val = ham_linebuf[spix++];
             *((uae_u32 *)&buf[dpix]) = double_word(out_val);
             dpix += 2;
         }
     } else if (bpldualpf) {
         int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
-        while (dpix < stoppos) {
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
         
             spix_val = pixdata.apixels[spix++];
@@ -174,20 +174,20 @@ static int NOINLINE linetoscr_16_stretch1 (int spix, int dpix, int stoppos)
             dpix += 2;
         }
     } else if (bplehb) {
-        while (dpix < stoppos) {
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 out_val;
         
             spix_val = pixdata.apixels[spix++];
             if (spix_val <= 31)
-                out_val = colors_for_drawing.acolors[spix_val];
+              out_val = colors_for_drawing.acolors[spix_val];
             else
               out_val = xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x0777];
               *((uae_u32 *)&buf[dpix]) = double_word(out_val);
             dpix += 2;
         }
     } else {
-        while (dpix < stoppos) {
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
         
             spix_val = pixdata.apixels[spix++];
@@ -199,11 +199,11 @@ static int NOINLINE linetoscr_16_stretch1 (int spix, int dpix, int stoppos)
     return spix;
 }
 
-static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int stoppos)
+static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
 
-    if (dp_for_drawing->ham_seen) {
+    if (bplham) {
         int rem;
         if (((long)&buf[dpix]) & 2) {
             uae_u32 dpix_val;
@@ -211,12 +211,12 @@ static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 dpix_val;
             uae_u32 out_val;
         
@@ -246,12 +246,12 @@ static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -286,12 +286,12 @@ static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -330,12 +330,12 @@ static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = colors_for_drawing.acolors[spix_val];
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -362,23 +362,23 @@ static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int stoppos)
 
 #ifdef AGA
 
-static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
+static int NOINLINE linetoscr_16_aga (int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
     uae_u8 xor_val = bplxor;
 
-    if (dp_for_drawing->ham_seen) {
+    if (bplham) {
         int rem;
         if (((long)&buf[dpix]) & 2) {
             buf[dpix++] = ham_linebuf[spix];
             spix++;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 out_val;
         
             out_val = *((uae_u32 *)&ham_linebuf[spix]);
@@ -401,7 +401,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -410,12 +410,12 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
             spix++;
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -424,7 +424,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
                 out_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -435,7 +435,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -452,7 +452,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -474,12 +474,12 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spix_val];
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -517,12 +517,12 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
             spix_val = pixdata.apixels[spix++] ^ xor_val;
             buf[dpix++] = colors_for_drawing.acolors[spix_val];
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -546,13 +546,13 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int stoppos)
 #endif
 
 #ifdef AGA
-static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int stoppos)
+static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
     uae_u8 xor_val = bplxor;
 
-    if (dp_for_drawing->ham_seen) {
-        while (dpix < stoppos) {
+    if (bplham) {
+        while (dpix < dpix_end) {
             uae_u32 out_val;
             out_val = ham_linebuf[spix++];
             *((uae_u32 *)&buf[dpix]) = double_word(out_val);
@@ -561,7 +561,7 @@ static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int stoppos)
     } else if (bpldualpf) {
         int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
         int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
-        while (dpix < stoppos) {
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 out_val;
         
@@ -569,7 +569,7 @@ static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int stoppos)
                 out_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -580,7 +580,7 @@ static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int stoppos)
             dpix += 2;
         }
     } else if (bplehb) {
-        while (dpix < stoppos) {
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 out_val;
         
@@ -594,7 +594,7 @@ static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int stoppos)
             dpix += 2;
         }
     } else {
-        while (dpix < stoppos) {
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 out_val;
         
@@ -610,23 +610,23 @@ static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int stoppos)
 #endif
 
 #ifdef AGA
-static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
+static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
     uae_u8 xor_val = bplxor;
 
-    if (dp_for_drawing->ham_seen) {
+    if (bplham) {
         int rem;
         if (((long)&buf[dpix]) & 2) {
             buf[dpix++] = ham_linebuf[spix];
             spix += 2;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 dpix_val;
             uae_u32 out_val;
         
@@ -653,7 +653,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -662,12 +662,12 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -676,7 +676,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
                 out_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -687,7 +687,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -704,7 +704,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
                 dpix_val = colors_for_drawing.acolors[spritepixels[spix]];
             } else {
                 spix_val = pixdata.apixels[spix];
-                unsigned int val = lookup[spix_val];
+                uae_u8 val = lookup[spix_val];
                 if (lookup_no[spix_val] == 2)
                     val += dblpfofs[bpldualpf2of];
         	      val ^= xor_val;
@@ -727,12 +727,12 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = dpix_val;
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;
@@ -774,12 +774,12 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int stoppos)
             spix += 2;
             buf[dpix++] = colors_for_drawing.acolors[spix_val];
         }
-        if (dpix >= stoppos)
+        if (dpix >= dpix_end)
             return spix;
-        rem = (((long)&buf[stoppos]) & 2);
+        rem = (((long)&buf[dpix_end]) & 2);
         if (rem)
-            stoppos--;
-        while (dpix < stoppos) {
+            dpix_end--;
+        while (dpix < dpix_end) {
             uae_u32 spix_val;
             uae_u32 dpix_val;
             uae_u32 out_val;

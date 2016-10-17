@@ -71,6 +71,9 @@ void romlist_add (const TCHAR *path, struct romdata *rd)
   rl2 = rl + romlist_cnt - 1;
   rl2->path = my_strdup (path);
   rl2->rd = rd;
+	struct romdata *rd2 = getromdatabyid (rd->id);
+	if (rd2 != rd && rd2) // replace "X" with parent name
+		rd->name = rd2->name;
 }
 
 
@@ -89,7 +92,7 @@ struct romdata *getromdatabypath (const TCHAR *path)
   return NULL;
 }
 
-#define NEXT_ROM_ID 74
+#define NEXT_ROM_ID 89
 
 static struct romheader romheaders[] = {
 	{ _T("Freezer Cartridges"), 1 },
@@ -105,6 +108,8 @@ static struct romheader romheaders[] = {
 static struct romdata roms[] = {
 	{ _T(" AROS KS ROM (built-in)"), 0, 0, 0, 0, _T("AROS\0"), 524288 * 2, 66, 0, 0, ROMTYPE_KICK, 0, 0, NULL,
 	0xffffffff, 0, 0, 0, 0, 0, _T("AROS") },
+	{ _T(" ROM Disabled"), 0, 0, 0, 0, _T("NOROM\0"), 0, 87, 0, 0, ROMTYPE_NONE, 0, 0, NULL,
+	0xffffffff, 0, 0, 0, 0, 0, _T("NOROM") },
 
 	{ _T("Cloanto Amiga Forever ROM key"), 0, 0, 0, 0, 0, 2069, 0, 0, 1, ROMTYPE_KEY, 0, 0, NULL,
 	0x869ae1b1, 0x801bbab3,0x2e3d3738,0x6dd1636d,0x4f1d6fa7,0xe21d5874 },
@@ -139,7 +144,7 @@ static struct romdata roms[] = {
 	0x64466c2a, 0xF72D8914,0x8DAC39C6,0x96E30B10,0x859EBC85,0x9226637B },
 	{ _T("KS ROM v2.05 (A600HD)"), 2, 5, 37, 350, _T("A600HD\0A600\0"), 524288, 10, 0, 0, ROMTYPE_KICK, 0, 0, _T("391304-02"),
 	0x43b0df7b, 0x02843C42,0x53BBD29A,0xBA535B0A,0xA3BD9A85,0x034ECDE4 },
-	{ _T("KS ROM v2.04 (A3000)"), 2, 4, 37, 175, _T("A3000\0"), 524288, 71, 3, 0, ROMTYPE_KICK, 0, 0, NULL,
+	{ _T("KS ROM v2.04 (A3000)"), 2, 4, 37, 175, _T("A3000\0"), 524288, 71, 8, 0, ROMTYPE_KICK, 0, 0, NULL,
 	0x234a7233, 0xd82ebb59,0xafc53540,0xddf2d718,0x7ecf239b,0x7ea91590 },
 	ALTROMPN(71, 1, 1, 262144, ROMTYPE_EVEN, _T("390629-03"), 0xa245dbdf,0x83bab8e9,0x5d378b55,0xb0c6ae65,0x61385a96,0xf638598f)
 	ALTROMPN(71, 1, 2, 262144, ROMTYPE_ODD , _T("390630-03"), 0x7db1332b,0x48f14b31,0x279da675,0x7848df6f,0xeb531881,0x8f8f576c)
@@ -192,6 +197,8 @@ static struct romdata roms[] = {
    
 	{ _T("CD32 MPEG Cartridge ROM"), 3, 1, 40, 30, _T("CD32FMV\0"), 262144, 23, 1, 0, ROMTYPE_CD32CART, 0, 0, NULL,
 	0xc35c37bf, 0x03ca81c7,0xa7b259cf,0x64bc9582,0x863eca0f,0x6529f435 },
+	{ _T("CD32 MPEG Cartridge ROM"), 3, 1, 40, 22, _T("CD32FMV\0"), 262144, 74, 1, 0, ROMTYPE_CD32CART, 0, 0, _T("391777-01"),
+	0xc2002d08, 0xa1ca2d71,0x7efb6c60,0xb9bfabeb,0x0280ae97,0xe82b0cb9 },
 
 	{ _T("CDTV extended ROM v1.00"), 1, 0, 1, 0, _T("CDTV\0"), 262144, 20, 0, 0, ROMTYPE_EXTCDTV, 0, 0, NULL,
 	0x42baa124, 0x7BA40FFA,0x17E500ED,0x9FED041F,0x3424BD81,0xD9C907BE },
@@ -246,7 +253,7 @@ static struct romdata roms[] = {
 	0x9e70c231, 0xa2977a1c,0x41a8ca7d,0x4af4a168,0x726da542,0x179d5963 },
   ALTROM(65, 1, 1, 65536, ROMTYPE_EVEN|ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0xf98742e4,0xe8e683ba,0xd8b38d1f,0x79f3ad83,0xa9e67c6f,0xa91dc96c)
   ALTROM(65, 1, 2, 65536, ROMTYPE_ODD |ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0xdfb9984b,0x8d6bdd49,0x469ec8e2,0x0143fbb3,0x72e92500,0x99f07910)
-	{ _T("Freezer: X-Power Professional 500 v1.3"), 1, 2, 1, 2, _T("XPOWER\0"), 131072, 68, 0, 0, ROMTYPE_XPOWER, 0, 1, NULL,
+	{ _T("Freezer: X-Power Professional 500 v1.3"), 1, 3, 1, 3, _T("XPOWER\0"), 131072, 68, 0, 0, ROMTYPE_XPOWER, 0, 1, NULL,
 	0x31e057f0, 0x84650266,0x465d1859,0x7fd71dee,0x00775930,0xb7e450ee },
   ALTROM(68, 1, 1, 65536, ROMTYPE_EVEN|ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0x0b2ce0c7,0x45ad5456,0x89192404,0x956f47ce,0xf66a5274,0x57ace33b)
   ALTROM(68, 1, 2, 65536, ROMTYPE_ODD |ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0x34580c35,0x8ad42566,0x7364f238,0x978f4381,0x08f8d5ec,0x470e72ea)
@@ -261,46 +268,59 @@ static struct romdata roms[] = {
 	{ _T("Freezer: Nordic Power v3.0"), 3, 0, 3, 0, _T("NPOWER\0"), 65536, 70, 0, 0, ROMTYPE_NORDIC, 0, 1, NULL,
 	0x72850aef, 0x59c91d1f,0xa8f118f9,0x0bdba05a,0x9ae788d7,0x7a6cc7c9 },
   ALTROM(70, 1, 1, 32768, ROMTYPE_EVEN|ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0xf3330e1f,0x3a597db2,0xb7d11b6c,0xb8e13496,0xc215f223,0x88c4ca3c)
-  ALTROM(70, 1, 2, 32768, ROMTYPE_EVEN|ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0xee58e0f9,0x4148f4cb,0xb42cec33,0x8ca144de,0xd4f54118,0xe0f185dd)
+	ALTROM(70, 1, 2, 32768, ROMTYPE_ODD |ROMTYPE_SCRAMBLED|ROMTYPE_8BIT, 0xee58e0f9,0x4148f4cb,0xb42cec33,0x8ca144de,0xd4f54118,0xe0f185dd)
 	{ _T("Freezer: HRTMon v2.33 (built-in)"), 0, 0, 0, 0, _T("HRTMON\0"), 0, 63, 0, 0, ROMTYPE_HRTMON, 0, 1, NULL,
 	0xffffffff, 0, 0, 0, 0, 0, _T("HRTMon") },
 
-	{ _T("A590/A2091 SCSI boot ROM"), 6, 0, 6, 0, _T("A590\0A2091\0"), 16384, 53, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
+	{ _T("A590/A2091 ROM 6.0"), 6, 0, 6, 0, _T("A590\0A2091\0"), 16384, 53, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
 	0x8396cf4e, 0x5E03BC61,0x8C862ABE,0x7BF79723,0xB4EEF4D2,0x1859A0F2 },
 	ALTROMPN(53, 1, 1, 8192, ROMTYPE_ODD  | ROMTYPE_8BIT, _T("390389-03"), 0xb0b8cf24,0xfcf40175,0x05f4d441,0x814b45d5,0x59c19eab,0x43816b30)
 	ALTROMPN(53, 1, 2, 8192, ROMTYPE_EVEN | ROMTYPE_8BIT, _T("390388-03"), 0x2e77bbff,0x8a098845,0x068f32cf,0xa4d34a27,0x8cd290f6,0x1d35a52c)
-	{ _T("A590/A2091 SCSI boot ROM"), 6, 6, 6, 6, _T("A590\0A2091\0"), 16384, 54, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
+	{ _T("A590/A2091 ROM 6.6"), 6, 6, 6, 6, _T("A590\0A2091\0"), 16384, 54, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
 	0x33e00a7a, 0x739BB828,0xE874F064,0x9360F59D,0x26B5ED3F,0xBC99BB66 },
 	ALTROMPN(54, 1, 1, 8192, ROMTYPE_ODD  | ROMTYPE_8BIT, _T("390722-02"), 0xe536bbb2,0xfd7f8a6d,0xa18c1b02,0xd07eb990,0xc2467a24,0x183ede12)
 	ALTROMPN(54, 1, 2, 8192, ROMTYPE_EVEN | ROMTYPE_8BIT, _T("390721-02"), 0xc0871d25,0xe155f18a,0xbb90cf82,0x0589c15e,0x70559d3b,0x6b391af8)
-	{ _T("A590/A2091 SCSI boot ROM"), 7, 0, 7, 0, _T("A590\0A2091\0"), 16384, 55, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
+	{ _T("A590/A2091 ROM 7.0"), 7, 0, 7, 0, _T("A590\0A2091\0"), 16384, 55, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
 	0x714a97a2, 0xE50F01BA,0xF2899892,0x85547863,0x72A82C33,0x3C91276E },
 	ALTROMPN(55, 1, 1, 8192, ROMTYPE_ODD  | ROMTYPE_8BIT, _T("390722-03"), 0xa9ccffed,0x149f5bd5,0x2e2d2990,0x4e3de483,0xb9ad7724,0x48e9278e)
 	ALTROMPN(55, 1, 2, 8192, ROMTYPE_EVEN | ROMTYPE_8BIT, _T("390721-03"), 0x2942747a,0xdbd7648e,0x79c75333,0x7ff3e4f4,0x91de224b,0xf05e6bb6)
-	{ _T("A590/A2091 SCSI Guru boot ROM"), 6, 14, 6, 14, _T("A590\0A2091\0"), 32768, 56, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
+	{ _T("A590/A2091 Guru ROM 6.14"), 6, 14, 6, 14, _T("A590\0A2091\0"), 32768, 56, 0, 0, ROMTYPE_A2091BOOT, 0, 0, NULL,
 	0x04e52f93, 0x6DA21B6F,0x5E8F8837,0xD64507CD,0x8A4D5CDC,0xAC4F426B },
-	{ _T("A4091 SCSI boot ROM"), 40, 9, 40, 9, _T("A4091\0"), 32768, 57, 0, 0, ROMTYPE_A4091BOOT, 0, 0, NULL,
+	{ _T("A4091 ROM 40.9"), 40, 9, 40, 9, _T("A4091\0"), 32768, 57, 0, 0, ROMTYPE_A4091BOOT, 0, 0, NULL,
 	0x00000000, 0, 0, 0, 0, 0 },
-	{ _T("A4091 SCSI boot ROM"), 40, 13, 40, 13, _T("A4091\0"), 32768, 58, 0, 0, ROMTYPE_A4091BOOT, 0, 0, _T("391592-02"),
+	{ _T("A4091 ROM 40.13"), 40, 13, 40, 13, _T("A4091\0"), 32768, 58, 0, 0, ROMTYPE_A4091BOOT, 0, 0, _T("391592-02"),
 	0x54cb9e85, 0x3CE66919,0xF6FD6797,0x4923A12D,0x91B730F1,0xFFB4A7BA },
 
 	{ _T("Arcadia OnePlay 2.11"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 49, 0, 0, ROMTYPE_ARCADIABIOS, 0, 0 },
 	{ _T("Arcadia TenPlay 2.11"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 50, 0, 0, ROMTYPE_ARCADIABIOS, 0, 0 },
+	{ _T("Arcadia TenPlay 2.20"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 75, 0, 0, ROMTYPE_ARCADIABIOS, 0, 0 },
 	{ _T("Arcadia OnePlay 3.00"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 51, 0, 0, ROMTYPE_ARCADIABIOS, 0, 0 },
+	{ _T("Arcadia TenPlay 3.11"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 76, 0, 0, ROMTYPE_ARCADIABIOS, 0, 0 },
+	{ _T("Arcadia TenPlay 4.00"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 77, 0, 0, ROMTYPE_ARCADIABIOS, 0, 0 },
 
-	{ _T("Arcadia SportTime Table Hockey"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 33, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia SportTime Bowling"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 34, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia World Darts"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 35, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Magic Johnson's Fast Break"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 36, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Leader Board Golf"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 37, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Leader Board Golf (alt)"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 38, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Ninja Mission"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 39, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Road Wars"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 40, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Sidewinder"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 41, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Spot"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 42, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Space Ranger"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 43, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia Xenon"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 44, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
-	{ _T("Arcadia World Trophy Soccer"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 45, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia SportTime Table Hockey v2.1"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 33, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia SportTime Bowling v2.1"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 34, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia World Darts v2.1"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 35, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Magic Johnson's Fast Break v2.8"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 36, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Leader Board Golf v2.4"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 37, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Leader Board Golf"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 38, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Ninja Mission v2.5"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 39, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Road Wars v2.3"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 40, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Sidewinder v2.1"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 41, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Spot v2.0"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 42, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Space Ranger v2.0"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 43, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Xenon v2.3"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 44, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia World Trophy Soccer v3.0"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 45, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Blastaball v2.1"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 78, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Delta Command"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 79, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Pharaohs Match"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 80, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia SportTime Table Hockey"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 81, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia World Darts (bad)"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 82, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Magic Johnson's Fast Break v2.7"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 83, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Ninja Mission"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 84, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Sidewinder"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 85, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Leader Board Golf v2.5"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 86, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
+	{ _T("Arcadia Aaargh"), 0, 0, 0, 0, _T("ARCADIA\0"), 0, 88, 0, 0, ROMTYPE_ARCADIAGAME, 0, 2 },
 
   { NULL }
 };
@@ -376,10 +396,12 @@ static void romlist_cleanup (void)
   	}
   	i++;
   }
+#if 0
   for (i = 0; i < romlist_cnt; i++) {
   	struct romlist *rll = &rl[i];
-		//write_log (_T("%s (%s)\n"), rll->rd->name, rll->path);
+		write_log (_T("%d: %08x %s (%s)\n"), rll->rd->id, rll->rd->group, rll->rd->name, rll->path);
   }
+#endif
 }
 
 struct romlist **getromlistbyident (int ver, int rev, int subver, int subrev, const TCHAR *model, int romflags, bool all)
@@ -735,15 +757,27 @@ STATIC_INLINE int notcrc32(uae_u32 crc32)
   return 0;
 }
 
-struct romdata *getromdatabycrc (uae_u32 crc32)
+struct romdata *getromdatabycrc (uae_u32 crc32, bool allowgroup)
 {
   int i = 0;
   while (roms[i].name) {
   	if (roms[i].group == 0 && crc32 == roms[i].crc32 && !notcrc32(crc32))
 	    return &roms[i];
   	i++;
+	}
+	if (allowgroup) {
+		i = 0;
+		while (roms[i].name) {
+			if (roms[i].group && crc32 == roms[i].crc32 && !notcrc32(crc32))
+				return &roms[i];
+			i++;
+		}
   }
   return 0;
+}
+struct romdata *getromdatabycrc (uae_u32 crc32)
+{
+	return getromdatabycrc (crc32, false);
 }
 
 static int cmpsha1 (const uae_u8 *s1, const struct romdata *rd)
@@ -867,6 +901,16 @@ struct romdata *getromdatabydata (uae_u8 *rom, int size)
   	rom = tmpbuf;
   	size = tmpsize;
   }
+#if 0
+	if (size > 0x6c + 524288 && !memcmp (rom, "AMIG", 4)) {
+		uae_u8 *tmpbuf = (uae_u8*)xmalloc (uae_u8, size);
+		int tmpsize = size - 0x6c;
+		memcpy (tmpbuf, rom + 0x6c, tmpsize);
+		decode_rom (tmpbuf, tmpsize, 2, tmpsize);
+		rom = tmpbuf;
+		size = tmpsize;
+	}
+#endif
   get_sha1 (rom, size, sha1);
   ret = checkromdata(sha1, size, -1);
   if (!ret) {
@@ -963,12 +1007,14 @@ void romwarning (const int *ids)
 	i = 0;
 	while (ids[i] >= 0) {
 		struct romdata *rd = getromdatabyid (ids[i]);
-		getromname (rd, tmp1);
-		_tcscat (tmp2, _T("- "));
-		_tcscat (tmp2, tmp1);
-		_tcscat (tmp2, _T("\n"));
-		if (rd->type & (ROMTYPE_A2091BOOT | ROMTYPE_A4091BOOT))
-			exp++;
+		if (!(rd->type & ROMTYPE_NONE)) {
+		  getromname (rd, tmp1);
+		  _tcscat (tmp2, _T("- "));
+		  _tcscat (tmp2, tmp1);
+		  _tcscat (tmp2, _T("\n"));
+		  if (rd->type & (ROMTYPE_A2091BOOT | ROMTYPE_A4091BOOT))
+			  exp++;
+		}
 		i++;
   }
 	translate_message (exp ? NUMSG_EXPROMNEED : NUMSG_ROMNEED, tmp3);
@@ -1048,10 +1094,10 @@ static int read_rom_file (uae_u8 *buf, const struct romdata *rd)
   return 1;
 }
 
-struct zfile *read_rom (struct romdata **prd)
+struct zfile *read_rom (struct romdata *prd)
 {
-  struct romdata *rd2 = *prd;
-  struct romdata *rd = *prd;
+	struct romdata *rd2 = prd;
+	struct romdata *rd = prd;
   TCHAR *name;
   int id = rd->id;
   uae_u32 crc32;
@@ -1066,7 +1112,6 @@ struct zfile *read_rom (struct romdata **prd)
 	    break;
   	rd2--;
   }
-  *prd = rd2;
   size = rd2->size;
   crc32 = rd2->crc32;
   name = rd->name;
@@ -1186,7 +1231,7 @@ struct zfile *read_rom_name (const TCHAR *filename)
   for (i = 0; i < romlist_cnt; i++) {
   	if (!_tcsicmp (filename, rl[i].path)) {
 	    struct romdata *rd = rl[i].rd;
-	    f = read_rom (&rd);
+			f = read_rom (rd);
 	    if (f)
     		return f;
   	}
@@ -1243,7 +1288,7 @@ struct zfile *read_rom_name_guess (const TCHAR *filename)
 			continue;
 		if (!_tcsicmp (name, n + j)) {
 			struct romdata *rd = rl[i].rd;
-			f = read_rom (&rd);
+			f = read_rom (rd);
 			if (f) {
 				write_log (_T("ROM %s not found, using %s\n"), filename, rl[i].path);
 				return f;

@@ -1,28 +1,4 @@
 /*
- * build68k.c - m68k CPU builder
- *
- * Copyright (c) 2001-2004 Milan Jurik of ARAnyM dev team (see AUTHORS)
- * 
- * Inspired by Christian Bauer's Basilisk II
- *
- * This file is part of the ARAnyM project which builds a new and powerful
- * TOS/FreeMiNT compatible virtual machine running on almost any hardware.
- *
- * ARAnyM is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * ARAnyM is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with ARAnyM; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- */
-/*
  * UAE - The Un*x Amiga Emulator
  *
  * Read 68000 CPU specs from file "table68k" and build table68k.c
@@ -30,6 +6,8 @@
  * Copyright 1995,1996 Bernd Schmidt
  */
 
+#include <stdlib.h>
+#include <tchar.h>
 #include <assert.h>
 #include <ctype.h>
 
@@ -37,6 +15,7 @@
 
 #include "sysconfig.h"
 #include "sysdeps.h"
+
 
 #include "readcpu.h"
 
@@ -108,6 +87,8 @@ int main(int argc, char **argv)
 
 	unsigned int bitmask,bitpattern;
 	int n_variable;
+
+	int head = 0, tail = 0, clocks = 0, fetchmode = 0;
 
 	n_variable = 0;
 	bitmask = bitpattern = 0;
@@ -271,6 +252,60 @@ int main(int argc, char **argv)
 
 	fgets(opcstr, 250, tablef);
 	getnextch();
+
+	if (nextch == '-') {
+		int neg;
+		char fm[20];
+		getnextch();
+		while (isspace(nextch))
+			getnextch();
+		neg = 1;
+		if (nextch == '-') {
+			neg = -1;
+			getnextch();
+		}
+		for (;;) {
+			if (nextch < '0' || nextch > '9')
+				break;
+			head *= 10;
+			head += nextch - '0';
+			nextch = fgetc (tablef);
+		}
+		head *= neg;
+		while (isspace(nextch))
+			getnextch();
+		for (;;) {
+			if (nextch < '0' || nextch > '9')
+				break;
+			tail *= 10;
+			tail += nextch - '0';
+			nextch = fgetc (tablef);
+		}
+		while (isspace(nextch))
+			getnextch();
+		for (;;) {
+			if (nextch < '0' || nextch > '9')
+				break;
+			clocks *= 10;
+			clocks += nextch - '0';
+			nextch = fgetc (tablef);
+		}
+		if (nextch == ' ') {
+			fgets(fm, sizeof fm, tablef);
+			if (!strnicmp(fm, "fea", 3))
+				fetchmode = 1;
+			if (!strnicmp(fm, "cea", 3))
+				fetchmode = 2;
+			if (!strnicmp(fm, "fiea", 4))
+				fetchmode = 3;
+			if (!strnicmp(fm, "ciea", 4))
+				fetchmode = 4;
+			if (!strnicmp(fm, "jea", 3))
+				fetchmode = 5;
+		}
+		getnextch();
+	}
+
 	{
 	    int j;
 	    /* Remove superfluous spaces from the string */
@@ -308,7 +343,7 @@ int main(int argc, char **argv)
 	    for(i = 0; i < 5; i++) {
 		printf("{%d,%d}%s", flaguse[i], flagset[i], i == 4 ? "" : ",");
 	    }
-	    printf("}, %2d, %2d,_T(\"%s\")}", cflow, sduse, opstrp);
+	    printf("}, %2d, %2d,_T(\"%s\"),%2d,%2d,%2d,%2d}", cflow, sduse, opstrp, head, tail, clocks, fetchmode);
 	}
     }
     printf("};\nint n_defs68k = %d;\n", no_insns);

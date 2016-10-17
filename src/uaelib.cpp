@@ -17,8 +17,8 @@
 #include "options.h"
 #include "uae.h"
 #include "memory-uae.h"
-#include "newcpu.h"
 #include "custom.h"
+#include "newcpu.h"
 #include "xwin.h"
 #include "autoconf.h"
 #include "traps.h"
@@ -182,9 +182,9 @@ static uae_u32 emulib_InsertDisk (uaecptr name, uae_u32 drive)
  */
 static uae_u32 emulib_ExitEmu (void)
 {
-    gui_message("Amiga sent signal to quit emulator.");
-    uae_quit ();
-    return 1;
+  gui_message("Amiga sent signal to quit emulator.");
+  uae_quit ();
+  return 1;
 }
 
 /*
@@ -195,9 +195,9 @@ static uae_u32 emulib_GetUaeConfig (uaecptr place)
 	int i, j;
 
   put_long (place, version);
-  put_long (place + 4, allocated_chipmem);
-  put_long (place + 8, allocated_bogomem);
-  put_long (place + 12, allocated_fastmem);
+  put_long (place + 4, chipmem_bank.allocated);
+	put_long (place + 8, bogomem_bank.allocated);
+  put_long (place + 12, fastmem_bank.allocated);
   put_long (place + 16, currprefs.gfx_framerate);
   put_long (place + 20, currprefs.produce_sound);
   put_long (place + 24, currprefs.jports[0].id | (currprefs.jports[1].id << 8));

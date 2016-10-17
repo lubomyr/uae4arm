@@ -120,6 +120,9 @@ static bool cpuSpeedChanged = false;
 static int lastCpuSpeed = 600;
 int defaultCpuSpeed = 600;
 
+int max_uae_width;
+int max_uae_height;
+
 
 extern "C" int main( int argc, char *argv[] );
 
@@ -188,12 +191,12 @@ void reinit_amiga(void)
 }
 
 
-void sleep_millis (int ms)
+void sleep_millis_main (int ms)
 {
   usleep(ms * 1000);
 }
 
-void sleep_millis_busy (int ms)
+void sleep_millis (int ms)
 {
   usleep(ms * 1000);
 }
@@ -285,7 +288,6 @@ void target_quit (void)
 void target_fixup_options (struct uae_prefs *p)
 {
 	p->rtgmem_type = 1;
-  gfxmem_start = rtg_start_adr;
   if (p->z3fastmem_start != z3_start_adr)
   	p->z3fastmem_start = z3_start_adr;
 
@@ -933,6 +935,9 @@ int main (int argc, char *argv[])
 {
   struct sigaction action;
   
+	max_uae_width = 768;
+	max_uae_height = 270;
+
   defaultCpuSpeed = getDefaultCpuSpeed();
   
   // Get startup path
@@ -986,6 +991,8 @@ int handle_msgpump (void)
   SDL_Event rEvent;
   int keycode;
   int modifier;
+  int handled = 0;
+  int i;
   
   if(delayed_mousebutton) {
     --delayed_mousebutton;
@@ -1110,20 +1117,147 @@ int handle_msgpump (void)
   				      break;
   				    }
   				  }
-  				  else
   				    
-  				  modifier = rEvent.key.keysym.mod;
-  				  keycode = translate_pandora_keys(rEvent.key.keysym.sym, &modifier);
-  				  if(keycode)
-  				  {
-				      if(modifier == KMOD_SHIFT)
-  				      inputdevice_do_keyboard(AK_LSH, 1);
-  				    else
-  				      inputdevice_do_keyboard(AK_LSH, 0);
-				      inputdevice_do_keyboard(keycode, 1);
-  				  } else {
-				      inputdevice_translatekeycode(0, rEvent.key.keysym.sym, 1);
+				    // Handle Pandora specific functions
+				    if(rEvent.key.keysym.mod == (KMOD_RCTRL | KMOD_RSHIFT)) {
+              // Left and right shoulder
+  				    switch(rEvent.key.keysym.sym) {
+  				      case SDLK_UP:  // Left and right shoulder + UP -> move display up
+  				        moveVertical(1);
+  				        handled = 1;
+  				        break;
+  				        
+  				      case SDLK_DOWN:  // Left and right shoulder + DOWN -> move display down
+  				        moveVertical(-1);
+  				        handled = 1;
+  				        break;
+  				        
+  				      case SDLK_1:
+  				      case SDLK_2:
+  				      case SDLK_3:
+  				      case SDLK_4:
+  				      case SDLK_5:
+  				      case SDLK_6:
+  				        // Change display height direct
+  				        changed_prefs.gfx_size.height = amigaheight_values[rEvent.key.keysym.sym - SDLK_1];
+  				        update_display(&changed_prefs);
+  				        handled = 1;
+  				        break;
+
+                case SDLK_9:  // Select next lower display height
+            			for(i=0; i<AMIGAHEIGHT_COUNT; ++i)
+            			{
+            			  if(currprefs.gfx_size.height == amigaheight_values[i])
+            		    {
+            		      if(i > 0)
+            		        changed_prefs.gfx_size.height = amigaheight_values[i - 1];
+            		      else
+            		        changed_prefs.gfx_size.height = amigaheight_values[AMIGAHEIGHT_COUNT - 1];
+            		      break;
+            		    }
+            			}
+            			update_display(&changed_prefs);
+  				        handled = 1;
+  				        break;
+
+                case SDLK_0:  // Select next higher display height
+            			for(i=0; i<AMIGAHEIGHT_COUNT; ++i)
+            			{
+            			  if(currprefs.gfx_size.height == amigaheight_values[i])
+            		    {
+            		      if(i < AMIGAHEIGHT_COUNT - 1)
+            		        changed_prefs.gfx_size.height = amigaheight_values[i + 1];
+            		      else
+            		        changed_prefs.gfx_size.height = amigaheight_values[0];
+            		      break;
+            		    }
+            			}
+            			update_display(&changed_prefs);
+  				        handled = 1;
+  				        break;
+
+                case SDLK_w:  // Select next display width
+            			for(i=0; i<AMIGAWIDTH_COUNT; ++i)
+            			{
+            			  if(currprefs.gfx_size.width == amigawidth_values[i])
+            		    {
+            		      if(i < AMIGAWIDTH_COUNT - 1)
+            		        changed_prefs.gfx_size.width = amigawidth_values[i + 1];
+            		      else
+            		        changed_prefs.gfx_size.width = amigawidth_values[0];
+            		      break;
+            		    }
+            			}
+            			update_display(&changed_prefs);
+  				        handled = 1;
+  				        break;
+
+                case SDLK_r:
+            		  // Toggle resolution (lores/hires)
+            		  if(currprefs.gfx_size.width > 600)
+            		    changed_prefs.gfx_size.width = currprefs.gfx_size.width / 2;
+            		  else
+            		    changed_prefs.gfx_size.width = currprefs.gfx_size.width * 2;
+            			update_display(&changed_prefs);
+  				        handled = 1;
+  				        break;
+
+              }              
+            }
+				    else if(rEvent.key.keysym.mod == KMOD_RSHIFT)
+			      {
+			        // Left shoulder
+  				    switch(rEvent.key.keysym.sym) {
+  				      case SDLK_c:  // Left shoulder + c -> toggle "Custom control"
+  				        currprefs.pandora_customControls = !currprefs.pandora_customControls;
+  				        changed_prefs.pandora_customControls = currprefs.pandora_customControls;
+  				        handled = 1;
+  				        break;
+  				        
+  				      case SDLK_d:  // Left shoulder + d -> toggle "Status line"
+  			          changed_prefs.leds_on_screen = !changed_prefs.leds_on_screen;
+  				        handled = 1;
+  				        break;
+  				        
+  				      case SDLK_f:  // Left shoulder + f -> toggle frameskip
+  				        changed_prefs.gfx_framerate ? changed_prefs.gfx_framerate = 0 : changed_prefs.gfx_framerate = 1;
+  				        handled = 1;
+				          break;
+				          
+				        case SDLK_s:  // Left shoulder + s -> store savestate
+				          savestate_state = STATE_DOSAVE;
+  				        handled = 1;
+				          break;
+				          
+				        case SDLK_l:  // Left shoulder + l -> load savestate
+                	{
+                		FILE *f=fopen(savestate_fname, "rb");
+                		if(f)
+                		{
+                			fclose(f);
+                			savestate_state = STATE_DORESTORE;
+                		}
+                	}
+  				        handled = 1;
+                	break;
+  			      }
 				    }
+
+            if(!handled) {
+    				  modifier = rEvent.key.keysym.mod;
+    				  keycode = translate_pandora_keys(rEvent.key.keysym.sym, &modifier);
+    				  if(keycode)
+    				  {
+  				      if(modifier == KMOD_SHIFT)
+    				      inputdevice_do_keyboard(AK_LSH, 1);
+    				    else
+    				      inputdevice_do_keyboard(AK_LSH, 0);
+  				      inputdevice_do_keyboard(keycode, 1);
+    				  } else {
+  				      inputdevice_translatekeycode(0, rEvent.key.keysym.sym, 1);
+  				    }
+            }
+            				    				  
   				  break;
 				}
         break;
@@ -1299,13 +1433,6 @@ int handle_msgpump (void)
 		}
 	}
 	return got;
-}
-
-
-void handle_events (void)
-{
-  /* Handle GUI events */
-  gui_handle_events ();
 }
 
 

@@ -1,3 +1,0 @@
-Bugs:
-
-Sound in picasso96 mode works incorrect.

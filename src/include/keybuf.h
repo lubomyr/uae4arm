@@ -12,4 +12,3 @@ extern int keys_available (void);
 extern int record_key (int);
 extern void keybuf_init (void);
 extern int getcapslockstate (void);
-extern void setcapslockstate (int);

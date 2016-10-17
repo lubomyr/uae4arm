@@ -6,7 +6,7 @@ ifeq ($(PLATFORM),android)
 	CPU_FLAGS += -mfpu=neon -mfloat-abi=soft
 	DEFS += -DANDROIDSDL
 	ANDROID = 1
-#	HAVE_NEON = 1
+	HAVE_NEON = 1
 	HAVE_SDL_DISPLAY = 1
 	USE_PICASSO96 = 1
 else ifeq ($(PLATFORM),rpi2)
@@ -49,7 +49,7 @@ PANDORA=1
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DARMV6T2 -DGP2X -DPANDORA -DWITH_INGAME_WARNING
+DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DARMV6T2 -DPANDORA -DWITH_INGAME_WARNING
 DEFS += -DUSE_SDL
 
 ifeq ($(USE_PICASSO96), 1)
@@ -62,15 +62,15 @@ endif
 
 MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
 
-MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/od-pandora -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -DUSE_SDL
+MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/od-pandora -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -Wno-narrowing -DUSE_SDL
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
 #LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
-MORE_CFLAGS += -Ofast -pipe -ftree-vectorize -fsingle-precision-constant
+MORE_CFLAGS += -Ofast -pipe -fsingle-precision-constant
 MORE_CFLAGS += -fweb -frename-registers
-MORE_CFLAGS += -fipa-pta -fgcse-las
+MORE_CFLAGS += -fipa-pta -fgcse-las -funroll-loops -ftracer -funswitch-loops
 
 # Using -flto and -fipa-pta generates an error with gcc5.2 (??? and -lto alone generates slower code ???)
 #MORE_CFLAGS += -flto=4 -fuse-linker-plugin
@@ -85,10 +85,10 @@ endif
 endif
 
 ifdef GEN_PROFILE
-MORE_CFLAGS += -fprofile-generate=/storage/sdcard0/profile/ -fprofile-arcs
+MORE_CFLAGS += -fprofile-generate=/storage/sdcard0/profile/ -fprofile-arcs -fvpt
 endif
 ifdef USE_PROFILE
-MORE_CFLAGS += -fprofile-use -fbranch-probabilities -fvpt -funroll-loops -fpeel-loops -ftracer -ftree-loop-distribute-patterns
+MORE_CFLAGS += -fprofile-use -fbranch-probabilities -fvpt
 endif
 
 ASFLAGS += $(CPU_FLAGS)
@@ -125,6 +125,7 @@ OBJS =	\
 	src/fsdb.o \
 	src/fsdb_unix.o \
 	src/fsusage.o \
+	src/gfxboard.o \
 	src/gfxutil.o \
 	src/hardfile.o \
 	src/inputdevice.o \
@@ -256,10 +257,11 @@ ifeq ($(USE_PICASSO96), 1)
 endif
 
 ifeq ($(HAVE_NEON), 1)
-	OBJS += src/osdep/neon_helper.o
+#	OBJS += src/osdep/neon_helper.o
 endif
 
 OBJS += src/newcpu.o
+OBJS += src/newcpu_common.o
 OBJS += src/readcpu.o
 OBJS += src/cpudefs.o
 OBJS += src/cpustbl.o
@@ -325,6 +327,7 @@ ASMS = \
 	src/osdep/sigsegv_handler.s \
 	src/sounddep/sound.s \
 	src/newcpu.s \
+	src/newcpu_common.s \
 	src/readcpu.s \
 	src/cpudefs.s \
 	src/cpustbl.s \

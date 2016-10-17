@@ -39,7 +39,7 @@ STATIC_INLINE bool isaudio(void)
   return currprefs.produce_sound != 0;
 }
 
-STATIC_INLINE bool usehacks1 (void)
+STATIC_INLINE bool usehacks (void)
 {
 	return currprefs.cpu_model >= 68020 || currprefs.m68k_speed != 0;
 }
@@ -80,6 +80,7 @@ struct audio_channel_data{
 	uaecptr ptx;
 	bool ptx_written;
 	bool ptx_tofetch;
+	int dmaofftime_active;
 };
 
 static struct audio_channel_data audio_channel[4];
@@ -717,6 +718,7 @@ static void zerostate (int nr)
   cdp->evtime = MAX_EV;
 	cdp->intreq2 = 0;
 	cdp->dmaenstore = false;
+	cdp->dmaofftime_active = 0;
 }
 
 static void schedule_audio (void)
@@ -752,10 +754,11 @@ static void audio_event_reset (void)
 	events_schedule ();
 }
 
-static void audio_deactivate(void)
+void audio_deactivate(void)
 {
   gui_data.sndbuf_status = 3;
   gui_data.sndbuf = 0;
+	audio_work_to_do = 0;
 	pause_sound_buffer ();
   clear_sound_buffers();
   audio_event_reset();
@@ -875,14 +878,20 @@ static void audio_state_channel2 (int nr, bool perfin)
 	}
 	audio_activate ();
 
-	if ((cdp->state == 2 || cdp->state == 3) && usehacks1 () && !chan_ena && old_dma) {
-		// DMA switched off, state=2/3 and "too fast CPU": kill DMA instantly
-		// or CPU timed DMA wait routines in common tracker players will lose notes
-		newsample (nr, (cdp->dat2 >> 0) & 0xff);
-		if (napnav)
-			setirq (nr, 91);
-		zerostate (nr);
-		return;
+	if ((cdp->state == 2 || cdp->state == 3) && usehacks()) {
+    if (!chan_ena && old_dma) {
+		// DMA switched off, state=2/3 and "too fast CPU":  set flag
+			cdp->dmaofftime_active = true;
+		}
+		if (cdp->dmaofftime_active && !old_dma && chan_ena) {
+			// We are still in state=2/3 and program is going to re-enable
+			// DMA. Force state to zero to prevent CPU timed DMA wait
+			// routines in common tracker players to lose notes.
+		  newsample (nr, (cdp->dat2 >> 0) & 0xff);
+//		  if (napnav)
+//		  	setirq (nr, 91);
+		  zerostate (nr);
+		}
 	}
 
 	switch (cdp->state)
@@ -904,7 +913,7 @@ static void audio_state_channel2 (int nr, bool perfin)
 			cdp->state = 2;
 			setirq (nr, 0);
 			loaddat (nr);
-			if (usehacks1 () && cdp->per < 10 * CYCLE_UNIT) {
+			if (usehacks() && cdp->per < 10 * CYCLE_UNIT) {
 				// make sure audio.device AUDxDAT startup returns to idle state before DMA is enabled
 				newsample (nr, (cdp->dat2 >> 0) & 0xff);
 				zerostate (nr);
@@ -1360,7 +1369,7 @@ void AUDxLCH (int nr, uae_u16 v)
   update_audio ();
 	// someone wants to update PT but DSR has not yet been processed.
 	// too fast CPU and some tracker players: enable DMA, CPU delay, update AUDxPT with loop position
-	if (usehacks1 () && ((cdp->ptx_tofetch && cdp->state == 1) || cdp->ptx_written)) {
+	if (usehacks() && ((cdp->ptx_tofetch && cdp->state == 1) || cdp->ptx_written)) {
 		cdp->ptx = cdp->lc;
 		cdp->ptx_written = true;
 	} else {
@@ -1373,7 +1382,7 @@ void AUDxLCL (int nr, uae_u16 v)
 	struct audio_channel_data *cdp = audio_channel + nr;
   audio_activate();
   update_audio ();
-	if (usehacks1 () && ((cdp->ptx_tofetch && cdp->state == 1) || cdp->ptx_written)) {
+	if (usehacks() && ((cdp->ptx_tofetch && cdp->state == 1) || cdp->ptx_written)) {
 		cdp->ptx = cdp->lc;
 		cdp->ptx_written = true;
 	} else {
@@ -1506,7 +1515,7 @@ uae_u8 *save_audio (int nr, int *len, uae_u8 *dstptr)
 	save_u8 (acd->state);
   save_u8 (acd->vol);
   save_u8 (acd->intreq2);
-	save_u8 ((acd->dr ? 1 : 0) | (acd->dsr ? 2 : 0));
+	save_u8 ((acd->dr ? 1 : 0) | (acd->dsr ? 2 : 0) | 0x80);
   save_u16 (acd->len);
   save_u16 (acd->wlen);
 	save_u16 (acd->per == PERIOD_MAX ? 0 : acd->per / CYCLE_UNIT);

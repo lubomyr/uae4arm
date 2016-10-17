@@ -43,27 +43,11 @@ static int cdrdcnt = 0;
 static int have_sound = 0;
 static int lastfreq;
 
-void update_sound (int freq, int lof)
+void update_sound (float clk)
 {
-  float lines = maxvpos_nom;
-	float hpos = maxhpos;
   float evtime;
-
-  if (freq < 0)
-  	freq = lastfreq;
-  lastfreq = freq;
-
-	if (currprefs.ntscmode) {
-		hpos += 0.5;
-		lines += 0.5;
-	} else {
-  	if (lof < 0)
-  		lines += 0.5;
-    else if(lof > 0)
-      lines += 1.0;
-  }
   
-  evtime = hpos * lines * freq * CYCLE_UNIT / (float)currprefs.sound_freq;
+  evtime = clk * CYCLE_UNIT / (float)currprefs.sound_freq;
 	scaled_sample_evtime = (int)evtime;
 }
 

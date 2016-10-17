@@ -12,8 +12,6 @@
 #include <sys/mman.h>
 #include <SDL.h>
 
-extern uae_u8 *extendedkickmemory2;
-
 
 uae_u8* natmem_offset = 0;
 uae_u32 natmem_size;
@@ -150,13 +148,13 @@ static uae_u32 getz2rtgaddr (void)
 uae_u8 *mapped_malloc (size_t s, const char *file)
 {
   if(!strcmp(file, "chip"))
-    return natmem_offset;
+    return natmem_offset + chipmem_start_addr;
 
   if(!strcmp(file, "fast"))
     return natmem_offset + 0x200000;
 
   if(!strcmp(file, "bogo"))
-    return natmem_offset + bogomem_start;
+    return natmem_offset + bogomem_start_addr;
 
   if(!strcmp(file, "rom_f0"))
     return natmem_offset + 0xf00000;
@@ -168,21 +166,21 @@ uae_u8 *mapped_malloc (size_t s, const char *file)
     return natmem_offset + 0xa80000;
 
   if(!strcmp(file, "kick"))
-    return natmem_offset + kickmem_start;
+    return natmem_offset + kickmem_start_addr;
 
   if(!strcmp(file, "z3"))
     return natmem_offset + z3_start_adr; //z3fastmem_start;
 
   if(!strcmp(file, "z3_gfx"))
   {
-    p96ram_start = rtg_start_adr;
-    return natmem_offset + p96ram_start;
+    gfxmem_bank.start = rtg_start_adr;
+    return natmem_offset + rtg_start_adr;
   }
 
   if(!strcmp(file, "z2_gfx"))
   {
-    p96ram_start = getz2rtgaddr();
-    return natmem_offset + p96ram_start;
+    gfxmem_bank.start = getz2rtgaddr();
+    return natmem_offset + gfxmem_bank.start;
   }
 
   if(!strcmp(file, "rtarea"))
@@ -209,12 +207,12 @@ void protect_roms (bool protect)
 	}
 
   // Protect all regions, which contains ROM
-  if(extendedkickmemory != NULL)
-    mprotect(extendedkickmemory, 0x80000, protect ? PROT_READ : PROT_READ | PROT_WRITE);
-  if(extendedkickmemory2 != NULL)
-    mprotect(extendedkickmemory2, 0x80000, protect ? PROT_READ : PROT_READ | PROT_WRITE);
-  if(kickmemory != NULL)
-    mprotect(kickmemory, 0x80000, protect ? PROT_READ : PROT_READ | PROT_WRITE);
+  if(extendedkickmem_bank.baseaddr != NULL)
+    mprotect(extendedkickmem_bank.baseaddr, 0x80000, protect ? PROT_READ : PROT_READ | PROT_WRITE);
+  if(extendedkickmem2_bank.baseaddr != NULL)
+    mprotect(extendedkickmem2_bank.baseaddr, 0x80000, protect ? PROT_READ : PROT_READ | PROT_WRITE);
+  if(kickmem_bank.baseaddr != NULL)
+    mprotect(kickmem_bank.baseaddr, 0x80000, protect ? PROT_READ : PROT_READ | PROT_WRITE);
   if(rtarea != NULL)
     mprotect(rtarea, RTAREA_SIZE, protect ? PROT_READ : PROT_READ | PROT_WRITE);
   if(filesysory != NULL)

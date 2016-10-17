@@ -32,6 +32,7 @@ void resetCpuSpeed(void);
 void update_display(struct uae_prefs *);
 void black_screen_now(void);
 void graphics_subshutdown (void);
+void moveVertical(int value);
 
 void pandora_stop_sound(void);
 
@@ -52,6 +53,9 @@ void SimulateMouseOrJoy(int code, int keypressed);
 #define REMAP_CD32_PLAY           -11
 #define REMAP_CD32_FFW            -12
 #define REMAP_CD32_RWD            -13
+
+extern void free_AmigaMem(void);
+extern void alloc_AmigaMem(void);
 
 void reinit_amiga(void);
 int count_HDs(struct uae_prefs *p);
