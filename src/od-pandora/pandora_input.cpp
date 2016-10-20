@@ -378,17 +378,24 @@ static void read_joystick (void)
 
     int cd32_start = 0, cd32_ffw = 0, cd32_rwd = 0;
 #ifdef ANDROID
-    if(keystate[SDLK_F11]) { // Pandora Start button
-      if(keystate[SDLK_F13])  // Left shoulder
+    if(keystate[SDLK_RCTRL]) { 
+      if(keystate[SDLK_END])
+
+        cd32_rwd = 1;
+      else if (keystate[SDLK_HOME])
+        cd32_ffw = 1;
+      else
+        cd32_start = 1;
 #else
     if(keystate[SDLK_LALT]) { // Pandora Start button
       if(keystate[SDLK_RSHIFT])  // Left shoulder
-#endif
+
         cd32_rwd = 1;
       else if (keystate[SDLK_RCTRL]) // Right shoulder
         cd32_ffw = 1;
       else
         cd32_start = 1;
+#endif
     }
     if(!joyButXviaCustom[6])
       setjoybuttonstate (0, 6, cd32_start);
