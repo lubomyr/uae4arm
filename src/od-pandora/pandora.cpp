@@ -747,7 +747,7 @@ void loadAdfDir(void)
 	char path[MAX_DPATH];
   int i;
 #ifdef ANDROID
-	strcpy(currentDir, "/storage/");
+	strcpy(currentDir, getenv("SDCARD"));
 #else
 	strcpy(currentDir, start_path_data);
 #endif
