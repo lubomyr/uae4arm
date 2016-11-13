@@ -627,6 +627,8 @@ void RefreshAllPanels(void)
 
 void DisableResume(void)
 {
+// Disable resume button after loading config is very bad idea
+#ifndef ANDROID
 	if(emulating)
   {
     widgets::cmdStart->setEnabled(false);
@@ -636,6 +638,7 @@ void DisableResume(void)
     backCol.b = 128;
     widgets::cmdStart->setForegroundColor(backCol);
   }
+#endif
 }
 
 
