@@ -21,10 +21,6 @@
 #endif
 #include <SDL/SDL_ttf.h>
 
-#ifdef ANDROID
-#include <android/log.h>
-#endif
-
 #ifdef ANDROIDSDL
 #include <SDL_screenkeyboard.h>
 #endif
@@ -39,10 +35,13 @@
 #define OMAPFB_WAITFORVSYNC_FRAME _IOWR('O', 70, unsigned int)
 #endif
 
+
 /* SDL variable for output of emulation */
 SDL_Surface *prSDLScreen = NULL;
 static int fbdev = -1;
 static unsigned int current_vsync_frame = 0;
+unsigned long time_per_frame = 20000; // Default for PAL (50 Hz): 20000 microsecs
+static unsigned long last_synctime;
 
 /* Possible screen modes (x and y resolutions) */
 #ifdef ANDROID
@@ -83,6 +82,20 @@ int delay_savestate_frame = 0;
 
 static unsigned long next_synctime = 0;
 
+#ifdef ANDROID
+static pthread_mutex_t gfx_mutex =  PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
+#else
+static pthread_mutex_t gfx_mutex =  PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+#endif
+
+void gfx_lock (void)
+{
+	pthread_mutex_lock(&gfx_mutex);
+}
+void gfx_unlock (void)
+{
+	pthread_mutex_unlock(&gfx_mutex);
+}
 
 int graphics_setup (void)
 {
@@ -144,11 +157,11 @@ void RefreshLiveInfo()
 void InitAmigaVidMode(struct uae_prefs *p)
 {
 	/* Initialize structure for Amiga video modes */
-	gfxvidinfo.pixbytes = 2;
-	gfxvidinfo.bufmem = (uae_u8 *)prSDLScreen->pixels;
-  gfxvidinfo.outwidth = p->gfx_size.width;
-  gfxvidinfo.outheight = p->gfx_size.height;
-	gfxvidinfo.rowbytes = prSDLScreen->pitch;
+	gfxvidinfo.drawbuffer.pixbytes = 2;
+	gfxvidinfo.drawbuffer.bufmem = (uae_u8 *)prSDLScreen->pixels;
+  gfxvidinfo.drawbuffer.outwidth = p->gfx_size.width;
+  gfxvidinfo.drawbuffer.outheight = p->gfx_size.height;
+	gfxvidinfo.drawbuffer.rowbytes = prSDLScreen->pitch;
 }
 
 
@@ -167,7 +180,7 @@ void graphics_subshutdown (void)
 }
 
 
-static void CalcPandoraWidth(struct uae_prefs *p)
+static int CalcPandoraWidth(struct uae_prefs *p)
 {
   int amigaWidth = p->gfx_size.width;
   int amigaHeight = p->gfx_size.height;
@@ -182,7 +195,7 @@ static void CalcPandoraWidth(struct uae_prefs *p)
     pandWidth += 2;
   if(pandWidth > 800)
     pandWidth = 800;
-  p->gfx_size_fs.width = pandWidth;
+  return pandWidth;
 }
 
 #ifdef ANDROIDSDL
@@ -258,12 +271,8 @@ static void open_screen(struct uae_prefs *p)
   
   if(!screen_is_picasso)
   {
-    CalcPandoraWidth(p);
-
-	  snprintf(layersize, 20, "%dx480", p->gfx_size_fs.width);
-#ifndef WIN32
-  	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
-#endif
+    int layerwidth = CalcPandoraWidth(p);
+	  snprintf(layersize, 20, "%dx480", layerwidth);
   }
   else
   {
@@ -271,14 +280,12 @@ static void open_screen(struct uae_prefs *p)
 	    snprintf(layersize, 20, "%dx480", picasso_vidinfo.width);
 	  else
 	    snprintf(layersize, 20, "%dx%d", picasso_vidinfo.width, picasso_vidinfo.height);
-#ifndef WIN32
-  	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
-#endif
   }
 #ifndef WIN32
+	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
 	setenv("SDL_OMAP_VSYNC", "0", 1);
 #endif
-
+  
 #ifdef ANDROIDSDL
 	update_onscreen();
 #endif
@@ -297,10 +304,11 @@ static void open_screen(struct uae_prefs *p)
   else
   {
 #ifdef PICASSO96
+    if(picasso_vidinfo.width != 0 && picasso_vidinfo.height != 0)
 #ifdef ANDROIDSDL
-  	prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN);
+  	    prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN);
 #else
-  	prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_HWSURFACE|SDL_FULLSCREEN|SDL_DOUBLEBUF);
+    	prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_HWSURFACE|SDL_FULLSCREEN|SDL_DOUBLEBUF);
 #endif
 #endif
   }
@@ -339,13 +347,11 @@ int check_prefs_changed_gfx (void)
   
   if(currprefs.gfx_size.height != changed_prefs.gfx_size.height ||
      currprefs.gfx_size.width != changed_prefs.gfx_size.width ||
-     currprefs.gfx_size_fs.width != changed_prefs.gfx_size_fs.width ||
      currprefs.gfx_resolution != changed_prefs.gfx_resolution)
   {
   	cfgfile_configuration_change(1);
     currprefs.gfx_size.height = changed_prefs.gfx_size.height;
     currprefs.gfx_size.width = changed_prefs.gfx_size.width;
-    currprefs.gfx_size_fs.width = changed_prefs.gfx_size_fs.width;
     currprefs.gfx_resolution = changed_prefs.gfx_resolution;
     update_display(&currprefs);
     changed = 1;
@@ -362,19 +368,25 @@ int check_prefs_changed_gfx (void)
   if (currprefs.chipset_refreshrate != changed_prefs.chipset_refreshrate) 
   {
   	currprefs.chipset_refreshrate = changed_prefs.chipset_refreshrate;
-	  init_hz_full ();
+	  init_hz_normal ();
 	  changed = 1;
   }
 
 	currprefs.filesys_limit = changed_prefs.filesys_limit;
+	currprefs.harddrive_read_only = changed_prefs.harddrive_read_only;
   
+  if(changed)
+		init_custom ();
+
   return changed;
 }
 
 
 int lockscr (void)
 {
-  SDL_LockSurface(prSDLScreen);
+  if(SDL_LockSurface(prSDLScreen) == -1)
+    return 0;
+  init_row_map();
   return 1;
 }
 
@@ -395,7 +407,7 @@ void wait_for_vsync(void)
 }
 
 
-void flush_screen ()
+bool render_screen (bool immediate)
 {
 	if (savestate_state == STATE_DOSAVE)
 	{
@@ -413,6 +425,12 @@ void flush_screen ()
   RefreshLiveInfo();
 #endif
 
+	return true;
+}
+
+
+void show_screen (int mode)
+{
   unsigned long start = read_processor_time();
   if(current_vsync_frame == 0) 
   {
@@ -422,7 +440,7 @@ void flush_screen ()
     ioctl(fbdev, OMAPFB_WAITFORVSYNC, &current_vsync_frame);
   } 
   else 
-    {
+  {
     // New style for vsync and idle time calc
     int wait_till = current_vsync_frame;
     do 
@@ -437,25 +455,33 @@ void flush_screen ()
     }
     current_vsync_frame += currprefs.gfx_framerate;
   }
-  
-// Android swapped SDL_Flip & last_synctime for fixing performance
-  SDL_Flip(prSDLScreen);
+
   last_synctime = read_processor_time();
+  SDL_Flip(prSDLScreen);
+
+  idletime += last_synctime - start;
 
   if(!screen_is_picasso)
-  	gfxvidinfo.bufmem = (uae_u8 *)prSDLScreen->pixels;
+  	gfxvidinfo.drawbuffer.bufmem = (uae_u8 *)prSDLScreen->pixels;
 
-  if(last_synctime - next_synctime > time_per_frame * (1 + currprefs.gfx_framerate) - 1000 || next_synctime < start)
-    adjust_idletime(0);
-  else
-    adjust_idletime(next_synctime - start);
-  
   if (last_synctime - next_synctime > time_per_frame - 5000)
     next_synctime = last_synctime + time_per_frame * (1 + currprefs.gfx_framerate);
   else
     next_synctime = next_synctime + time_per_frame * (1 + currprefs.gfx_framerate);
+}
 
-	init_row_map();
+
+unsigned long target_lastsynctime(void)
+{
+  return last_synctime;
+}
+
+
+bool show_screen_maybe (bool show)
+{
+	if (show)
+		show_screen (0);
+	return false;
 }
 
 
@@ -510,7 +536,6 @@ STATIC_INLINE int maskShift (unsigned long mask)
 
 static int init_colors (void)
 {
-	int i;
   int red_bits, green_bits, blue_bits;
   int red_shift, green_shift, blue_shift;
 
@@ -523,8 +548,6 @@ static int init_colors (void)
 	blue_shift = maskShift(prSDLScreen->format->Bmask);
 	alloc_colors64k (red_bits, green_bits, blue_bits, red_shift, green_shift, blue_shift, 0);
 	notice_new_xcolors();
-	for (i = 0; i < 4096; i++)
-		xcolors[i] = xcolors[i] * 0x00010001;
 
 	return 1;
 }
@@ -723,19 +746,25 @@ bool vsync_switchmode (int hz)
       case 270: changed_height = 240; break;
     }
   }
-
-  if(changed_height == currprefs.gfx_size.height && hz == currprefs.chipset_refreshrate)
-    return true;
   
-  changed_prefs.gfx_size.height = changed_height;
-
+  if(hz != currVSyncRate) 
+  {
+    SetVSyncRate(hz);
+  	black_screen_now();
+    fpscounter_reset();
+    time_per_frame = 1000 * 1000 / (hz);
+  }
+  
+  if(!picasso_on && !picasso_requested_on)
+    changed_prefs.gfx_size.height = changed_height;
+  
   return true;
 }
 
 
 bool target_graphics_buffer_update (void)
 {
-  bool rate_changed = SetVSyncRate(currprefs.chipset_refreshrate);
+  bool rate_changed = false;
   
   if(currprefs.gfx_size.height != changed_prefs.gfx_size.height)
   {
@@ -757,15 +786,15 @@ bool target_graphics_buffer_update (void)
 #ifdef PICASSO96
 
 
-int picasso_palette (void)
+int picasso_palette (struct MyCLUTEntry *CLUT)
 {
   int i, changed;
 
   changed = 0;
   for (i = 0; i < 256; i++) {
-    int r = picasso96_state.CLUT[i].Red;
-    int g = picasso96_state.CLUT[i].Green;
-    int b = picasso96_state.CLUT[i].Blue;
+    int r = CLUT[i].Red;
+    int g = CLUT[i].Green;
+    int b = CLUT[i].Blue;
   	uae_u32 v = CONVERT_RGB(r << 16 | g << 8 | b);
 	  if (v !=  picasso_vidinfo.clut[i]) {
 	     picasso_vidinfo.clut[i] = v;
@@ -883,7 +912,8 @@ void gfx_set_picasso_state (int on)
 
 	screen_is_picasso = on;
   open_screen(&currprefs);
-  picasso_vidinfo.rowbytes	= prSDLScreen->pitch;
+  if(prSDLScreen != NULL)
+    picasso_vidinfo.rowbytes	= prSDLScreen->pitch;
 }
 
 void gfx_set_picasso_modeinfo (uae_u32 w, uae_u32 h, uae_u32 depth, RGBFTYPE rgbfmt)
@@ -905,21 +935,29 @@ void gfx_set_picasso_modeinfo (uae_u32 w, uae_u32 h, uae_u32 depth, RGBFTYPE rgb
   if (screen_is_picasso)
   {
   	open_screen(&currprefs);
-    picasso_vidinfo.rowbytes	= prSDLScreen->pitch;
+  	if(prSDLScreen != NULL)
+      picasso_vidinfo.rowbytes	= prSDLScreen->pitch;
     picasso_vidinfo.rgbformat = RGBFB_R5G6B5;
   }
 }
 
 uae_u8 *gfx_lock_picasso (void)
 {
+  if(prSDLScreen == NULL || screen_is_picasso == 0)
+    return NULL;
   SDL_LockSurface(prSDLScreen);
   picasso_vidinfo.rowbytes = prSDLScreen->pitch;
   return (uae_u8 *)prSDLScreen->pixels;
 }
 
-void gfx_unlock_picasso (void)
+void gfx_unlock_picasso (bool dorender)
 {
   SDL_UnlockSurface(prSDLScreen);
+  if(dorender)
+  {
+    render_screen(true);
+    show_screen(0);
+  }
 }
 
 #endif // PICASSO96

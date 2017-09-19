@@ -164,7 +164,7 @@ STATIC_INLINE void SIGNED16_REG_2_REG(W4 d, RR4 s) {
 #define SIGN_EXTEND_16_REG_2_REG(d,s) SIGNED16_REG_2_REG(d,s)
 
 
-#define jit_unimplemented(fmt, ...) do{ panicbug("**** Unimplemented ****\n"); panicbug(fmt, ## __VA_ARGS__); abort(); }while (0)
+#define jit_unimplemented(fmt, ...) do{ jit_log("**** Unimplemented ****\n"); jit_log(fmt, ## __VA_ARGS__); abort(); }while (0)
 
 LOWFUNC(WRITE,NONE,2,raw_add_l,(RW4 d, RR4 s))
 {
@@ -435,9 +435,6 @@ STATIC_INLINE void raw_flags_evicted(int r)
   live.nat[r].nholds = 0;
 }
 
-STATIC_INLINE void raw_flags_init(void) {
-}
-
 STATIC_INLINE void raw_flags_to_reg(int r)
 {
 	MRS_CPSR(r);
@@ -462,62 +459,6 @@ STATIC_INLINE void raw_load_flagreg(uae_u32 t, uae_u32 r)
 #define FLAG_NREG1 -1
 #define FLAG_NREG3 -1
 
-STATIC_INLINE void raw_fflags_into_flags(int r)
-{
-	jit_unimplemented("raw_fflags_into_flags %x", r);
-}
-
-STATIC_INLINE void raw_fp_init(void)
-{
-#ifdef USE_JIT_FPU
-  int i;
-
-  for (i=0;i<N_FREGS;i++)
-  	live.spos[i]=-2;
-  live.tos=-1;  /* Stack is empty */
-#endif
-}
-
-// Verify
-STATIC_INLINE void raw_fp_cleanup_drop(void)
-{
-#ifdef USE_JIT_FPU
-  D(panicbug("raw_fp_cleanup_drop"));
-
-  while (live.tos>=1) {
-  	live.tos-=2;
-  }
-  while (live.tos>=0) {
-	  live.tos--;
-  }
-  raw_fp_init();
-#endif
-}
-
-LOWFUNC(NONE,WRITE,2,raw_fmov_mr_drop,(MEMW m, FR r))
-{
-	jit_unimplemented("raw_fmov_mr_drop %x %x", m, r);
-}
-LENDFUNC(NONE,WRITE,2,raw_fmov_mr_drop,(MEMW m, FR r))
-
-LOWFUNC(NONE,WRITE,2,raw_fmov_mr,(MEMW m, FR r))
-{
-	jit_unimplemented("raw_fmov_mr %x %x", m, r);
-}
-LENDFUNC(NONE,WRITE,2,raw_fmov_mr,(MEMW m, FR r))
-
-LOWFUNC(NONE,READ,2,raw_fmov_rm,(FW r, MEMR m))
-{
-	jit_unimplemented("raw_fmov_rm %x %x", r, m);
-}
-LENDFUNC(NONE,READ,2,raw_fmov_rm,(FW r, MEMR m))
-
-LOWFUNC(NONE,NONE,2,raw_fmov_rr,(FW d, FR s))
-{
-	jit_unimplemented("raw_fmov_rr %x %x", d, s);
-}
-LENDFUNC(NONE,NONE,2,raw_fmov_rr,(FW d, FR s))
-
 STATIC_INLINE void raw_emit_nop_filler(int nbytes)
 {
 	nbytes >>= 2;
@@ -527,14 +468,6 @@ STATIC_INLINE void raw_emit_nop_filler(int nbytes)
 STATIC_INLINE void raw_emit_nop(void)
 {
   NOP();
-}
-
-static void raw_init_cpu(void)
-{
-	align_loops = 0;
-	align_jumps = 0;
-
-	raw_flags_init();
 }
 
 //

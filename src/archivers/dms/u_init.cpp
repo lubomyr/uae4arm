@@ -16,7 +16,6 @@
 #include "u_deep.h"
 #include "u_heavy.h"
 
-
 void Init_Decrunchers(void){
 	dms_quick_text_loc = 251;
 	dms_medium_text_loc = 0x3fbe;

@@ -25,8 +25,9 @@ static NavigationMap navMap[] =
 {
 //  active              move left         move right        move up             move down
 // main_window
-  { "Paths",            "SystemROMs",     "SystemROMs",     "Reset",            "Configurations" },
-  { "Configurations",   "ConfigList",     "ConfigList",     "Paths",            "CPU and FPU" },
+  { "Paths",            "SystemROMs",     "SystemROMs",     "Reset",            "Quickstart" },
+  { "Quickstart",       "qsNTSC",         "AModel",         "Paths",            "Configurations" },
+  { "Configurations",   "ConfigList",     "ConfigList",     "Quickstart",       "CPU and FPU" },
   { "CPU and FPU",      "7 Mhz",          "68000",          "Configurations",   "Chipset" },
   { "Chipset",          "Fast copper",    "OCS",            "CPU and FPU",      "ROM" },
   { "ROM",              "MainROM",        "cboMainROM",     "Chipset",          "RAM" },
@@ -38,22 +39,47 @@ static NavigationMap navMap[] =
   { "Input",            "cboPort0",       "cboPort0",       "Sound",            "Miscellaneous" },
   { "Miscellaneous",    "StatusLine",     "StatusLine",     "Input",            "Savestates" },
 #ifdef ANDROIDSDL
-  { "Savestates",       "State0",         "State0",         "Miscellaneous",  "OnScreen" },
+  { "Savestates",       "State0",         "State0",         "Miscellaneous",    "OnScreen" },
   { "OnScreen",         "OnScrButton3",   "OnScrCtrl",      "Savestates",     "Reset" },
   { "Reset",            "Start",          "Quit",           "OnScreen",       "Paths" },
-  { "Quit",             "Reset",          "Start",          "OnScreen",       "Paths" },
-  { "Start",            "Quit",           "Reset",          "OnScreen",       "Paths" },
+  { "Quit",             "Reset",          "Help",           "OnScreen",       "Paths" },
+  { "Help",             "Quit",           "Start",          "OnScreen",       "Paths" },
+  { "Start",            "Help",           "Reset",          "OnScreen",       "Paths" },
 #else
   { "Savestates",       "State0",         "State0",         "Miscellaneous",    "Reset" },
   { "Reset",            "Start",          "Quit",           "Savestates",       "Paths" },
-  { "Quit",             "Reset",          "Start",          "Savestates",       "Paths" },
-  { "Start",            "Quit",           "Reset",          "Savestates",       "Paths" },
+  { "Quit",             "Reset",          "Help",           "Savestates",       "Paths" },
+  { "Help",             "Quit",           "Start",          "Savestates",       "Paths" },
+  { "Start",            "Help",           "Reset",          "Savestates",       "Paths" },
 #endif
-  
+
 // PanelPaths
   { "SystemROMs",     "Paths",          "Paths",          "RescanROMs",     "ConfigPath" },
   { "ConfigPath",     "Paths",          "Paths",          "SystemROMs",     "RescanROMs" },
   { "RescanROMs",     "Paths",          "Paths",          "ConfigPath",     "SystemROMs" },
+
+//  active            move left         move right        move up           move down
+// PanelQuickstart
+  { "AModel",         "Quickstart",     "qsNTSC",         "qsMode",         "AConfig" },
+  { "qsNTSC",         "AModel",         "Quickstart",     "qsMode",         "AConfig" },
+  { "AConfig",        "Quickstart",     "Quickstart",     "AModel",         "qscmdSel0" },
+  { "qsDF0",          "Quickstart",     "qsWP0",          "AConfig",        "qscboDisk0" },
+  { "qsWP0",          "qsDF0",          "qscmdEject0",    "AConfig",        "qscboDisk0" },
+//  { "qsInfo0",        "Quickstart",     "",     "",               "" },
+  { "qscmdEject0",    "qsWP0",          "qscmdSel0",      "AConfig",        "qscboDisk0" },
+  { "qscmdSel0",      "qscmdEject0",    "Quickstart",     "AConfig",        "qscboDisk0" },
+  { "qscboDisk0",     "Quickstart",     "Quickstart",     "qscmdSel0",      "qscmdSel1" },
+  { "qsDF1",          "Quickstart",     "qsWP1",          "qscboDisk0",     "qscboDisk1" },
+  { "qsWP1",          "qsDF1",          "qscmdEject1",    "qscboDisk0",     "qscboDisk1" },
+//  { "qsInfo1",        "Quickstart",     "",     "",               "" },
+  { "qscmdEject1",    "qsWP1",          "qscmdSel1",      "qscboDisk0",     "qscboDisk1" },
+  { "qscmdSel1",      "qscmdEject1",    "Quickstart",     "qscboDisk0",     "qscboDisk1" },
+  { "qscboDisk1",     "Quickstart",     "Quickstart",     "qsDF1",          "qsCDSelect" },
+  { "qsCD drive",     "Quickstart",     "qscdEject",      "qscboDisk1",     "qscboCD" },
+  { "qscdEject",      "qsCD drive",     "qsCDSelect",     "qscboDisk1",     "qscboCD" },
+  { "qsCDSelect",     "qscdEject",      "Quickstart",     "qscboDisk1",     "qscboCD" },
+  { "qscboCD",        "Quickstart",     "Quickstart",     "qsCDSelect",     "qsMode" },
+  { "qsMode",         "Quickstart",     "Quickstart",     "qscboCD",        "qsNTSC" },
 
 // PanelConfig
   { "ConfigList",     "Configurations", "ConfigName",     "",               "" },
@@ -69,29 +95,32 @@ static NavigationMap navMap[] =
   { "68010",          "CPU and FPU",    "68881",          "68000",          "68020" },
   { "68020",          "CPU and FPU",    "68882",          "68010",          "68030" },
   { "68030",          "CPU and FPU",    "CPU internal",   "68020",          "68040" },
-  { "68040",          "CPU and FPU",    "CPU internal",   "68030",          "CPU24Bit" },
-  { "CPU24Bit",       "CPU and FPU",    "CPU internal",   "68040",          "CPUComp" },
-  { "CPUComp",        "CPU and FPU",    "CPU internal",   "CPU24Bit",       "JIT" },
-  { "JIT",            "CPU and FPU",    "CPU internal",   "CPUComp",        "68000" },
-  { "FPUnone",        "68000",          "7 Mhz",          "CPU internal",   "68881" },
+  { "68040",          "CPU and FPU",    "FPUstrict",      "68030",          "CPU24Bit" },
+  { "CPU24Bit",       "CPU and FPU",    "SoftFloat",      "68040",          "CPUComp" },
+  { "CPUComp",        "CPU and FPU",    "SoftFloat",      "CPU24Bit",       "JIT" },
+  { "JIT",            "CPU and FPU",    "SoftFloat",      "CPUComp",        "68000" },
+  { "FPUnone",        "68000",          "7 Mhz",          "SoftFloat",      "68881" },
   { "68881",          "68010",          "14 Mhz",         "FPUnone",        "68882" },
   { "68882",          "68020",          "25 Mhz",         "68881",          "CPU internal" },
-  { "CPU internal",   "68030",          "Fastest",        "68882",          "FPUnone" },
+  { "CPU internal",   "68030",          "Fastest",        "68882",          "FPUstrict" },
+  { "FPUstrict",      "68040",          "Fastest",        "CPU internal",   "SoftFloat" },
+  { "SoftFloat",      "CPU24Bit",       "Fastest",        "FPUstrict",      "FPUnone" },
   { "7 Mhz",          "FPUnone",        "CPU and FPU",    "Fastest",        "14 Mhz" },
   { "14 Mhz",         "68881",          "CPU and FPU",    "7 Mhz",          "25 Mhz" },
   { "25 Mhz",         "68882",          "CPU and FPU",    "14 Mhz",         "Fastest" },
   { "Fastest",        "CPU internal",   "CPU and FPU",    "25 Mhz",         "7 Mhz" },
 
 // PanelChipset
-  { "OCS",            "Chipset",        "BlitNormal",     "CollFull",       "ECS Agnus" },
+  { "OCS",            "Chipset",        "ChipsetExtra",   "CollFull",       "ECS Agnus" },
   { "ECS Agnus",      "Chipset",        "Immediate",      "OCS",            "Full ECS" },
   { "Full ECS",       "Chipset",        "BlitWait",       "ECS Agnus",      "AGA" },
-  { "AGA",            "Chipset",        "Chipset",        "Full ECS",       "NTSC" },
-  { "NTSC",           "Chipset",        "Chipset",        "AGA",            "CollNone" },
-  { "BlitNormal",     "OCS",            "Fast copper",    "CollFull",       "Immediate" },
-  { "Immediate",      "ECS Agnus",      "Fast copper",    "BlitNormal",     "BlitWait" },
-  { "BlitWait",       "Full ECS",       "Fast copper",    "Immediate",      "CollNone" },
-  { "Fast copper",    "BlitNormal",     "Chipset",        "CollFull",       "CollNone" },
+  { "AGA",            "Chipset",        "Fast copper",    "Full ECS",       "NTSC" },
+  { "NTSC",           "Chipset",        "Fast copper",    "AGA",            "CollNone" },
+  { "ChipsetExtra",   "OCS",            "BlitNormal",     "",               "" },
+  { "BlitNormal",     "ChipsetExtra",   "Chipset",        "Fast copper",    "Immediate" },
+  { "Immediate",      "ECS Agnus",      "Chipset",        "BlitNormal",     "BlitWait" },
+  { "BlitWait",       "Full ECS",       "Chipset",        "Immediate",      "Fast copper" },
+  { "Fast copper",    "NTSC",           "Chipset",        "BlitWait",       "BlitNormal" },
   { "CollNone",       "Chipset",        "Chipset",        "NTSC",           "Sprites only" },
   { "Sprites only",   "Chipset",        "Chipset",        "CollNone",       "CollPlay" },
   { "CollPlay",       "Chipset",        "Chipset",        "Sprites only",   "CollFull" },
@@ -99,17 +128,28 @@ static NavigationMap navMap[] =
 
 //  active            move left         move right        move up           move down
 // PanelROM
+#ifdef ACTION_REPLAY
+  { "cboMainROM",     "ROM",            "MainROM",        "cboCartROM",     "cboExtROM" },
+  { "MainROM",        "cboMainROM",     "ROM",            "CartROM",        "ExtROM" },
+  { "cboExtROM",      "ROM",            "ExtROM",         "cboMainROM",     "cboCartROM" },
+  { "ExtROM",         "cboExtROM",      "ROM",            "MainROM",        "CartROM" },
+  { "cboCartROM",     "ROM",            "CartROM",        "cboExtROM",      "cboMainROM" },
+  { "CartROM",        "cboCartROM",     "ROM",            "ExtROM",         "MainROM" },
+#else
   { "cboMainROM",     "ROM",            "MainROM",        "cboExtROM",      "cboExtROM" },
   { "MainROM",        "cboMainROM",     "ROM",            "ExtROM",         "ExtROM" },
   { "cboExtROM",      "ROM",            "ExtROM",         "cboMainROM",     "cboMainROM" },
   { "ExtROM",         "cboExtROM",      "ROM",            "MainROM",        "MainROM" },
+#endif
 
 //PanelRAM
   { "Chipmem",        "",               "",               "RAM",            "Slowmem" },
   { "Slowmem",        "",               "",               "Chipmem",        "Fastmem" },
   { "Fastmem",        "",               "",               "Slowmem",        "Z3mem" },
   { "Z3mem",          "",               "",               "Fastmem",        "Gfxmem" },
-  { "Gfxmem",         "",               "",               "Z3mem",          "RAM" },
+  { "Gfxmem",         "",               "",               "Z3mem",          "A3000Low" },
+  { "A3000Low",       "",               "",               "Gfxmem",         "A3000High" },
+  { "A3000High",      "",               "",               "A3000Low",       "RAM" },
 
 //PanelFloppy
   { "DF0:",           "Floppy drives",  "cboType0",       "SaveForDisk",    "cboDisk0" },
@@ -150,10 +190,11 @@ static NavigationMap navMap[] =
   { "cmdDel3",        "cmdProp3",         "Hard drives / CD", "cmdDel2",        "cmdDel4" },
   { "cmdProp4",       "Hard drives / CD", "cmdDel4",          "cmdProp3",       "cmdAddDir" },
   { "cmdDel4",        "cmdProp4",         "Hard drives / CD", "cmdDel3",        "cmdAddHDF" },
-  { "cmdAddDir",      "Hard drives / CD", "cmdAddHDF",        "cmdProp4",       "CD drive" },
-  { "cmdAddHDF",      "cmdAddDir",        "cmdCreateHDF",     "cmdDel4",        "CD drive" },
-  { "cmdCreateHDF",   "cmdAddHDF",        "Hard drives / CD", "cmdDel4",        "CD drive" },
-  { "CD drive",       "Hard drives / CD", "cdEject",          "cmdAddDir",      "cboCD" },
+  { "cmdAddDir",      "Hard drives / CD", "cmdAddHDF",        "cmdProp4",       "chkHDRO" },
+  { "cmdAddHDF",      "cmdAddDir",        "cmdCreateHDF",     "cmdDel4",        "chkHDRO" },
+  { "cmdCreateHDF",   "cmdAddHDF",        "Hard drives / CD", "cmdDel4",        "chkHDRO" },
+  { "chkHDRO",        "Hard drives / CD", "Hard drives / CD", "cmdAddDir",      "CD drive" },
+  { "CD drive",       "Hard drives / CD", "cdEject",          "chkHDRO",        "cboCD" },
   { "cdEject",        "CD drive",         "CDSelect",         "cmdCreateHDF",   "cboCD" },
   { "CDSelect",       "cdEject",          "Hard drives / CD", "cmdCreateHDF",   "cboCD" },
   { "cboCD",          "Hard drives / CD", "Hard drives / CD", "CD drive",       "CDVol" },
@@ -177,7 +218,7 @@ static NavigationMap navMap[] =
   { "cboFilter",      "Sound",          "Sound",          "cboInterpol",    "sldSeparation" },
   { "sldSeparation",  "",               "",               "cboFilter",      "sldStereoDelay" },
   { "sldStereoDelay", "",               "",               "sldSeparation",  "sndDisable" },
-
+  
 //  active            move left           move right          move up           move down
 // PanelInput
   { "cboPort0",       "Input",          "Input",          "cboLeft",        "cboPort1" },
@@ -199,11 +240,17 @@ static NavigationMap navMap[] =
   { "cboRight",       "cboLeft",        "Input",          "cboDown",        "cboPort0" },
 
 // PanelMisc
-  { "StatusLine",     "Miscellaneous",  "Miscellaneous",  "BSDSocket",      "HideIdle" },
+  { "StatusLine",     "Miscellaneous",  "Miscellaneous",  "MasterWP",       "HideIdle" },
   { "HideIdle",       "Miscellaneous",  "Miscellaneous",  "StatusLine",     "ShowGUI" },
+#ifdef ANDROID
+  { "ShowGUI",        "Miscellaneous",  "Miscellaneous",  "HideIdle",       "BSDSocket" },
+  { "BSDSocket",      "Miscellaneous",  "Miscellaneous",  "ShowGUI",      "MasterWP" },
+#else
   { "ShowGUI",        "Miscellaneous",  "Miscellaneous",  "HideIdle",       "PandSpeed" },
   { "PandSpeed",      "",               "",               "ShowGUI",        "BSDSocket" },
-  { "BSDSocket",      "Miscellaneous",  "Miscellaneous",  "PandSpeed",      "StatusLine" },
+  { "BSDSocket",      "Miscellaneous",  "Miscellaneous",  "PandSpeed",      "MasterWP" },
+#endif
+  { "MasterWP",       "Miscellaneous",  "Miscellaneous",  "BSDSocket",      "StatusLine" },
   
 // PanelSavestate
   { "State0",         "Savestates",     "Savestates",     "LoadState",      "State1" },
@@ -247,11 +294,13 @@ static NavigationMap navMap[] =
   { "hdfBootPri",     "hdfAutoboot",    "hdfDev",         "hdfCancel",      "hdfPath" },
   { "hdfSurface",     "hdfReserved",    "hdfReserved",    "hdfPath",        "hdfSectors" },
   { "hdfReserved",    "hdfSurface",     "hdfSurface",     "hdfPath",        "hdfBlocksize" },
-  { "hdfSectors",     "hdfBlocksize",   "hdfBlocksize",   "hdfSurface",     "hdfOK" },
-  { "hdfBlocksize",   "hdfSectors",     "hdfSectors",     "hdfReserved",    "hdfOK" },
+  { "hdfSectors",     "hdfBlocksize",   "hdfBlocksize",   "hdfSurface",     "hdfController" },
+  { "hdfBlocksize",   "hdfSectors",     "hdfSectors",     "hdfReserved",    "hdfUnit" },
   { "hdfPath",        "",               "",               "hdfBootPri",     "hdfReserved" },
-  { "hdfOK",          "hdfCancel",      "hdfCancel",      "hdfBlocksize",   "hdfBootPri" },
-  { "hdfCancel",      "hdfOK",          "hdfOK",          "hdfBlocksize",   "hdfBootPri" },
+  { "hdfController",  "hdfUnit",        "hdfUnit",        "hdfSectors",     "hdfOK" },
+  { "hdfUnit",        "hdfController",  "hdfController",  "hdfBlocksize",   "hdfOK" },
+  { "hdfOK",          "hdfCancel",      "hdfCancel",      "hdfUnit",        "hdfBootPri" },
+  { "hdfCancel",      "hdfOK",          "hdfOK",          "hdfUnit",        "hdfBootPri" },
 
 // CreateFilesysHardfile
   { "createHdfDev",       "createHdfBootPri",   "createHdfAutoboot",  "createHdfOK",      "createHdfPath" },
@@ -279,8 +328,9 @@ bool HandleNavigation(int direction)
     {
       std::string activeName = activeWidget->getId();
       bool bFoundEnabled = false;
+      int tries = 10;
       
-      while(!bFoundEnabled)
+      while(!bFoundEnabled && tries > 0)
       {
         std::string searchFor = "";
         
@@ -308,7 +358,7 @@ bool HandleNavigation(int direction)
               focusTarget = gui_top->findWidgetById(searchFor);
               if(focusTarget != NULL)
               {
-                if(focusTarget->isEnabled())
+                if(focusTarget->isEnabled() && focusTarget->isVisible())
                   bFoundEnabled = true;
                 else
                   activeName = searchFor;
@@ -319,11 +369,12 @@ bool HandleNavigation(int direction)
         }
         if(searchFor == "")
           bFoundEnabled = true; // No entry to navigate to -> exit loop
+        --tries;
       }
       
       if(focusTarget != NULL)
       {
-        if(!activeWidget->getId().substr(0, 3).compare("cbo"))
+        if(!activeWidget->getId().substr(0, 3).compare("cbo") || !activeWidget->getId().substr(0, 5).compare("qscbo"))
         {
           gcn::UaeDropDown *dropdown = (gcn::UaeDropDown *) activeWidget;
           if(dropdown->isDroppedDown() && (direction == DIRECTION_UP || direction == DIRECTION_DOWN))

@@ -33,6 +33,8 @@
 
 #if (defined(CPU_i386) && defined(X86_ASSEMBLY)) || (defined(CPU_x86_64) && defined(X86_64_ASSEMBLY))
 
+#ifndef REGS_DEFINED
+
  /*
   * Machine dependent structure for holding the 68k CCR flags
   */
@@ -68,6 +70,8 @@ struct flag_struct {
 #define FLAGVAL_V	(1 << FLAGBIT_V)
 #define FLAGVAL_X	(1 << FLAGBIT_X)
 
+#else /* REGS_DEFINED */
+
 #define SET_ZFLG(y)	(regs.ccrflags.cznv = (regs.ccrflags.cznv & ~FLAGVAL_Z) | (((y) ? 1 : 0) << FLAGBIT_Z))
 #define SET_CFLG(y)	(regs.ccrflags.cznv = (regs.ccrflags.cznv & ~FLAGVAL_C) | (((y) ? 1 : 0) << FLAGBIT_C))
 #define SET_VFLG(y)	(regs.ccrflags.cznv = (regs.ccrflags.cznv & ~FLAGVAL_V) | (((y) ? 1 : 0) << FLAGBIT_V))
@@ -91,9 +95,9 @@ struct flag_struct {
 /*
  * Test CCR condition
  */
-STATIC_INLINE int cctrue (struct flag_struct &flags, int cc)
+STATIC_INLINE int cctrue (int cc)
 {
-    uae_u32 cznv = flags.cznv;
+    uae_u32 cznv = regs.ccrflags.cznv;
 
     switch (cc) {
 	case 0:  return 1;								/*				T  */
@@ -118,7 +122,11 @@ STATIC_INLINE int cctrue (struct flag_struct &flags, int cc)
     return 0;
 }
 
+#endif /* REGS_DEFINED */
+
 #elif defined(CPU_arm) && defined(ARMV6_ASSEMBLY)
+
+#ifndef REGS_DEFINED
 
 struct flag_struct {
 	uae_u32 nzcv;
@@ -130,6 +138,8 @@ struct flag_struct {
 #define FLAGVAL_C       0x20000000
 #define FLAGVAL_Z       0x40000000
 #define FLAGVAL_N       0x80000000
+
+#else /* REGS_DEFINED */
 
 #define SET_NFLG(y)     (regs.ccrflags.nzcv = (regs.ccrflags.nzcv & ~0x80000000) | (((y) ? 1 : 0) << 31))
 #define SET_ZFLG(y)     (regs.ccrflags.nzcv = (regs.ccrflags.nzcv & ~0x40000000) | (((y) ? 1 : 0) << 30))
@@ -151,9 +161,9 @@ struct flag_struct {
 
 #define COPY_CARRY()      (regs.ccrflags.x = ((regs.ccrflags.nzcv >> 29) & 1))
 
-STATIC_INLINE int cctrue(struct flag_struct &flags, int cc)
+STATIC_INLINE int cctrue(int cc)
 {
-    unsigned int nzcv = flags.nzcv;
+    unsigned int nzcv = regs.ccrflags.nzcv;
     switch(cc){
      case 0: return 1;                       /* T */
      case 1: return 0;                       /* F */
@@ -179,7 +189,11 @@ STATIC_INLINE int cctrue(struct flag_struct &flags, int cc)
     return 0;
 }
 
+#endif /* REGS_DEFINED */
+
 #else
+
+#ifndef REGS_DEFINED
 
 struct flag_struct {
     unsigned int c;
@@ -188,6 +202,8 @@ struct flag_struct {
     unsigned int v; 
     unsigned int x;
 };
+
+#else /* REGS_DEFINED */
 
 #define ZFLG (regs.ccrflags.z)
 #define NFLG (regs.ccrflags.n)
@@ -216,7 +232,7 @@ struct flag_struct {
 
 #define COPY_CARRY() (regs.ccrflags.x = regs.ccrflags.c)
 
-STATIC_INLINE int cctrue(struct flag_struct &flags, const int cc)
+STATIC_INLINE int cctrue(const int cc)
 {
     switch(cc){
      case 0: return 1;                       /* T */
@@ -238,5 +254,7 @@ STATIC_INLINE int cctrue(struct flag_struct &flags, const int cc)
     }
     return 0;
 }
+
+#endif /* REGS_DEFINED */
 
 #endif

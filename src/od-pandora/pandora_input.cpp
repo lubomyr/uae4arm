@@ -359,6 +359,7 @@ static void read_joystick (void)
 {
   if(currprefs.jports[0].id == JSEM_JOYS || currprefs.jports[1].id == JSEM_JOYS) {
   	Uint8 *keystate = SDL_GetKeyState(NULL);
+    
     if(!keystate[SDLK_RCTRL]) { // Right shoulder + dPad -> cursor keys
       int axis = (keystate[SDLK_LEFT] ? -32767 : (keystate[SDLK_RIGHT] ? 32767 : 0));
       if(!joyXviaCustom)
@@ -377,25 +378,13 @@ static void read_joystick (void)
       setjoybuttonstate (0, 3, keystate[SDLK_PAGEUP]);
 
     int cd32_start = 0, cd32_ffw = 0, cd32_rwd = 0;
-#ifdef ANDROID
-    if(keystate[SDLK_RCTRL]) { 
-      if(keystate[SDLK_END])
-
-        cd32_rwd = 1;
-      else if (keystate[SDLK_HOME])
-        cd32_ffw = 1;
-      else
-        cd32_start = 1;
-#else
     if(keystate[SDLK_LALT]) { // Pandora Start button
       if(keystate[SDLK_RSHIFT])  // Left shoulder
-
         cd32_rwd = 1;
       else if (keystate[SDLK_RCTRL]) // Right shoulder
         cd32_ffw = 1;
       else
         cd32_start = 1;
-#endif
     }
     if(!joyButXviaCustom[6])
       setjoybuttonstate (0, 6, cd32_start);

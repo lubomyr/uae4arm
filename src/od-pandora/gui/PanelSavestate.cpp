@@ -11,7 +11,6 @@
 #include "sysdeps.h"
 #include "config.h"
 #include "options.h"
-#include "autoconf.h"
 #include "memory-uae.h"
 #include "newcpu.h"
 #include "custom.h"
@@ -19,6 +18,7 @@
 #include "drawing.h"
 #include "uae.h"
 #include "gui.h"
+#include "autoconf.h"
 #include "savestate.h"
 #include "gui_handling.h"
 
@@ -248,4 +248,17 @@ void RefreshPanelSavestate(void)
   cmdLoadState->setEnabled(enabled);
   cmdSaveState->setEnabled(enabled);
   lblWarningHDDon->setVisible(!enabled);
+}
+
+
+bool HelpPanelSavestate(std::vector<std::string> &helptext)
+{
+  helptext.clear();
+  helptext.push_back("Savestates are stored with the name of the disk in drive DF0 attached with the selected number.");
+  helptext.push_back(" ");
+  helptext.push_back("When you hold left shoulder button and press 'l' during emulation, the state of the last active number will be");
+  helptext.push_back("loaded. Hold left shoulder button and press 's' to save the current state in the last active slot.");
+  helptext.push_back(" ");
+  helptext.push_back("Note: Savestates will not work with HDDs.");
+  return true;
 }

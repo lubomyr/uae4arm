@@ -60,23 +60,25 @@ ifeq ($(HAVE_NEON), 1)
 	DEFS += -DUSE_ARMNEON
 endif
 
-MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
+#MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
 
-MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/od-pandora -Wno-unused -Wno-format -Wno-write-strings -Wno-multichar -Wno-narrowing -DUSE_SDL
+MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/archivers -Isrc/od-pandora
+MORE_CFLAGS += -Wno-write-strings -Wno-narrowing -DUSE_SDL
+#MORE_CFLAGS += -std=gnu++14
 
-LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
+LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
 #LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
-MORE_CFLAGS += -Ofast -pipe -fsingle-precision-constant
+MORE_CFLAGS += -Ofast -pipe
 MORE_CFLAGS += -fweb -frename-registers
-MORE_CFLAGS += -fipa-pta -fgcse-las -funroll-loops -ftracer -funswitch-loops
+MORE_CFLAGS += -funroll-loops -ftracer -funswitch-loops
 
 # Using -flto and -fipa-pta generates an error with gcc5.2 (??? and -lto alone generates slower code ???)
 #MORE_CFLAGS += -flto=4 -fuse-linker-plugin
 
 else
-MORE_CFLAGS += -g -DDEBUG -Wl,--export-dynamic
+MORE_CFLAGS += -g -rdynamic -funwind-tables -mapcs-frame -DDEBUG -Wl,--export-dynamic
 
 ifdef TRACER
 TRACE_CFLAGS = -DTRACER -finstrument-functions -Wall -rdynamic
@@ -100,6 +102,7 @@ MY_CFLAGS  = $(CFLAGS)
 
 OBJS =	\
 	src/akiko.o \
+	src/ar.o \
 	src/aros.rom.o \
 	src/audio.o \
 	src/autoconf.o \
@@ -110,50 +113,71 @@ OBJS =	\
 	src/blkdev_cdimage.o \
 	src/bsdsocket.o \
 	src/calc.o \
+	src/cd32_fmv.o \
+	src/cd32_fmv_genlock.o \
 	src/cdrom.o \
 	src/cfgfile.o \
 	src/cia.o \
 	src/crc32.o \
 	src/custom.o \
+	src/def_icons.o \
+	src/devices.o \
 	src/disk.o \
 	src/diskutil.o \
 	src/drawing.o \
 	src/events.o \
 	src/expansion.o \
+	src/fdi2raw.o \
 	src/filesys.o \
+	src/flashrom.o \
 	src/fpp.o \
+	src/fpp_native.o \
+	src/fpp_softfloat.o \
+	src/softfloat/softfloat.o \
+	src/softfloat/softfloat_decimal.o \
+	src/softfloat/softfloat_fpsp.o \
 	src/fsdb.o \
 	src/fsdb_unix.o \
 	src/fsusage.o \
+	src/gayle.o \
 	src/gfxboard.o \
 	src/gfxutil.o \
 	src/hardfile.o \
+	src/hrtmon.rom.o \
+	src/ide.o \
 	src/inputdevice.o \
 	src/keybuf.o \
 	src/main.o \
 	src/memory.o \
 	src/native2amiga.o \
 	src/rommgr.o \
+	src/rtc.o \
 	src/savestate.o \
+	src/scsi.o \
 	src/statusline.o \
 	src/traps.o \
 	src/uaelib.o \
 	src/uaeresource.o \
 	src/zfile.o \
 	src/zfile_archive.o \
-	src/archivers/7z/Archive/7z/7zAlloc.o \
-	src/archivers/7z/Archive/7z/7zDecode.o \
-	src/archivers/7z/Archive/7z/7zExtract.o \
-	src/archivers/7z/Archive/7z/7zHeader.o \
-	src/archivers/7z/Archive/7z/7zIn.o \
-	src/archivers/7z/Archive/7z/7zItem.o \
+	src/archivers/7z/7zAlloc.o \
 	src/archivers/7z/7zBuf.o \
 	src/archivers/7z/7zCrc.o \
+	src/archivers/7z/7zCrcOpt.o \
+	src/archivers/7z/7zDec.o \
+	src/archivers/7z/7zIn.o \
 	src/archivers/7z/7zStream.o \
-        src/archivers/7z/Bcj2.o \
+    src/archivers/7z/Bcj2.o \
 	src/archivers/7z/Bra.o \
 	src/archivers/7z/Bra86.o \
 	src/archivers/7z/LzmaDec.o \
+	src/archivers/7z/Lzma2Dec.o \
+	src/archivers/7z/BraIA64.o \
+	src/archivers/7z/Delta.o \
+	src/archivers/7z/Sha256.o \
+	src/archivers/7z/Xz.o \
+	src/archivers/7z/XzCrc64.o \
+	src/archivers/7z/XzDec.o \
 	src/archivers/dms/crc_csum.o \
 	src/archivers/dms/getbits.o \
 	src/archivers/dms/maketbl.o \
@@ -177,6 +201,7 @@ OBJS =	\
 	src/archivers/lha/uae_lha.o \
 	src/archivers/lha/util.o \
 	src/archivers/lzx/unlzx.o \
+	src/archivers/mp2/kjmp2.o \
 	src/archivers/wrp/warp.o \
 	src/archivers/zip/unzip.o \
 	src/machdep/support.o \
@@ -196,7 +221,6 @@ OBJS =	\
 	src/osdep/pandora_rp9.o \
 	src/osdep/pandora_mem.o \
 	src/osdep/sigsegv_handler.o \
-	src/osdep/menu/menu_config.o \
 	src/sounddep/sound.o \
 	src/osdep/gui/UaeRadioButton.o \
 	src/osdep/gui/UaeDropDown.o \
@@ -205,12 +229,14 @@ OBJS =	\
 	src/osdep/gui/InGameMessage.o \
 	src/osdep/gui/SelectorEntry.o \
 	src/osdep/gui/ShowMessage.o \
+	src/osdep/gui/ShowHelp.o \
 	src/osdep/gui/SelectFolder.o \
 	src/osdep/gui/SelectFile.o \
 	src/osdep/gui/CreateFilesysHardfile.o \
 	src/osdep/gui/EditFilesysVirtual.o \
 	src/osdep/gui/EditFilesysHardfile.o \
 	src/osdep/gui/PanelPaths.o \
+	src/osdep/gui/PanelQuickstart.o \
 	src/osdep/gui/PanelConfig.o \
 	src/osdep/gui/PanelCPU.o \
 	src/osdep/gui/PanelChipset.o \
@@ -227,6 +253,7 @@ OBJS =	\
 	src/osdep/gui/Navigation.o
 	
 ifeq ($(ANDROID), 1)
+OBJS += src/osdep/gui/androidsdl_event.o
 OBJS += src/osdep/gui/PanelOnScreen.o
 endif
 
@@ -268,6 +295,8 @@ OBJS += src/cpustbl.o
 OBJS += src/cpuemu_0.o
 OBJS += src/cpuemu_4.o
 OBJS += src/cpuemu_11.o
+OBJS += src/cpuemu_40.o
+OBJS += src/cpuemu_44.o
 OBJS += src/jit/compemu.o
 OBJS += src/jit/compemu_fpp.o
 OBJS += src/jit/compstbl.o
@@ -347,3 +376,7 @@ clean:
 
 delasm:
 	$(RM) $(ASMS)
+	
+bootrom:
+	od -v -t xC -w8 src/filesys |tail -n +5 | sed -e "s,^.......,," -e "s,[0123456789abcdefABCDEF][0123456789abcdefABCDEF],db(0x&);,g" > src/filesys_bootrom.cpp
+	touch src/filesys.cpp

@@ -14,9 +14,10 @@
 #include "options.h"
 #include "memory-uae.h"
 #include "newcpu.h"
-#include "events.h"
 
-frame_time_t vsyncmintime;
+unsigned long int nextevent, currcycle;
+int is_syncline;
+frame_time_t vsyncmintime, vsyncmaxtime, vsyncwaittime;
 int vsynctimebase;
 
 void events_schedule (void)
@@ -42,11 +43,13 @@ void do_cycles_cpu_fastest (unsigned long cycles_to_add)
   cycles_to_add = -regs.pissoff;
   regs.pissoff = 0;
 
-  if (is_syncline && eventtab[ev_hsync].evtime - currcycle <= cycles_to_add) {
+	/* Keep only CPU emulation running while waiting for sync point. */
+  if (is_syncline) {
 	  int rpt = read_processor_time ();
 	  int v = rpt - vsyncmintime;
-	  if (v > syncbase || v < -syncbase)
-	    vsyncmintime = rpt;
+	  if (v > vsynctimebase || v < -vsynctimebase) {
+	    v = 0;
+    }
   	if (v < speedup_timelimit) {
 	    regs.pissoff = pissoff_value;
 	    return;
@@ -56,6 +59,7 @@ void do_cycles_cpu_fastest (unsigned long cycles_to_add)
 
   while ((nextevent - currcycle) <= cycles_to_add) {
 	  int i;
+
 	  cycles_to_add -= (nextevent - currcycle);
 	  currcycle = nextevent;
 
@@ -73,6 +77,7 @@ void do_cycles_cpu_norm (unsigned long cycles_to_add)
 {
   while ((nextevent - currcycle) <= cycles_to_add) {
 	  int i;
+
 	  cycles_to_add -= (nextevent - currcycle);
 	  currcycle = nextevent;
 
@@ -120,7 +125,7 @@ void MISC_handler(void)
     }
 	}
 
-  if (mintime != ~0L) {
+  if (mintime != ~0UL) {
 		eventtab[ev_misc].active = true;
 	  eventtab[ev_misc].evtime = ct + mintime;
 	  events_schedule();

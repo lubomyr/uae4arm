@@ -430,3 +430,10 @@ void RefreshPanelOnScreen(void)
     window_pos_button6->setVisible(changed_prefs.onScreen_button6);
     button_onscreen_pos->setVisible(changed_prefs.custom_position);
 }
+
+bool HelpPanelOnScreen(std::vector<std::string> &helptext)
+{
+  helptext.clear();
+  helptext.push_back("onScreen Help");
+  return true;
+}

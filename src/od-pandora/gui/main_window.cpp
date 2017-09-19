@@ -14,41 +14,54 @@
 #include "memory-uae.h"
 #include "autoconf.h"
 
-#if defined(ANDROID)
+#if defined(ANDROIDSDL)
+#include "androidsdl_event.h"
 #include <SDL_screenkeyboard.h>
+#include <SDL_android.h>
 #include <android/log.h>
 #endif
 
 bool gui_running = false;
-static int last_active_panel = 1;
+static int last_active_panel = 2;
+
+#define MAX_STARTUP_TITLE 64
+#define MAX_STARTUP_MESSAGE 256
+static TCHAR startup_title[MAX_STARTUP_TITLE] = _T("");
+static TCHAR startup_message[MAX_STARTUP_MESSAGE] = _T("");
+
+
+void target_startup_msg(TCHAR *title, TCHAR *msg)
+{
+  _tcsncpy(startup_title, title, MAX_STARTUP_TITLE);
+  _tcsncpy(startup_message, msg, MAX_STARTUP_MESSAGE);
+}
 
 
 ConfigCategory categories[] = {
-  { "Paths",            "data/paths.ico",     NULL, NULL, InitPanelPaths,     ExitPanelPaths,   RefreshPanelPaths },
-  { "Configurations",   "data/file.ico",      NULL, NULL, InitPanelConfig,    ExitPanelConfig,  RefreshPanelConfig },
-  { "CPU and FPU",      "data/cpu.ico",       NULL, NULL, InitPanelCPU,       ExitPanelCPU,     RefreshPanelCPU },
-  { "Chipset",          "data/cpu.ico",       NULL, NULL, InitPanelChipset,   ExitPanelChipset, RefreshPanelChipset },
-  { "ROM",              "data/chip.ico",      NULL, NULL, InitPanelROM,       ExitPanelROM,     RefreshPanelROM },
-  { "RAM",              "data/chip.ico",      NULL, NULL, InitPanelRAM,       ExitPanelRAM,     RefreshPanelRAM },
-  { "Floppy drives",    "data/35floppy.ico",  NULL, NULL, InitPanelFloppy,    ExitPanelFloppy,  RefreshPanelFloppy },
-  { "Hard drives / CD", "data/drive.ico",     NULL, NULL, InitPanelHD,        ExitPanelHD,      RefreshPanelHD },
-  { "Display",          "data/screen.ico",    NULL, NULL, InitPanelDisplay,   ExitPanelDisplay, RefreshPanelDisplay },
-  { "Sound",            "data/sound.ico",     NULL, NULL, InitPanelSound,     ExitPanelSound,   RefreshPanelSound },
-  { "Input",            "data/joystick.ico",  NULL, NULL, InitPanelInput,     ExitPanelInput,   RefreshPanelInput },
-  { "Miscellaneous",    "data/misc.ico",      NULL, NULL, InitPanelMisc,      ExitPanelMisc,    RefreshPanelMisc },
-  { "Savestates",       "data/savestate.png", NULL, NULL, InitPanelSavestate, ExitPanelSavestate, RefreshPanelSavestate },
+  { "Paths",            "data/paths.ico",     NULL, NULL, InitPanelPaths,     ExitPanelPaths,     RefreshPanelPaths,      HelpPanelPaths },
+  { "Quickstart",       "data/quickstart.ico",  NULL, NULL, InitPanelQuickstart,  ExitPanelQuickstart,  RefreshPanelQuickstart, HelpPanelQuickstart },
+  { "Configurations",   "data/file.ico",      NULL, NULL, InitPanelConfig,    ExitPanelConfig,    RefreshPanelConfig,     HelpPanelConfig },
+  { "CPU and FPU",      "data/cpu.ico",       NULL, NULL, InitPanelCPU,       ExitPanelCPU,       RefreshPanelCPU,        HelpPanelCPU },
+  { "Chipset",          "data/cpu.ico",       NULL, NULL, InitPanelChipset,   ExitPanelChipset,   RefreshPanelChipset,    HelpPanelChipset },
+  { "ROM",              "data/chip.ico",      NULL, NULL, InitPanelROM,       ExitPanelROM,       RefreshPanelROM,        HelpPanelROM },
+  { "RAM",              "data/chip.ico",      NULL, NULL, InitPanelRAM,       ExitPanelRAM,       RefreshPanelRAM,        HelpPanelRAM },
+  { "Floppy drives",    "data/35floppy.ico",  NULL, NULL, InitPanelFloppy,    ExitPanelFloppy,    RefreshPanelFloppy,     HelpPanelFloppy },
+  { "Hard drives / CD", "data/drive.ico",     NULL, NULL, InitPanelHD,        ExitPanelHD,        RefreshPanelHD,         HelpPanelHD },
+  { "Display",          "data/screen.ico",    NULL, NULL, InitPanelDisplay,   ExitPanelDisplay,   RefreshPanelDisplay,    HelpPanelDisplay },
+  { "Sound",            "data/sound.ico",     NULL, NULL, InitPanelSound,     ExitPanelSound,     RefreshPanelSound,      HelpPanelSound },
+  { "Input",            "data/joystick.ico",  NULL, NULL, InitPanelInput,     ExitPanelInput,     RefreshPanelInput,      HelpPanelInput },
+  { "Miscellaneous",    "data/misc.ico",      NULL, NULL, InitPanelMisc,      ExitPanelMisc,      RefreshPanelMisc,       HelpPanelMisc },
+  { "Savestates",       "data/savestate.png", NULL, NULL, InitPanelSavestate, ExitPanelSavestate, RefreshPanelSavestate,  HelpPanelSavestate },
 #ifdef ANDROIDSDL  
-  { "OnScreen",         "data/screen.ico",    NULL, NULL, InitPanelOnScreen,  ExitPanelOnScreen, RefreshPanelOnScreen },
+  { "OnScreen",         "data/screen.ico",    NULL, NULL, InitPanelOnScreen,  ExitPanelOnScreen, RefreshPanelOnScreen,  HelpPanelOnScreen },
 #endif
   { NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 };
 #ifdef ANDROIDSDL
-enum { PANEL_PATHS, PANEL_CONFIGURATIONS, PANEL_CPU, PANEL_CHIPSET, PANEL_ROM, PANEL_RAM,
-       PANEL_FLOPPY, PANEL_HD, PANEL_DISPLAY, PANEL_SOUND, PANEL_INPUT, PANEL_MISC, PANEL_SAVESTATES, 
+enum { PANEL_PATHS, PANEL_QUICKSTART, PANEL_CONFIGURATIONS, PANEL_CPU, PANEL_CHIPSET, PANEL_ROM, PANEL_RAM, PANEL_FLOPPY, PANEL_HD, PANEL_DISPLAY, PANEL_SOUND, PANEL_INPUT, PANEL_MISC, PANEL_SAVESTATES, 
        PANEL_ONSCREEN, NUM_PANELS };
 #else
-enum { PANEL_PATHS, PANEL_CONFIGURATIONS, PANEL_CPU, PANEL_CHIPSET, PANEL_ROM, PANEL_RAM,
-       PANEL_FLOPPY, PANEL_HD, PANEL_DISPLAY, PANEL_SOUND, PANEL_INPUT, PANEL_MISC, PANEL_SAVESTATES, 
+enum { PANEL_PATHS, PANEL_QUICKSTART, PANEL_CONFIGURATIONS, PANEL_CPU, PANEL_CHIPSET, PANEL_ROM, PANEL_RAM, PANEL_FLOPPY, PANEL_HD, PANEL_DISPLAY, PANEL_SOUND, PANEL_INPUT, PANEL_MISC, PANEL_SAVESTATES, 
        NUM_PANELS };
 #endif
 
@@ -73,12 +86,13 @@ namespace widgets
   gcn::Button* cmdReset;
   gcn::Button* cmdRestart;
   gcn::Button* cmdStart;
+  gcn::Button* cmdHelp;
 }
 
 
 /* Flag for changes in rtarea:
   Bit 0: any HD in config?
-  Bit 1: force because add/remove HD was clicked
+  Bit 1: force because add/remove HD was clicked or new config loaded
   Bit 2: socket_emu on
   Bit 3: mousehack on
   Bit 4: rtgmem on
@@ -101,7 +115,7 @@ static int gui_create_rtarea_flag(struct uae_prefs *p)
   if (p->input_tablet > 0)
     flag |= 8;
 
-  if(p->rtgmem_size)
+  if(p->rtgboards[0].rtgmem_size)
     flag |= 16;
 
   if (p->chipmem_size > 2 * 1024 * 1024)
@@ -115,11 +129,46 @@ void gui_force_rtarea_hdchange(void)
   gui_rtarea_flags_onenter |= 2;
 }
 
+void gui_restart(void)
+{
+  gui_running = false;
+}
+
 static void (*refreshFuncAfterDraw)(void) = NULL;
 
 void RegisterRefreshFunc(void (*func)(void))
 {
   refreshFuncAfterDraw = func;
+}
+
+void FocusBugWorkaround(gcn::Window *wnd)
+{
+  // When modal dialog opens via mouse, the dialog will not
+  // has the focus unless one mouse click. We simulate the click...
+  SDL_Event event;
+  event.type = SDL_MOUSEBUTTONDOWN;
+  event.button.button = SDL_BUTTON_LEFT;
+  event.button.state = SDL_PRESSED;
+  event.button.x = wnd->getX() + 2;
+  event.button.y = wnd->getY() + 2;
+  gui_input->pushInput(event);
+  event.type = SDL_MOUSEBUTTONUP;
+  gui_input->pushInput(event);
+}
+
+
+static void ShowHelpRequested()
+{
+  std::vector<std::string> helptext;
+  if(categories[last_active_panel].HelpFunc != NULL && categories[last_active_panel].HelpFunc(helptext))
+  {
+    //------------------------------------------------
+    // Show help for current panel
+    //------------------------------------------------
+    char title[128];
+    snprintf(title, 128, "Help for %s", categories[last_active_panel].category);
+    ShowHelp(title, helptext);
+  }
 }
 
 
@@ -273,6 +322,11 @@ namespace sdl
               if(HandleNavigation(DIRECTION_RIGHT))
                 continue; // Don't change value when enter Slider -> don't send event to control
               break;
+          
+            case SDLK_F1:
+              ShowHelpRequested();
+              widgets::cmdHelp->requestFocus();
+              break;
           }
         }
 
@@ -280,67 +334,9 @@ namespace sdl
         // Send event to guichan-controls
         //-------------------------------------------------
 #ifdef ANDROIDSDL
-            /*
-             * Now that we are done polling and using SDL events we pass
-             * the leftovers to the SDLInput object to later be handled by
-             * the Gui. (This example doesn't require us to do this 'cause a
-             * label doesn't use input. But will do it anyway to show how to
-             * set up an SDL application with Guichan.)
-             */
-            if (event.type == SDL_MOUSEMOTION ||
-                event.type == SDL_MOUSEBUTTONDOWN ||
-                event.type == SDL_MOUSEBUTTONUP) {
-                // Filter emulated mouse events for Guichan, we wand absolute input
-            } else {
-                // Convert multitouch event to SDL mouse event
-                static int x = 0, y = 0, buttons = 0, wx=0, wy=0, pr=0;
-                SDL_Event event2;
-                memcpy(&event2, &event, sizeof(event));
-                if (event.type == SDL_JOYBALLMOTION &&
-                    event.jball.which == 0 &&
-                    event.jball.ball == 0) {
-                    event2.type = SDL_MOUSEMOTION;
-                    event2.motion.which = 0;
-                    event2.motion.state = buttons;
-                    event2.motion.xrel = event.jball.xrel - x;
-                    event2.motion.yrel = event.jball.yrel - y;
-                    if (event.jball.xrel!=0) {
-                        x = event.jball.xrel;
-                        y = event.jball.yrel;
-                    }
-                    event2.motion.x = x;
-                    event2.motion.y = y;
-                    //__android_log_print(ANDROID_LOG_INFO, "GUICHAN","Mouse motion %d %d btns %d", x, y, buttons);
-                    if (buttons == 0) {
-                        // Push mouse motion event first, then button down event
-                        gui_input->pushInput(event2);
-                        buttons = SDL_BUTTON_LMASK;
-                        event2.type = SDL_MOUSEBUTTONDOWN;
-                        event2.button.which = 0;
-                        event2.button.button = SDL_BUTTON_LEFT;
-                        event2.button.state =  SDL_PRESSED;
-                        event2.button.x = x;
-                        event2.button.y = y;
-                        //__android_log_print(ANDROID_LOG_INFO, "GUICHAN","Mouse button %d coords %d %d", buttons, x, y);
-                    }
-                }
-                if (event.type == SDL_JOYBUTTONUP &&
-                    event.jbutton.which == 0 &&
-                    event.jbutton.button == 0) {
-                    // Do not push button down event here, because we need mouse motion event first
-                    buttons = 0;
-                    event2.type = SDL_MOUSEBUTTONUP;
-                    event2.button.which = 0;
-                    event2.button.button = SDL_BUTTON_LEFT;
-                    event2.button.state = SDL_RELEASED;
-                    event2.button.x = x;
-                    event2.button.y = y;
-                    //__android_log_print(ANDROID_LOG_INFO, "GUICHAN","Mouse button %d coords %d %d", buttons, x, y);
-                }
-                gui_input->pushInput(event2);
-            }
+        androidsdl_event(event, gui_input);
 #else
-            gui_input->pushInput(event);
+        gui_input->pushInput(event);
 #endif
       }
 
@@ -398,13 +394,13 @@ namespace widgets
           char tmp[MAX_PATH];
           fetch_configurationpath (tmp, sizeof (tmp));
           if(strlen(last_loaded_config) > 0)
-            strcat (tmp, last_loaded_config);
+            strncat (tmp, last_loaded_config, MAX_PATH - 1);
           else
           {
-            strcat (tmp, OPTIONSFILENAME);
-            strcat (tmp, ".uae");
+            strncat (tmp, OPTIONSFILENAME, MAX_PATH);
+            strncat (tmp, ".uae", MAX_PATH);
           }
-    			uae_restart(0, tmp);
+    			uae_restart(-1, tmp);
     			gui_running = false;
 			  }
 			  else if(actionEvent.getSource() == cmdStart)
@@ -425,6 +421,11 @@ namespace widgets
       			gui_running = false;
           }
         }
+        else if(actionEvent.getSource() == cmdHelp)
+        {
+          ShowHelpRequested();
+          cmdHelp->requestFocus();
+        }
       }
   };
   MainButtonActionListener* mainButtonActionListener;
@@ -443,6 +444,7 @@ namespace widgets
             categories[i].selector->setActive(true);
             categories[i].panel->setVisible(true);
             last_active_panel = i;
+            cmdHelp->setVisible(categories[last_active_panel].HelpFunc != NULL);
           }
           else
           {
@@ -527,6 +529,12 @@ namespace widgets
   	cmdStart->setId("Start");
     cmdStart->addActionListener(mainButtonActionListener);
 
+  	cmdHelp = new gcn::Button("Help");
+  	cmdHelp->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    cmdHelp->setBaseColor(gui_baseCol);
+  	cmdHelp->setId("Help");
+    cmdHelp->addActionListener(mainButtonActionListener);
+    
   	//--------------------------------------------------
     // Create selector entries
   	//--------------------------------------------------
@@ -568,7 +576,8 @@ namespace widgets
   	//--------------------------------------------------
     gui_top->add(cmdReset, DISTANCE_BORDER, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
     gui_top->add(cmdQuit, DISTANCE_BORDER + BUTTON_WIDTH + DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
-//    gui_top->add(cmdRestart, DISTANCE_BORDER + 2 * BUTTON_WIDTH + 2 * DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
+    //gui_top->add(cmdRestart, DISTANCE_BORDER + 2 * BUTTON_WIDTH + 2 * DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
+    gui_top->add(cmdHelp, DISTANCE_BORDER + 2 * BUTTON_WIDTH + 2 * DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
     gui_top->add(cmdStart, GUI_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
 
     gui_top->add(selectors, DISTANCE_BORDER + 1, DISTANCE_BORDER + 1);
@@ -581,7 +590,10 @@ namespace widgets
   	//--------------------------------------------------
   	// Activate last active panel
   	//--------------------------------------------------
+  	if(!emulating && quickstart_start)
+  	  last_active_panel = 1;
   	categories[last_active_panel].selector->requestFocus();
+  	cmdHelp->setVisible(categories[last_active_panel].HelpFunc != NULL);
   }
 
 
@@ -604,7 +616,8 @@ namespace widgets
     delete cmdReset;
     delete cmdRestart;
     delete cmdStart;
-   
+    delete cmdHelp;
+    
     delete mainButtonActionListener;
     
     delete gui_font;
@@ -629,7 +642,7 @@ void DisableResume(void)
 {
 // Disable resume button after loading config is very bad idea
 #ifndef ANDROID
-	if(emulating)
+  if(emulating)
   {
     widgets::cmdStart->setEnabled(false);
     gcn::Color backCol;
@@ -646,14 +659,23 @@ void run_gui(void)
 {
 #ifdef ANDROIDSDL
   SDL_ANDROID_SetScreenKeyboardShown(0);
+  SDL_ANDROID_SetSystemMousePointerVisible(1);
 #endif
   gui_running = true;
   gui_rtarea_flags_onenter = gui_create_rtarea_flag(&currprefs);
+  
+  expansion_generate_autoconfig_info(&changed_prefs);
 
   try
   {
     sdl::gui_init();
     widgets::gui_init();
+    if(_tcslen(startup_message) > 0) {
+      ShowMessage(startup_title, startup_message, _T(""), _T("Ok"), _T(""));
+      _tcscpy(startup_title, _T(""));
+      _tcscpy(startup_message, _T(""));
+      widgets::cmdStart->requestFocus();
+    }
     sdl::gui_run();
     widgets::gui_halt();
     sdl::gui_halt();
@@ -661,6 +683,7 @@ void run_gui(void)
     if (currprefs.onScreen!=0)
     {
        SDL_ANDROID_SetScreenKeyboardShown(1);
+       SDL_ANDROID_SetSystemMousePointerVisible(0);
     }
 #endif
   }
@@ -682,14 +705,22 @@ void run_gui(void)
     std::cout << "Unknown exception" << std::endl;
     uae_quit();
   }
+
+  expansion_generate_autoconfig_info(&changed_prefs);
+  cfgfile_compatibility_romtype(&changed_prefs);
+  
   if(quit_program > UAE_QUIT || quit_program < -UAE_QUIT)
   {
   	//--------------------------------------------------
     // Prepare everything for Reset of Amiga
   	//--------------------------------------------------
 		currprefs.nr_floppies = changed_prefs.nr_floppies;
+		screen_is_picasso = 0;
 		
 		if(gui_rtarea_flags_onenter != gui_create_rtarea_flag(&changed_prefs))
 	    quit_program = -UAE_RESET_HARD; // Hardreset required...
   }
+
+  // Reset counter for access violations
+  init_max_signals();
 }

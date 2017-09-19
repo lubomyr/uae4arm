@@ -43,8 +43,6 @@ STATIC_INLINE void clear_sound_buffers (void)
     memset (sndbuffer, 0, 4 * (SNDBUFFER_LEN + 32) * DEFAULT_SOUND_CHANNELS);
 }
 
-#define PUT_SOUND_WORD_MONO(x) put_sound_word_mono_func(x)
-
 #define PUT_SOUND_WORD(b) do { *sndbufpt = b; sndbufpt = sndbufpt + 1; } while (0)
 #define PUT_SOUND_WORD_STEREO(l,r) do { *((uae_u32 *)sndbufpt) = (r << 16) | (l & 0xffff); sndbufpt = sndbufpt + 2; } while (0)
 

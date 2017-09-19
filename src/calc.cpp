@@ -12,13 +12,7 @@
 
 */
 
-#define CALC_DEBUG 0
-
-#if CALC_DEBUG
-#define calc_log(x) do { write_log x; } while(0)
-#else
 #define calc_log(x)
-#endif
 
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -272,15 +266,6 @@ static double docalc1(TCHAR op, struct calcstack *sv1, double v2)
 	return docalcx (op, v1, v2);
 }
 
-static TCHAR *stacktostr(struct calcstack *st)
-{
-	static TCHAR out[256];
-	if (st->s)
-		return st->s;
-	_stprintf(out, _T("%f"), st->val);
-	return out;
-}
-
 static TCHAR *chartostack(TCHAR c)
 {
 	TCHAR *s = xmalloc (TCHAR, 2);
@@ -294,7 +279,7 @@ static bool execution_order(const TCHAR *input, double *outval)
     const TCHAR *strpos = input, *strend = input + _tcslen(input);
     TCHAR c, res[4];
     unsigned int sl = 0, rn = 0;
-	struct calcstack stack[STACK_SIZE] = { 0 }, *sc, *sc2;
+	struct calcstack stack[STACK_SIZE] = { { 0 } }, *sc, *sc2;
 	double val = 0;
 	int i;
 	bool ok = false;
@@ -383,6 +368,13 @@ static bool execution_order(const TCHAR *input, double *outval)
 		return ok;
 }
 
+static bool is_separator(TCHAR c)
+{
+	if (is_operator(c))
+		return true;
+	return c == 0 || c == ')' || c == ' ';
+}
+
 static bool parse_values(const TCHAR *ins, TCHAR *out)
 {
 	int ident = 0;
@@ -399,6 +391,18 @@ static bool parse_values(const TCHAR *ins, TCHAR *out)
 	}
 	while (*in) {
 		TCHAR *instart = in;
+		if (!_tcsncmp(in, _T("true"), 4) && is_separator(in[4])) {
+			in[0] = '1';
+			in[1] = ' ';
+			in[2] = ' ';
+			in[3] = ' ';
+		} else if (!_tcsncmp(in, _T("false"), 5) && is_separator(in[5])) {
+			in[0] = '0';
+			in[1] = ' ';
+			in[2] = ' ';
+			in[3] = ' ';
+			in[4] = ' ';
+		}
 		if (_istdigit (*in)) {
 			if (ident >= MAX_VALUES)
 				return false;

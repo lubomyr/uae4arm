@@ -65,9 +65,33 @@ bool my_stat (const TCHAR *name, struct mystat *statbuf)
 
 bool my_chmod (const TCHAR *name, uae_u32 mode)
 {
-  // return result of mystat so invalid file will return false
-  struct mystat ms;
-  return my_stat(name, &ms);
+  // Note: only used to set or clear write protect on disk file
+  
+  // get current state
+  struct stat64 st;
+  if(stat64(name, &st) == -1) {
+    write_log("my_chmod: stat on file %s failed\n", name);
+    return false;
+  }
+
+  if(mode & FILEFLAG_WRITE)
+    // set write permission
+    st.st_mode |= S_IWUSR;
+  else
+    // clear write permission
+    st.st_mode &= ~(S_IWUSR);
+  chmod(name, st.st_mode);
+
+  stat64(name, &st);
+  int newmode = 0;
+  if (st.st_mode & S_IRUSR) {
+    newmode |= FILEFLAG_READ;
+  }
+  if (st.st_mode & S_IWUSR) {
+    newmode |= FILEFLAG_WRITE;
+  }
+
+  return (mode == newmode);
 }
 
 

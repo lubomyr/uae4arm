@@ -21,7 +21,7 @@ void console_out (const TCHAR *format,...)
     va_start (parms, format);
     vsnprintf (buffer, WRITE_LOG_BUF_SIZE-1, format, parms);
     va_end (parms);
-    printf(buffer);
+    printf("%s", buffer);
 }
 
 #ifdef WITH_LOGGING

@@ -40,36 +40,19 @@ bool LoadConfigByName(const char *name)
   ConfigFileInfo* config = SearchConfigInList(name);
   if(config != NULL)
   {
-    txtName->setText(config->Name);
-    txtDesc->setText(config->Description);
-    target_cfgfile_load(&changed_prefs, config->FullPath, 0, 0);
-    strncpy(last_active_config, config->Name, MAX_PATH);
-    DisableResume();
-    RefreshAllPanels();
+    if(emulating) {
+		  uae_restart(-1, config->FullPath);
+    } else {
+      txtName->setText(config->Name);
+      txtDesc->setText(config->Description);
+      target_cfgfile_load(&changed_prefs, config->FullPath, 0, 0);
+      strncpy(last_active_config, config->Name, MAX_PATH);
+      DisableResume();
+      RefreshAllPanels();
+    }
   }
 
   return false;
-}
-
-void load_buildin_config(int id)
-{
-  if(changed_prefs.cdslots[0].inuse)
-    gui_force_rtarea_hdchange();
-  discard_prefs(&changed_prefs, 0);
-  default_prefs(&changed_prefs, 0);
-  switch(id) {
-    case BUILDINID_A500:
-      bip_a500(&changed_prefs, -1);
-      break;
-    
-    case BUILDINID_A1200:
-      bip_a1200(&changed_prefs, -1);
-      break;
-      
-    case BUILDINID_CD32:
-      bip_cd32(&changed_prefs, -1);
-      break;
-  }
 }
 
 void SetLastActiveConfig(const char *filename)
@@ -109,9 +92,9 @@ class ConfigsListModel : public gcn::ListModel
         strncpy(tmp, ConfigFilesList[i]->Name, MAX_DPATH);
         if(strlen(ConfigFilesList[i]->Description) > 0)
         {
-          strncat(tmp, " (", MAX_DPATH);
-          strncat(tmp, ConfigFilesList[i]->Description, MAX_DPATH);
-          strncat(tmp, ")", MAX_DPATH);
+          strncat(tmp, " (", MAX_DPATH - 1);
+          strncat(tmp, ConfigFilesList[i]->Description, MAX_DPATH - 1);
+          strncat(tmp, ")", MAX_DPATH - 1);
         }
         configs.push_back(tmp);
       }
@@ -132,15 +115,14 @@ class ConfigButtonActionListener : public gcn::ActionListener
         // Load selected configuration
         //-----------------------------------------------
         i = lstConfigs->getSelected();
-        if(ConfigFilesList[i]->BuildInID != BUILDINID_NONE) {
-          load_buildin_config(ConfigFilesList[i]->BuildInID);
-          strcpy(changed_prefs.description, ConfigFilesList[i]->Description);
+        if(emulating) {
+  			  uae_restart(-1, ConfigFilesList[i]->FullPath);
         } else {
           target_cfgfile_load(&changed_prefs, ConfigFilesList[i]->FullPath, 0, 0);
+          strncpy(last_active_config, ConfigFilesList[i]->Name, MAX_PATH);
+          DisableResume();
+          RefreshAllPanels();
         }
-        strncpy(last_active_config, ConfigFilesList[i]->Name, MAX_PATH);
-        DisableResume();
-        RefreshAllPanels();
       }
       else if(actionEvent.getSource() == cmdSave)
       {
@@ -151,7 +133,7 @@ class ConfigButtonActionListener : public gcn::ActionListener
         if(!txtName->getText().empty())
         {
           fetch_configurationpath(filename, MAX_DPATH);
-          strncat(filename, txtName->getText().c_str(), MAX_DPATH);
+          strncat(filename, txtName->getText().c_str(), MAX_DPATH - 1);
           strncat(filename, ".uae", MAX_DPATH);
           strncpy(changed_prefs.description, txtDesc->getText().c_str(), 256);
           if(cfgfile_save(&changed_prefs, filename, 0))
@@ -171,7 +153,7 @@ class ConfigButtonActionListener : public gcn::ActionListener
         //-----------------------------------------------
         char msg[256];
         i = lstConfigs->getSelected();
-        if(i >= 0 && ConfigFilesList[i]->BuildInID == BUILDINID_NONE && strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME))
+        if(i >= 0 && strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME))
         {
           snprintf(msg, 256, "Do you want to delete '%s' ?", ConfigFilesList[i]->Name);
           if(ShowMessage("Delete Configuration", msg, "", "Yes", "No"))
@@ -206,19 +188,15 @@ class ConfigsListActionListener : public gcn::ActionListener
         //-----------------------------------------------
         // Selected same config again -> load and start it
         //-----------------------------------------------
-        if(ConfigFilesList[selected_item]->BuildInID != BUILDINID_NONE) {
-          load_buildin_config(ConfigFilesList[selected_item]->BuildInID);
-          strcpy(changed_prefs.description, ConfigFilesList[selected_item]->Description);
-        } else {
+  			if(emulating) {
+  			  uae_restart(0, ConfigFilesList[selected_item]->FullPath);
+  			} else {
           target_cfgfile_load(&changed_prefs, ConfigFilesList[selected_item]->FullPath, 0, 0);
-        }
-        strncpy(last_active_config, ConfigFilesList[selected_item]->Name, MAX_PATH);
-        DisableResume();
-        RefreshAllPanels();
-  			if(emulating)
-  			  uae_reset(1, 1);
-  			else
+          strncpy(last_active_config, ConfigFilesList[selected_item]->Name, MAX_PATH);
+          DisableResume();
+          RefreshAllPanels();
   			  uae_reset(0, 1);
+  			}
   			gui_running = false;
       }
       else
@@ -268,11 +246,7 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   cmdDelete->addActionListener(configButtonActionListener);
 
   int buttonX = DISTANCE_BORDER;
-#ifdef ANDROID
-  int buttonY = (DISTANCE_BORDER + BUTTON_HEIGHT) * 2;
-#else
   int buttonY = category.panel->getHeight() - DISTANCE_BORDER - BUTTON_HEIGHT;
-#endif
   category.panel->add(cmdLoad, buttonX, buttonY);
   buttonX += BUTTON_WIDTH + DISTANCE_NEXT_X;
   category.panel->add(cmdSave, buttonX, buttonY);
@@ -289,9 +263,6 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   txtName = new gcn::TextField();
   txtName->setSize(300, TEXTFIELD_HEIGHT);
   txtName->setId("ConfigName");
-#ifdef ANDROID
-  txtName->disableVirtualKeyboard(changed_prefs.disableMenuVKeyb);
-#endif
 
   lblDesc = new gcn::Label("Description:");
   lblDesc->setSize(90, LABEL_HEIGHT);
@@ -319,11 +290,7 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   
   scrAreaConfigs = new gcn::ScrollArea(lstConfigs);
   scrAreaConfigs->setFrameSize(1);
-#ifdef ANDROID
-  scrAreaConfigs->setPosition(DISTANCE_BORDER, DISTANCE_BORDER + buttonY + BUTTON_HEIGHT);
-#else
   scrAreaConfigs->setPosition(DISTANCE_BORDER, DISTANCE_BORDER);
-#endif
   scrAreaConfigs->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER - 2, 252);
   scrAreaConfigs->setScrollbarWidth(20);
   scrAreaConfigs->setBaseColor(gui_baseCol);
@@ -390,4 +357,18 @@ void RefreshPanelConfig(void)
       }
     }
   }
+}
+
+
+bool HelpPanelConfig(std::vector<std::string> &helptext)
+{
+  helptext.clear();
+  helptext.push_back("To load a configuration, select the entry in the list and then click on \"Load\". If you doubleclick on an entry");
+  helptext.push_back("in the list, the emulation starts with this configuration.");
+  helptext.push_back(" ");
+  helptext.push_back("If you want to create a new configuration, setup all options, enter a new name in \"Name\", provide a short");
+  helptext.push_back("description and then click on \"Save\".");
+  helptext.push_back(" ");
+  helptext.push_back("\"Delete\" will delete the selected configuration.");
+  return true;
 }

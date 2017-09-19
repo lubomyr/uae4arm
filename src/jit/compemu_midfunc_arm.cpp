@@ -224,7 +224,9 @@ MIDFUNC(2,mov_l_rr,(W4 d, RR4 s))
 
 	live.nat[s].holds[live.nat[s].nholds] = d;
 	live.nat[s].nholds++;
-	D2(panicbug("Added %d to nreg %d(%d), now holds %d regs", d, s, live.state[d].realind, live.nat[s].nholds));
+#if defined(DEBUG) && DEBUG > 1	
+	jit_log("Added %d to nreg %d(%d), now holds %d regs", d, s, live.state[d].realind, live.nat[s].nholds);
+#endif
 	unlock2(s);
 }
 MENDFUNC(2,mov_l_rr,(W4 d, RR4 s))
@@ -380,16 +382,6 @@ MIDFUNC(1,forget_about,(W4 r))
 	set_status(r, UNDEF);
 }
 MENDFUNC(1,forget_about,(W4 r))
-
-#ifdef USE_JIT_FPU
-MIDFUNC(1,f_forget_about,(FW r))
-{
-	if (f_isinreg(r))
-	  f_disassociate(r);
-	live.fate[r].status=UNDEF;
-}
-MENDFUNC(1,f_forget_about,(FW r))
-#endif
 
 
 // ARM optimized functions

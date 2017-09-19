@@ -12,7 +12,7 @@
 #include "keybuf.h"
 #include "zfile.h"
 #include "gui.h"
-#include "osdep/gui/SelectorEntry.hpp"
+#include "gui/SelectorEntry.hpp"
 #include "gui/gui_handling.h"
 #include "memory-uae.h"
 #include "rommgr.h"
@@ -36,8 +36,6 @@
 
 int emulating = 0;
 
-extern int screen_is_picasso;
-
 struct gui_msg {
   int num;
   const char *msg;
@@ -57,6 +55,7 @@ struct gui_msg gui_msglist[] = {
   { NUMSG_KICKREPNO,      "The floppy disk (image file) in DF0: is not compatible with the system ROM replacement functionality." },
   { NUMSG_ROMNEED,        "One of the following system ROMs is required:\n\n%s\n\nCheck the System ROM path in the Paths panel and click Rescan ROMs." },
   { NUMSG_EXPROMNEED,     "One of the following expansion boot ROMs is required:\n\n%s\n\nCheck the System ROM path in the Paths panel and click Rescan ROMs." },
+  { NUMSG_NOMEMORY,       "Out of memory or too much Z3 autoconfig space configured." },
 
   { -1, "" }
 };
@@ -198,7 +197,7 @@ static struct romdata *scan_single_rom (char *path)
     char tmp[MAX_DPATH];
     struct romdata *rd;
 
-    strcpy (tmp, path);
+    strncpy (tmp, path, MAX_PATH);
     rd = getromdatabypath(path);
     if (rd && rd->crc32 == 0xffffffff)
 	return rd;
@@ -245,17 +244,11 @@ static int scan_rom_2 (struct zfile *f, void *dummy)
 
 static void scan_rom(char *path)
 {
-  struct romdata *rd;
-
   if (!isromext(path)) {
 	  //write_log("ROMSCAN: skipping file '%s', unknown extension\n", path);
 	  return;
   }
-  rd = getarcadiarombyname(path);
-  if (rd) 
-    addrom(rd, path);
-  else
-    zfile_zopen (path, scan_rom_2, 0);
+  zfile_zopen (path, scan_rom_2, 0);
 }
 
 
@@ -274,8 +267,8 @@ void RescanROMs(void)
   for(int i=0; i<files.size(); ++i)
   {
     char tmppath[MAX_PATH];
-    strncpy(tmppath, path, MAX_PATH);
-    strncat(tmppath, files[i].c_str(), MAX_PATH);
+    strncpy(tmppath, path, MAX_PATH - 1);
+    strncat(tmppath, files[i].c_str(), MAX_PATH - 1);
     scan_rom (tmppath);
   }
   
@@ -286,6 +279,9 @@ void RescanROMs(void)
 			break;
 		if (rd->crc32 == 0xffffffff && strncmp(rd->model, "AROS", 4) == 0)
 			addrom (rd, ":AROS");
+    if (rd->crc32 == 0xffffffff && rd->id == 63) {
+      addrom (rd, ":HRTMon");
+    }
 		id++;
 	}
 }
@@ -307,34 +303,9 @@ void ReadConfigFileList(void)
   std::vector<std::string> files;
   const char *filter_rp9[] = { ".rp9", "\0" };
   const char *filter_uae[] = { ".uae", "\0" };
-  const char *filter_conf[] = { ".conf", "\0" };
     
   ClearConfigFileList();
   
-  // Add built-in configs: A500
-  ConfigFileInfo *buildin = new ConfigFileInfo();
-  strcpy(buildin->FullPath, "");
-  strcpy(buildin->Name, "Amiga 500");
-  strcpy(buildin->Description, _T("Built-in, A500, OCS, 512KB"));
-  buildin->BuildInID = BUILDINID_A500;
-  ConfigFilesList.push_back(buildin);
-
-  // A1200
-  buildin = new ConfigFileInfo();
-  strcpy(buildin->FullPath, "");
-  strcpy(buildin->Name, "Amiga 1200");
-  strcpy(buildin->Description, _T("Built-in, A1200"));
-  buildin->BuildInID = BUILDINID_A1200;
-  ConfigFilesList.push_back(buildin);
-  
-  // CD32
-  buildin = new ConfigFileInfo();
-  strcpy(buildin->FullPath, "");
-  strcpy(buildin->Name, "CD32");
-  strcpy(buildin->Description, _T("Built-in"));
-  buildin->BuildInID = BUILDINID_CD32;
-  ConfigFilesList.push_back(buildin);
-
   // Read rp9 files
   fetch_rp9path(path, MAX_PATH);
   ReadDirectory(path, NULL, &files);
@@ -343,11 +314,10 @@ void ReadConfigFileList(void)
   {
     ConfigFileInfo *tmp = new ConfigFileInfo();
     strncpy(tmp->FullPath, path, MAX_DPATH);
-    strcat(tmp->FullPath, files[i].c_str());
+    strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH);
     strncpy(tmp->Name, files[i].c_str(), MAX_DPATH);
     removeFileExtension(tmp->Name);
-    strcpy(tmp->Description, _T("rp9"));
-    tmp->BuildInID = BUILDINID_NONE;
+    strncpy(tmp->Description, _T("rp9"), MAX_PATH);
     ConfigFilesList.push_back(tmp);
   }
   
@@ -359,41 +329,11 @@ void ReadConfigFileList(void)
   {
     ConfigFileInfo *tmp = new ConfigFileInfo();
     strncpy(tmp->FullPath, path, MAX_DPATH);
-    strcat(tmp->FullPath, files[i].c_str());
+    strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH);
     strncpy(tmp->Name, files[i].c_str(), MAX_DPATH);
     removeFileExtension(tmp->Name);
     cfgfile_get_description(tmp->FullPath, tmp->Description);
-    tmp->BuildInID = BUILDINID_NONE;
     ConfigFilesList.push_back(tmp);
-  }
-
-  // Read also old style configs
-  ReadDirectory(path, NULL, &files);
-  FilterFiles(&files, filter_conf);
-  for (int i=0; i<files.size(); ++i)
-  {
-    if(strcmp(files[i].c_str(), "adfdir.conf"))
-    { 
-      ConfigFileInfo *tmp = new ConfigFileInfo();
-      strncpy(tmp->FullPath, path, MAX_DPATH);
-      strcat(tmp->FullPath, files[i].c_str());
-      strncpy(tmp->Name, files[i].c_str(), MAX_DPATH);
-      removeFileExtension(tmp->Name);
-      strcpy(tmp->Description, "Old style configuration file");
-      tmp->BuildInID = BUILDINID_NONE;
-      for(int j=0; j<ConfigFilesList.size(); ++j)
-      {
-        if(!strcmp(ConfigFilesList[j]->Name, tmp->Name))
-        {
-          // Config in new style already in list
-          delete tmp;
-          tmp = NULL;
-          break;
-        }
-      }
-      if(tmp != NULL)
-        ConfigFilesList.push_back(tmp);
-    }
   }
 }
 
@@ -421,6 +361,7 @@ static void gui_to_prefs (void)
   /* filesys hack */
   currprefs.mountitems = changed_prefs.mountitems;
   memcpy(&currprefs.mountconfig, &changed_prefs.mountconfig, MOUNT_CONFIG_SIZE * sizeof (struct uaedev_config_info));
+	fixup_prefs (&changed_prefs, true);
 }
 
 
@@ -450,7 +391,7 @@ int gui_init (void)
   int ret = 0;
   
 	emulating=0;
-
+	
   if(lstAvailableROMs.size() == 0)
     RescanROMs();
 
@@ -505,28 +446,28 @@ int gui_update (void)
   else
     strncpy(tmp, last_loaded_config, MAX_PATH);
 
-  strncat(savestate_fname, tmp, MAX_DPATH);
-  strncat(screenshot_filename, tmp, MAX_DPATH);
+  strncat(savestate_fname, tmp, MAX_DPATH - 1);
+  strncat(screenshot_filename, tmp, MAX_DPATH - 1);
   removeFileExtension(savestate_fname);
   removeFileExtension(screenshot_filename);
 
   switch(currentStateNum)
   {
     case 1:
-  		strcat(savestate_fname,"-1.uss");
-	    strcat(screenshot_filename,"-1.png");
+  		strncat(savestate_fname,"-1.uss", MAX_PATH - 1);
+	    strncat(screenshot_filename,"-1.png", MAX_PATH - 1);
 	    break;
     case 2:
-  		strcat(savestate_fname,"-2.uss");
-  		strcat(screenshot_filename,"-2.png");
+  		strncat(savestate_fname,"-2.uss", MAX_PATH - 1);
+  		strncat(screenshot_filename,"-2.png", MAX_PATH - 1);
   		break;
     case 3:
-  		strcat(savestate_fname,"-3.uss");
-  		strcat(screenshot_filename,"-3.png");
+  		strncat(savestate_fname,"-3.uss", MAX_PATH - 1);
+  		strncat(screenshot_filename,"-3.png", MAX_PATH - 1);
   		break;
     default: 
-  	   	strcat(savestate_fname,".uss");
-    		strcat(screenshot_filename,".png");
+	   	strncat(savestate_fname,".uss", MAX_PATH - 1);
+  		strncat(screenshot_filename,".png", MAX_PATH - 1);
   }
   return 0;
 }
@@ -569,18 +510,10 @@ void gui_display (int shortcut)
 void moveVertical(int value)
 {
 	changed_prefs.pandora_vertical_offset += value;
-	if(changed_prefs.pandora_vertical_offset < -16)
-		changed_prefs.pandora_vertical_offset = -16;
-	else if(changed_prefs.pandora_vertical_offset > 16)
-		changed_prefs.pandora_vertical_offset = 16;
-}
-
-void gui_disk_image_change (int unitnum, const char *name, bool writeprotected)
-{
-}
-
-void gui_led (int led, int on)
-{
+	if(changed_prefs.pandora_vertical_offset < -16 + OFFSET_Y_ADJUST)
+		changed_prefs.pandora_vertical_offset = -16 + OFFSET_Y_ADJUST;
+	else if(changed_prefs.pandora_vertical_offset > 16 + OFFSET_Y_ADJUST)
+		changed_prefs.pandora_vertical_offset = 16 + OFFSET_Y_ADJUST;
 }
 
 void gui_flicker_led (int led, int unitnum, int status)
@@ -639,6 +572,29 @@ void notify_user (int msg)
   }
 }
 
+void notify_user_parms (int msg, const TCHAR *parms, ...)
+{
+	TCHAR msgtxt[MAX_DPATH];
+	TCHAR tmp[MAX_DPATH];
+	int c = 0;
+	va_list parms2;
+
+  int i=0;
+  while(gui_msglist[i].num >= 0)
+  {
+    if(gui_msglist[i].num == msg)
+    {
+      strncpy(tmp, gui_msglist[i].msg, MAX_DPATH);
+    	va_start (parms2, parms);
+    	_vsntprintf (msgtxt, sizeof msgtxt / sizeof (TCHAR), tmp, parms2);
+      gui_message(msgtxt);
+    	va_end (parms2);
+      break;
+    }
+    ++i;
+  }
+}
+
 
 int translate_message (int msg,	TCHAR *out)
 {
@@ -647,7 +603,7 @@ int translate_message (int msg,	TCHAR *out)
   {
     if(gui_msglist[i].num == msg)
     {
-      strcpy(out, gui_msglist[i].msg);
+      strncpy(out, gui_msglist[i].msg, MAX_DPATH);
       return 1;
     }
     ++i;

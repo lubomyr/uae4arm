@@ -23,7 +23,11 @@ static gcn::Button *cmdMainROM;
 static gcn::Label *lblExtROM;
 static gcn::UaeDropDown* cboExtROM;
 static gcn::Button *cmdExtROM;
-static gcn::UaeCheckBox* chkMapROM;
+#ifdef ACTION_REPLAY
+static gcn::Label *lblCartROM;
+static gcn::UaeDropDown* cboCartROM;
+static gcn::Button *cmdCartROM;
+#endif
 
 
 class ROMListModel : public gcn::ListModel
@@ -63,12 +67,13 @@ class ROMListModel : public gcn::ListModel
       roms.clear();
       idxToAvailableROMs.clear();
       
-      if(ROMType & (ROMTYPE_EXTCDTV | ROMTYPE_EXTCD32))
+      int currIdx = -1;
+      if(ROMType & (ROMTYPE_ALL_EXT | ROMTYPE_ALL_CART))
       {
         roms.push_back(""); 
         idxToAvailableROMs.push_back(-1);
+        currIdx = 0;
       }
-      int currIdx = -1;
       for(int i=0; i<lstAvailableROMs.size(); ++i)
       {
         if(lstAvailableROMs[i]->ROMType & ROMType)
@@ -84,6 +89,9 @@ class ROMListModel : public gcn::ListModel
 };
 static ROMListModel *mainROMList;
 static ROMListModel *extROMList;
+#ifdef ACTION_REPLAY
+static ROMListModel *cartROMList;
+#endif
 
 
 class MainROMActionListener : public gcn::ActionListener
@@ -113,6 +121,22 @@ class ExtROMActionListener : public gcn::ActionListener
 };
 static ExtROMActionListener* extROMActionListener;
 
+
+#ifdef ACTION_REPLAY
+class CartROMActionListener : public gcn::ActionListener
+{
+  public:
+    void action(const gcn::ActionEvent& actionEvent)
+    {
+      AvailableROM* rom = cartROMList->getROMat(cboCartROM->getSelected());
+      if(rom != NULL)
+        strncpy(changed_prefs.cartfile, rom->Path, sizeof(changed_prefs.cartfile));
+      else
+        strncpy(changed_prefs.cartfile, "", sizeof(changed_prefs.cartfile));
+    }
+};
+static CartROMActionListener* cartROMActionListener;
+#endif
 
 class ROMButtonActionListener : public gcn::ActionListener
 {
@@ -156,6 +180,25 @@ class ROMButtonActionListener : public gcn::ActionListener
         }
         cmdExtROM->requestFocus();
       }
+#ifdef ACTION_REPLAY
+      else if (actionEvent.getSource() == cmdCartROM)
+      {
+        strncpy(tmp, currentDir, MAX_PATH);
+        if(SelectFile("Select Cartridge ROM", tmp, filter))
+        {
+          AvailableROM *newrom;
+          newrom = new AvailableROM();
+          extractFileName(tmp, newrom->Name);
+          removeFileExtension(newrom->Name);
+          strncpy(newrom->Path, tmp, MAX_PATH);
+          newrom->ROMType = ROMTYPE_CD32CART;
+          lstAvailableROMs.push_back(newrom);
+          strncpy(changed_prefs.romextfile, tmp, sizeof(changed_prefs.romextfile));
+          RefreshPanelROM();
+        }
+        cmdCartROM->requestFocus();
+      }
+#endif
     }
 };
 static ROMButtonActionListener* romButtonActionListener;
@@ -165,14 +208,26 @@ void InitPanelROM(const struct _ConfigCategory& category)
 {
   mainROMActionListener = new MainROMActionListener();
   extROMActionListener = new ExtROMActionListener();
+#ifdef ACTION_REPLAY
+  cartROMActionListener = new CartROMActionListener();
+#endif
   romButtonActionListener = new ROMButtonActionListener();
-  mainROMList = new ROMListModel(ROMTYPE_KICK | ROMTYPE_KICKCD32);
-  extROMList = new ROMListModel(ROMTYPE_EXTCDTV | ROMTYPE_EXTCD32);
+  mainROMList = new ROMListModel(ROMTYPE_ALL_KICK);
+  extROMList = new ROMListModel(ROMTYPE_ALL_EXT);
+#ifdef ACTION_REPLAY
+  cartROMList = new ROMListModel(ROMTYPE_ALL_CART);
+#endif
+  int cboWidth;
+#ifdef ANDROID
+  cboWidth = 450;
+#else
+  cboWidth = 400;
+#endif
   
   lblMainROM = new gcn::Label("Main ROM File:");
   lblMainROM->setSize(200, LABEL_HEIGHT);
 	cboMainROM = new gcn::UaeDropDown(mainROMList);
-  cboMainROM->setSize(400, DROPDOWN_HEIGHT);
+  cboMainROM->setSize(cboWidth, DROPDOWN_HEIGHT);
   cboMainROM->setBaseColor(gui_baseCol);
   cboMainROM->setId("cboMainROM");
   cboMainROM->addActionListener(mainROMActionListener);
@@ -185,7 +240,7 @@ void InitPanelROM(const struct _ConfigCategory& category)
   lblExtROM = new gcn::Label("Extended ROM File:");
   lblExtROM->setSize(200, LABEL_HEIGHT);
 	cboExtROM = new gcn::UaeDropDown(extROMList);
-  cboExtROM->setSize(400, DROPDOWN_HEIGHT);
+  cboExtROM->setSize(cboWidth, DROPDOWN_HEIGHT);
   cboExtROM->setBaseColor(gui_baseCol);
   cboExtROM->setId("cboExtROM");
   cboExtROM->addActionListener(extROMActionListener);
@@ -195,25 +250,44 @@ void InitPanelROM(const struct _ConfigCategory& category)
   cmdExtROM->setBaseColor(gui_baseCol);
   cmdExtROM->addActionListener(romButtonActionListener);
 
-	chkMapROM = new gcn::UaeCheckBox("MapROM emulation", true);
-	chkMapROM->setEnabled(false);
-  
+#ifdef ACTION_REPLAY
+  lblCartROM = new gcn::Label("Cardridge ROM File:");
+  lblCartROM->setSize(200, LABEL_HEIGHT);
+	cboCartROM = new gcn::UaeDropDown(cartROMList);
+  cboCartROM->setSize(cboWidth, DROPDOWN_HEIGHT);
+  cboCartROM->setBaseColor(gui_baseCol);
+  cboCartROM->setId("cboCartROM");
+  cboCartROM->addActionListener(cartROMActionListener);
+  cmdCartROM = new gcn::Button("...");
+  cmdCartROM->setId("CartROM");
+  cmdCartROM->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
+  cmdCartROM->setBaseColor(gui_baseCol);
+  cmdCartROM->addActionListener(romButtonActionListener);
+#endif
+ 
   int posY = DISTANCE_BORDER;
   category.panel->add(lblMainROM, DISTANCE_BORDER, posY);
   posY += lblMainROM->getHeight() + 4;
   category.panel->add(cboMainROM, DISTANCE_BORDER, posY);
   category.panel->add(cmdMainROM, DISTANCE_BORDER + cboMainROM->getWidth() + DISTANCE_NEXT_X, posY);
   posY += cboMainROM->getHeight() + DISTANCE_NEXT_Y;
-
+ 
   category.panel->add(lblExtROM, DISTANCE_BORDER, posY);
   posY += lblExtROM->getHeight() + 4;
-  category.panel->add(cboExtROM, DISTANCE_BORDER, posY);
+// FIXME: caused crash on android device Xiaomi Redmi Note 4x
+//  category.panel->add(cboExtROM, DISTANCE_BORDER, posY);
   category.panel->add(cmdExtROM, DISTANCE_BORDER + cboExtROM->getWidth() + DISTANCE_NEXT_X, posY);
   posY += cboExtROM->getHeight() + DISTANCE_NEXT_Y;
   
-//  category.panel->add(chkMapROM, DISTANCE_BORDER, posY);
-  posY += chkMapROM->getHeight() + DISTANCE_NEXT_Y;
-  
+#ifdef ACTION_REPLAY
+  category.panel->add(lblCartROM, DISTANCE_BORDER, posY);
+  posY += lblCartROM->getHeight() + 4;
+// FIXME: caused crash on android device Xiaomi Redmi Note 4x
+//  category.panel->add(cboCartROM, DISTANCE_BORDER, posY);
+  category.panel->add(cmdCartROM, DISTANCE_BORDER + cboCartROM->getWidth() + DISTANCE_NEXT_X, posY);
+  posY += cboCartROM->getHeight() + DISTANCE_NEXT_Y;
+#endif
+
   RefreshPanelROM();
 }
 
@@ -231,9 +305,16 @@ void ExitPanelROM(void)
   delete cmdExtROM;
   delete extROMList;
   delete extROMActionListener;
+
+#ifdef ACTION_REPLAY
+  delete lblCartROM;
+  delete cboCartROM;
+  delete cmdCartROM;
+  delete cartROMList;
+  delete cartROMActionListener;
+#endif
   
   delete romButtonActionListener;
-  delete chkMapROM;
 }
 
 
@@ -245,5 +326,21 @@ void RefreshPanelROM(void)
   idx = extROMList->InitROMList(changed_prefs.romextfile);
   cboExtROM->setSelected(idx);
   
-  chkMapROM->setSelected(false);
+#ifdef ACTION_REPLAY
+  idx = cartROMList->InitROMList(changed_prefs.cartfile);
+  cboCartROM->setSelected(idx);
+#endif
+}
+
+
+bool HelpPanelROM(std::vector<std::string> &helptext)
+{
+  helptext.clear();
+  helptext.push_back("Select the required kickstart ROM for the Amiga you want to emulate in \"Main ROM File\".");
+  helptext.push_back(" ");
+  helptext.push_back("In \"Extended ROM File\", you can only select the required ROM for CD32 emulation.");
+  helptext.push_back(" ");
+  helptext.push_back("In \"Cartridge ROM File\", you can select the CD32 FMV module to activate video playback in CD32.");
+  helptext.push_back("There are also some Action Replay and Freezer cards and the built in HRTMon available.");
+  return true;
 }

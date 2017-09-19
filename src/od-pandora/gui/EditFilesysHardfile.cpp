@@ -18,11 +18,24 @@
 #include "gui.h"
 #include "gui_handling.h"
 
+#ifdef ANDROIDSDL
+#include "androidsdl_event.h"
+#endif
 
 #define DIALOG_WIDTH 620
-#define DIALOG_HEIGHT 242
+#define DIALOG_HEIGHT 272
 
 static const char *harddisk_filter[] = { ".hdf", "\0" };
+
+struct controller_map {
+  int type;
+  char display[64];
+};
+static struct controller_map controller[] = {
+  { HD_CONTROLLER_TYPE_UAE,     "UAE" },
+  { HD_CONTROLLER_TYPE_IDE_FIRST,  "A600/A1200/A4000 IDE" },
+  { -1 }
+};
 
 static bool dialogResult = false;
 static bool dialogFinished = false;
@@ -49,6 +62,9 @@ static gcn::Label *lblSectors;
 static gcn::TextField *txtSectors;
 static gcn::Label *lblBlocksize;
 static gcn::TextField *txtBlocksize;
+static gcn::Label *lblController;
+static gcn::UaeDropDown* cboController;
+static gcn::UaeDropDown* cboUnit;
 
 
 static void check_rdb(const TCHAR *filename)
@@ -68,13 +84,59 @@ static void check_rdb(const TCHAR *filename)
 }
 
 
+class ControllerListModel : public gcn::ListModel
+{
+  public:
+    ControllerListModel()
+    {
+    }
+    
+    int getNumberOfElements()
+    {
+      return 2;
+    }
+
+    std::string getElementAt(int i)
+    {
+      if(i < 0 || i >= 2)
+        return "---";
+      return controller[i].display;
+    }
+};
+static ControllerListModel controllerListModel;
+
+
+class UnitListModel : public gcn::ListModel
+{
+  public:
+    UnitListModel()
+    {
+    }
+    
+    int getNumberOfElements()
+    {
+      return 4;
+    }
+
+    std::string getElementAt(int i)
+    {
+      char num[8];
+      
+      if(i < 0 || i >= 4)
+        return "---";
+      snprintf(num, 8, "%d", i);
+      return num;
+    }
+};
+static UnitListModel unitListModel;
+
+
 class FilesysHardfileActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      if(actionEvent.getSource() == cmdPath)
-      {
+      if(actionEvent.getSource() == cmdPath) {
         char tmp[MAX_PATH];
         strncpy(tmp, txtPath->getText().c_str(), MAX_PATH);
         wndEditFilesysHardfile->releaseModalFocus();
@@ -86,9 +148,19 @@ class FilesysHardfileActionListener : public gcn::ActionListener
         }
         wndEditFilesysHardfile->requestModalFocus();
         cmdPath->requestFocus();
-      }
-      else
-      {
+
+      } else if(actionEvent.getSource() == cboController) {
+        switch(controller[cboController->getSelected()].type) {
+          case HD_CONTROLLER_TYPE_UAE:
+            cboUnit->setSelected(0);
+            cboUnit->setEnabled(false);
+            break;
+          default:
+            cboUnit->setEnabled(true);
+            break;
+        }
+
+      } else {
         if (actionEvent.getSource() == cmdOK)
         {
           if(txtDevice->getText().length() <= 0)
@@ -112,6 +184,18 @@ static FilesysHardfileActionListener* filesysHardfileActionListener;
 
 static void InitEditFilesysHardfile(void)
 {
+	for (int i = 0; expansionroms[i].name; i++) {
+		const struct expansionromtype *erc = &expansionroms[i];
+		if (erc->deviceflags & EXPANSIONTYPE_IDE) {
+		  for (int j = 0; controller[j].type >= 0; ++j) {
+		    if(!strcmp(erc->friendlyname, controller[j].display)) {
+		      controller[j].type = HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST + i;
+		      break;
+		    }
+		  }   
+		}
+	}
+	
 	wndEditFilesysHardfile = new gcn::Window("Edit");
 	wndEditFilesysHardfile->setSize(DIALOG_WIDTH, DIALOG_HEIGHT);
   wndEditFilesysHardfile->setPosition((GUI_WIDTH - DIALOG_WIDTH) / 2, (GUI_HEIGHT - DIALOG_HEIGHT) / 2);
@@ -195,6 +279,19 @@ static void InitEditFilesysHardfile(void)
   cmdPath->setId("hdfPath");
   cmdPath->addActionListener(filesysHardfileActionListener);
 
+  lblController = new gcn::Label("Controller:");
+  lblController->setSize(100, LABEL_HEIGHT);
+  lblController->setAlignment(gcn::Graphics::RIGHT);
+	cboController = new gcn::UaeDropDown(&controllerListModel);
+  cboController->setSize(180, DROPDOWN_HEIGHT);
+  cboController->setBaseColor(gui_baseCol);
+  cboController->setId("hdfController");
+  cboController->addActionListener(filesysHardfileActionListener);
+	cboUnit = new gcn::UaeDropDown(&unitListModel);
+  cboUnit->setSize(60, DROPDOWN_HEIGHT);
+  cboUnit->setBaseColor(gui_baseCol);
+  cboUnit->setId("hdfUnit");
+
   int posY = DISTANCE_BORDER;
   wndEditFilesysHardfile->add(lblDevice, DISTANCE_BORDER, posY);
   wndEditFilesysHardfile->add(txtDevice, DISTANCE_BORDER + lblDevice->getWidth() + 8, posY);
@@ -217,6 +314,10 @@ static void InitEditFilesysHardfile(void)
   wndEditFilesysHardfile->add(lblBlocksize, 240, posY);
   wndEditFilesysHardfile->add(txtBlocksize, 240 + lblBlocksize->getWidth() + 8, posY);
   posY += txtSectors->getHeight() + DISTANCE_NEXT_Y;
+  wndEditFilesysHardfile->add(lblController, DISTANCE_BORDER, posY);
+  wndEditFilesysHardfile->add(cboController, DISTANCE_BORDER + lblController->getWidth() + 8, posY);
+  wndEditFilesysHardfile->add(cboUnit, cboController->getX() + cboController->getWidth() + 8, posY);
+  posY += cboController->getHeight() + DISTANCE_NEXT_Y;
 
   wndEditFilesysHardfile->add(cmdOK);
   wndEditFilesysHardfile->add(cmdCancel);
@@ -250,6 +351,9 @@ static void ExitEditFilesysHardfile(void)
   delete txtSectors;
   delete lblBlocksize;
   delete txtBlocksize;
+  delete lblController;
+  delete cboController;
+  delete cboUnit;
     
   delete cmdOK;
   delete cmdCancel;
@@ -261,6 +365,8 @@ static void ExitEditFilesysHardfile(void)
 
 static void EditFilesysHardfileLoop(void)
 {
+  FocusBugWorkaround(wndEditFilesysHardfile);  
+
   while(!dialogFinished)
   {
     SDL_Event event;
@@ -307,67 +413,9 @@ static void EditFilesysHardfileLoop(void)
       // Send event to guichan-controls
       //-------------------------------------------------
 #ifdef ANDROIDSDL
-            /*
-             * Now that we are done polling and using SDL events we pass
-             * the leftovers to the SDLInput object to later be handled by
-             * the Gui. (This example doesn't require us to do this 'cause a
-             * label doesn't use input. But will do it anyway to show how to
-             * set up an SDL application with Guichan.)
-             */
-            if (event.type == SDL_MOUSEMOTION ||
-                event.type == SDL_MOUSEBUTTONDOWN ||
-                event.type == SDL_MOUSEBUTTONUP) {
-                // Filter emulated mouse events for Guichan, we wand absolute input
-            } else {
-                // Convert multitouch event to SDL mouse event
-                static int x = 0, y = 0, buttons = 0, wx=0, wy=0, pr=0;
-                SDL_Event event2;
-                memcpy(&event2, &event, sizeof(event));
-                if (event.type == SDL_JOYBALLMOTION &&
-                    event.jball.which == 0 &&
-                    event.jball.ball == 0) {
-                    event2.type = SDL_MOUSEMOTION;
-                    event2.motion.which = 0;
-                    event2.motion.state = buttons;
-                    event2.motion.xrel = event.jball.xrel - x;
-                    event2.motion.yrel = event.jball.yrel - y;
-                    if (event.jball.xrel!=0) {
-                        x = event.jball.xrel;
-                        y = event.jball.yrel;
-                    }
-                    event2.motion.x = x;
-                    event2.motion.y = y;
-                    //__android_log_print(ANDROID_LOG_INFO, "GUICHAN","Mouse motion %d %d btns %d", x, y, buttons);
-                    if (buttons == 0) {
-                        // Push mouse motion event first, then button down event
-                        gui_input->pushInput(event2);
-                        buttons = SDL_BUTTON_LMASK;
-                        event2.type = SDL_MOUSEBUTTONDOWN;
-                        event2.button.which = 0;
-                        event2.button.button = SDL_BUTTON_LEFT;
-                        event2.button.state =  SDL_PRESSED;
-                        event2.button.x = x;
-                        event2.button.y = y;
-                        //__android_log_print(ANDROID_LOG_INFO, "GUICHAN","Mouse button %d coords %d %d", buttons, x, y);
-                    }
-                }
-                if (event.type == SDL_JOYBUTTONUP &&
-                    event.jbutton.which == 0 &&
-                    event.jbutton.button == 0) {
-                    // Do not push button down event here, because we need mouse motion event first
-                    buttons = 0;
-                    event2.type = SDL_MOUSEBUTTONUP;
-                    event2.button.which = 0;
-                    event2.button.button = SDL_BUTTON_LEFT;
-                    event2.button.state = SDL_RELEASED;
-                    event2.button.x = x;
-                    event2.button.y = y;
-                    //__android_log_print(ANDROID_LOG_INFO, "GUICHAN","Mouse button %d coords %d %d", buttons, x, y);
-                }
-                gui_input->pushInput(event2);
-            }
+        androidsdl_event(event, gui_input);
 #else
-            gui_input->pushInput(event);
+        gui_input->pushInput(event);
 #endif
     }
 
@@ -388,6 +436,7 @@ bool EditFilesysHardfile(int unit_no)
   struct uaedev_config_data *uci;
   std::string strdevname, strroot;
   char tmp[32];
+  int i;
     
   dialogResult = false;
   dialogFinished = false;
@@ -420,6 +469,13 @@ bool EditFilesysHardfile(int unit_no)
     txtSectors->setText(tmp);
     snprintf(tmp, 32, "%d", ci->blocksize);
     txtBlocksize->setText(tmp);
+    int selIndex = 0;
+    for(i = 0; i < 2; ++i) {
+      if(controller[i].type == ci->controller_type)
+        selIndex = i;
+    }
+    cboController->setSelected(selIndex);
+    cboUnit->setSelected(ci->controller_unit);
     
     check_rdb(strroot.c_str());
   }
@@ -437,6 +493,8 @@ bool EditFilesysHardfile(int unit_no)
     txtReserved->setText("2");
     txtSectors->setText("32");
     txtBlocksize->setText("512");
+    cboController->setSelected(0);
+    cboUnit->setSelected(0);
   }
 
   EditFilesysHardfileLoop();
@@ -448,20 +506,30 @@ bool EditFilesysHardfile(int unit_no)
     extractPath((char *) txtPath->getText().c_str(), currentDir);
 
     uci_set_defaults(&ci, false);
-    strcpy(ci.devname, (char *) txtDevice->getText().c_str());
-    strcpy(ci.rootdir, (char *) txtPath->getText().c_str());
+    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH);
+    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH);
     ci.type = UAEDEV_HDF;
+    ci.controller_type = controller[cboController->getSelected()].type;
+    ci.controller_type_unit = 0;
+    ci.controller_unit = cboUnit->getSelected();
+    ci.controller_media_type = 0;
+    ci.unit_feature_level = 1;
+    ci.unit_special_flags = 0;
     ci.readonly = !chkReadWrite->isSelected();
     ci.sectors = atoi(txtSectors->getText().c_str());
     ci.surfaces = atoi(txtSurfaces->getText().c_str());
     ci.reserved = atoi(txtReserved->getText().c_str());
     ci.blocksize = atoi(txtBlocksize->getText().c_str());
     ci.bootpri = bp;
+    ci.physical_geometry = hardfile_testrdb(ci.rootdir);
     
     uci = add_filesys_config(&changed_prefs, unit_no, &ci);
     if (uci) {
   		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
-      hardfile_media_change (hfd, &ci, true, false);
+  		if(hfd)
+        hardfile_media_change (hfd, &ci, true, false);
+      else
+        hardfile_added(&ci);
     }
   }
 

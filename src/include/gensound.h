@@ -7,6 +7,9 @@
   * Copyright 1997 Bernd Schmidt
   */
 
+#ifndef UAE_GENSOUND_H
+#define UAE_GENSOUND_H
+
 extern int sound_available;
 
 extern void (*sample_handler) (void);
@@ -24,3 +27,4 @@ extern void close_sound (void);
 extern void sample16_handler (void);
 extern void sample16s_handler (void);
 
+#endif /* UAE_GENSOUND_H */

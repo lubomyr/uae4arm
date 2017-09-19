@@ -26,6 +26,7 @@ static gcn::Label* lblPandoraSpeed;
 static gcn::Label* lblPandoraSpeedInfo;
 static gcn::Slider* sldPandoraSpeed;
 static gcn::UaeCheckBox* chkBSDSocket;
+static gcn::UaeCheckBox* chkMasterWP;
 
 
 class MiscActionListener : public gcn::ActionListener
@@ -45,6 +46,12 @@ class MiscActionListener : public gcn::ActionListener
       else if (actionEvent.getSource() == chkBSDSocket)
         changed_prefs.socket_emu = chkBSDSocket->isSelected();
         
+      else if (actionEvent.getSource() == chkMasterWP) {
+        changed_prefs.floppy_read_only = chkMasterWP->isSelected();
+        RefreshPanelQuickstart();
+        RefreshPanelFloppy();
+      }
+
       else if (actionEvent.getSource() == sldPandoraSpeed)
       {
         int newspeed = (int) sldPandoraSpeed->getValue();
@@ -91,6 +98,10 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 	chkBSDSocket = new gcn::UaeCheckBox("bsdsocket.library");
   chkBSDSocket->setId("BSDSocket");
   chkBSDSocket->addActionListener(miscActionListener);
+
+	chkMasterWP = new gcn::UaeCheckBox("Master floppy write protection");
+  chkMasterWP->setId("MasterWP");
+  chkMasterWP->addActionListener(miscActionListener);
   
 	int posY = DISTANCE_BORDER;
   category.panel->add(chkStatusLine, DISTANCE_BORDER, posY);
@@ -107,6 +118,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 #endif
   category.panel->add(chkBSDSocket, DISTANCE_BORDER, posY);
   posY += chkBSDSocket->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkMasterWP, DISTANCE_BORDER, posY);
+  posY += chkMasterWP->getHeight() + DISTANCE_NEXT_Y;
   
   RefreshPanelMisc();
 }
@@ -121,6 +134,7 @@ void ExitPanelMisc(void)
   delete sldPandoraSpeed;
   delete lblPandoraSpeedInfo;
   delete chkBSDSocket;
+  delete chkMasterWP;
   delete miscActionListener;
 }
 
@@ -138,4 +152,27 @@ void RefreshPanelMisc(void)
   lblPandoraSpeedInfo->setCaption(tmp);
   
   chkBSDSocket->setSelected(changed_prefs.socket_emu);
+  chkMasterWP->setSelected(changed_prefs.floppy_read_only);
+}
+
+
+bool HelpPanelMisc(std::vector<std::string> &helptext)
+{
+  helptext.clear();
+  helptext.push_back("\"Status Line\" shows/hides the status line indicator. During emulation, you can show/hide this by pressing left");
+  helptext.push_back("shoulder and 'd'. The first value in the status line shows the idle time of the Pandora CPU in %, the second value");
+  helptext.push_back("is the current frame rate. When you have a HDD in your Amiga emulation, the HD indicator shows read (blue) and");
+  helptext.push_back("write (red) access to the HDD. The next values are showing the track number for each disk drive and indicates");
+  helptext.push_back("disk access.");
+  helptext.push_back(" ");
+  helptext.push_back("When you deactivate the option \"Show GUI on startup\" and use this configuration by specifying it with the");
+  helptext.push_back("command line parameter \"-config=<file>\", the emulation starts directly without showing the GUI.");
+  helptext.push_back(" ");
+  helptext.push_back("Set the speed for the Pandora CPU to overclock it for games which need more power. Be careful with this");
+  helptext.push_back("parameter.");
+  helptext.push_back(" ");
+  helptext.push_back("\"bsdsocket.library\" enables network functions (i.e. for web browsers in OS3.9).");
+  helptext.push_back(" ");
+  helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
+  return true;
 }

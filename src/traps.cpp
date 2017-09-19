@@ -20,6 +20,7 @@
 #include "threaddep/thread.h"
 #include "autoconf.h"
 #include "traps.h"
+#include "uae.h"
 
 /*
  * Traps are the mechanism via which 68k code can call emulator code
@@ -75,9 +76,6 @@ struct Trap
 static struct Trap  traps[MAX_TRAPS];
 static unsigned int trap_count = 1;
 
-
-static const int trace_traps = 0;
-
 static void trap_HandleExtendedTrap (TrapHandler, int has_retval);
 
 uaecptr find_trap (const TCHAR *name)
@@ -106,7 +104,8 @@ unsigned int define_trap (TrapHandler handler_func, int flags, const TCHAR *name
 {
   if (trap_count == MAX_TRAPS) {
 		write_log (_T("Ran out of emulator traps\n"));
-  	abort ();
+    target_startup_msg(_T("Internal error"), _T("Ran out of emulator traps."));
+    uae_restart(1, NULL);
   	return -1;
   } else {
   	int i;
@@ -145,9 +144,6 @@ void REGPARAM2 m68k_handle_trap (unsigned int trap_num)
 
   int has_retval   = (trap->flags & TRAPFLAG_NO_RETVAL) == 0;
   int implicit_rts = (trap->flags & TRAPFLAG_DORET) != 0;
-
-  if (trap->name && trap->name[0] != 0 && trace_traps)
-		write_log (_T("TRAP: %s\n"), trap->name);
 
   if (trap_num < trap_count) {
   	if (trap->flags & TRAPFLAG_EXTRA_STACK) {
@@ -190,7 +186,6 @@ struct TrapContext
 {
   /* Trap's working copy of 68k state. This is what the trap handler should
   *  access to get arguments from 68k space. */
-	//struct regstruct regs;
 
   /* Trap handler function that gets called on the trap context */
   TrapHandler       trap_handler;
@@ -200,7 +195,6 @@ struct TrapContext
   uae_u32           trap_retval;
 
   /* Copy of 68k state at trap entry. */
-	//struct regstruct saved_regs;
 	struct TrapCPUContext saved_regs;
 
   /* Thread which effects the trap context. */
@@ -215,6 +209,9 @@ struct TrapContext
   uaecptr           call68k_func_addr;
   /* And this gets set to the return value of the 68k call. */
   uae_u32           call68k_retval;
+
+	uae_u32 calllib_regs[16];
+	uae_u8 calllib_reg_inuse[16];
 };
 
 static void copytocpucontext(struct TrapCPUContext *cpu)
@@ -283,7 +280,6 @@ static void *trap_thread (void *arg)
   /* Good bye, cruel world... */
 
   /* dummy return value */
-  write_log("trap_thread: exit (arg=0x%08X)\n", arg);
   return 0;
 }
 
@@ -325,11 +321,11 @@ static void trap_HandleExtendedTrap (TrapHandler handler_func, int has_retval)
  *
  * This function is to be called from the trap context.
  */
-static uae_u32 trap_Call68k (TrapContext *context, uaecptr func_addr)
+static uae_u32 trap_Call68k (TrapContext *ctx, uaecptr func_addr)
 {
   /* Enter critical section - only one trap at a time, please! */
   uae_sem_wait (&trap_mutex);
-  current_context = context;
+  current_context = ctx;
 
   /* Don't allow an interrupt and thus potentially another
    * trap to be invoked while we hold the above mutex.
@@ -337,7 +333,7 @@ static uae_u32 trap_Call68k (TrapContext *context, uaecptr func_addr)
   regs.intmask = 7;
 
   /* Set up function call address. */
-  context->call68k_func_addr = func_addr;
+  ctx->call68k_func_addr = func_addr;
 
   /* Set PC to address of 68k call trap, so that it will be
    * executed when emulator context resumes. */
@@ -345,16 +341,16 @@ static uae_u32 trap_Call68k (TrapContext *context, uaecptr func_addr)
   fill_prefetch ();
 
   /* Switch to emulator context. */
-  uae_sem_post (&context->switch_to_emu_sem);
+  uae_sem_post (&ctx->switch_to_emu_sem);
 
   /* Wait for 68k call return handler to switch back to us. */
-  uae_sem_wait (&context->switch_to_trap_sem);
+  uae_sem_wait (&ctx->switch_to_trap_sem);
 
   /* End critical section. */
   uae_sem_post (&trap_mutex);
 
   /* Get return value from 68k function called. */
-  return context->call68k_retval;
+  return ctx->call68k_retval;
 }
 
 /*
@@ -465,14 +461,14 @@ static uae_u32 REGPARAM2 exit_trap_handler (TrapContext *dummy_ctx)
 /*
  * Call a 68k library function from extended trap.
  */
-uae_u32 CallLib (TrapContext *context, uaecptr base, uae_s16 offset)
+uae_u32 CallLib (TrapContext *ctx, uaecptr base, uae_s16 offset)
 {
   uae_u32 retval;
-  uaecptr olda6 = m68k_areg (regs, 6);
+	uaecptr olda6 = trap_get_areg(ctx, 6);
 
-  m68k_areg (regs, 6) = base;
-  retval = trap_Call68k (context, base + offset);
-  m68k_areg (regs, 6) = olda6;
+	trap_set_areg(ctx, 6, base);
+  retval = trap_Call68k (ctx, base + offset);
+	trap_set_areg(ctx, 6, olda6);
 
   return retval;
 }
@@ -480,9 +476,9 @@ uae_u32 CallLib (TrapContext *context, uaecptr base, uae_s16 offset)
 /*
  * Call 68k function from extended trap.
  */
-uae_u32 CallFunc (TrapContext *context, uaecptr func)
+uae_u32 CallFunc(TrapContext *ctx, uaecptr func)
 {
-  return trap_Call68k (context, func);
+	return trap_Call68k(ctx, func);
 }
 
 
@@ -512,4 +508,348 @@ void init_extended_traps (void)
     uae_sem_destroy(&trap_mutex);
   trap_mutex = 0;
   uae_sem_init (&trap_mutex, 0, 1);
+}
+
+void trap_call_add_dreg(TrapContext *ctx, int reg, uae_u32 v)
+{
+	ctx->calllib_reg_inuse[reg] = 1;
+	ctx->calllib_regs[reg] = v;
+}
+void trap_call_add_areg(TrapContext *ctx, int reg, uae_u32 v)
+{
+	ctx->calllib_reg_inuse[reg + 8] = 1;
+	ctx->calllib_regs[reg + 8] = v;
+}
+uae_u32 trap_call_lib(TrapContext *ctx, uaecptr base, uae_s16 offset)
+{
+	uae_u32 v;
+	uae_u32 storedregs[16];
+	bool storedregsused[16];
+	for (int i = 0; i < 16; i++) {
+		storedregsused[i] = false;
+		if (ctx->calllib_reg_inuse[i]) {
+			if ((i & 7) >= 2) {
+				storedregsused[i] = true;
+				storedregs[i] = regs.regs[i];
+			}
+			regs.regs[i] = ctx->calllib_regs[i];
+		}
+		ctx->calllib_reg_inuse[i] = 0;
+	}
+	v = CallLib(ctx, base, offset);
+	for (int i = 0; i < 16; i++) {
+		if (storedregsused[i]) {
+			regs.regs[i] = storedregs[i];
+		}
+	}
+	return v;
+}
+uae_u32 trap_call_func(TrapContext *ctx, uaecptr func)
+{
+	uae_u32 v;
+	uae_u32 storedregs[16];
+	bool storedregsused[16];
+	for (int i = 0; i < 16; i++) {
+		storedregsused[i] = false;
+		if (ctx->calllib_reg_inuse[i]) {
+			if ((i & 7) >= 2) {
+				storedregsused[i] = true;
+				storedregs[i] = regs.regs[i];
+			}
+			regs.regs[i] = ctx->calllib_regs[i];
+		}
+		ctx->calllib_reg_inuse[i] = 0;
+	}
+	v = CallFunc(ctx, func);
+	for (int i = 0; i < 16; i++) {
+		if (storedregsused[i]) {
+			regs.regs[i] = storedregs[i];
+		}
+	}
+	return v;
+}
+
+
+bool trap_valid_address(TrapContext *ctx, uaecptr addr, uae_u32 size)
+{
+	return valid_address(addr, size) != 0;
+}
+
+uae_u32 trap_get_dreg(TrapContext *ctx, int reg)
+{
+	return m68k_dreg(regs, reg);
+}
+uae_u32 trap_get_areg(TrapContext *ctx, int reg)
+{
+	return m68k_areg(regs, reg);
+}
+void trap_set_dreg(TrapContext *ctx, int reg, uae_u32 v)
+{
+	m68k_dreg(regs, reg) = v;
+}
+void trap_set_areg(TrapContext *ctx, int reg, uae_u32 v)
+{
+	m68k_areg(regs, reg) = v;
+}
+void trap_put_quad(TrapContext *ctx, uaecptr addr, uae_u64 v)
+{
+	uae_u8 out[8];
+	put_long_host(out + 0, v >> 32);
+	put_long_host(out + 4, (uae_u32)(v >> 0));
+	trap_put_bytes(ctx, out, addr, 8);
+}
+void trap_put_long(TrapContext *ctx, uaecptr addr, uae_u32 v)
+{
+	put_long(addr, v);
+}
+void trap_put_word(TrapContext *ctx, uaecptr addr, uae_u16 v)
+{
+	put_word(addr, v);
+}
+void trap_put_byte(TrapContext *ctx, uaecptr addr, uae_u8 v)
+{
+	put_byte(addr, v);
+}
+
+uae_u64 trap_get_quad(TrapContext *ctx, uaecptr addr)
+{
+	uae_u8 in[8];
+	trap_get_bytes(ctx, in, addr, 8);
+	return ((uae_u64)get_long_host(in + 0) << 32) | get_long_host(in + 4);
+}
+uae_u32 trap_get_long(TrapContext *ctx, uaecptr addr)
+{
+	return get_long(addr);
+}
+uae_u16 trap_get_word(TrapContext *ctx, uaecptr addr)
+{
+	return get_word(addr);
+}
+uae_u8 trap_get_byte(TrapContext *ctx, uaecptr addr)
+{
+	return get_byte(addr);
+}
+
+void trap_put_bytes(TrapContext *ctx, const void *haddrp, uaecptr addr, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	uae_u8 *haddr = (uae_u8*)haddrp;
+	if (valid_address(addr, cnt)) {
+		memcpy(get_real_address(addr), haddr, cnt);
+	} else {
+		for (int i = 0; i < cnt; i++) {
+			put_byte(addr, *haddr++);
+			addr++;
+		}
+	}
+}
+void trap_get_bytes(TrapContext *ctx, void *haddrp, uaecptr addr, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	uae_u8 *haddr = (uae_u8*)haddrp;
+	if (valid_address(addr, cnt)) {
+		memcpy(haddr, get_real_address(addr), cnt);
+	} else {
+		for (int i = 0; i < cnt; i++) {
+			*haddr++ = get_byte(addr);
+			addr++;
+		}
+	}
+}
+void trap_put_longs(TrapContext *ctx, uae_u32 *haddr, uaecptr addr, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	uae_u32 *p = (uae_u32*)haddr;
+	for (int i = 0; i < cnt; i++) {
+		put_long(addr, *p++);
+		addr += 4;
+	}
+}
+void trap_get_longs(TrapContext *ctx, uae_u32 *haddr, uaecptr addr, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	uae_u32 *p = (uae_u32*)haddr;
+	for (int i = 0; i < cnt; i++) {
+		*p++ = get_long(addr);
+		addr += 4;
+	}
+}
+void trap_put_words(TrapContext *ctx, uae_u16 *haddr, uaecptr addr, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	uae_u16 *p = (uae_u16*)haddr;
+	for (int i = 0; i < cnt; i++) {
+		put_word(addr, *p++);
+		addr += sizeof(uae_u16);
+	}
+}
+void trap_get_words(TrapContext *ctx, uae_u16 *haddr, uaecptr addr, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	uae_u16 *p = (uae_u16*)haddr;
+	for (int i = 0; i < cnt; i++) {
+		*p++ = get_word(addr);
+		addr += sizeof(uae_u16);
+	}
+}
+
+int trap_put_string(TrapContext *ctx, const void *haddrp, uaecptr addr, int maxlen)
+{
+	int len = 0;
+	uae_u8 *haddr = (uae_u8*)haddrp;
+	for (;;) {
+		uae_u8 v = *haddr++;
+		put_byte(addr, v);
+		addr++;
+		if (!v)
+			break;
+		len++;
+	}
+	return len;
+}
+int trap_get_string(TrapContext *ctx, void *haddrp, uaecptr addr, int maxlen)
+{
+	int len = 0;
+	uae_u8 *haddr = (uae_u8*)haddrp;
+	for (;;) {
+		uae_u8 v = get_byte(addr);
+		*haddr++ = v;
+		addr++;
+		if (!v)
+			break;
+	}
+	len++;
+	return len;
+}
+uae_char *trap_get_alloc_string(TrapContext *ctx, uaecptr addr, int maxlen)
+{
+	uae_char *buf = xmalloc(uae_char, maxlen);
+	trap_get_string(ctx, buf, addr, maxlen);
+	return buf;
+}
+
+int trap_get_bstr(TrapContext *ctx, uae_u8 *haddr, uaecptr addr, int maxlen)
+{
+	int len = 0;
+	uae_u8 cnt = get_byte(addr);
+	while (cnt-- != 0 && maxlen-- > 0) {
+		addr++;
+		*haddr++ = get_byte(addr);
+	}
+	*haddr = 0;
+	return len;
+}
+
+void trap_set_longs(TrapContext *ctx, uaecptr addr, uae_u32 v, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	for (int i = 0; i < cnt; i++) {
+		put_long(addr, v);
+		addr += 4;
+	}
+}
+void trap_set_words(TrapContext *ctx, uaecptr addr, uae_u16 v, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	for (int i = 0; i < cnt; i++) {
+		put_word(addr, v);
+		addr += 2;
+	}
+}
+void trap_set_bytes(TrapContext *ctx, uaecptr addr, uae_u8 v, int cnt)
+{
+	if (cnt <= 0)
+		return;
+	for (int i = 0; i < cnt; i++) {
+		put_byte(addr, v);
+		addr += 1;
+	}
+}
+
+void trap_multi(TrapContext *ctx, struct trapmd *data, int items)
+{
+	uae_u32 v = 0;
+	for (int i = 0; i < items; i++) {
+		struct trapmd *md = &data[i];
+		switch (md->cmd)
+		{
+			case TRAPCMD_PUT_LONG:
+			trap_put_long(ctx, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_PUT_WORD:
+			trap_put_word(ctx, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_PUT_BYTE:
+			trap_put_byte(ctx, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_GET_LONG:
+			v = md->params[0] = trap_get_long(ctx, md->params[0]);
+			break;
+			case TRAPCMD_GET_WORD:
+			v = md->params[0] = trap_get_word(ctx, md->params[0]);
+			break;
+			case TRAPCMD_GET_BYTE:
+			v = md->params[0] = trap_get_byte(ctx, md->params[0]);
+			break;
+			case TRAPCMD_PUT_BYTES:
+			trap_put_bytes(ctx, md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_GET_BYTES:
+			trap_get_bytes(ctx, md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_PUT_WORDS:
+			trap_put_words(ctx, (uae_u16*)md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_GET_WORDS:
+			trap_get_words(ctx, (uae_u16*)md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_PUT_LONGS:
+			trap_put_longs(ctx, (uae_u32*)md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_GET_LONGS:
+			trap_get_longs(ctx, (uae_u32*)md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_PUT_STRING:
+			trap_put_string(ctx, md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_GET_STRING:
+			trap_get_string(ctx, md->haddr, md->params[0], md->params[1]);
+			break;
+			case TRAPCMD_SET_LONGS:
+			trap_set_longs(ctx, md->params[0], md->params[1], md->params[2]);
+			break;
+			case TRAPCMD_SET_WORDS:
+			trap_set_words(ctx, md->params[0], md->params[1], md->params[2]);
+			break;
+			case TRAPCMD_SET_BYTES:
+			trap_set_bytes(ctx, md->params[0], md->params[1], md->params[2]);
+			break;
+			case TRAPCMD_NOP:
+			break;
+		}
+		if (md->trapmd_index) {
+			data[md->trapmd_index].params[md->parm_num] = v;
+		}
+	}
+}
+
+void trap_memcpyha_safe(TrapContext *ctx, uaecptr dst, const uae_u8 *src, int size)
+{
+	if (size <= 0)
+		return;
+	memcpyha_safe(dst, src, size);
+}
+void trap_memcpyah_safe(TrapContext *ctx, uae_u8 *dst, uaecptr src, int size)
+{
+	if (size <= 0)
+		return;
+	memcpyah_safe(dst, src, size);
 }

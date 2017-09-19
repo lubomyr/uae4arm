@@ -5,6 +5,7 @@
 #include "sysdeps.h"
 #include "config.h"
 #include "zfile.h"
+#include "options.h"
 
 
 int my_setcurrentdir (const TCHAR *curdir, TCHAR *oldcur)
@@ -183,7 +184,7 @@ int my_getvolumeinfo (const char *root)
   if (lstat (root, &st) == -1)
     return -1;
   if (!S_ISDIR(st.st_mode))
-    return -1;
+    return -2;
   return ret;
 }
 
@@ -193,9 +194,32 @@ FILE *my_opentext (const TCHAR *name)
     return fopen (name, "r");
 }
 
-/* Returns 1 if an actual volume-name was found, 2 if no volume-name (so uses some defaults) */
-int target_get_volume_name(struct uaedev_mount_info *mtinf, const char *volumepath, char *volumename, int size, bool inserted, bool fullcheck)
+
+bool my_issamepath(const TCHAR *path1, const TCHAR *path2)
 {
-	sprintf(volumename, "DH_%c", volumepath[0]);
+	if (!_tcsicmp(path1, path2))
+		return true;
+	return false;
+}
+
+
+const TCHAR *my_getfilepart(const TCHAR *filename)
+{
+	const TCHAR *p;
+
+	p = _tcsrchr(filename, '\\');
+	if (p)
+		return p + 1;
+	p = _tcsrchr(filename, '/');
+	if (p)
+		return p + 1;
+	return filename;
+}
+
+
+/* Returns 1 if an actual volume-name was found, 2 if no volume-name (so uses some defaults) */
+int target_get_volume_name(struct uaedev_mount_info *mtinf, struct uaedev_config_info *ci, bool inserted, bool fullcheck, int cnt)
+{
+	sprintf(ci->volname, "DH_%c", ci->rootdir[0]);
   return 2;
 }
