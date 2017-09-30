@@ -1,32 +1,38 @@
 1) You need 64bit linux
 
-2) Install Android sdk&ndk (i unpacked it into ~/android directory)
-http://developer.android.com/ndk/downloads/index.html
-https://developer.android.com/sdk/index.html
+2) Download and unpack Android Studio
+https://developer.android.com/studio/index.html
 
-for run android environment i create and use simple script setenv-android.sh
+3) run android studio
+via menu Tools -> Android -> SDK-Manager download follow components:
+SDK Platform (tab)
+- Android 8.0 (O)
 
+SDK Tools (tab)
+- Android SDK Build-Tools
+- Android SDK Platform-Tools
+- Android SDK Tools
+- NDK
+
+copy path from Android SDK Location field
+
+4) create script setenv-android.sh (use correct path for android sdk location)
+----------------------------------------------------------
 #!/bin/sh
 
-export PATH=~/android/android-ndk-r13:$PATH
-export PATH=~/android/android-sdk-linux/tools:$PATH
-export PATH=~/android/android-sdk-linux/build-tools/24.0.3:$PATH
-
+export ANDROID_HOME=~/Android/Sdk
+export ANDROID_NDK_HOME=~/Android/Sdk/ndk-bundle
+export PATH=$ANDROID_NDK_HOME:$ANDROID_HOME/tools:$PATH
+----------------------------------------------------------
 now you can run android build environment via console
 . setenv-android.sh
 
-Now via Android SDK Manager (for call sdk manager via console type android). You need to download latest version:
-Android SDK Tools
-Android SDK Platform-tools
-Android SDL Build tools
-Android 6.0 (API 23)
-+SDK Platform (API 23)
 
-3) Install pelya's libSDL-environment
+5) Install pelya's libSDL-environment
 cd ~
 git clone git://github.com/pelya/commandergenius androidsdl
 
-4) download uae4arm sources
+6) download uae4arm sources
 cd ~/androidsdl/project/jni/application
 git clone https://github.com/lubomyr/uae4arm
 cd uae4arm
