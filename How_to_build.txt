@@ -1,9 +1,15 @@
-1) You need 64bit linux
+1. You need 64bit linux
 
-2) Download and unpack Android Studio
+2. Install JDK. You can do it from apt-get tool or download from official site (in this case you must set envirnoment 
+value to JDK, see guides "How install JDK and set envirnoment values to JDK).
+
+Command:
+sudo apt-get install openjdk-8-jdk
+
+3. Download and unpack Android Studio
 https://developer.android.com/studio/index.html
 
-3) run android studio
+4. run android studio
 via menu Tools -> Android -> SDK-Manager download follow components:
 SDK Platform (tab)
 - Android 8.0 (O)
@@ -16,7 +22,7 @@ SDK Tools (tab)
 
 copy path from Android SDK Location field
 
-4) create script setenv-android.sh (use correct path for android sdk location)
+5. create script setenv-android.sh (use correct path for android sdk location)
 ----------------------------------------------------------
 #!/bin/sh
 
@@ -28,11 +34,13 @@ now you can run android build environment via console
 . setenv-android.sh
 
 
-5) Install pelya's libSDL-environment
+6. Install pelya's libSDL-environment
 cd ~
 git clone git://github.com/pelya/commandergenius androidsdl
+git submodule update --init project/jni/iconv/src
 
-6) download uae4arm sources
+
+7. download uae4arm sources
 cd ~/androidsdl/project/jni/application
 git clone https://github.com/lubomyr/uae4arm
 cd uae4arm
