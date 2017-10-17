@@ -87,6 +87,8 @@ void alloc_AmigaMem(void)
     set_expamem_z3_hack_mode(Z3MAPPING_REAL);
     return;
   }
+// FIXME This part of code caused crash on Commodore pet (arm64) android device
+#ifndef ANDROID
   additional_mem = (uae_u8*) mmap(natmem_offset + Z3BASE_UAE, ADDITIONAL_MEMSIZE + BARRIER,
     PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
   if(additional_mem != MAP_FAILED)
@@ -99,6 +101,7 @@ void alloc_AmigaMem(void)
     set_expamem_z3_hack_mode(Z3MAPPING_UAE);
     return;
   }
+#endif
   free(natmem_offset);
   
   // Next attempt: allocate huge memory block for entire area
