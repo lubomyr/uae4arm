@@ -35,7 +35,6 @@
 
 void device_check_config(void)
 {
-	check_prefs_changed_cd ();
   check_prefs_changed_audio ();
   check_prefs_changed_custom ();
   check_prefs_changed_cpu ();
@@ -65,9 +64,6 @@ void devices_vsync_pre(void)
   CIA_vsync_prehandler();
   inputdevice_vsync ();
   filesys_vsync ();
-#ifdef CD32
-	cd32_fmv_vsync_handler();
-#endif
 }
 
 void devices_hsync(void)
@@ -76,10 +72,10 @@ void devices_hsync(void)
 	AKIKO_hsync_handler ();
 	cd32_fmv_hsync_handler();
 #endif
+	decide_blitter (-1);
 
   DISK_hsync ();
-  if (currprefs.produce_sound)
-  	audio_hsync ();
+ 	audio_hsync ();
 	gayle_hsync ();
 }
 
@@ -95,7 +91,7 @@ void devices_rethink(void)
 	rethink_uae_int();
 }
 
-void devices_update_sync(float svpos, float syncadjust)
+void devices_update_sync(double svpos, double syncadjust)
 {
 	cd32_fmv_set_sync(svpos, syncadjust);
 }

@@ -18,10 +18,6 @@
 #include "sysconfig.h"
 #include "sysdeps.h"
 
-//#ifdef ANDROID
-//#undef STAT_STATVFS
-//#endif
-
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -30,8 +26,6 @@
 #endif
 #if defined(STAT_STATVFS) && !defined(__ANDROID__)
 #include <sys/statvfs.h>
-#else
-#include <sys/vfs.h>
 #endif
 
 #include "fsusage.h"
@@ -294,6 +288,7 @@ int get_fs_usage (const TCHAR *path, const TCHAR *disk, struct fs_usage *fsp)
 #ifdef STAT_STATVFS		/* SVR4 */
 # define CONVERT_BLOCKS(B) \
     adjust_blocks ((B), fsd.f_frsize ? fsd.f_frsize : fsd.f_bsize, 512)
+
 #ifdef ANDROID
   struct statfs fsd;
 

@@ -20,7 +20,7 @@
 extern int init_socket_layer (void);
 extern void deinit_socket_layer (void);
 
-/* inital size of per-process descriptor table (currently fixed) */
+/* initial size of per-process descriptor table (currently fixed) */
 #define DEFAULT_DTABLE_SIZE 64
 
 #define SCRATCHBUFSIZE 128
@@ -29,7 +29,7 @@ extern void deinit_socket_layer (void);
 
 #define MAXADDRLEN 256
 
-#ifdef _WIN32
+#ifdef _WIN32_
 #define SOCKET_TYPE SOCKET
 #else
 #define SOCKET_TYPE int
@@ -70,7 +70,7 @@ struct socketbase {
 
     unsigned int *mtable;	/* window messages allocated for asynchronous event notification */
     /* host-specific fields below */
-#ifdef _WIN32
+#ifdef _WIN32_
     SOCKET_TYPE sockAbort;	/* for aborting WinSock2 select() (damn Microsoft) */
     SOCKET_TYPE sockAsync;	/* for aborting WSBAsyncSelect() in window message handler */
     int needAbort;		/* abort flag */
@@ -172,8 +172,8 @@ extern uae_u32 host_listen (TrapContext *, SB, uae_u32, uae_u32);
 extern void host_accept (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern void host_sendto (TrapContext *, SB, uae_u32, uae_u32, uae_u8*, uae_u32, uae_u32, uae_u32, uae_u32);
 extern void host_recvfrom (TrapContext *, SB, uae_u32, uae_u32, uae_u8*, uae_u32, uae_u32, uae_u32, uae_u32);
-extern uae_u32 host_shutdown (TrapContext *,SB, uae_u32, uae_u32);
-extern void host_setsockopt (TrapContext *, SB, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32);
+extern uae_u32 host_shutdown (SB, uae_u32, uae_u32);
+extern void host_setsockopt (SB, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32);
 extern uae_u32 host_getsockopt (TrapContext *, SB, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32);
 extern uae_u32 host_getsockname (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern uae_u32 host_getpeername (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
@@ -201,7 +201,7 @@ extern void host_getprotobynumber (TrapContext *, SB, uae_u32);
 extern uae_u32 host_vsyslog (void);
 extern uae_u32 host_Dup2Socket (void);
 extern uae_u32 host_gethostname(TrapContext *ctx, uae_u32, uae_u32);
-extern uae_u32 callfdcallback (TrapContext *context, SB, uae_u32 fd, uae_u32 action);
+extern uae_u32 callfdcallback(TrapContext *context, SB, uae_u32 fd, uae_u32 action);
 
 extern uaecptr bsdlib_startup (TrapContext*, uaecptr);
 extern void bsdlib_install (void);

@@ -37,13 +37,13 @@ struct hardfiledata {
   uae_u64 virtual_size;
   int unitnum;
   int byteswap;
-  int adide;
   int hfd_type;
 
   int drive_empty;
   TCHAR *emptyname;
 
 	uae_u8 scsi_sense[MAX_SCSI_SENSE];
+	uae_u8 sector_buffer[512];
 
 	struct uaedev_config_info delayedci;
 	int reinsertdelay;
@@ -82,8 +82,6 @@ struct hd_hardfiledata {
 #define FILESYS_VIRTUAL 0
 #define FILESYS_HARDFILE 1
 #define FILESYS_HARDFILE_RDB 2
-#define FILESYS_HARDDRIVE 3
-#define FILESYS_CD 4
 
 #define MAX_FILESYSTEM_UNITS 30
 
@@ -91,6 +89,7 @@ struct uaedev_mount_info;
 extern struct uaedev_mount_info options_mountinfo;
 
 extern struct hardfiledata *get_hardfile_data (int nr);
+extern struct hardfiledata *get_hardfile_data_controller(int nr);
 #define FILESYS_MAX_BLOCKSIZE 2048
 extern int hdf_open (struct hardfiledata *hfd);
 extern int hdf_open (struct hardfiledata *hfd, const TCHAR *altname);

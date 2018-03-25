@@ -11,7 +11,7 @@ extern bool gayle_ide_init(struct autoconfig_info*);
 extern int gayle_modify_pcmcia_sram_unit (struct uaedev_config_info*, int insert);
 extern int gayle_modify_pcmcia_ide_unit (struct uaedev_config_info*, int insert);
 extern int gayle_add_pcmcia_sram_unit (struct uaedev_config_info*);
-extern int gayle_add_pcmcia_ide_unit (struct uaedev_config_info*);
+extern int gayle_add_pcmcia_ide_unit(struct uaedev_config_info*);
 extern void gayle_free_units (void);
 extern void rethink_gayle (void);
 extern void gayle_map_pcmcia (void);

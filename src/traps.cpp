@@ -14,7 +14,7 @@
 #include "sysdeps.h"
 
 #include "options.h"
-#include "memory-uae.h"
+#include "include/memory-uae.h"
 #include "custom.h"
 #include "newcpu.h"
 #include "threaddep/thread.h"
@@ -321,6 +321,7 @@ static void trap_HandleExtendedTrap (TrapHandler handler_func, int has_retval)
  *
  * This function is to be called from the trap context.
  */
+
 static uae_u32 trap_Call68k (TrapContext *ctx, uaecptr func_addr)
 {
   /* Enter critical section - only one trap at a time, please! */

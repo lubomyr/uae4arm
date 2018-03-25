@@ -54,7 +54,7 @@ using namespace std;
 #endif
 
 #ifndef __STDC__
-#ifndef _MSC_VER
+#ifndef _MSC_VER_
 #error "Your compiler is not ANSI. Get a real one."
 #endif
 #endif
@@ -190,7 +190,6 @@ typedef uae_u32 uaecptr;
 #else
 extern TCHAR *my_strdup (const TCHAR*s);
 #endif
-
 extern TCHAR *my_strdup_ansi (const char*);
 extern void my_trim (TCHAR*);
 extern TCHAR *my_strdup_trim (const TCHAR*);
@@ -242,7 +241,7 @@ extern void to_upper (TCHAR *s, int len);
 #define DONT_HAVE_POSIX
 #endif
 
-#if !defined(FSUAE) && defined _WIN32
+#if !defined(FSUAE) && defined _WIN32_
 
 //#ifdef FSUAE
 //#error _WIN32 should not be defined here
@@ -271,7 +270,7 @@ extern void to_upper (TCHAR *s, int len);
 
 #define mkdir(a,b) mkdir(a)
 
-#elif defined _MSC_VER
+#elif defined _MSC_VER_
 
 #ifdef HAVE_GETTIMEOFDAY
 #include <winsock.h> // for 'struct timeval' definition
@@ -323,7 +322,7 @@ struct direct
 
 #endif /* _WIN32 */
 
-#if defined PANDORA
+#if defined(PANDORA) || defined(RASPBERRY)
 
 #include <ctype.h>
 
@@ -339,7 +338,7 @@ struct direct
 #define REGPARAM3 
 #define REGPARAM
 
-#endif /* PANDORA */
+#endif /* defined(PANDORA) || defined(RASPBERRY) */
 
 #ifdef DONT_HAVE_POSIX
 
@@ -439,10 +438,14 @@ extern void gui_message (const TCHAR *,...);
 #define NOINLINE __attribute__ ((noinline))
 #define NORETURN
 #elif __GNUC__ - 1 > 1 && __GNUC_MINOR__ - 1 >= 0
+#ifdef RASPBERRY
+#define STATIC_INLINE static __inline__
+#else
 #define STATIC_INLINE static __inline__ __attribute__ ((always_inline))
+#endif
 #define NOINLINE __attribute__ ((noinline))
 #define NORETURN __attribute__ ((noreturn))
-#elif _MSC_VER
+#elif _MSC_VER_
 #define STATIC_INLINE static __forceinline
 #define NOINLINE __declspec(noinline)
 #define NORETURN __declspec(noreturn)
@@ -481,7 +484,7 @@ extern void gui_message (const TCHAR *,...);
  * Byte-swapping functions
  */
 
-#ifdef ARMV6_ASSEMBLY
+#ifdef ARMV6T2
 
 STATIC_INLINE uae_u32 do_byteswap_32(uae_u32 v) {
   __asm__ (
@@ -509,6 +512,8 @@ STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
 #  include <SDL_endian.h>
 #  define bswap_16(x) SDL_Swap16(x)
 #  define bswap_32(x) SDL_Swap32(x)
+#define do_byteswap_16(x) SDL_Swap16(x)
+#define do_byteswap_32(x) SDL_Swap32(x)
 # else
 /* Otherwise, we'll roll our own. */
 #  define bswap_16(x) (((x) >> 8) | (((x) & 0xFF) << 8))

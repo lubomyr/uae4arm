@@ -123,11 +123,11 @@ typedef union {
 #if defined(CPU_arm)
 //#define DEBUG_DATA_BUFFER
 #define ALIGN_NOT_NEEDED
-#define N_REGS 13  /* really 16, but 13 to 15 are SP, LR, PC */
+#define N_REGS 11  /* really 16, but 13 to 15 are SP, LR, PC; 12 is scratch reg and 11 holds regs-struct */
 #else
 #define N_REGS 8  /* really only 7, but they are numbered 0,1,2,3,5,6,7 */
 #endif
-#define N_FREGS 6 /* That leaves us two positions on the stack to play with */
+#define N_FREGS 16  // We use 10 regs: 6 - FP_RESULT, 7 - SCRATCH, 8-15 - Amiga regs FP0-FP7
 
 /* Functions exposed to newcpu, or to what was moved from newcpu.c to
  * compemu_support.c */
@@ -139,8 +139,6 @@ extern void set_target(uae_u8* t);
 extern void freescratch(void);
 extern void build_comp(void);
 extern void set_cache_state(int enabled);
-extern int get_cache_state(void);
-extern uae_u32 get_jitted_size(void);
 #ifdef JIT
 extern void flush_icache(int n);
 extern void flush_icache_hard(int n);
@@ -151,11 +149,21 @@ extern int check_for_cache_miss(void);
 
 #define scaled_cycles(x) (currprefs.m68k_speed<0?(((x)/SCALE)?(((x)/SCALE<MAXCYCLES?((x)/SCALE):MAXCYCLES)):1):(x))
 
+/* JIT FPU compilation */
+extern void comp_fpp_opp (uae_u32 opcode, uae_u16 extra);
+extern void comp_fbcc_opp (uae_u32 opcode);
+extern void comp_fscc_opp (uae_u32 opcode, uae_u16 extra);
+void comp_fdbcc_opp (uae_u32 opcode, uae_u16 extra);
+void comp_ftrapcc_opp (uae_u32 opcode, uaecptr oldpc);
+void comp_fsave_opp (uae_u32 opcode);
+void comp_frestore_opp (uae_u32 opcode);
+
 extern uae_u32 needed_flags;
 extern uae_u8* comp_pc_p;
 extern void* pushall_call_handler;
 
-#define VREGS 32
+#define VREGS 24
+#define VFREGS 10
 
 #define INMEM 1
 #define CLEAN 2
@@ -170,8 +178,14 @@ typedef struct {
   uae_s8 realreg; /* gb-- realreg can hold -1 */
   uae_u8 realind; /* The index in the holds[] array */
   uae_u8 validsize;
-  uae_u8 dirtysize;
 } reg_status;
+
+typedef struct {
+  uae_u32* mem;
+  uae_u8 status;
+  uae_s8 realreg; /* gb-- realreg can hold -1 */
+  uae_u8 needflush;
+} freg_status;
 
 typedef struct {
     uae_u8 use_flags;
@@ -190,24 +204,21 @@ STATIC_INLINE int end_block(uae_u16 opcode)
 #define PC_P 16
 #define FLAGX 17
 #define FLAGTMP 18
-#define NEXT_HANDLER 19
-#define S1 20
-#define S2 21
-#define S3 22
-#define S4 23
-#define S5 24
-#define S6 25
-#define S7 26
-#define S8 27
-#define S9 28
-#define S10 29
-#define S11 30
-#define S12 31
+#define S1 19
+#define S2 20
+#define S3 21
+#define S4 22
+#define S5 23
 
 #define FP_RESULT 8
 #define FS1 9
-#define FS2 10
-#define FS3 11
+
+#define SCRATCH_F64_1  1
+#define SCRATCH_F64_2  2
+#define SCRATCH_F64_3  3
+#define SCRATCH_F32_1  2
+#define SCRATCH_F32_2  4
+#define SCRATCH_F32_3  6
 
 typedef struct {
   uae_u32 touched;
@@ -215,6 +226,11 @@ typedef struct {
   uae_u8 nholds;
   uae_u8 locked;
 } n_status;
+
+typedef struct {
+  uae_s8 holds;
+  uae_u8 nholds;
+} fn_status;
 
 /* For flag handling */
 #define NADA 1
@@ -233,15 +249,10 @@ typedef struct {
     uae_u32 flags_on_stack;
     uae_u32 flags_in_flags;
     uae_u32 flags_are_important;
+    /* FPU part */
+    freg_status fate[VFREGS];
+    fn_status   fat[N_FREGS];
 } bigstate;
-
-typedef struct {
-    /* Integer part */
-  uae_s8 virt[VREGS];
-  uae_s8 nat[N_REGS];
-} smallstate;
-
-extern int touchcnt;
 
 #define IMM uae_s32
 #define RR1 uae_u32
@@ -293,15 +304,16 @@ extern void readlong(int address, int dest, int tmp);
 extern void writebyte(int address, int source, int tmp);
 extern void writeword(int address, int source, int tmp);
 extern void writelong(int address, int source, int tmp);
+extern void writeword_clobber(int address, int source, int tmp);
 extern void writelong_clobber(int address, int source, int tmp);
 extern void get_n_addr(int address, int dest, int tmp);
 extern void get_n_addr_jmp(int address, int dest, int tmp);
 extern void calc_disp_ea_020(int base, uae_u32 dp, int target, int tmp);
-#define SYNC_PC_OFFSET 100
+#define SYNC_PC_OFFSET 124
 extern void sync_m68k_pc(void);
 extern uae_u32 get_const(int r);
-extern int  is_const(int r);
 extern void register_branch(uae_u32 not_taken, uae_u32 taken, uae_u8 cond);
+extern void register_possible_exception(void);
 
 #define comp_get_ibyte(o) do_get_mem_byte((uae_u8 *)(comp_pc_p + (o) + 1))
 #define comp_get_iword(o) do_get_mem_word((uae_u16 *)(comp_pc_p + (o)))
@@ -355,11 +367,9 @@ typedef struct blockinfo_t {
     uae_u8 optlevel;
     uae_u8 needed_flags;
     uae_u8 status;
-    uae_u8 havestate;
 
     dependency  dep[2];  /* Holds things we depend on */
     dependency* deplist; /* List of things that depend on this */
-    smallstate  env;
 } blockinfo;
 
 #define BI_INVALID 0
@@ -370,17 +380,20 @@ typedef struct blockinfo_t {
 #define BI_COMPILING 5
 #define BI_FINALIZING 6
 
+#if defined(CPU_arm) && !defined(ARMV6T2)
+const int POPALLSPACE_SIZE = 2048; /* That should be enough space */
+#else
+const int POPALLSPACE_SIZE = 512; /* That should be enough space */
+#endif
+
 void execute_normal(void);
 void exec_nostats(void);
 void do_nothing(void);
+void execute_exception(void);
 
-void comp_fdbcc_opp (uae_u32 opcode, uae_u16 extra);
-void comp_fscc_opp (uae_u32 opcode, uae_u16 extra);
-void comp_ftrapcc_opp (uae_u32 opcode, uaecptr oldpc);
-void comp_fbcc_opp (uae_u32 opcode);
-void comp_fsave_opp (uae_u32 opcode);
-void comp_frestore_opp (uae_u32 opcode);
-void comp_fpp_opp (uae_u32 opcode, uae_u16 extra);
+/* ARAnyM uses fpu_register name, used in scratch_t */
+/* FIXME: check that no ARAnyM code assumes different floating point type */
+typedef fptype fpu_register;
 
 void jit_abort(const TCHAR *format,...);
 

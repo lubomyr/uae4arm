@@ -14,7 +14,7 @@
 
 #include "threaddep/thread.h"
 #include "options.h"
-#include "memory-uae.h"
+#include "include/memory-uae.h"
 #include "custom.h"
 #include "newcpu.h"
 #include "autoconf.h"
@@ -44,7 +44,7 @@ void native2amiga_reset (void)
   p->rdp = p->wrp = 0;
   p->reader_waiting = 0;
   p->writer_waiting = 0;
-};
+}
 
 /*
  * to be called when the Amiga boots, i.e. by filesys_diagentry()

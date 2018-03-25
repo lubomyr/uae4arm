@@ -394,9 +394,9 @@ static int REGPARAM2 expamem_type (void)
 static void call_card_init(int index)
 {	
 	addrbank *ab, *abe;
+	bool ok = false;
 	card_data *cd = cards[ecard];
 	struct autoconfig_info *aci = &cd->aci;
-	bool ok = false;
 
 	expamem_bank.name = cd->name ? cd->name : _T("None");
 	aci->prefs = &currprefs;
@@ -957,24 +957,12 @@ addrbank uaeboard_bank = {
 };
 
 uae_u32 uaeboard_base; /* Determined by the OS */
-static uae_u32 uaeboard_ram_start;
 #define UAEBOARD_WRITEOFFSET 0x4000
 
 uae_u8 *uaeboard_map_ram(uaecptr p)
 {
 	p -= filesys_bank.start;
 	return filesys_bank.baseaddr + p;
-}
-
-uaecptr uaeboard_alloc_ram(uae_u32 size)
-{
-	uaecptr p;
-	size += 7;
-	size &= ~7;
-	p = uaeboard_ram_start + filesys_bank.start;
-	memset(filesys_bank.baseaddr + uaeboard_ram_start, 0, size);
-	uaeboard_ram_start += size;
-	return p;
 }
 
 static bool uaeboard_write(uaecptr addr)
@@ -1055,7 +1043,6 @@ static uae_u8 *REGPARAM2 uaeboard_xlate(uaecptr addr)
 static addrbank *expamem_map_uaeboard(struct autoconfig_info *aci)
 {
 	uaeboard_base = expamem_board_pointer;
-	uaeboard_ram_start = UAEBOARD_WRITEOFFSET;
 	uaeboard_bank.start = uaeboard_base;
 	map_banks_z2(&uaeboard_bank, uaeboard_base >> 16, 1);
 	return &uaeboard_bank;
@@ -1070,6 +1057,22 @@ static bool set_params_filesys(struct uae_prefs *prefs, struct expansion_params 
 {
 	prefs->uaeboard_order = p->device_order;
 	return true;
+}
+
+static void add_rtarea_pointer(struct autoconfig_info *aci)
+{
+	if (aci->doinit) {
+		uaecptr addr = 0;
+		if (aci->prefs->uaeboard == 1) {
+			addr = rtarea_base;
+		}
+		if (addr) {
+			expamem[0x48] = addr >> 24;
+			expamem[0x49] = addr >> 16;
+			expamem[0x4a] = addr >> 8;
+			expamem[0x4b] = addr >> 0;
+		}
+	}
 }
 
 static bool expamem_init_uaeboard(struct autoconfig_info *aci)
@@ -1094,9 +1097,11 @@ static bool expamem_init_uaeboard(struct autoconfig_info *aci)
 	expamem_write(0x18, 0x00); /* ser.no. Byte 0 */
 	expamem_write(0x1c, 0x00); /* ser.no. Byte 1 */
 	expamem_write(0x20, p->uaeboard); /* ser.no. Byte 2 */
-	expamem_write(0x24, 0x02); /* ser.no. Byte 3 */
+	expamem_write(0x24, 0x03); /* ser.no. Byte 3 */
 
 	uae_u8 *ptr = uaeboard_bank.baseaddr;
+
+	add_rtarea_pointer(aci);
 
 	expamem_write(0x28, 0x00); /* ROM-Offset hi */
 	expamem_write(0x2c, 0x00); /* ROM-Offset lo */
@@ -1155,6 +1160,11 @@ static bool fastmem_autoconfig(struct uae_prefs *p, struct autoconfig_info *aci,
 	uae_u8 flags = 0;
 	uae_u8 ac[16] = { 0 };
 	int boardnum = aci->devnum;
+	bool canforceac = false;
+
+	if (aci->ert) {
+		canforceac = true;
+	}
 
 	uae_u8 *forceac = NULL;
 	struct ramboard *rb = NULL;
@@ -1177,7 +1187,7 @@ static bool fastmem_autoconfig(struct uae_prefs *p, struct autoconfig_info *aci,
 						   : allocated == 0x400000 ? Z3_SS_MEM_4MB
 						   : allocated == 0x800000 ? Z3_SS_MEM_8MB
 						   : Z3_SS_MEM_SAME);
-			struct ramboard *rb = &p->z3fastmem[boardnum];
+			rb = &p->z3fastmem[boardnum];
 			if (rb->autoconfig[0]) {
 				forceac = rb->autoconfig;
 			} else if (rb->manufacturer) {
@@ -1188,6 +1198,15 @@ static bool fastmem_autoconfig(struct uae_prefs *p, struct autoconfig_info *aci,
   			pid = 83;
       }
 			flags |= care_addr | force_z3 | (allocated > 0x800000 ? ext_size : subsize);
+		}
+	} else if (canforceac) {
+		if (zorro <= 2) {
+			rb = &p->fastmem[boardnum];
+		} else if (zorro == 3) {
+			rb = &p->z3fastmem[boardnum];
+		}
+		if (rb && rb->autoconfig[0]) {
+			forceac = rb->autoconfig;
 		}
 	}
 	if (!mid) {
@@ -1317,15 +1336,26 @@ static addrbank *expamem_map_filesys (struct autoconfig_info *aci)
 		return &filesys_bank;
 	mapped_malloc(&filesys_bank);
 	memcpy (filesys_bank.baseaddr, expamem, 0x3000);
-	uaeboard_ram_start = UAEBOARD_WRITEOFFSET;
 	map_banks_z2(&filesys_bank, filesys_bank.start >> 16, 1);
 	expamem_map_filesys_update();
 	return &filesys_bank;
 }
 
 #if KS12_BOOT_HACK
-static void add_ks12_boot_hack(void)
+static uaecptr ks12_resident;
+static void set_ks12_boot_hack(void)
 {
+	uaecptr old = here();
+	org(ks12_resident);
+	dw(ks12orolder() ? 0x4afc : 0x0000);
+	org(ks12_resident + 11);
+	db((uae_u8)kickstart_version);
+	org(old);
+}
+
+void create_ks12_boot(void)
+{
+	// KS 1.2 boot resident
 	uaecptr name = ds(_T("UAE boot"));
 	align(2);
 	uaecptr code = here();
@@ -1343,10 +1373,10 @@ static void add_ks12_boot_hack(void)
 	dl(0x4cdf7cfc); // movem.l (sp)+,d2-d7/a2-a6
 	dw(0x4e75);
 	// struct Resident
-	uaecptr addr = here();
-	dw(0x4afc);
-	dl(addr);
-	dl(addr + 26);
+	ks12_resident = here();
+	dw(0x0000);
+	dl(ks12_resident);
+	dl(ks12_resident + 26);
 	db(1); // RTF_COLDSTART
 	db((uae_u8)kickstart_version); // version
 	db(0); // NT_UNKNOWN
@@ -1354,12 +1384,14 @@ static void add_ks12_boot_hack(void)
 	dl(name);
 	dl(name);
 	dl(code);
+	set_ks12_boot_hack();
 }
 #endif
 
 static bool expamem_init_filesys(struct autoconfig_info *aci)
 {
 	bool ks12 = ks12orolder();
+	bool rom = !(ks12 || !do_mount);
 
 	if (aci) {
 		aci->label = ks12 ? _T("Pre-KS 1.3 UAE FS ROM") : _T("UAE FS ROM");
@@ -1380,7 +1412,7 @@ static bool expamem_init_filesys(struct autoconfig_info *aci)
   };
 
   expamem_init_clear();
-	expamem_write (0x00, Z2_MEM_64KB | zorroII | (ks12 || !do_mount ? 0 : rom_card));
+	expamem_write (0x00, Z2_MEM_64KB | zorroII | (rom ? rom_card : 0));
 
   expamem_write (0x08, no_shutup);
 
@@ -1391,13 +1423,15 @@ static bool expamem_init_filesys(struct autoconfig_info *aci)
   expamem_write (0x18, 0x00); /* ser.no. Byte 0 */
   expamem_write (0x1c, 0x00); /* ser.no. Byte 1 */
   expamem_write (0x20, 0x00); /* ser.no. Byte 2 */
-  expamem_write (0x24, 0x01); /* ser.no. Byte 3 */
+	expamem_write (0x24, 0x03); /* ser.no. Byte 3 */
 
   /* er_InitDiagVec */
-	expamem_write (0x28, 0x20); /* ROM-Offset hi */
+	expamem_write (0x28, rom ? 0x20 : 0x00); /* ROM-Offset hi */
   expamem_write (0x2c, 0x00); /* ROM-Offset lo */
 
   expamem_write (0x40, 0x00); /* Ctrl/Statusreg.*/
+
+	add_rtarea_pointer(aci);
 
 	if (aci && !aci->doinit) {
 		memcpy(aci->autoconfig_raw, expamem, sizeof aci->autoconfig_raw);
@@ -1420,8 +1454,7 @@ static bool expamem_init_filesys(struct autoconfig_info *aci)
 	put_word_host(expamem + FILESYS_DIAGAREA + FILESYS_BOOTPOINT, 0x4EF9); /* JMP */
 	put_long_host(expamem + FILESYS_DIAGAREA + FILESYS_BOOTPOINT + 2, EXPANSION_bootcode);
   
-	if (ks12)
-		add_ks12_boot_hack();
+	set_ks12_boot_hack();
 
 	return true;
 }
@@ -1468,7 +1501,8 @@ static bool expamem_init_z3fastmem(struct autoconfig_info *aci)
 		code = Z3_MEM_16MB; /* Z3 physical board size is always at least 16M */
 
   expamem_init_clear();
-	fastmem_autoconfig(aci->prefs, aci, BOARD_AUTOCONFIG_Z3, add_memory | zorroIII | code, 1, size);
+	if (!fastmem_autoconfig(aci->prefs, aci, BOARD_AUTOCONFIG_Z3, add_memory | zorroIII | code, 1, size))
+		aci->zorro = -1;
 
 	memcpy(aci->autoconfig_raw, expamem, sizeof aci->autoconfig_raw);
 	aci->addrbankp = bank;
@@ -1651,25 +1685,6 @@ static void allocate_expamem (void)
 		mapped_free (&z3fastmem_bank[0]);
 		mapped_malloc_dynamic (&currprefs.z3fastmem[0].size, &changed_prefs.z3fastmem[0].size, &z3fastmem_bank[0], 1, _T("*"));
     memory_hardreset(1);
-	}
-	for (int i = 1; i < MAX_RAM_BOARDS; i++) {
-		if (currprefs.z3fastmem[i].size && z3fastmem_bank[i].start == 0xffffffff) {
-			z3fastmem_bank[i].start = expansion_startaddress(&currprefs, z3fastmem_bank[i - 1].start, currprefs.z3fastmem[i - 1].size);
-		}
-		if (z3fastmem_bank[i].reserved_size != currprefs.z3fastmem[i].size) {
-			mapped_free (&z3fastmem_bank[i]);
-
-			z3fastmem_bank[i].reserved_size = currprefs.z3fastmem[i].size;
-			z3fastmem_bank[i].mask = z3fastmem_bank[i].reserved_size - 1;
-
-			if (z3fastmem_bank[i].reserved_size) {
-				mapped_malloc(&z3fastmem_bank[i]);
-				if (z3fastmem_bank[i].baseaddr == 0) {
-					write_log (_T("Out of memory for 32 bit fast memory #%d.\n"), i);
-				}
-			}
-			memory_hardreset (1);
-		}
   }
 
 #ifdef PICASSO96
@@ -1999,7 +2014,7 @@ static void expansion_init_cards(struct uae_prefs *p)
 			ok = cd->initrc(aci);
 		}
 		
-		if ((aci->zorro == 1 || aci->zorro == 2 || aci->zorro == 3) && (aci->autoconfig_raw[0] != 0xff || aci->autoconfigp)) {
+		if ((aci->zorro == 1 || aci->zorro == 2 || aci->zorro == 3) && aci->addrbankp != &expamem_null && (aci->autoconfig_raw[0] != 0xff || aci->autoconfigp)) {
 			uae_u8 ac2[16];
 			const uae_u8 *a = aci->autoconfigp;
 			if (!a) {
@@ -2012,38 +2027,6 @@ static void expansion_init_cards(struct uae_prefs *p)
 			cd->size = expamem_board_size;
 		}
 	}
-}
-
-static void set_order(struct uae_prefs *p, struct card_data *cd, int order)
-{
-	if (!cd)
-		return;
-	if (cd->aci.set_params) {
-		struct expansion_params parms = { 0 };
-		parms.device_order = order;
-		if (cd->aci.set_params(p, &parms))
-			return;
-	}
-	if (cd->zorro <= 0 || cd->zorro >= 4)
-		return;
-	if (cd->rc) {
-		cd->rc->back->device_order = order;
-		return;
-	}
-	int devnum = (cd->flags >> 16) & 255;
-	if (!_tcsicmp(cd->name, _T("Z2Fast"))) {
-		p->fastmem[devnum].device_order = order;
-		return;
-	}
-	if (!_tcsicmp(cd->name, _T("Z3Fast"))) {
-		p->z3fastmem[devnum].device_order = order;
-		return;
-	}
-	if (!_tcsicmp(cd->name, _T("Z3RTG")) || !_tcsicmp(cd->name, _T("Z2RTG"))) {
-		p->rtgboards[devnum].device_order = order;
-		return;
-	}
-
 }
 
 static int get_order(struct uae_prefs *p, struct card_data *cd)
@@ -2362,7 +2345,6 @@ static void expansion_autoconfig_sort(struct uae_prefs *p)
 			cards[new_cardno++] = tcards[i];
 		}
 	}
-
 }
 
 static void expansion_add_autoconfig(struct uae_prefs *p)
@@ -2462,7 +2444,6 @@ static void expansion_add_autoconfig(struct uae_prefs *p)
 	add_expansions(p, BOARD_AUTOCONFIG_Z3, NULL, 1);
 
 	add_expansions(p, BOARD_NONAUTOCONFIG_AFTER_Z3, NULL, 0);
-
 }
 
 void expansion_scan_autoconfig(struct uae_prefs *p, bool log)
@@ -2488,10 +2469,12 @@ void expamem_reset (void)
 	expansion_autoconfig_sort(&currprefs);
 	expansion_parse_cards(&currprefs, true);
 
-  if (cardno == 0 || savestate_state)
+	if (cardno == 0 || savestate_state) {
 	  expamem_init_clear_zero ();
-  else
+	} else {
+		set_ks12_boot_hack();
 		call_card_init(0);
+	}
 }
 
 void expansion_init (void)
@@ -2552,7 +2535,6 @@ void expansion_cleanup (void)
 void expansion_map(void)
 {
 	map_banks(&expamem_bank, 0xE8, 1, 0);
-	// map non-autoconfig ram boards
 	if (do_mount < 0 && ks11orolder()) {
 		filesys_bank.start = 0xe90000;
 		mapped_free(&filesys_bank);
@@ -2632,7 +2614,7 @@ uae_u8 *save_expansion (int *len, uae_u8 *dstptr)
   save_u32 (z3fastmem_bank[0].start);
 	save_u32 (gfxmem_banks[0]->start);
   save_u32 (rtarea_base);
-	save_u32 (0 /* fastmem_bank[1].start */);
+	save_u32 (0);
   *len = dst - dstbak;
   return dstbak;
 }
@@ -2643,8 +2625,8 @@ uae_u8 *restore_expansion (uae_u8 *src)
   z3fastmem_bank[0].start = restore_u32 ();
 	gfxmem_banks[0]->start = restore_u32 ();
   rtarea_base = restore_u32 ();
-  restore_u32 (); /* ignore fastmem_bank[1].start */
-  if (rtarea_base != 0 && rtarea_base != RTAREA_DEFAULT && rtarea_base != RTAREA_BACKUP && rtarea_base != RTAREA_BACKUP_2)
+  restore_u32 ();
+  if (rtarea_base != 0 && rtarea_base != RTAREA_DEFAULT && rtarea_base != RTAREA_BACKUP)
   	rtarea_base = 0;
   return src;
 }
@@ -2704,20 +2686,21 @@ uae_u8 *restore_expansion_info(uae_u8 *src)
 #endif /* SAVESTATE */
 
 const struct expansionromtype expansionroms[] = {
+
 		/* built-in controllers */
 	{
 		_T("cd32fmv"), _T("CD32 FMV"), _T("Commodore"),
-		expamem_init_cd32fmv, NULL, NULL, ROMTYPE_CD32CART, 0, 0, BOARD_AUTOCONFIG_Z2, true,
+		expamem_init_cd32fmv, NULL, ROMTYPE_CD32CART, BOARD_AUTOCONFIG_Z2, 
 		EXPANSIONTYPE_INTERNAL
 	},
 	{
 		_T("ide_mb"), _T("A600/A1200/A4000 IDE"), _T("Commodore"),
-		gayle_ide_init, NULL, gayle_add_ide_unit, ROMTYPE_MB_IDE | ROMTYPE_NOT, 0, 0, BOARD_NONAUTOCONFIG_BEFORE, true,
+		gayle_ide_init, gayle_add_ide_unit, ROMTYPE_MB_IDE | ROMTYPE_NOT, BOARD_NONAUTOCONFIG_BEFORE,
 		EXPANSIONTYPE_INTERNAL | EXPANSIONTYPE_IDE
 	},
 	{
 		_T("pcmcia_mb"), _T("A600/A1200 PCMCIA"), _T("Commodore"),
-		gayle_pcmcia_init, NULL, gayle_add_pcmcia_unit, ROMTYPE_MB_PCMCIA | ROMTYPE_NOT, 0, 0, BOARD_NONAUTOCONFIG_BEFORE, true,
+		gayle_pcmcia_init, gayle_add_pcmcia_unit, ROMTYPE_MB_PCMCIA | ROMTYPE_NOT, BOARD_NONAUTOCONFIG_BEFORE,
 		EXPANSIONTYPE_INTERNAL
 	},
 

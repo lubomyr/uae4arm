@@ -3,31 +3,13 @@ ifeq ($(PLATFORM),)
 endif
 
 ifeq ($(PLATFORM),android)
-	CPU_FLAGS += -mfpu=neon -mfloat-abi=soft
+	CPU_FLAGS += -mfpu=vfp -mfloat-abi=soft
 	DEFS += -DANDROIDSDL
 	ANDROID = 1
-	HAVE_NEON = 1
-	HAVE_SDL_DISPLAY = 1
-	USE_PICASSO96 = 1
-else ifeq ($(PLATFORM),rpi2)
-	CPU_FLAGS += -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
-	LDFLAGS += -lbcm_host
-	DEFS += -DRASPBERRY -DSIX_AXIS_WORKAROUND
-	HAVE_NEON = 1
-	HAVE_DISPMANX = 1
-	USE_PICASSO96 = 1
-else ifeq ($(PLATFORM),rpi1)
-	CPU_FLAGS += -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard
-	LDFLAGS += -lbcm_host
-	HAVE_DISPMANX = 1
-	DEFS += -DRASPBERRY -DSIX_AXIS_WORKAROUND
+	USE_SDL_VERSION = sdl1
+	PROFILER_PATH = /storage/sdcard0/profile/
 else ifeq ($(PLATFORM),generic-sdl)
-	HAVE_SDL_DISPLAY = 1
-	HAVE_NEON = 1
-	USE_PICASSO96 = 1
-else ifeq ($(PLATFORM),gles)
-	HAVE_GLES_DISPLAY = 1
-	HAVE_NEON = 1
+	USE_SDL_VERSION = sdl1
 endif
 
 NAME   = uae4arm
@@ -43,54 +25,41 @@ all: $(PROG)
 #DEBUG=1
 #TRACER=1
 
-PANDORA=1
 #GEN_PROFILE=1
 #USE_PROFILE=1
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-DEFS += -DCPU_arm -DARM_ASSEMBLY -DARMV6_ASSEMBLY -DARMV6T2 -DPANDORA -DWITH_INGAME_WARNING
+DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV -DPANDORA
+#DEFS += -DUSE_JIT_FPU # disabled because it caused crash on android
 DEFS += -DUSE_SDL
 
-ifeq ($(USE_PICASSO96), 1)
-	DEFS += -DPICASSO96
-endif
-
-ifeq ($(HAVE_NEON), 1)
-	DEFS += -DUSE_ARMNEON
-endif
-
-#MORE_CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/include/interface/vcos/pthreads
-
-MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/archivers -Isrc/od-pandora
-MORE_CFLAGS += -Wno-write-strings -Wno-narrowing -DUSE_SDL
-#MORE_CFLAGS += -std=gnu++14
+MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/archivers
+MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
+MORE_CFLAGS += -fuse-ld=gold -fdiagnostics-color=auto
+MORE_CFLAGS += -mstructure-size-boundary=32
+MORE_CFLAGS += -falign-functions=32
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
 #LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
-MORE_CFLAGS += -Ofast -pipe
-MORE_CFLAGS += -fweb -frename-registers
-MORE_CFLAGS += -funroll-loops -ftracer -funswitch-loops
-
-# Using -flto and -fipa-pta generates an error with gcc5.2 (??? and -lto alone generates slower code ???)
-#MORE_CFLAGS += -flto=4 -fuse-linker-plugin
-
+MORE_CFLAGS += -O2 -ffast-math -pipe
+MORE_CFLAGS += -frename-registers
+MORE_CFLAGS += -ftracer
+# flags -Ofast and -funroll-loops caused crash on android
 else
-MORE_CFLAGS += -g -rdynamic -funwind-tables -mapcs-frame -DDEBUG -Wl,--export-dynamic
-
-ifdef TRACER
-TRACE_CFLAGS = -DTRACER -finstrument-functions -Wall -rdynamic
-endif
-
+  MORE_CFLAGS += -g -rdynamic -funwind-tables -mapcs-frame -DDEBUG -Wl,--export-dynamic
+  ifdef TRACER
+    TRACE_CFLAGS = -DTRACER -finstrument-functions -Wall -rdynamic
+  endif
 endif
 
 ifdef GEN_PROFILE
-MORE_CFLAGS += -fprofile-generate=/storage/sdcard0/profile/ -fprofile-arcs -fvpt
+MORE_CFLAGS += -fprofile-generate=$(PROFILER_PATH) -fprofile-arcs -fvpt
 endif
 ifdef USE_PROFILE
-MORE_CFLAGS += -fprofile-use -fbranch-probabilities -fvpt
+MORE_CFLAGS += -fprofile-use -fprofile-correction -fbranch-probabilities -fvpt
 endif
 
 ASFLAGS += $(CPU_FLAGS)
@@ -131,11 +100,6 @@ OBJS =	\
 	src/filesys.o \
 	src/flashrom.o \
 	src/fpp.o \
-	src/fpp_native.o \
-	src/fpp_softfloat.o \
-	src/softfloat/softfloat.o \
-	src/softfloat/softfloat_decimal.o \
-	src/softfloat/softfloat_fpsp.o \
 	src/fsdb.o \
 	src/fsdb_unix.o \
 	src/fsusage.o \
@@ -167,7 +131,7 @@ OBJS =	\
 	src/archivers/7z/7zDec.o \
 	src/archivers/7z/7zIn.o \
 	src/archivers/7z/7zStream.o \
-    src/archivers/7z/Bcj2.o \
+	src/archivers/7z/Bcj2.o \
 	src/archivers/7z/Bra.o \
 	src/archivers/7z/Bra86.o \
 	src/archivers/7z/LzmaDec.o \
@@ -209,27 +173,24 @@ OBJS =	\
 	src/osdep/cda_play.o \
 	src/osdep/charset.o \
 	src/osdep/fsdb_host.o \
-	src/osdep/hardfile_pandora.o \
 	src/osdep/keyboard.o \
 	src/osdep/mp3decoder.o \
-	src/osdep/neon_helper_p96.o \
+	src/osdep/picasso96.o \
 	src/osdep/writelog.o \
-	src/osdep/pandora.o \
-	src/osdep/pandora_filesys.o \
-	src/osdep/pandora_input.o \
-	src/osdep/pandora_gui.o \
-	src/osdep/pandora_rp9.o \
-	src/osdep/pandora_mem.o \
+	src/osdep/generic_hardfile.o \
+	src/osdep/generic_target.o \
+	src/osdep/generic_filesys.o \
+	src/osdep/generic_gui.o \
+	src/osdep/generic_rp9.o \
+	src/osdep/generic_mem.o \
 	src/osdep/sigsegv_handler.o \
-	src/sounddep/sound.o \
 	src/osdep/gui/UaeRadioButton.o \
 	src/osdep/gui/UaeDropDown.o \
 	src/osdep/gui/UaeCheckBox.o \
 	src/osdep/gui/UaeListBox.o \
-	src/osdep/gui/InGameMessage.o \
 	src/osdep/gui/SelectorEntry.o \
-	src/osdep/gui/ShowMessage.o \
 	src/osdep/gui/ShowHelp.o \
+	src/osdep/gui/ShowMessage.o \
 	src/osdep/gui/SelectFolder.o \
 	src/osdep/gui/SelectFile.o \
 	src/osdep/gui/CreateFilesysHardfile.o \
@@ -246,7 +207,6 @@ OBJS =	\
 	src/osdep/gui/PanelHD.o \
 	src/osdep/gui/PanelDisplay.o \
 	src/osdep/gui/PanelSound.o \
-	src/osdep/gui/PanelInput.o \
 	src/osdep/gui/PanelMisc.o \
 	src/osdep/gui/PanelSavestate.o \
 	src/osdep/gui/main_window.o \
@@ -257,34 +217,22 @@ OBJS += src/osdep/gui/androidsdl_event.o
 OBJS += src/osdep/gui/PanelOnScreen.o
 endif
 
-ifeq ($(HAVE_DISPMANX), 1)
-OBJS += src/od-rasp/rasp_gfx.o
-endif
-
-ifeq ($(HAVE_SDL_DISPLAY), 1)
-OBJS += src/osdep/pandora_gfx.o
-endif
-
-ifeq ($(HAVE_GLES_DISPLAY), 1)
-OBJS += src/od-gles/gl.o
-OBJS += src/od-gles/gl_platform.o
-OBJS += src/od-gles/gles_gfx.o
-MORE_CFLAGS += -I/opt/vc/include/
-MORE_CFLAGS += -DHAVE_GLES
-LDFLAGS +=  -ldl -lEGL -lGLESv1_CM
-endif
-
-
-ifdef PANDORA
+ifeq ($(USE_SDL_VERSION),sdl1)
 OBJS += src/osdep/gui/sdltruetypefont.o
 endif
 
-ifeq ($(USE_PICASSO96), 1)
-	OBJS += src/osdep/picasso96.o
+ifeq ($(PLATFORM),android)
+OBJS += src/osdep/pandora.o
+OBJS += src/osdep/pandora_gfx.o
+OBJS += src/osdep/pandora_input.o
+OBJS += src/sounddep/sound_sdl.o
+OBJS += src/osdep/gui/PanelInputPandora.o
 endif
 
-ifeq ($(HAVE_NEON), 1)
-#	OBJS += src/osdep/neon_helper.o
+ifeq ($(PLATFORM),android)
+	OBJS += src/osdep/arm_helper.o
+else
+	OBJS += src/osdep/neon_helper.o
 endif
 
 OBJS += src/newcpu.o
@@ -298,15 +246,16 @@ OBJS += src/cpuemu_11.o
 OBJS += src/cpuemu_40.o
 OBJS += src/cpuemu_44.o
 OBJS += src/jit/compemu.o
-OBJS += src/jit/compemu_fpp.o
 OBJS += src/jit/compstbl.o
+OBJS += src/jit/compemu_fpp.o
 OBJS += src/jit/compemu_support.o
 
-src/osdep/neon_helper.o: src/osdep/neon_helper.s
-	$(CXX) $(CPU_FLAGS) -fpic -falign-functions=32 -mcpu=cortex-a8 -Wall -o src/osdep/neon_helper.o -c src/osdep/neon_helper.s
-
+ifdef TRACER
 src/trace.o: src/trace.c
 	$(CC) $(MY_CFLAGS) -std=c99 -c src/trace.c -o src/trace.o
+
+OBJS += src/trace.o
+endif
 
 .cpp.o:
 	$(CXX) $(MY_CFLAGS) $(TRACE_CFLAGS) -c $< -o $@
@@ -314,7 +263,7 @@ src/trace.o: src/trace.c
 .cpp.s:
 	$(CXX) $(MY_CFLAGS) -S -c $< -o $@
 
-$(PROG): $(OBJS) src/trace.o
+$(PROG): $(OBJS)
 	$(CXX) -o $(PROG) $(OBJS) $(LDFLAGS)
 ifndef DEBUG
 	$(STRIP) $(PROG)
@@ -350,11 +299,7 @@ ASMS = \
 	src/zfile_archive.s \
 	src/machdep/support.s \
 	src/osdep/picasso96.s \
-	src/osdep/pandora.s \
-	src/osdep/pandora_gfx.s \
-	src/osdep/pandora_mem.s \
 	src/osdep/sigsegv_handler.s \
-	src/sounddep/sound.s \
 	src/newcpu.s \
 	src/newcpu_common.s \
 	src/readcpu.s \

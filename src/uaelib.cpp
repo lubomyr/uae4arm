@@ -277,15 +277,6 @@ static uae_u32 emulib_GetDisk(TrapContext *ctx, uae_u32 drive, uaecptr name)
 #define CALL_NATIVE_FUNC( d1,d2,d3,d4,d5,d6,d7,a1,a2,a3,a4,a5,a6 ) if(native_func) native_func( d1,d2,d3,d4,d5,d6,d7,a1,a2,a3,a4,a5,a6 )
 /* A0 - Contains a ptr to the native .obj data.  This ptr is Amiga-based. */
 /*      We simply find the first function in this .obj data, and execute it. */
-static uae_u32 REGPARAM2 emulib_ExecuteNativeCode (void)
-{
-  return 0;
-}
-
-static uae_u32 emulib_Minimize (void)
-{
-	return 0;
-}
 
 static int native_dos_op(TrapContext *ctx, uae_u32 mode, uae_u32 p1, uae_u32 p2, uae_u32 p3)
 {
@@ -328,8 +319,8 @@ static uae_u32 uaelib_demux_common(TrapContext *ctx, uae_u32 ARG0, uae_u32 ARG1,
 		case 14: return emulib_GetDisk(ctx, ARG1, ARG2);
     case 15: return 0;
 
-    case 68: return emulib_Minimize ();
-    case 69: return emulib_ExecuteNativeCode ();
+		case 68: return 0;
+		case 69: return 0;
 
     case 70: return 0; /* RESERVED. Something uses this.. */
 
@@ -390,7 +381,7 @@ static uae_u32 REGPARAM2 uaelib_demux (TrapContext *ctx)
 void emulib_install (void)
 {
   uaecptr a;
-	if (!uae_boot_rom_type)
+	if (!uae_boot_rom_type && !currprefs.uaeboard)
   	return;
   a = here ();
   org (rtarea_base + 0xFF60);

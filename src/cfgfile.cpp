@@ -35,12 +35,6 @@
 #define cfgfile_warning write_log
 #define cfgfile_warning_obsolete write_log
 
-#if SIZEOF_TCHAR != 1
-/* FIXME: replace strcasecmp with _tcsicmp in source code instead */
-#undef strcasecmp
-#define strcasecmp _tcsicmp
-#endif
-
 static int config_newfilesystem;
 static struct strlist *temp_lines;
 static struct strlist *error_lines;
@@ -58,6 +52,12 @@ static const TCHAR *guimode1[] = { _T("no"), _T("yes"), _T("nowait"), 0 };
 static const TCHAR *guimode2[] = { _T("false"), _T("true"), _T("nowait"), 0 };
 static const TCHAR *guimode3[] = { _T("0"), _T("1"), _T("nowait"), 0 };
 static const TCHAR *csmode[] = { _T("ocs"), _T("ecs_agnus"), _T("ecs_denise"), _T("ecs"), _T("aga"), 0 };
+static const TCHAR *linemode[] = {
+	_T("none"),
+	_T("double"), _T("scanlines"), _T("scanlines2p"), _T("scanlines3p"),
+	_T("double2"), _T("scanlines2"), _T("scanlines2p2"), _T("scanlines2p3"),
+	_T("double3"), _T("scanlines3"), _T("scanlines3p2"), _T("scanlines3p3"),
+	0 };
 static const TCHAR *speedmode[] = { _T("max"), _T("real"), 0 };
 static const TCHAR *soundmode1[] = { _T("none"), _T("interrupts"), _T("normal"), _T("exact"), 0 };
 static const TCHAR *soundmode2[] = { _T("none"), _T("interrupts"), _T("good"), _T("best"), 0 };
@@ -73,21 +73,21 @@ static const TCHAR *idemode[] = { _T("none"), _T("a600/a1200"), _T("a4000"), 0 }
 static const TCHAR *rtctype[] = { _T("none"), _T("MSM6242B"), _T("RP5C01A"), _T("MSM6242B_A2000"), 0 };
 static const TCHAR *ciaatodmode[] = { _T("vblank"), _T("50hz"), _T("60hz"), 0 };
 static const TCHAR *cscompa[] = {
-	_T("-"), _T("Generic"), _T("CDTV"), _T("CDTV-CR"), _T("CD32"), _T("A500"), _T("A500+"), _T("A600"),
-	_T("A1000"), _T("A1200"), _T("A2000"), _T("A3000"), _T("A3000T"), _T("A4000"),
-	_T("Velvet"),
+	_T("-"), _T("Generic"), _T("CD32"), _T("A500"), _T("A500+"), _T("A600"),
+	_T("A1200"), _T("A2000"), _T("A4000"), 
 	NULL
 };
 static const TCHAR *qsmodes[] = {
 	_T("A500"), _T("A500+"), _T("A600"), _T("A1200"), _T("A4000"), _T("CD32"), NULL };
 static const TCHAR *abspointers[] = { _T("none"), _T("mousehack"), _T("tablet"), 0 };
-static const TCHAR *joyportmodes[] = { _T(""), _T("mouse"), _T("mousenowheel"), _T("djoy"), _T("gamepad"), _T("ajoy"), _T("cdtvjoy"), _T("cd32joy"), 0 };
+static const TCHAR *joyportmodes[] = { _T(""), _T("mouse"), _T("mousenowheel"), _T("djoy"), _T("gamepad"), _T("ajoy"), _T("cd32joy"), 0 };
 static const TCHAR *joyaf[] = { _T("none"), _T("normal"), _T("toggle"), _T("always"), 0 };
-static const TCHAR *vsyncmodes[] = { _T("adaptive"), _T("false"), _T("true"), _T("autoswitch"), 0 };
 static const TCHAR *cdmodes[] = { _T("disabled"), _T(""), _T("image"), _T("ioctl"), _T("spti"), _T("aspi"), 0 };
 static const TCHAR *cdconmodes[] = { _T(""), _T("uae"), _T("ide"), _T("scsi"), _T("cdtv"), _T("cd32"), 0 };
 static const TCHAR *waitblits[] = { _T("disabled"), _T("automatic"), _T("noidleonly"), _T("always"), 0 };
 static const TCHAR *autoext2[] = { _T("disabled"), _T("copy"), _T("replace"), 0 };
+static const TCHAR *unmapped[] = { _T("floating"), _T("zero"), _T("one"), 0 };
+static const TCHAR *ciatype[] = { _T("default"), _T("391078-01"), 0 };
 
 struct hdcontrollerconfig
 {
@@ -100,8 +100,6 @@ static const struct hdcontrollerconfig hdcontrollers[] = {
 
 	{ _T("ide%d"), 0 },
 	{ _T("ide%d_mainboard"), ROMTYPE_MB_IDE },
-
-	{ _T("scsi%d"), 0 },
 
 	{ NULL }
 };
@@ -133,7 +131,7 @@ static const TCHAR *obsolete[] = {
 	_T("gfx_test_speed"), _T("gfxlib_replacement"), _T("enforcer"), _T("catweasel_io"),
   _T("kickstart_key_file"), _T("sound_adjust"), _T("sound_latency"),
 	_T("serial_hardware_dtrdsr"), _T("gfx_filter_upscale"),
-	_T("gfx_correct_aspect"), _T("gfx_autoscale"), _T("parallel_sampler"), _T("parallel_ascii_emulation"),
+	_T("gfx_autoscale"), _T("parallel_sampler"), _T("parallel_ascii_emulation"),
 	_T("avoid_vid"), _T("avoid_dga"), _T("z3chipmem_size"), _T("state_replay_buffer"), _T("state_replay"),
 	_T("z3realmapping"), _T("force_0x10000000_z3"),
 	_T("fpu_arithmetic_exceptions"),
@@ -159,6 +157,72 @@ static const TCHAR *obsolete[] = {
 
 #define UNEXPANDED _T("$(FILE_PATH)")
 
+
+static TCHAR *cfgfile_unescape(const TCHAR *s, const TCHAR **endpos, TCHAR separator, bool min)
+{
+	bool quoted = false;
+	TCHAR *s2 = xmalloc (TCHAR, _tcslen (s) + 1);
+	TCHAR *p = s2;
+	if (s[0] == '\"') {
+		s++;
+		quoted = true;
+	}
+	int i;
+	for (i = 0; s[i]; i++) {
+		TCHAR c = s[i];
+		if (quoted && c == '\"') {
+			i++;
+			break;
+		}
+		if (c == separator) {
+			i++;
+			break;
+		}
+		if (c == '\\' && !min) {
+			char v = 0;
+			TCHAR c2;
+			c = s[i + 1];
+			switch (c)
+			{
+				case 'X':
+				case 'x':
+				c2 = _totupper (s[i + 2]);
+				v = ((c2 >= 'A') ? c2 - 'A' : c2 - '0') << 4;
+				c2 = _totupper (s[i + 3]);
+				v |= (c2 >= 'A') ? c2 - 'A' : c2 - '0';
+				*p++ = c2;
+				i += 2;
+				break;
+				case 'r':
+				*p++ = '\r';
+				break;
+				case '\n':
+				*p++ = '\n';
+				break;
+				default:
+				*p++ = c;
+				break;
+			}
+			i++;
+		}
+		else {
+			*p++ = c;
+		}
+	}
+	*p = 0;
+	if (endpos)
+		*endpos = &s[i];
+	return s2;
+}
+static TCHAR *cfgfile_unescape (const TCHAR *s, const TCHAR **endpos)
+{
+	return cfgfile_unescape(s, endpos, 0, false);
+}
+static TCHAR *cfgfile_unescape_min(const TCHAR *s)
+{
+	return cfgfile_unescape(s, NULL, 0, true);
+}
+
 static TCHAR *cfgfile_option_find_it(const TCHAR *s, const TCHAR *option, bool checkequals)
 {
 	TCHAR buf[MAX_DPATH];
@@ -178,9 +242,16 @@ static TCHAR *cfgfile_option_find_it(const TCHAR *s, const TCHAR *option, bool c
 			if (tmpp2)
 				*tmpp2++ = 0;
 		}
-		if (!strcasecmp(p, option)) {
-			if (checkequals && tmpp2)
+		if (!_tcsicmp(p, option)) {
+			if (checkequals && tmpp2) {
+				if (tmpp2[0] == '"') {
+					TCHAR *n = cfgfile_unescape_min(tmpp2);
+					_tcscpy(tmpp2, n);
+					xfree(n);
+				  return tmpp2;
+				}
 				return tmpp2;
+			}
 			return p;
 		}
 		p = tmpp;
@@ -209,7 +280,7 @@ static int match_string (const TCHAR *table[], const TCHAR *str)
 {
   int i;
   for (i = 0; table[i] != 0; i++)
-  	if (strcasecmp (table[i], str) == 0)
+  	if (_tcsicmp (table[i], str) == 0)
 	    return i;
   return -1;
 }
@@ -236,6 +307,8 @@ static TCHAR *cfgfile_escape (const TCHAR *s, const TCHAR *escstr, bool quote)
 			}
 		}
 	}
+	if (escstr == NULL && quote)
+		doquote = true;
 	TCHAR *s2 = xmalloc (TCHAR, _tcslen (s) + cnt * 4 + 1);
 	TCHAR *p = s2;
 	if (doquote)
@@ -288,7 +361,7 @@ static TCHAR *cfgfile_escape (const TCHAR *s, const TCHAR *escstr, bool quote)
 	return s2;
 }
 
-// escapy only , and "
+// escape only , and "
 static TCHAR *cfgfile_escape_min(const TCHAR *s)
 {
 	for (int i = 0; s[i]; i++) {
@@ -298,66 +371,6 @@ static TCHAR *cfgfile_escape_min(const TCHAR *s)
 		}
 	}
 	return my_strdup(s);
-}
-
-static TCHAR *cfgfile_unescape (const TCHAR *s, const TCHAR **endpos, TCHAR separator)
-{
-	bool quoted = false;
-	TCHAR *s2 = xmalloc (TCHAR, _tcslen (s) + 1);
-	TCHAR *p = s2;
-	if (s[0] == '\"') {
-		s++;
-		quoted = true;
-	}
-	int i;
-	for (i = 0; s[i]; i++) {
-		TCHAR c = s[i];
-		if (quoted && c == '\"') {
-			i++;
-			break;
-		}
-		if (c == separator) {
-			i++;
-			break;
-		}
-		if (c == '\\') {
-			char v = 0;
-			TCHAR c2;
-			c = s[i + 1];
-			switch (c)
-			{
-				case 'X':
-				case 'x':
-				c2 = _totupper (s[i + 2]);
-				v = ((c2 >= 'A') ? c2 - 'A' : c2 - '0') << 4;
-				c2 = _totupper (s[i + 3]);
-				v |= (c2 >= 'A') ? c2 - 'A' : c2 - '0';
-				*p++ = c2;
-				i += 2;
-				break;
-				case 'r':
-				*p++ = '\r';
-				break;
-				case '\n':
-				*p++ = '\n';
-				break;
-				default:
-				*p++ = c;
-				break;
-			}
-			i++;
-		} else {
-			*p++ = c;
-		}
-	}
-	*p = 0;
-	if (endpos)
-		*endpos = &s[i];
-	return s2;
-}
-static TCHAR *cfgfile_unescape (const TCHAR *s, const TCHAR **endpos)
-{
-	return cfgfile_unescape (s, endpos, 0);
 }
 
 static TCHAR *getnextentry (const TCHAR **valuep, const TCHAR separator)
@@ -374,14 +387,14 @@ static TCHAR *getnextentry (const TCHAR **valuep, const TCHAR separator)
 		value++;
 		*valuep = value;
 	} else {
-		s = cfgfile_unescape (value, valuep, separator);
+		s = cfgfile_unescape (value, valuep, separator, false);
 	}
 	return s;
 }
 
 static TCHAR *cfgfile_subst_path2 (const TCHAR *path, const TCHAR *subst, const TCHAR *file)
 {
-  /* @@@ use strcasecmp for some targets.  */
+  /* @@@ use _tcsicmp for some targets.  */
   if (_tcslen (path) > 0 && _tcsncmp (file, path, _tcslen (path)) == 0) {
   	int l;
   	TCHAR *p2, *p = xmalloc (TCHAR, _tcslen (file) + _tcslen (subst) + 2);
@@ -657,7 +670,7 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 			else
 				_tcscpy(hdcs, _T("scide"));
 		} else if (ct == HD_CONTROLLER_TYPE_UAE) {
-			_tcscpy(hdcs, _T("uae"));
+			_stprintf(hdcs, _T("uae%d"), ci->controller_unit);
 		}
 		if (romtype) {
 			for (int j = 0; hdcontrollers[j].label; j++) {
@@ -678,26 +691,30 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 				ci->devname ? ci->devname : _T(""), ci->volname, str1c, bp);
 	    cfgfile_write_str (f, _T("filesystem2"), tmp);
 			_tcscpy (tmp3, tmp);
-	  } else  if (ci->type == UAEDEV_HDF || ci->type == UAEDEV_CD) {
+	  } else  if (ci->type == UAEDEV_HDF) {
+			TCHAR filesyspath[MAX_DPATH];
+			_tcscpy(filesyspath, ci->filesys);
+			TCHAR *sfilesys = cfgfile_escape_min(filesyspath);
 	    _stprintf (tmp, _T("%s,%s:%s,%d,%d,%d,%d,%d,%s,%s"),
 		    ci->readonly ? _T("ro") : _T("rw"),
 				ci->devname ? ci->devname : _T(""), str1c,
 				ci->sectors, ci->surfaces, ci->reserved, ci->blocksize,
-				bp, ci->filesys ? ci->filesys : _T(""), hdcs);
+				bp, ci->filesys[0] ? sfilesys : _T(""), hdcs);
 			_stprintf (tmp3, _T("%s,%s:%s%s%s,%d,%d,%d,%d,%d,%s,%s"),
 				ci->readonly ? _T("ro") : _T("rw"),
 				ci->devname ? ci->devname : _T(""), str1b, str2b[0] ? _T(":") : _T(""), str2b,
 		    ci->sectors, ci->surfaces, ci->reserved, ci->blocksize,
-				bp, ci->filesys ? ci->filesys : _T(""), hdcs);
+				bp, ci->filesys[0] ? sfilesys : _T(""), hdcs);
 			if (ci->highcyl || ci->physical_geometry) {
 				TCHAR *s = tmp + _tcslen (tmp);
 				TCHAR *s2 = s;
 				_stprintf (s2, _T(",%d"), ci->highcyl);
 				if (ci->physical_geometry && ci->pheads && ci->psecs) {
-					TCHAR *s = tmp + _tcslen (tmp);
+					s = tmp + _tcslen (tmp);
 					_stprintf (s, _T(",%d/%d/%d"), ci->pcyls, ci->pheads, ci->psecs);
 				}
 				_tcscat (tmp3, s2);
+				xfree(sfilesys);
 			}
 			if (ci->controller_media_type) {
 				_tcscat(tmp, _T(",CF"));
@@ -732,11 +749,7 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 	      cfgfile_write_str (f, _T("hardfile2"), tmp);
 	  }
 	  _stprintf (tmp2, _T("uaehf%d"), i);
-		if (ci->type == UAEDEV_CD) {
-			cfgfile_write (f, tmp2, _T("cd%d,%s"), ci->device_emu_unit, tmp);
-		} else {
-			cfgfile_write (f, tmp2, _T("%s,%s"), ci->type == UAEDEV_HDF ? _T("hdf") : _T("dir"), tmp3);
-		}
+		cfgfile_write (f, tmp2, _T("%s,%s"), ci->type == UAEDEV_HDF ? _T("hdf") : _T("dir"), tmp3);
 		if (ci->type == UAEDEV_DIR) {
 			bool add_extra = false;
 			if (ci->inject_icons) {
@@ -762,8 +775,6 @@ static void write_compatibility_cpu(struct zfile *f, struct uae_prefs *p)
   model = p->cpu_model;
   if (model == 68030)
   	model = 68020;
-  if (model == 68060)
-  	model = 68040;
   if (p->address_space_24 && model == 68020)
   	_tcscpy (tmp, _T("68ec020"));
   else
@@ -779,128 +790,9 @@ static void write_resolution (struct zfile *f, const TCHAR *ws, const TCHAR *hs,
 	cfgfile_write (f, hs, _T("%d"), wh->height);
 }
 
-static int cfgfile_read_rom_settings(const struct expansionboardsettings *ebs, const TCHAR *buf, TCHAR *configtext)
-{
-	int settings = 0;
-	int bitcnt = 0;
-	int sstr = 0;
-	if (configtext)
-		configtext[0] = 0;
-	TCHAR *ct = configtext;
-	for (int i = 0; ebs[i].name; i++) {
-		const struct expansionboardsettings *eb = &ebs[i];
-		if (eb->type == EXPANSIONBOARD_STRING) {
-			const TCHAR *p = cfgfile_option_get(buf, eb->configname);
-			if (p) {
-				_tcscpy(ct, p);
-				ct += _tcslen(ct);
-			}
-			*ct++ = 0;
-		} else if (eb->type == EXPANSIONBOARD_MULTI) {
-			int itemcnt = -1;
-			int itemfound = 0;
-			const TCHAR *p = eb->configname;
-			while (p[0]) {
-				if (itemcnt >= 0) {
-					if (cfgfile_option_find(buf, p)) {
-						itemfound = itemcnt;
-					}
-				}
-				itemcnt++;
-				p += _tcslen(p) + 1;
-			}
-			int cnt = 1;
-			int bits = 1;
-			for (int i = 0; i < 8; i++) {
-				if ((1 << i) >= itemcnt) {
-					cnt = 1 << i;
-					bits = i;
-					break;
-				}
-			}
-			int multimask = cnt - 1;
-			if (eb->invert)
-				itemfound ^= 0x7fffffff;
-			itemfound &= multimask;
-			settings |= itemfound << bitcnt;
-			bitcnt += bits;
-		} else {
-			int mask = 1 << bitcnt;
-			if (cfgfile_option_find(buf, eb->configname)) {
-				settings |= mask;
-			}
-			if (eb->invert)
-				settings ^= mask;
-			bitcnt++;
-		}
-	}
-	return settings;
-}
-
-static void cfgfile_write_rom_settings(const struct expansionboardsettings *ebs, TCHAR *buf, int settings, const TCHAR *settingstring)
-{
-	int bitcnt = 0;
-	int sstr = 0;
-	for (int j = 0; ebs[j].name; j++) {
-		const struct expansionboardsettings *eb = &ebs[j];
-		if (eb->type == EXPANSIONBOARD_STRING) {
-			if (settingstring) {
-				const TCHAR *p = settingstring;
-				for (int i = 0; i < sstr; i++) {
-					p += _tcslen(p) + 1;
-				}
-				if (buf[0])
-					_tcscat(buf, _T(","));
-				_stprintf(buf, _T("%s=%s"), eb->configname, p);
-				sstr++;
-			}
-		} else if (eb->type == EXPANSIONBOARD_MULTI) {
-			int itemcnt = -1;
-			const TCHAR *p = eb->configname;
-			while (p[0]) {
-				itemcnt++;
-				p += _tcslen(p) + 1;
-			}
-			int cnt = 1;
-			int bits = 1;
-			for (int i = 0; i < 8; i++) {
-				if ((1 << i) >= itemcnt) {
-					cnt = 1 << i;
-					bits = i;
-					break;
-				}
-			}
-			int multimask = cnt - 1;
-			int multivalue = settings;
-			if (eb->invert)
-				multivalue ^= 0x7fffffff;
-			multivalue = (multivalue >> bitcnt) & multimask;
-			p = eb->configname;
-			while (multivalue >= 0) {
-				multivalue--;
-				p += _tcslen(p) + 1;
-			}
-			if (buf[0])
-				_tcscat(buf, _T(","));
-			_tcscat(buf, p);
-			bitcnt += bits;
-		} else {
-			int value = settings;
-			if (eb->invert)
-				value ^= 0x7fffffff;
-			if (value & (1 << bitcnt)) {
-				if (buf[0])
-					_tcscat(buf, _T(","));
-				_tcscat(buf, eb->configname);
-			}
-			bitcnt++;
-		}
-	}
-}
-
 static void cfgfile_write_board_rom(struct uae_prefs *prefs, struct zfile *f, const TCHAR *path, struct boardromconfig *br)
 {
-	TCHAR buf[256];
+	TCHAR buf[MAX_DPATH];
 	TCHAR name[256];
 	const struct expansionromtype *ert;
 	
@@ -921,7 +813,7 @@ static void cfgfile_write_board_rom(struct uae_prefs *prefs, struct zfile *f, co
 				_stprintf(buf, _T("%s%s_rom"), name, i ? _T("_ext") : _T(""));
 				cfgfile_dwrite_str (f, buf, br->roms[i].romident);
 			}
-			if (br->roms[i].autoboot_disabled || ert->settings || br->device_order > 0) {
+			if (br->roms[i].autoboot_disabled || br->device_order > 0) {
 				TCHAR buf2[256], *p;
 				buf2[0] = 0;
 				p = buf2;
@@ -930,9 +822,6 @@ static void cfgfile_write_board_rom(struct uae_prefs *prefs, struct zfile *f, co
 					if (buf2[0])
 						_tcscat(buf2, _T(","));
 					_tcscat(buf2, _T("autoboot_disabled=true"));
-				}
-				if (br->roms[i].device_settings && ert->settings) {
-					cfgfile_write_rom_settings(ert->settings, buf2, br->roms[i].device_settings, br->roms[i].configtext);
 				}
 				if (buf2[0])
 					cfgfile_dwrite_str (f, buf, buf2);
@@ -970,23 +859,6 @@ static bool cfgfile_readramboard(const TCHAR *option, const TCHAR *value, const 
 			v = 0;
 			cfgfile_intval(option, value, tmp1, &v, 1024);
 			rb->size = v;
-			return true;
-		}
-		if (i > 0)
-			_stprintf(tmp1, _T("%s%d_options"), name, i + 1);
-		else
-			_stprintf(tmp1, _T("%s_options"), name);
-		if (!_tcsicmp(option, tmp1)) {
-			TCHAR *s;
-			s = cfgfile_option_get(value, _T("order"));
-			if (s)
-				rb->device_order = _tstol(s);
-			s = cfgfile_option_get(value, _T("mid"));
-			if (s)
-				rb->manufacturer = (uae_u16)_tstol(s);
-			s = cfgfile_option_get(value, _T("pid"));
-			if (s)
-				rb->product = (uae_u8)_tstol(s);
 			return true;
 		}
   }
@@ -1052,6 +924,10 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 
 	cfgfile_write_rom (f, p->path_rom, p->romfile, _T("kickstart_rom_file"));
   cfgfile_write_rom (f, p->path_rom, p->romextfile, _T("kickstart_ext_rom_file"));
+	if (p->romident[0])
+		cfgfile_dwrite_str (f, _T("kickstart_rom"), p->romident);
+	if (p->romextident[0])
+		cfgfile_write_str (f, _T("kickstart_ext_rom="), p->romextident);
 
 	for (int i = 0; i < MAX_EXPANSION_BOARDS; i++) {
 		cfgfile_write_board_rom(p, f, p->path_rom, &p->expansionboard[i]);
@@ -1059,6 +935,9 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 
 	cfgfile_write_str (f, _T("flash_file"), p->flashfile);
 	cfgfile_write_str (f, _T("cart_file"), p->cartfile);
+	if (p->cartident[0])
+		cfgfile_write_str (f, _T("cart"), p->cartident);
+
   p->nr_floppies = 4;
   for (i = 0; i < 4; i++) {
     _stprintf (tmp, _T("floppy%d"), i);
@@ -1105,9 +984,13 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
   cfgfile_write_str (f, _T("sound_interpol"), interpolmode[p->sound_interpol]);
   cfgfile_write_str (f, _T("sound_filter"), soundfiltermode1[p->sound_filter]);
   cfgfile_write_str (f, _T("sound_filter_type"), soundfiltermode2[p->sound_filter_type]);
+	cfgfile_write (f, _T("sound_volume_paula"), _T("%d"), p->sound_volume_paula);
 	if (p->sound_volume_cd >= 0)
 		cfgfile_write (f, _T("sound_volume_cd"), _T("%d"), p->sound_volume_cd);
 
+#ifdef USE_JIT_FPU
+	cfgfile_write_bool (f, _T("compfpu"), p->compfpu);
+#endif
   cfgfile_write (f, _T("cachesize"), _T("%d"), p->cachesize);
 
 	for (i = 0; i < MAX_JPORTS; i++) {
@@ -1162,10 +1045,9 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 	cfgfile_write (f, _T("gfx_refreshrate"), _T("%d"), p->gfx_apmode[0].gfx_refreshrate);
 	cfgfile_dwrite (f, _T("gfx_refreshrate_rtg"), _T("%d"), p->gfx_apmode[1].gfx_refreshrate);
 
-	cfgfile_write_str (f, _T("gfx_vsync"), vsyncmodes[p->gfx_apmode[0].gfx_vsync + 1]);
-	cfgfile_write_str (f, _T("gfx_vsync_picasso"), vsyncmodes[p->gfx_apmode[1].gfx_vsync + 1]);
   cfgfile_write_bool (f, _T("gfx_lores"), p->gfx_resolution == 0);
   cfgfile_write_str (f, _T("gfx_resolution"), lorestype1[p->gfx_resolution]);
+	cfgfile_write_str (f, _T("gfx_linemode"), p->gfx_vresolution > 0 ? linemode[1] : linemode[0]);
 
   cfgfile_write_bool (f, _T("immediate_blits"), p->immediate_blits);
 	cfgfile_dwrite_str (f, _T("waiting_blits"), waitblits[p->waiting_blits]);
@@ -1202,8 +1084,6 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 			s += _stprintf (s, _T(",h=%d"), cr->horiz);
 		if (cr->vert > 0)
 			s += _stprintf (s, _T(",v=%d"), cr->vert);
-		if (cr->locked)
-			_tcscat (s, _T(",locked"));
 		if (cr->ntsc > 0)
 			_tcscat (s, _T(",ntsc"));
 		else if (cr->ntsc == 0)
@@ -1229,9 +1109,7 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 		if (cr->defaultdata)
 			_tcscat(s, _T(",default"));
 		if (i == CHIPSET_REFRESH_PAL) {
-			cfgfile_dwrite (f, _T("displaydata_pal"), tmp);
 		} else if (i == CHIPSET_REFRESH_NTSC) {
-			cfgfile_dwrite (f, _T("displaydata_ntsc"), tmp);
 		} else {
 			cfgfile_dwrite (f, _T("displaydata"), tmp);
     }
@@ -1253,6 +1131,9 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 	cfgfile_dwrite_bool(f, _T("pcmcia"), p->cs_pcmcia);
 	cfgfile_dwrite_bool(f, _T("cia_todbug"), p->cs_ciatodbug);
 	cfgfile_dwrite_bool(f, _T("z3_autoconfig"), p->cs_z3autoconfig);
+	cfgfile_dwrite_str(f, _T("ciaa_type"), ciatype[p->cs_ciatype[0]]);
+	cfgfile_dwrite_str(f, _T("ciab_type"), ciatype[p->cs_ciatype[1]]);
+	cfgfile_dwrite_str(f, _T("unmapped_address_space"), unmapped[p->cs_unmapped_space]);
 
 	if (is_board_enabled(p, ROMTYPE_CD32CART, 0)) {
 		cfgfile_dwrite_bool(f, _T("cd32fmv"), true);
@@ -1336,7 +1217,6 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 
 	cfgfile_dwrite_bool (f, _T("fpu_no_unimplemented"), p->fpu_no_unimplemented);
 	cfgfile_write_bool (f, _T("fpu_strict"), p->fpu_strict);
-	cfgfile_dwrite_bool (f, _T("fpu_softfloat"), p->fpu_softfloat);
 
   cfgfile_write (f, _T("rtg_modes"), _T("0x%x"), p->picasso96_modeflags);
 
@@ -1367,13 +1247,13 @@ static int cfgfile_yesno (const TCHAR *option, const TCHAR *value, const TCHAR *
 {
   if (name != NULL && _tcscmp (option, name) != 0)
   	return 0;
-	if (strcasecmp (value, _T("yes")) == 0 || strcasecmp (value, _T("y")) == 0
-		|| strcasecmp (value, _T("true")) == 0 || strcasecmp (value, _T("t")) == 0
-		|| (numbercheck && strcasecmp (value, _T("1")) == 0))
+	if (_tcsicmp (value, _T("yes")) == 0 || _tcsicmp (value, _T("y")) == 0
+		|| _tcsicmp (value, _T("true")) == 0 || _tcsicmp (value, _T("t")) == 0
+		|| (numbercheck && _tcsicmp (value, _T("1")) == 0))
   	*location = 1;
-	else if (strcasecmp (value, _T("no")) == 0 || strcasecmp (value, _T("n")) == 0
-		|| strcasecmp (value, _T("false")) == 0 || strcasecmp (value, _T("f")) == 0
-		|| (numbercheck && strcasecmp (value, _T("0")) == 0))
+	else if (_tcsicmp (value, _T("no")) == 0 || _tcsicmp (value, _T("n")) == 0
+		|| _tcsicmp (value, _T("false")) == 0 || _tcsicmp (value, _T("f")) == 0
+		|| (numbercheck && _tcsicmp (value, _T("0")) == 0))
 	  *location = 0;
   else {
 		cfgfile_warning(_T("Option '%s' requires a value of either 'true' or 'false' (was '%s').\n"), option, value);
@@ -1461,11 +1341,11 @@ static int cfgfile_intval (const TCHAR *option, const TCHAR *value, const TCHAR 
   *location = _tcstol (value, &endptr, base) * scale;
 
   if (*endptr != '\0' || *value == '\0') {
-		if (strcasecmp (value, _T("false")) == 0 || strcasecmp (value, _T("no")) == 0) {
+		if (_tcsicmp (value, _T("false")) == 0 || _tcsicmp (value, _T("no")) == 0) {
 			*location = 0;
 			return 1;
 		}
-		if (strcasecmp (value, _T("true")) == 0 || strcasecmp (value, _T("yes")) == 0) {
+		if (_tcsicmp (value, _T("true")) == 0 || _tcsicmp (value, _T("yes")) == 0) {
 			*location = 1;
 			return 1;
   	}
@@ -1516,9 +1396,9 @@ static int cfgfile_strval (const TCHAR *option, const TCHAR *value, const TCHAR 
   if (val == -1) {
   	if (more)
 	    return 0;
-		if (!strcasecmp (value, _T("yes")) || !strcasecmp (value, _T("true"))) {
+		if (!_tcsicmp (value, _T("yes")) || !_tcsicmp (value, _T("true"))) {
 			val = 1;
-		} else if  (!strcasecmp (value, _T("no")) || !strcasecmp (value, _T("false"))) {
+		} else if  (!_tcsicmp (value, _T("no")) || !_tcsicmp (value, _T("false"))) {
 			val = 0;
 		} else {
 			cfgfile_warning(_T("Unknown value ('%s') for option '%s'.\n"), value, nameext ? tmp : option);
@@ -1694,10 +1574,10 @@ static int cfgfile_option_select(TCHAR *s, const TCHAR *option, const TCHAR *sel
 		if (!tmpp2)
 			return -1;
 		*tmpp2++ = 0;
-		if (!strcasecmp(p, option)) {
+		if (!_tcsicmp(p, option)) {
 			int idx = 0;
 			while (select[0]) {
-				if (!strcasecmp(select, tmpp2))
+				if (!_tcsicmp(select, tmpp2))
 					return idx;
 				idx++;
 				select += _tcslen(select) + 1;
@@ -1723,15 +1603,15 @@ static int cfgfile_option_bool(TCHAR *s, const TCHAR *option)
 		TCHAR *tmpp2 = _tcschr(p, '=');
 		if (tmpp2)
 			*tmpp2++ = 0;
-		if (!strcasecmp(p, option)) {
+		if (!_tcsicmp(p, option)) {
 			if (!tmpp2)
 				return 0;
 			TCHAR *tmpp3 = _tcschr (tmpp2, ',');
 			if (tmpp3)
 				*tmpp3 = 0;
-			if (tmpp2 && !strcasecmp(tmpp2, _T("true")))
+			if (tmpp2 && !_tcsicmp(tmpp2, _T("true")))
 				return 1;
-			if (tmpp2 && !strcasecmp(tmpp2, _T("false")))
+			if (tmpp2 && !_tcsicmp(tmpp2, _T("false")))
 				return 0;
 			return 1;
 		}
@@ -1852,6 +1732,7 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 	}
 
   if (cfgfile_intval (option, value, _T("sound_frequency"), &p->sound_freq, 1)
+		|| cfgfile_intval (option, value, _T("sound_volume_paula"), &p->sound_volume_paula, 1)
 		|| cfgfile_intval (option, value, _T("sound_volume_cd"), &p->sound_volume_cd, 1)
 	  || cfgfile_intval (option, value, _T("sound_stereo_separation"), &p->sound_stereo_separation, 1)
 	  || cfgfile_intval (option, value, _T("sound_stereo_mixing_delay"), &p->sound_mixed_stereo_delay, 1)
@@ -1905,19 +1786,16 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 		return 1;
 	}
 
-	if (_tcscmp (option, _T("gfx_vsync")) == 0) {
-		if (cfgfile_strval (option, value, _T("gfx_vsync"), &p->gfx_apmode[APMODE_NATIVE].gfx_vsync, vsyncmodes, 0) >= 0) {
-			p->gfx_apmode[APMODE_NATIVE].gfx_vsync--;
-			return 1;
+	if (_tcscmp (option, _T("gfx_linemode")) == 0) {
+		int v;
+		p->gfx_vresolution = VRES_DOUBLE;
+		if (cfgfile_strval(option, value, _T("gfx_linemode"), &v, linemode, 0)) {
+			p->gfx_vresolution = VRES_NONDOUBLE;
+			if (v > 0) {
+				p->gfx_vresolution = VRES_DOUBLE;
+			}
 		}
-		return cfgfile_yesno (option, value, _T("gfx_vsync"), &p->gfx_apmode[APMODE_NATIVE].gfx_vsync);
-	}
-	if (_tcscmp (option, _T("gfx_vsync_picasso")) == 0) {
-		if (cfgfile_strval (option, value, _T("gfx_vsync_picasso"), &p->gfx_apmode[APMODE_RTG].gfx_vsync, vsyncmodes, 0) >= 0) {
-			p->gfx_apmode[APMODE_RTG].gfx_vsync--;
-			return 1;
-		}
-		return cfgfile_yesno (option, value, _T("gfx_vsync_picasso"), &p->gfx_apmode[APMODE_RTG].gfx_vsync);
+		return 1;
 	}
 
   if(cfgfile_yesno (option, value, _T("show_leds"), &vb)) {
@@ -2028,13 +1906,13 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 
 	if (_tcscmp (option, _T("kbd_lang")) == 0) {
 		KbdLang l;
-		if ((l = KBD_LANG_DE, strcasecmp (value, _T("de")) == 0)
-			|| (l = KBD_LANG_DK, strcasecmp (value, _T("dk")) == 0)
-			|| (l = KBD_LANG_SE, strcasecmp (value, _T("se")) == 0)
-			|| (l = KBD_LANG_US, strcasecmp (value, _T("us")) == 0)
-			|| (l = KBD_LANG_FR, strcasecmp (value, _T("fr")) == 0)
-			|| (l = KBD_LANG_IT, strcasecmp (value, _T("it")) == 0)
-			|| (l = KBD_LANG_ES, strcasecmp (value, _T("es")) == 0))
+		if ((l = KBD_LANG_DE, _tcsicmp (value, _T("de")) == 0)
+			|| (l = KBD_LANG_DK, _tcsicmp (value, _T("dk")) == 0)
+			|| (l = KBD_LANG_SE, _tcsicmp (value, _T("se")) == 0)
+			|| (l = KBD_LANG_US, _tcsicmp (value, _T("us")) == 0)
+			|| (l = KBD_LANG_FR, _tcsicmp (value, _T("fr")) == 0)
+			|| (l = KBD_LANG_IT, _tcsicmp (value, _T("it")) == 0)
+			|| (l = KBD_LANG_ES, _tcsicmp (value, _T("es")) == 0))
 			p->keyboard_lang = l;
 		else
 			cfgfile_warning(_T("Unknown keyboard language\n"));
@@ -2063,9 +1941,9 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 		tmpbuf[sizeof tmpbuf / sizeof (TCHAR) - 1] = '\0';
 
 		int vert = -1, horiz = -1, lace = -1, ntsc = -1, vsync = -1, hres = 0;
-		bool locked = false, rtg = false;
+		bool rtg = false;
 		bool defaultdata = false;
-		float rate = -1;
+		double rate = -1;
 		TCHAR label[16] = { 0 };
 		TCHAR *tmpp = tmpbuf;
 		TCHAR *end = tmpbuf + _tcslen (tmpbuf);
@@ -2089,8 +1967,6 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 				horiz = _tstol(equals);
 			else if (!_tcsnicmp(tmpp, _T("t="), 2))
 				_tcsncpy(label, equals, sizeof label / sizeof(TCHAR) - 1);
-			if (!_tcsnicmp(tmpp, _T("locked"), 4))
-				locked = true;
 			if (!_tcsnicmp(tmpp, _T("nlace"), 5))
 				lace = 0;
 			if (!_tcsnicmp(tmpp, _T("lace"), 4))
@@ -2124,12 +2000,12 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 			if (_tcscmp (option, _T("displaydata_pal")) == 0) {
 				i = CHIPSET_REFRESH_PAL;
         cr = &p->cr[i];
-				cr->rate = -1;
+				cr->inuse = false;
 				_tcscpy (label, _T("PAL"));
 			} else if (_tcscmp (option, _T("displaydata_ntsc")) == 0) {
 				i = CHIPSET_REFRESH_NTSC;
         cr = &p->cr[i];
-				cr->rate = -1;
+				cr->inuse = false;
 				_tcscpy (label, _T("NTSC"));
 			}
 			if (!cr->inuse) {
@@ -2140,7 +2016,6 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 				cr->resolution = hres ? hres : 1 + 2 + 4;
 				cr->ntsc = ntsc;
 				cr->vsync = vsync;
-				cr->locked = locked;
 				cr->rtg = rtg;
 				cr->rate = rate;
 				cr->defaultdata = defaultdata;
@@ -2152,6 +2027,82 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 	}
 
   return 0;
+}
+
+static void decode_rom_ident (TCHAR *romfile, int maxlen, const TCHAR *ident, int romflags)
+{
+	const TCHAR *p;
+	int ver, rev, subver, subrev, round, i;
+	TCHAR model[64], *modelp;
+	struct romlist **rl;
+	TCHAR *romtxt;
+
+	if (!ident[0])
+		return;
+	romtxt = xmalloc (TCHAR, 10000);
+	romtxt[0] = 0;
+	for (round = 0; round < 2; round++) {
+		ver = rev = subver = subrev = -1;
+		modelp = NULL;
+		memset (model, 0, sizeof model);
+		p = ident;
+		while (*p) {
+			TCHAR c = *p++;
+			int *pp1 = NULL, *pp2 = NULL;
+			if (_totupper (c) == 'V' && _istdigit (*p)) {
+				pp1 = &ver;
+				pp2 = &rev;
+			} else if (_totupper (c) == 'R' && _istdigit (*p)) {
+				pp1 = &subver;
+				pp2 = &subrev;
+			} else if (!_istdigit (c) && c != ' ') {
+				_tcsncpy (model, p - 1, (sizeof model) / sizeof (TCHAR) - 1);
+				p += _tcslen (model);
+				modelp = model;
+			}
+			if (pp1) {
+				*pp1 = _tstol (p);
+				while (*p != 0 && *p != '.' && *p != ' ')
+					p++;
+				if (*p == '.') {
+					p++;
+					if (pp2)
+						*pp2 = _tstol (p);
+				}
+			}
+			if (*p == 0 || *p == ';') {
+				rl = getromlistbyident (ver, rev, subver, subrev, modelp, romflags, round > 0);
+				if (rl) {
+					for (i = 0; rl[i]; i++) {
+						if (rl[i]->path && !_tcscmp(rl[i]->path, romfile)) {
+							xfree(rl);
+							round = 0;
+							goto end;
+						}
+					}
+					if (!rl[i]) {
+						for (i = 0; rl[i]; i++) {
+							if (round) {
+								TCHAR romname[MAX_DPATH];
+								getromname(rl[i]->rd, romname);
+								_tcscat (romtxt, romname);
+								_tcscat (romtxt, _T("\n"));
+							} else {
+								_tcsncpy (romfile, rl[i]->path, maxlen);
+								goto end;
+							}
+						}
+					}
+					xfree (rl);
+				}
+			}
+		}
+	}
+end:
+	if (round && romtxt[0]) {
+		notify_user_parms (NUMSG_ROMNEED, romtxt, romtxt);
+	}
+	xfree (romtxt);
 }
 
 static struct uaedev_config_data *getuci(struct uae_prefs *p)
@@ -2171,17 +2122,6 @@ struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int index, s
 			if (p->mountconfig[i].ci.devname && !_tcscmp (p->mountconfig[i].ci.devname, ci->devname))
 				return NULL;
 		}
-	}
-	for (;;) {
-	  if (ci->type == UAEDEV_CD) {
-			if (ci->controller_type >= HD_CONTROLLER_TYPE_IDE_FIRST && ci->controller_type <= HD_CONTROLLER_TYPE_IDE_LAST)
-				break;
-			if (ci->controller_type >= HD_CONTROLLER_TYPE_SCSI_FIRST && ci->controller_type <= HD_CONTROLLER_TYPE_SCSI_LAST)
-				break;
-		} else {
-			break;
-		}
-		return NULL;
 	}
 
   if (index < 0) {
@@ -2204,11 +2144,22 @@ struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int index, s
 					break;
 				}
 			}
-		}
-		if (ci->type == UAEDEV_CD) {
-			for (i = 0; i < p->mountitems; i++) {
-				if (p->mountconfig[i].ci.type == ci->type)
-					return NULL;
+		} else if (ci->controller_type == HD_CONTROLLER_TYPE_UAE) {
+			int ctrl = ci->controller_type;
+			int ctrlunit = ci->controller_type_unit;
+			int cunit = ci->controller_unit;
+			for (;;) {
+				for (i = 0; i < p->mountitems; i++) {
+					if (p->mountconfig[i].ci.controller_type == ctrl && p->mountconfig[i].ci.controller_type_unit == ctrlunit && p->mountconfig[i].ci.controller_unit == cunit) {
+						cunit++;
+						if (cunit >= MAX_FILESYSTEM_UNITS)
+							return NULL;
+					}
+				}
+				if (i == p->mountitems) {
+					ci->controller_unit = cunit;
+					break;
+				}
 			}
 		}
 	  uci = getuci(p);
@@ -2223,7 +2174,7 @@ struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int index, s
 	memcpy (&uci->ci, ci, sizeof (struct uaedev_config_info));
 	validatedevicename (uci->ci.devname, NULL);
 	validatevolumename (uci->ci.volname, NULL);
-	if (!uci->ci.devname[0] && ci->type != UAEDEV_CD) {
+	if (!uci->ci.devname[0]) {
   	  TCHAR base[32];
 	  TCHAR base2[32];
 	  int num = 0;
@@ -2282,10 +2233,27 @@ static void get_filesys_controller (const TCHAR *hdc, int *type, int *typenum, i
 		hdunit = hdc[4] - '0';
 		if (hdunit < 0 || hdunit >= 8 + 2)
 			hdunit = 0;
+	} else if (_tcslen (hdc) >= 6 && !_tcsncmp (hdc, _T("scsram"), 6)) {
+		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
+		hdunit = 0;
+		idx = 0;
+	} else if (_tcslen(hdc) >= 5 && !_tcsncmp(hdc, _T("scide"), 5)) {
+		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
+		hdunit = 0;
+		idx = 1;
 	}
-	if (hdcv > HD_CONTROLLER_TYPE_UAE) {
+	if (hdcv == HD_CONTROLLER_TYPE_UAE) {
+		hdunit = _tstol(hdc + 3);
+		if (hdunit >= MAX_FILESYSTEM_UNITS)
+			hdunit = 0;
+	} else if (hdcv > HD_CONTROLLER_TYPE_UAE) {
+		TCHAR control[MAX_DPATH];
 		bool found = false;
-		const TCHAR *ext = _tcsrchr (hdc, '_');
+		_tcscpy(control, hdc);
+		TCHAR *extend = (TCHAR*)_tcschr(control, ',');
+		if (extend)
+			extend[0] = 0;
+		const TCHAR *ext = _tcsrchr(control, '_');
 		if (ext) {
 			ext++;
 			int len = _tcslen(ext);
@@ -2331,159 +2299,14 @@ static void get_filesys_controller (const TCHAR *hdc, int *type, int *typenum, i
 
 			}
 		}
-	} else if (_tcslen (hdc) >= 6 && !_tcsncmp (hdc, _T("scsram"), 6)) {
-		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
-		hdunit = 0;
-		idx = 0;
-	} else if (_tcslen (hdc) >= 5 && !_tcsncmp (hdc, _T("scide"), 6)) {
-		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
-		hdunit = 0;
-		idx = 1;
 	}
 	if (idx >= MAX_DUPLICATE_EXPANSION_BOARDS)
 		idx = MAX_DUPLICATE_EXPANSION_BOARDS - 1;
+	if (hdunit < 0)
+		hdunit = 0;
 	*type = hdcv;
 	*typenum = idx;
 	*num = hdunit;
-}
-
-static bool parse_geo (const TCHAR *tname, struct uaedev_config_info *uci, struct hardfiledata *hfd, bool empty)
-{
-	struct zfile *f;
-	int found;
-	TCHAR buf[200];
-	
-	f = zfile_fopen (tname, _T("r"));
-	if (!f)
-		return false;
-	found = hfd == NULL && !empty ? 2 : 0;
-	if (found)
-		write_log (_T("Geometry file '%s' detected\n"), tname);
-	while (zfile_fgets (buf, sizeof buf / sizeof (TCHAR), f)) {
-		int v;
-		TCHAR *sep;
-		
-		my_trim (buf);
-		if (_tcslen (buf) == 0)
-			continue;
-		if (buf[0] == '[' && buf[_tcslen (buf) - 1] == ']') {
-			if (found > 1) {
-				zfile_fclose (f);
-				return true;
-			}
-			found = 0;
-			buf[_tcslen (buf) - 1] = 0;
-			my_trim (buf + 1);
-			if (!_tcsicmp (buf + 1, _T("empty"))) {
-				if (empty)
-					found = 1;
-			} else if (!_tcsicmp (buf + 1, _T("default"))) {
-				if (!empty)
-					found = 1;
-			} else if (hfd) {
-				uae_u64 size = _tstoi64 (buf + 1);
-				if (size == hfd->virtsize)
-					found = 2;
-			}
-			if (found)
-				write_log (_T("Geometry file '%s', entry '%s' detected\n"), tname, buf + 1);
-			continue;
-		}
-		if (!found)
-			continue;
-
-		sep =  _tcschr (buf, '=');
-		if (!sep)
-			continue;
-		sep[0] = 0;
-
-		TCHAR *key = my_strdup_trim (buf);
-		TCHAR *val = my_strdup_trim (sep + 1);
-		if (val[0] == '0' && _totupper (val[1]) == 'X') {
-			TCHAR *endptr;
-			v = _tcstol (val, &endptr, 16);
-		} else {
-			v = _tstol (val);
-		}
-		if (!_tcsicmp (key, _T("surfaces")))
-			uci->surfaces = v;
-		if (!_tcsicmp (key, _T("sectorspertrack")) || !_tcsicmp (key, _T("blockspertrack")))
-			uci->sectors = v;
-		if (!_tcsicmp (key, _T("sectorsperblock")))
-			uci->sectorsperblock = v;
-		if (!_tcsicmp (key, _T("reserved")))
-			uci->reserved = v;
-		if (!_tcsicmp (key, _T("lowcyl")))
-			uci->lowcyl = v;
-		if (!_tcsicmp (key, _T("highcyl")) || !_tcsicmp (key, _T("cyl")))
-			uci->highcyl = v;
-		if (!_tcsicmp (key, _T("blocksize")) || !_tcsicmp (key, _T("sectorsize")))
-			uci->blocksize = v;
-		if (!_tcsicmp (key, _T("buffers")))
-			uci->buffers = v;
-		if (!_tcsicmp (key, _T("maxtransfer")))
-			uci->maxtransfer = v;
-		if (!_tcsicmp (key, _T("interleave")))
-			uci->interleave = v;
-		if (!_tcsicmp (key, _T("dostype")))
-			uci->dostype = v;
-		if (!_tcsicmp (key, _T("bufmemtype")))
-			uci->bufmemtype = v;
-		if (!_tcsicmp (key, _T("stacksize")))
-			uci->stacksize = v;
-		if (!_tcsicmp (key, _T("mask")))
-			uci->mask = v;
-		if (!_tcsicmp (key, _T("unit")))
-			uci->unit = v;
-		if (!_tcsicmp (key, _T("controller")))
-			get_filesys_controller (val, &uci->controller_type, &uci->controller_type_unit, &uci->controller_unit);
-		if (!_tcsicmp (key, _T("flags")))
-			uci->flags = v;
-		if (!_tcsicmp (key, _T("priority")))
-			uci->priority = v;
-		if (!_tcsicmp (key, _T("forceload")))
-			uci->forceload = v;
-		if (!_tcsicmp (key, _T("bootpri"))) {
-			if (v < -129)
-				v = -129;
-			if (v > 127)
-				v = 127;
-			uci->bootpri = v;
-		}
-		if (!_tcsicmp (key, _T("filesystem")))
-			_tcscpy (uci->filesys, val);
-		if (!_tcsicmp (key, _T("device")))
-			_tcscpy (uci->devname, val);
-		xfree (val);
-		xfree (key);
-	}
-	zfile_fclose (f);
-	return false;
-}
-bool get_hd_geometry (struct uaedev_config_info *uci)
-{
-	TCHAR tname[MAX_DPATH];
-
-	fetch_configurationpath (tname, sizeof tname / sizeof (TCHAR));
-	_tcscat (tname, _T("default.geo"));
-	if (zfile_exists (tname)) {
-		struct hardfiledata hfd;
-		memset (&hfd, 0, sizeof hfd);
-		hfd.ci.readonly = true;
-		hfd.ci.blocksize = 512;
-		if (hdf_open (&hfd, uci->rootdir) > 0) {
-			parse_geo (tname, uci, &hfd, false);
-			hdf_close (&hfd);
-		} else {
-			parse_geo (tname, uci, NULL, true);
-		}
-	}
-	if (uci->rootdir[0]) {
-		_tcscpy (tname, uci->rootdir);
-		_tcscat (tname, _T(".geo"));
-		return parse_geo (tname, uci, NULL, false);
-	}
-	return false;
 }
 
 static int cfgfile_parse_partial_newfilesys (struct uae_prefs *p, int nr, int type, const TCHAR *value, int unit, bool uaehfentry)
@@ -2537,9 +2360,9 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
     goto invalid_fs;
 
   *tmpp++ = '\0';
-  if (strcasecmp (value, _T("ro")) == 0)
+  if (_tcsicmp (value, _T("ro")) == 0)
 		uci.readonly = true;
-  else if (strcasecmp (value, _T("rw")) == 0)
+  else if (_tcsicmp (value, _T("rw")) == 0)
 		uci.readonly = false;
 	else
     goto invalid_fs;
@@ -2562,7 +2385,7 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
 		// quoted special case
 		if (tmpp2[0] == '\"') {
 			const TCHAR *end;
-			TCHAR *n = cfgfile_unescape (tmpp2, &end, 0);
+			TCHAR *n = cfgfile_unescape (tmpp2, &end, 0, false);
 			if (!n)
 				goto invalid_fs;
 			_tcscpy (uci.rootdir, n);
@@ -2590,7 +2413,7 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
 		// quoted special case
 		if (tmpp2[0] == '\"') {
 			const TCHAR *end;
-			TCHAR *n = cfgfile_unescape (tmpp2, &end, 0);
+			TCHAR *n = cfgfile_unescape (tmpp2, &end, 0, false);
 			if (!n)
 				goto invalid_fs;
 			_tcscpy (uci.rootdir, n);
@@ -2604,8 +2427,6 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
       *tmpp++ = 0;
 		  _tcscpy (uci.rootdir, tmpp2);
 		}
-		if (uci.rootdir[0] != ':')
-			get_hd_geometry (&uci);
 		_tcscpy (uci.devname, devname);
 		if (! getintval (&tmpp, &uci.sectors, ',')
 			|| ! getintval (&tmpp, &uci.surfaces, ',')
@@ -2614,69 +2435,73 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
 	    goto invalid_fs;
 		if (getintval2 (&tmpp, &uci.bootpri, ',', false)) {
 			tmpp2 = tmpp;
-	    tmpp = _tcschr (tmpp, ',');
-	    if (tmpp != 0) {
-	      *tmpp++ = 0;
-				_tcscpy (uci.filesys, tmpp2);
-				TCHAR *tmpp2 = _tcschr (tmpp, ',');
-				if (tmpp2)
-					*tmpp2++ = 0;
-				get_filesys_controller (tmpp, &uci.controller_type, &uci.controller_type_unit, &uci.controller_unit);
-				if (tmpp2) {
-					if (getintval2 (&tmpp2, &uci.highcyl, ',', false)) {
-						getintval (&tmpp2, &uci.pcyls, '/');
-						getintval (&tmpp2, &uci.pheads, '/');
-						getintval2 (&tmpp2, &uci.psecs, '/', true);
-						if (uci.pheads && uci.psecs) {
-							uci.physical_geometry = true;
-						} else {
-							uci.pheads = uci.psecs = uci.pcyls = 0;
-							uci.physical_geometry = false;
-					  }
-				  }
-    		}
-				uci.controller_media_type = 0;
-				uci.unit_feature_level = 1;
-
-				if (cfgfile_option_find(tmpp2, _T("CF")))
-					uci.controller_media_type = 1;
-				else if (cfgfile_option_find(tmpp2, _T("HD")))
-					uci.controller_media_type = 0;
-
-				TCHAR *pflags;
-				if ((pflags = cfgfile_option_get(tmpp2, _T("flags")))) {
-					getintval(&pflags, &uci.unit_special_flags, 0);
+			// quoted special case
+			if (tmpp2[0] == '\"') {
+				const TCHAR *end;
+				TCHAR *n = cfgfile_unescape (tmpp2, &end, 0, false);
+				if (!n)
+					goto invalid_fs;
+				_tcscpy (uci.filesys, n);
+				xfree(n);
+				tmpp = (TCHAR*)end;
+				*tmpp++ = 0;
+			} else {
+	      tmpp = _tcschr (tmpp, ',');
+				if (tmpp == 0)
+					goto empty_fs;
+        *tmpp++ = 0;
+			  _tcscpy (uci.filesys, tmpp2);
+			}
+		  get_filesys_controller (tmpp, &uci.controller_type, &uci.controller_type_unit, &uci.controller_unit);
+			tmpp2 = _tcschr (tmpp, ',');
+			if (tmpp2) {
+				tmpp2++;
+				if (getintval2 (&tmpp2, &uci.highcyl, ',', false)) {
+					getintval (&tmpp2, &uci.pcyls, '/');
+					getintval (&tmpp2, &uci.pheads, '/');
+					getintval2 (&tmpp2, &uci.psecs, '/', true);
+					if (uci.pheads && uci.psecs) {
+						uci.physical_geometry = true;
+					} else {
+						uci.pheads = uci.psecs = uci.pcyls = 0;
+						uci.physical_geometry = false;
+					}
 				}
+			}
+		  uci.controller_media_type = 0;
+		  uci.unit_feature_level = 1;
 
-				if (cfgfile_option_find(tmpp2, _T("lock")))
-					uci.lock = true;
+		  if (cfgfile_option_find(tmpp2, _T("CF")))
+			  uci.controller_media_type = 1;
+		  else if (cfgfile_option_find(tmpp2, _T("HD")))
+			  uci.controller_media_type = 0;
 
-				if (cfgfile_option_find(tmpp2, _T("SCSI2")))
-					uci.unit_feature_level = HD_LEVEL_SCSI_2;
-				else if (cfgfile_option_find(tmpp2, _T("SCSI1")))
-					uci.unit_feature_level = HD_LEVEL_SCSI_1;
-				else if (cfgfile_option_find(tmpp2, _T("SASIE")))
-					uci.unit_feature_level = HD_LEVEL_SASI_ENHANCED;
-				else if (cfgfile_option_find(tmpp2, _T("SASI")))
-					uci.unit_feature_level = HD_LEVEL_SASI;
-				else if (cfgfile_option_find(tmpp2, _T("SASI_CHS")))
-					uci.unit_feature_level = HD_LEVEL_SASI_CHS;
-				else if (cfgfile_option_find(tmpp2, _T("ATA2+S")))
-					uci.unit_feature_level = HD_LEVEL_ATA_2S;
-				else if (cfgfile_option_find(tmpp2, _T("ATA2+")))
-					uci.unit_feature_level = HD_LEVEL_ATA_2;
-				else if (cfgfile_option_find(tmpp2, _T("ATA1")))
-					uci.unit_feature_level = HD_LEVEL_ATA_1;
-      }
-		}
-		if (type == 2) {
-			uci.device_emu_unit = unit;
-			uci.blocksize = 2048;
-			uci.readonly = true;
-			uci.type = UAEDEV_CD;
-		} else {
-			uci.type = UAEDEV_HDF;
-		}
+		  TCHAR *pflags;
+		  if ((pflags = cfgfile_option_get(tmpp2, _T("flags")))) {
+			  getintval(&pflags, &uci.unit_special_flags, 0);
+		  }
+
+			if (cfgfile_option_find(tmpp2, _T("lock")))
+				uci.lock = true;
+
+			if (cfgfile_option_find(tmpp2, _T("SCSI2")))
+				uci.unit_feature_level = HD_LEVEL_SCSI_2;
+			else if (cfgfile_option_find(tmpp2, _T("SCSI1")))
+				uci.unit_feature_level = HD_LEVEL_SCSI_1;
+			else if (cfgfile_option_find(tmpp2, _T("SASIE")))
+				uci.unit_feature_level = HD_LEVEL_SASI_ENHANCED;
+			else if (cfgfile_option_find(tmpp2, _T("SASI")))
+				uci.unit_feature_level = HD_LEVEL_SASI;
+			else if (cfgfile_option_find(tmpp2, _T("SASI_CHS")))
+				uci.unit_feature_level = HD_LEVEL_SASI_CHS;
+			else if (cfgfile_option_find(tmpp2, _T("ATA2+S")))
+				uci.unit_feature_level = HD_LEVEL_ATA_2S;
+			else if (cfgfile_option_find(tmpp2, _T("ATA2+")))
+				uci.unit_feature_level = HD_LEVEL_ATA_2;
+			else if (cfgfile_option_find(tmpp2, _T("ATA1")))
+				uci.unit_feature_level = HD_LEVEL_ATA_1;
+    }
+		uci.type = UAEDEV_HDF;
 	} else {
 		goto invalid_fs;
 	}
@@ -2707,7 +2532,7 @@ static int cfgfile_parse_filesys (struct uae_prefs *p, const TCHAR *option, TCHA
   for (i = 0; i < MAX_FILESYSTEM_UNITS; i++) {
 	  TCHAR tmp[100];
 	  _stprintf (tmp, _T("uaehf%d"), i);
-	  if (_tcscmp (option, tmp) == 0) {
+		if (!_tcscmp (option, tmp)) {
 			for (;;) {
 				int  type = -1;
 				int unit = -1;
@@ -2775,13 +2600,13 @@ static int cfgfile_parse_filesys (struct uae_prefs *p, const TCHAR *option, TCHA
 	    goto invalid_fs;
 
 	  *tmpp++ = '\0';
-	  if (_tcscmp (value, _T("1")) == 0 || strcasecmp (value, _T("ro")) == 0
-    || strcasecmp (value, _T("readonly")) == 0
-    || strcasecmp (value, _T("read-only")) == 0)
+	  if (_tcscmp (value, _T("1")) == 0 || _tcsicmp (value, _T("ro")) == 0
+    || _tcsicmp (value, _T("readonly")) == 0
+    || _tcsicmp (value, _T("read-only")) == 0)
 			uci.readonly = true;
-  	else if (_tcscmp (value, _T("0")) == 0 || strcasecmp (value, _T("rw")) == 0
-		|| strcasecmp (value, _T("readwrite")) == 0
-		|| strcasecmp (value, _T("read-write")) == 0)
+  	else if (_tcscmp (value, _T("0")) == 0 || _tcsicmp (value, _T("rw")) == 0
+		|| _tcsicmp (value, _T("readwrite")) == 0
+		|| _tcsicmp (value, _T("read-write")) == 0)
 			uci.readonly = false;
 	  else
 	    goto invalid_fs;
@@ -2845,10 +2670,10 @@ invalid_fs:
 				TCHAR *tmpp2 = _tcschr(s, '=');
 				if (tmpp2) {
 					*tmpp2++ = 0;
-					if (!strcasecmp(tmpp2, _T("false")))
+					if (!_tcsicmp(tmpp2, _T("false")))
 						b = false;
 				}
-				if (!strcasecmp(s, _T("inject_icons"))) {
+				if (!_tcsicmp(s, _T("inject_icons"))) {
 					ci->inject_icons = b;
 				}
 			}
@@ -2904,6 +2729,18 @@ static bool cfgfile_read_board_rom(struct uae_prefs *p, const TCHAR *option, con
 				return true;
 			}
 
+			_stprintf(buf, _T("%s_rom"), name);
+			if (cfgfile_string (option, value, buf, buf2, sizeof buf2 / sizeof (TCHAR))) {
+				if (buf2[0]) {
+					decode_rom_ident (buf3, sizeof(buf3) / sizeof (TCHAR), buf2, ert->romtype);
+					if (buf3[0]) {
+						brc = get_device_rom_new(p, ert->romtype, j, &idx);
+						_tcscpy(brc->roms[idx].romident, buf3);
+					}
+				}
+				return true;
+			}
+
 			_stprintf(buf, _T("%s_rom_options"), name);
 			if (cfgfile_string (option, value, buf, buf2, sizeof buf2 / sizeof (TCHAR))) {
 				brc = get_device_rom(p, ert->romtype, j, &idx);
@@ -2915,9 +2752,6 @@ static bool cfgfile_read_board_rom(struct uae_prefs *p, const TCHAR *option, con
 					p = cfgfile_option_get(buf2, _T("order"));
 					if (p) {
 						brc->device_order = _tstol(p);
-					}
-					if (ert->settings) {
-						brc->roms[idx].device_settings = cfgfile_read_rom_settings(ert->settings, buf2, brc->roms[idx].configtext);
 					}
 				}
 				return true;
@@ -2969,7 +2803,9 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 	  || cfgfile_yesno (option, value, _T("cpu_compatible"), &p->cpu_compatible)
 	  || cfgfile_yesno (option, value, _T("cpu_24bit_addressing"), &p->address_space_24)
 		|| cfgfile_yesno (option, value, _T("fpu_strict"), &p->fpu_strict)
-		|| cfgfile_yesno (option, value, _T("fpu_softfloat"), &p->fpu_softfloat)
+#ifdef USE_JIT_FPU
+		|| cfgfile_yesno (option, value, _T("compfpu"), &p->compfpu)
+#endif
 		|| cfgfile_yesno (option, value, _T("floppy_write_protect"), &p->floppy_read_only)
 		|| cfgfile_yesno(option, value, _T("harddrive_write_protect"), &p->harddrive_read_only))
 	  return 1;
@@ -2978,7 +2814,7 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 		|| cfgfile_intval (option, value, _T("cd32nvram_size"), &p->cs_cd32nvram_size, 1024)
 		|| cfgfile_intval (option, value, _T("fatgary"), &p->cs_fatgaryrev, 1)
 		|| cfgfile_intval (option, value, _T("ramsey"), &p->cs_ramseyrev, 1)
-	  || cfgfile_floatval (option, value, _T("chipset_refreshrate"), &p->chipset_refreshrate)
+	  || cfgfile_doubleval (option, value, _T("chipset_refreshrate"), &p->chipset_refreshrate)
 		|| cfgfile_intval (option, value, _T("a3000mem_size"), &p->mbresmem_low_size, 0x100000)
 		|| cfgfile_intval (option, value, _T("mbresmem_size"), &p->mbresmem_high_size, 0x100000)
 	  || cfgfile_intval (option, value, _T("z3mem_start"), &p->z3autoconfig_start, 1)
@@ -3001,8 +2837,14 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 		|| cfgfile_strval (option, value, _T("floppy_auto_extended_adf"), &p->floppy_auto_ext2, autoext2, 0)
 		|| cfgfile_strval (option, value,  _T("z3mapping"), &p->z3_mapping_mode, z3mapping, 0)
 		|| cfgfile_strval(option, value, _T("boot_rom_uae"), &p->boot_rom, uaebootrom, 0)
-		|| cfgfile_strval(option, value, _T("uaeboard"), &p->uaeboard, uaeboard, 0))
+		|| cfgfile_strval(option, value, _T("unmapped_address_space"), &p->cs_unmapped_space, unmapped, 0)
+		|| cfgfile_strval(option, value, _T("ciaa_type"), &p->cs_ciatype[0], ciatype, 0)
+		|| cfgfile_strval(option, value, _T("ciab_type"), &p->cs_ciatype[1], ciatype, 0))
   	return 1;
+
+	if (cfgfile_strval(option, value, _T("uaeboard"), &p->uaeboard, uaeboard, 0)) {
+		return 1;
+	}
 
   if (cfgfile_path (option, value, _T("kickstart_rom_file"), p->romfile, sizeof p->romfile / sizeof (TCHAR))
 	  || cfgfile_path (option, value, _T("kickstart_ext_rom_file"), p->romextfile, sizeof p->romextfile / sizeof (TCHAR))
@@ -3094,6 +2936,19 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 			if (rd)
 				_stprintf (p->cartfile, _T(":%s"), rd->configname);
 		}
+		return 1;
+	}
+	if (cfgfile_string (option, value, _T("kickstart_rom"), p->romident, sizeof p->romident / sizeof (TCHAR))) {
+		decode_rom_ident (p->romfile, sizeof p->romfile / sizeof (TCHAR), p->romident, ROMTYPE_ALL_KICK);
+		return 1;
+	}
+	if (cfgfile_string (option, value, _T("kickstart_ext_rom"), p->romextident, sizeof p->romextident / sizeof (TCHAR))) {
+		decode_rom_ident (p->romextfile, sizeof p->romextfile / sizeof (TCHAR), p->romextident, ROMTYPE_ALL_EXT);
+		return 1;
+	}
+
+	if (cfgfile_string (option, value, _T("cart"), p->cartident, sizeof p->cartident / sizeof (TCHAR))) {
+		decode_rom_ident (p->cartfile, sizeof p->cartfile / sizeof (TCHAR), p->cartident, ROMTYPE_ALL_CART);
 		return 1;
 	}
 
@@ -3193,12 +3048,12 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 	    int factor = OFFICIAL_CYCLE_UNIT / CYCLE_UNIT;
 	    p->m68k_speed = (p->m68k_speed + factor - 1) / factor;
   	}
-    if (strcasecmp (value, _T("max")) == 0)
+    if (_tcsicmp (value, _T("max")) == 0)
       p->m68k_speed = -1;
   	return 1;
   }
 
-	if (strcasecmp (option, _T("quickstart")) == 0) {
+	if (_tcsicmp (option, _T("quickstart")) == 0) {
 		int model = 0;
 		TCHAR *tmpp = _tcschr (value, ',');
 		if (tmpp) {
@@ -3403,7 +3258,6 @@ int cfgfile_separate_linea (const TCHAR *filename, char *line, TCHAR *line1b, TC
     || line[i - 1] == '\r' || line[i - 1] == '\n'))
   	line[--i] = '\0';
   line += strspn (line, "\t \r\n");
-
 	au_copy (line1b, MAX_DPATH, line);
 	if (isutf8ext (line1b)) {
 		if (line2[0]) {
@@ -3414,7 +3268,6 @@ int cfgfile_separate_linea (const TCHAR *filename, char *line, TCHAR *line1b, TC
 	} else {
 		au_copy (line2b, MAX_DPATH, line2);
 	}
-
   return 1;
 }
 
@@ -3466,7 +3319,7 @@ static int isobsolete (TCHAR *s)
 {
   int i = 0;
   while (obsolete[i]) {
-  	if (!strcasecmp (s, obsolete[i])) {
+  	if (!_tcsicmp (s, obsolete[i])) {
 			cfgfile_warning_obsolete(_T("obsolete config entry '%s'\n"), s);
 	    return 1;
   	}
@@ -3496,7 +3349,7 @@ static void cfgfile_parse_separated_line (struct uae_prefs *p, TCHAR *line1b, TC
   ret = cfgfile_parse_option (p, line1b, line2b, type);
   if (!isobsolete (line3b)) {
   	for (sl = p->all_lines; sl; sl = sl->next) {
-	    if (sl->option && !strcasecmp (line1b, sl->option)) break;
+	    if (sl->option && !_tcsicmp (line1b, sl->option)) break;
   	}
   	if (!sl) {
 	    struct strlist *u = xcalloc (struct strlist, 1);
@@ -3720,7 +3573,7 @@ int cfgfile_configuration_change(int v)
 static void parse_sound_spec (struct uae_prefs *p, const TCHAR *spec)
 {
   TCHAR *x0 = my_strdup (spec);
-  TCHAR *x1, *x2 = NULL, *x3 = NULL, *x4 = NULL, *x5 = NULL;
+	TCHAR *x1, *x2 = NULL, *x3 = NULL;
 
   x1 = _tcschr (x0, ':');
   if (x1 != NULL) {
@@ -3731,11 +3584,6 @@ static void parse_sound_spec (struct uae_prefs *p, const TCHAR *spec)
 	    x3 = _tcschr (x2 + 1, ':');
 	    if (x3 != NULL) {
 		    *x3++ = '\0';
-		    x4 = _tcschr (x3 + 1, ':');
-		    if (x4 != NULL) {
-		      *x4++ = '\0';
-		      x5 = _tcschr (x4 + 1, ':');
-    		}
 	    }
   	}
   }
@@ -3917,7 +3765,8 @@ int parse_cmdline_option (struct uae_prefs *p, TCHAR c, const TCHAR *arg)
   u->option = xmalloc (TCHAR, 2);
   u->option[0] = c;
   u->option[1] = 0;
-  u->value = my_strdup(arg);
+	if (arg)
+    u->value = my_strdup(arg);
   u->next = p->all_lines;
   p->all_lines = u;
 
@@ -3972,19 +3821,19 @@ int parse_cmdline_option (struct uae_prefs *p, TCHAR c, const TCHAR *arg)
 	    break;
 
 	  case 'l':
-		  if (0 == strcasecmp(arg, _T("de")))
+		  if (0 == _tcsicmp(arg, _T("de")))
 			  p->keyboard_lang = KBD_LANG_DE;
-		  else if (0 == strcasecmp(arg, _T("dk")))
+		  else if (0 == _tcsicmp(arg, _T("dk")))
 			  p->keyboard_lang = KBD_LANG_DK;
-		  else if (0 == strcasecmp(arg, _T("us")))
+		  else if (0 == _tcsicmp(arg, _T("us")))
 			  p->keyboard_lang = KBD_LANG_US;
-		  else if (0 == strcasecmp(arg, _T("se")))
+		  else if (0 == _tcsicmp(arg, _T("se")))
 			  p->keyboard_lang = KBD_LANG_SE;
-		  else if (0 == strcasecmp(arg, _T("fr")))
+		  else if (0 == _tcsicmp(arg, _T("fr")))
 			  p->keyboard_lang = KBD_LANG_FR;
-		  else if (0 == strcasecmp(arg, _T("it")))
+		  else if (0 == _tcsicmp(arg, _T("it")))
 			  p->keyboard_lang = KBD_LANG_IT;
-		  else if (0 == strcasecmp(arg, _T("es")))
+		  else if (0 == _tcsicmp(arg, _T("es")))
 			  p->keyboard_lang = KBD_LANG_ES;
 		  break;
 
@@ -4221,6 +4070,7 @@ uae_u32 cfgfile_modify (uae_u32 index, const TCHAR *parms, uae_u32 size, TCHAR *
 					}
 				}
 			}
+			inputdevice_fix_prefs(&changed_prefs, false);
 			set_config_changed ();
 			set_special (SPCFLAG_MODE_CHANGE);
 			i++;
@@ -4283,7 +4133,7 @@ static const TCHAR *cfgfile_read_config_value (const TCHAR *option)
 {
 	struct strlist *sl;
 	for (sl = currprefs.all_lines; sl; sl = sl->next) {
-		if (sl->option && !strcasecmp (sl->option, option))
+		if (sl->option && !_tcsicmp (sl->option, option))
 			return sl->value;
 	}
 	return NULL;
@@ -4358,20 +4208,37 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->sound_filter_type = 0;
 	p->sound_volume_cd = 20;
 
+#if defined(USE_JIT_FPU) && !defined(ANDROID)
+	p->compfpu = 1;
+#else
+	p->compfpu = 0;
+#endif
   p->cachesize = 0;
 
   p->gfx_framerate = 0;
+
+#if defined(RASPBERRY) || defined(ANDROID)
+	p->gfx_size.width = 640;
+	p->gfx_size.height = 262;
+  p->gfx_resolution = RES_HIRES;
+#else
   p->gfx_size.width = 320;
   p->gfx_size.height = 240;
   p->gfx_resolution = RES_LORES;
-  
+#endif
+	p->gfx_vresolution = VRES_NONDOUBLE;
+
   p->immediate_blits = 0;
 	p->waiting_blits = 0;
   p->chipset_refreshrate = 50;
   p->collision_level = 2;
   p->leds_on_screen = 0;
 	p->boot_rom = 0;
+#ifdef PANDORA
   p->fast_copper = 1;
+#else
+	p->fast_copper = 0;
+#endif
 	p->cart_internal = 1;
 
 	p->cs_compatible = CP_GENERIC;
@@ -4388,6 +4255,9 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	p->cs_ciaatod = 0;
 	p->cs_df0idhw = 1;
 	p->cs_ciatodbug = false;
+	p->cs_unmapped_space = 0;
+	p->cs_ciatype[0] = 0;
+	p->cs_ciatype[1] = 0;
 
   _tcscpy (p->floppyslots[0].df, _T(""));
   _tcscpy (p->floppyslots[1].df, _T(""));
@@ -4408,7 +4278,6 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->cpu_model = 68000;
 	p->fpu_no_unimplemented = false;
 	p->fpu_strict = 0;
-	p->fpu_softfloat = 0;
   p->m68k_speed = 0;
   p->cpu_compatible = 0;
   p->address_space_24 = 1;
@@ -4464,7 +4333,6 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	cr->vsync = - 1;
 	cr->rate = 50.0;
 	cr->ntsc = 0;
-	cr->locked = false;
 	cr->inuse = true;
 	_tcscpy (cr->label, _T("PAL"));
 	cr = &p->cr[CHIPSET_REFRESH_NTSC];
@@ -4475,7 +4343,6 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	cr->vsync = - 1;
 	cr->rate = 60.0;
 	cr->ntsc = 1;
-	cr->locked = false;
 	cr->inuse = true;
 	_tcscpy (cr->label, _T("NTSC"));
 
@@ -4667,12 +4534,12 @@ static int bip_cd32 (struct uae_prefs *p, int config, int compa, int romcheck)
 	p->nr_floppies = 0;
 	p->floppyslots[0].dfxtype = DRV_NONE;
 	p->floppyslots[1].dfxtype = DRV_NONE;
+	p->cs_unmapped_space = 1;
 	set_68020_compa (p, compa, 1);
 	p->cs_compatible = CP_CD32;
 	built_in_chipset_prefs (p);
 	fetch_datapath (p->flashfile, sizeof (p->flashfile) / sizeof (TCHAR));
 	_tcscat (p->flashfile, _T("cd32.nvr"));
-
 	roms[0] = 64;
 	roms[1] = -1;
 	if (!configure_rom (p, roms, 0)) {
@@ -4713,7 +4580,6 @@ static int bip_a1200 (struct uae_prefs *p, int config, int compa, int romcheck)
 	roms[1] = 15;
 	roms[2] = 31;
 	roms[3] = -1;
-
 	p->cs_rtc = 0;
 	p->cs_compatible = CP_A1200;
 	built_in_chipset_prefs (p);
@@ -4777,7 +4643,6 @@ static int bip_a500p (struct uae_prefs *p, int config, int compa, int romcheck)
 	p->chipset_mask = CSMASK_ECS_AGNUS | CSMASK_ECS_DENISE;
   return configure_rom (p, roms, romcheck);
 }
-
 static int bip_a500 (struct uae_prefs *p, int config, int compa, int romcheck)
 {
   int roms[4];
@@ -4888,6 +4753,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 	p->cs_ciatodbug = false;
 	p->cs_z3autoconfig = false;
 	p->cs_bytecustomwritebug = false;
+	p->cs_unmapped_space = 0;
 
 	switch (p->cs_compatible)
 	{
@@ -4898,6 +4764,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
   			p->cs_fatgaryrev = 0;
       	p->cs_ide = -1;
   			p->cs_ramseyrev = 0x0f;
+			  p->cs_unmapped_space = 1;
 		  } else if (p->cpu_compatible) {
 			  // very A500-like
 	      p->cs_df0idhw = 0;
@@ -4915,6 +4782,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 		  p->cs_ksmirror_e0 = 0;
 		  p->cs_ksmirror_a8 = 1;
 		  p->cs_ciaoverlay = 0;
+		  p->cs_unmapped_space = 1;
 		  break;
 	  case CP_A500: // A500
     	p->cs_df0idhw = 0;
@@ -4932,6 +4800,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 		  p->cs_ksmirror_a8 = 1;
 		  p->cs_ciaoverlay = 0;
 			p->cs_ciatodbug = true;
+		p->cs_ciatype[0] = p->cs_ciatype[1] = 1;
 		  break;
 	  case CP_A1200: // A1200
 		  p->cs_ide = IDE_A600A1200;
@@ -4943,8 +4812,9 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 		  break;
 	  case CP_A2000: // A2000
 		  p->cs_rtc = 1;
-		p->cs_ciaatod = p->ntscmode ? 2 : 1;
+		  p->cs_ciaatod = p->ntscmode ? 2 : 1;
 			p->cs_ciatodbug = true;
+		  p->cs_unmapped_space = 1;
 		  break;
 	  case CP_A4000: // A4000
 		  p->cs_rtc = 2;
@@ -4955,6 +4825,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 		  p->cs_ksmirror_e0 = 0;
 		  p->cs_ciaoverlay = 0;
 		  p->cs_z3autoconfig = true;
+		  p->cs_unmapped_space = 1;
 		  break;
 	}
 	if (p->cpu_model >= 68040)

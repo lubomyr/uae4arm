@@ -208,7 +208,6 @@ INPUTEVENT_END
 #undef DEFEVENT2
 
 extern void handle_cd32_joystick_cia (uae_u8, uae_u8);
-extern uae_u8 handle_parport_joystick (int port, uae_u8 pra, uae_u8 dra);
 extern uae_u8 handle_joystick_buttons (uae_u8, uae_u8);
 
 extern int inputdevice_is_tablet (void);
@@ -285,9 +284,7 @@ extern uae_u64 input_getqualifiers (void);
 #define JSEM_MODE_JOYSTICK 3
 #define JSEM_MODE_GAMEPAD 4
 #define JSEM_MODE_JOYSTICK_ANALOG 5
-#define JSEM_MODE_MOUSE_CDTV 6
-#define JSEM_MODE_JOYSTICK_CD32 7
-#define JSEM_MODE_LIGHTPEN 8
+#define JSEM_MODE_JOYSTICK_CD32 6
 
 #define JSEM_KBDLAYOUT 0
 #define JSEM_CUSTOM 10

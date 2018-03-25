@@ -1069,6 +1069,19 @@ void action_replay_reset (bool hardreset, bool keyboardreset)
 	}
 }
 
+static void action_replay_cia_access_delay(uae_u32 v)
+{
+	if (v) {
+		armode_read = ARMODE_WRITE_BFD100;
+		action_replay_flag = ACTION_REPLAY_ACTIVATE;
+		set_special(SPCFLAG_ACTION_REPLAY);
+	} else {
+		armode_read = ARMODE_READ_BFE001;
+		action_replay_flag = ACTION_REPLAY_ACTIVATE;
+		set_special(SPCFLAG_ACTION_REPLAY);
+	}
+}
+
 void action_replay_cia_access(bool write)
 {
 	if (armodel < 2)
@@ -1078,13 +1091,9 @@ void action_replay_cia_access(bool write)
 	if (action_replay_flag == ACTION_REPLAY_INACTIVE)
 		return;
 	if ((armode_write & ARMODE_ACTIVATE_BFE001) && !write) {
-		armode_read = ARMODE_READ_BFE001;
-		action_replay_flag = ACTION_REPLAY_ACTIVATE;
-		set_special (SPCFLAG_ACTION_REPLAY);
+		event2_newevent_xx(-1, 1, write, action_replay_cia_access_delay);
 	} else if ((armode_write & ARMODE_ACTIVATE_BFD100) && write) {
-		armode_read = ARMODE_WRITE_BFD100;
-		action_replay_flag = ACTION_REPLAY_ACTIVATE;
-		set_special (SPCFLAG_ACTION_REPLAY);
+		event2_newevent_xx(-1, 1, write, action_replay_cia_access_delay);
 	}
 }
 
@@ -1480,7 +1489,6 @@ int action_replay_unload (int in_memory_reset)
 static int superiv_init (struct romdata *rd, struct zfile *f)
 {
 	uae_u32 chip = currprefs.chipmem_size - 0x10000;
-	int subtype = rd->id;
 	int flags = rd->type & ROMTYPE_MASK;
 	const TCHAR *memname1, *memname2, *memname3;
 
@@ -1720,8 +1728,6 @@ void action_replay_cleanup()
 #define TRUE 1
 #endif
 
-int hrtmon_lang = 0;
-
 static void hrtmon_configure(void)
 {
 	HRTCFG *cfg = (HRTCFG*)hrtmemory;
@@ -1735,7 +1741,7 @@ static void hrtmon_configure(void)
 	cfg->novbr = TRUE;
 	cfg->hexmode = TRUE;
 	cfg->entered = 0;
-	cfg->keyboard = hrtmon_lang;
+	cfg->keyboard = 0;
 	do_put_mem_long (&cfg->max_chip, currprefs.chipmem_size);
 	do_put_mem_long (&cfg->mon_size, 0x800000);
 	cfg->ide = currprefs.cs_ide ? 1 : 0;

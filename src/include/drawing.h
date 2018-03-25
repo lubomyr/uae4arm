@@ -12,7 +12,7 @@
 #define MAX_PLANES 8
 
 /* According to the HRM, pixel data spends a couple of cycles somewhere in the chips
-   before it appears on-screen.  */
+before it appears on-screen. (TW: display emulation now does this automatically)  */
 #define DIW_DDF_OFFSET 1
 /* this many cycles starting from hpos=0 are visible on right border */
 #define HBLANK_OFFSET 9
@@ -27,6 +27,14 @@
 
 extern int lores_shift, interlace_seen;
 extern bool aga_mode;
+
+STATIC_INLINE int shres_coord_hw_to_window_x (int x)
+{
+	x -= DISPLAY_LEFT_SHIFT << 2;
+	x <<= lores_shift;
+	x >>= 2;
+	return x;
+}
 
 STATIC_INLINE int coord_hw_to_window_x (int x)
 {
@@ -79,7 +87,7 @@ struct color_entry {
 };
 
 /* convert 24 bit AGA Amiga RGB to native color */
-#ifdef ARMV6_ASSEMBLY
+#ifdef ARMV6T2
 STATIC_INLINE uae_u32 CONVERT_RGB(uae_u32 c)
 {
   uae_u32 ret;
@@ -106,18 +114,10 @@ STATIC_INLINE uae_u16 CONVERT_RGB_16(uae_u32 c)
   return ret;
 }
 #else
-/* warning: this is still ugly, but now works with either byte order */
-#ifdef WORDS_BIGENDIAN
-# define CONVERT_RGB(c) \
-	( xbluecolors[((uae_u8*)(&c))[3]] | xgreencolors[((uae_u8*)(&c))[2]] | xredcolors[((uae_u8*)(&c))[1]] )
-# define CONVERT_RGB_16(c) \
-	( xbluecolors[((uae_u8*)(&c))[3]] | xgreencolors[((uae_u8*)(&c))[2]] | xredcolors[((uae_u8*)(&c))[1]] )
-#else
 #define CONVERT_RGB(c) \
     ( xbluecolors[((uae_u8*)(&c))[0]] | xgreencolors[((uae_u8*)(&c))[1]] | xredcolors[((uae_u8*)(&c))[2]] )
 #define CONVERT_RGB_16(c) \
     ( xbluecolors[((uae_u8*)(&c))[0]] | xgreencolors[((uae_u8*)(&c))[1]] | xredcolors[((uae_u8*)(&c))[2]] )
-#endif
 #endif
 
 STATIC_INLINE xcolnr getxcolor (int c)
@@ -136,7 +136,6 @@ STATIC_INLINE int color_reg_get (struct color_entry *ce, int c)
 	else
 		return ce->color_regs_ecs[c];
 }
-
 STATIC_INLINE void color_reg_set (struct color_entry *ce, int c, int v)
 {
 	if (aga_mode)
@@ -144,7 +143,6 @@ STATIC_INLINE void color_reg_set (struct color_entry *ce, int c, int v)
 	else
 		ce->color_regs_ecs[c] = v;
 }
-
 /* ugly copy hack, is there better solution? */
 STATIC_INLINE void color_reg_cpy (struct color_entry *dst, struct color_entry *src)
 {
@@ -190,16 +188,18 @@ struct sprite_entry
 };
 
 union sps_union {
-  uae_u8 bytes[MAX_SPR_PIXELS];
-  uae_u32 words[MAX_SPR_PIXELS / 4];
+	uae_u8 bytes[2 * MAX_SPR_PIXELS];
+	uae_u32 words[2 * MAX_SPR_PIXELS / 4];
 };
 extern union sps_union spixstate;
-extern uae_u16 spixels[MAX_SPR_PIXELS];
+
+extern uae_u16 spixels[MAX_SPR_PIXELS * 2];
 
 /* Way too much... */
 #define MAX_REG_CHANGE ((MAXVPOS + 1) * MAXHPOS)
+#define COLOR_TABLE_SIZE (MAXVPOS + 2) * 2
 
-extern struct color_entry curr_color_tables[(MAXVPOS + 2) * 2];
+extern struct color_entry curr_color_tables[COLOR_TABLE_SIZE];
 
 extern struct sprite_entry *curr_sprite_entries;
 extern struct color_change *curr_color_changes;
@@ -221,6 +221,7 @@ struct decision {
   bool ham_seen;
   bool ham_at_start;
 	bool bordersprite_seen;
+	bool xor_seen;
 };
 
 /* Anything related to changes in hw registers during the DDF for one
@@ -240,7 +241,6 @@ extern int coord_native_to_amiga_y (int);
 extern int coord_native_to_amiga_x (int);
 
 extern void hsync_record_line_state (int lineno);
-extern void partial_draw_frame(void);
 extern void halt_draw_frame(void);
 extern void vsync_handle_redraw (void);
 extern bool vsync_handle_check (void);

@@ -447,7 +447,7 @@ out2:
     		}
     		break;
       case 'p': srcmode = immi; srcreg = bitval[bitp];
-    		if (CPU_EMU_SIZE < 5) {
+				if (CPU_EMU_SIZE < 5) {
 					/* 0..3 */
 					srcgather = 1;
 					srctype = 7;

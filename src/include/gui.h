@@ -14,11 +14,7 @@
 extern int gui_init (void);
 extern int gui_update (void);
 extern void gui_exit (void);
-#ifdef WIN32
 extern void gui_led (int, int, int);
-#else
-STATIC_INLINE void gui_led (int led, int on, int brightness) { }
-#endif
 extern void gui_filename (int, const TCHAR *);
 extern void gui_flicker_led (int, int, int);
 extern void gui_display (int shortcut);
@@ -34,13 +30,13 @@ extern bool no_gui;
 #define LED_DF1 2
 #define LED_DF2 3
 #define LED_DF3 4
-#define LED_HD 5
-#define LED_CD 6
-#define LED_FPS 7
-#define LED_CPU 8
-#define LED_SND 9
-#define LED_MD 10
-#define LED_NET 11
+#define LED_DFs 5         // Define for any DF* access
+#define LED_HD 6
+#define LED_CD 7
+#define LED_FPS 8
+#define LED_CPU 9
+#define LED_SND 10
+#define LED_MD 11
 #define LED_MAX 12
 
 struct gui_info
@@ -87,11 +83,9 @@ typedef enum {
 	NUMSG_STATEHD, // 15
 	NUMSG_KICKREP,
 	NUMSG_KICKREPNO,
-	NUMSG_KS68030PLUS, // 20
-	NUMSG_NO_PPC,
-	NUMSG_UAEBOOTROM_PPC,
+	NUMSG_KS68030PLUS,
 	NUMSG_NOMEMORY,
-	NUMSG_LAST
+	NUMSG_LAST  // 20
 } notify_user_msg;
 
 #endif /* UAE_GUI_H */
