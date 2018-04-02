@@ -157,7 +157,6 @@ static const TCHAR *obsolete[] = {
 
 #define UNEXPANDED _T("$(FILE_PATH)")
 
-
 static TCHAR *cfgfile_unescape(const TCHAR *s, const TCHAR **endpos, TCHAR separator, bool min)
 {
 	bool quoted = false;
@@ -4208,10 +4207,8 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->sound_filter_type = 0;
 	p->sound_volume_cd = 20;
 
-#if defined(USE_JIT_FPU) && !defined(ANDROID)
+#if defined(USE_JIT_FPU)
 	p->compfpu = 1;
-#else
-	p->compfpu = 0;
 #endif
   p->cachesize = 0;
 
