@@ -18,8 +18,6 @@
 #include <sys/timeb.h>
 #endif
 
-#include <sys/timeb.h>
-
 #include "options.h"
 #include "traps.h"
 #include "blkdev.h"

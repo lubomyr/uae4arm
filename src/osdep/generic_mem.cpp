@@ -13,7 +13,9 @@
 #include "uae/mman.h"
 #include <sys/mman.h>
 #include <SDL.h>
+#include <unistd.h>
 
+#define valloc(x) memalign(getpagesize(), x)
 
 static uae_u32 natmem_size;
 uae_u32 max_z3fastmem;

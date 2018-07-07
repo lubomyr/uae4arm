@@ -3,7 +3,7 @@ ifeq ($(PLATFORM),)
 endif
 
 ifeq ($(PLATFORM),android)
-	CPU_FLAGS += -mfpu=vfp -mfloat-abi=soft
+	CPU_FLAGS += -mfpu=vfp
 	DEFS += -DANDROIDSDL
 	ANDROID = 1
 	USE_SDL_VERSION = sdl1

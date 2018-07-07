@@ -1,4 +1,6 @@
+#ifdef HAVE_SYS_TIMEB_H
 #include <sys/timeb.h>
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 #include "sysconfig.h"
