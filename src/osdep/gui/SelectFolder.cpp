@@ -124,6 +124,19 @@ class ListBoxActionListener : public gcn::ActionListener
 };
 static ListBoxActionListener* listBoxActionListener;
 
+#ifdef ANDROID
+class EditDirPathActionListener : public gcn::ActionListener
+{
+  public:
+    void action(const gcn::ActionEvent& actionEvent)
+    {
+       char tmp[MAX_PATH];
+       strncpy(tmp, txtCurrent->getText().c_str(), MAX_PATH - 1);
+       checkfoldername(tmp);
+    }
+};
+static EditDirPathActionListener* editDirPathActionListener;
+#endif
 
 static void InitSelectFolder(const char *title)
 {
@@ -151,7 +164,13 @@ static void InitSelectFolder(const char *title)
   txtCurrent = new gcn::TextField();
   txtCurrent->setSize(DIALOG_WIDTH - 2 * DISTANCE_BORDER - 4, TEXTFIELD_HEIGHT);
   txtCurrent->setPosition(DISTANCE_BORDER, 10);
+#ifdef ANDROID
+  txtCurrent->setEnabled(true);
+  editDirPathActionListener = new EditDirPathActionListener();
+  txtCurrent->addActionListener(editDirPathActionListener);
+#else
   txtCurrent->setEnabled(false);
+#endif
 
   listBoxActionListener = new ListBoxActionListener();
   
@@ -198,7 +217,9 @@ static void ExitSelectFolder(void)
   delete lstFolders;
   delete scrAreaFolders;
   delete listBoxActionListener;
-  
+#ifdef ANDROID
+  delete editDirPathActionListener;
+#endif
   delete wndSelectFolder;
 }
 
