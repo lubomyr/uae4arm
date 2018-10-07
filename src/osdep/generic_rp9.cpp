@@ -30,7 +30,7 @@ static bool clip_no_hires = false;
 void rp9_init(void)
 {
   fetch_rp9path(rp9tmp_path, MAX_DPATH);
-  strncat(rp9tmp_path, _T("tmp/"), MAX_DPATH);
+  strncat(rp9tmp_path, _T("tmp/"), MAX_DPATH - 1);
   lstTmpRP9Files.clear();
   LIBXML_TEST_VERSION
 }
@@ -72,7 +72,7 @@ static bool get_value(xmlNode *node, const char *key, char *value, int max_size)
     if (curr_node->type == XML_ELEMENT_NODE && strcmp((const char *)curr_node->name, key) == 0) {
       xmlChar *content = xmlNodeGetContent(curr_node);
       if(content != NULL) {
-        strncpy(value, (char *)content, max_size);
+        strncpy(value, (char *)content, max_size - 1);
         xmlFree(content);
         bResult = true;
       }
@@ -320,7 +320,7 @@ static void parse_peripheral(struct uae_prefs *p, xmlNode *node)
           {
 						if(strcmp((const char *) attr, "false") == 0)
 							p->compfpu = false;
-          }
+					}
         }
         xmlFree(content);
       }      
@@ -368,7 +368,7 @@ static void parse_boot(struct uae_prefs *p, xmlNode *node)
               ci.type = UAEDEV_HDF;
               sprintf(ci.devname, "DH%d", add_HDF_DHnum);
               ++add_HDF_DHnum;
-              strncpy(ci.rootdir, target_file, MAX_DPATH);
+              strncpy(ci.rootdir, target_file, MAX_DPATH - 1);
               
               xmlChar *ro = xmlGetProp(curr_node, (const xmlChar *) _T("readonly"));
               if(ro != NULL)
@@ -437,7 +437,7 @@ static void extract_media(struct uae_prefs *p, unzFile uz, xmlNode *node)
                     char target_file[MAX_DPATH];
                     if(!my_existsdir(rp9tmp_path))
                       my_mkdir(rp9tmp_path);
-                    snprintf(target_file, MAX_DPATH, "%s%s", rp9tmp_path, content);
+                    snprintf(target_file, MAX_DPATH - 1, "%s%s", rp9tmp_path, content);
                     FILE *f = fopen(target_file, "wb");
                     if(f != NULL)
                     {
@@ -448,22 +448,22 @@ static void extract_media(struct uae_prefs *p, unzFile uz, xmlNode *node)
                         // Add floppy
                         if(priority < 2)
                         {
-                  	      strncpy(p->floppyslots[0].df, target_file, sizeof(p->floppyslots[0].df));
+                  	      strncpy(p->floppyslots[0].df, target_file, sizeof(p->floppyslots[0].df) - 1);
                   	      disk_insert(0, p->floppyslots[0].df);
                   	    }
                   	    else if(priority == 2 && p->nr_floppies > 1)
                 	      {
-                  	      strncpy(p->floppyslots[1].df, target_file, sizeof(p->floppyslots[1].df));
+                  	      strncpy(p->floppyslots[1].df, target_file, sizeof(p->floppyslots[1].df) - 1);
                   	      disk_insert(1, p->floppyslots[1].df);
                 	      }
                   	    else if(priority == 3 && p->nr_floppies > 2)
                 	      {
-                  	      strncpy(p->floppyslots[2].df, target_file, sizeof(p->floppyslots[2].df));
+                  	      strncpy(p->floppyslots[2].df, target_file, sizeof(p->floppyslots[2].df) - 1);
                   	      disk_insert(2, p->floppyslots[2].df);
                 	      }
                   	    else if(priority == 4 && p->nr_floppies > 3)
                 	      {
-                  	      strncpy(p->floppyslots[3].df, target_file, sizeof(p->floppyslots[3].df));
+                  	      strncpy(p->floppyslots[3].df, target_file, sizeof(p->floppyslots[3].df) - 1);
                   	      disk_insert(3, p->floppyslots[3].df);
                 	      }
                         AddFileToDiskList(target_file, 1);
@@ -485,7 +485,7 @@ static void extract_media(struct uae_prefs *p, unzFile uz, xmlNode *node)
                         ci.type = UAEDEV_HDF;
                         sprintf(ci.devname, "DH%d", add_HDF_DHnum);
                         ++add_HDF_DHnum;
-                        strncpy(ci.rootdir, target_file, MAX_DPATH);
+                        strncpy(ci.rootdir, target_file, MAX_DPATH - 1);
                         
                         ci.bootpri = 0;
                         

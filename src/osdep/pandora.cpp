@@ -60,7 +60,7 @@ static void setCpuSpeed()
 
 	if(currprefs.pandora_cpu_speed != lastCpuSpeed)
 	{
-		snprintf((char*)speedCmd, 128, "unset DISPLAY; echo y | sudo -n /usr/pandora/scripts/op_cpuspeed.sh %d", currprefs.pandora_cpu_speed);
+		snprintf((char*)speedCmd, 127, "unset DISPLAY; echo y | sudo -n /usr/pandora/scripts/op_cpuspeed.sh %d", currprefs.pandora_cpu_speed);
 		system(speedCmd);
 		lastCpuSpeed = currprefs.pandora_cpu_speed;
 		cpuSpeedChanged = true;

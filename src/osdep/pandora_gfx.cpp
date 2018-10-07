@@ -257,14 +257,14 @@ static void open_screen(struct uae_prefs *p)
   if(!screen_is_picasso)
   {
     int layerwidth = CalcPandoraWidth(p);
-	  snprintf(layersize, 20, "%dx480", layerwidth);
+	  snprintf(layersize, 19, "%dx480", layerwidth);
   }
   else
   {
     if(picasso_vidinfo.height < 480)
-	    snprintf(layersize, 20, "%dx480", picasso_vidinfo.width);
+	    snprintf(layersize, 19, "%dx480", picasso_vidinfo.width);
 	  else
-	    snprintf(layersize, 20, "%dx%d", picasso_vidinfo.width, picasso_vidinfo.height);
+	    snprintf(layersize, 19, "%dx%d", picasso_vidinfo.width, picasso_vidinfo.height);
   }
 #ifndef WIN32
 	setenv("SDL_OMAP_LAYER_SIZE", layersize, 1);
@@ -332,7 +332,7 @@ static bool SetVSyncRate(int hz)
 
   if(currVSyncRate != hz && (hz == 50 || hz == 60))
   {
-    snprintf((char*)cmd, 64, "sudo /usr/pandora/scripts/op_lcdrate.sh %d", hz);
+    snprintf((char*)cmd, 63, "sudo /usr/pandora/scripts/op_lcdrate.sh %d", hz);
     system(cmd);
     currVSyncRate = hz;
     return true;

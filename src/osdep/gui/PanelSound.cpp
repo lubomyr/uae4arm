@@ -499,7 +499,7 @@ void RefreshPanelSound(void)
 
   sldSeparation->setValue(curr_separation_idx);
   sldSeparation->setEnabled(changed_prefs.sound_stereo >= 1);
-  snprintf(tmp, 10, "%d%%", 100 - 10 * curr_separation_idx);
+  snprintf(tmp, sizeof (tmp) - 1, "%d%%", 100 - 10 * curr_separation_idx);
   lblSeparationInfo->setCaption(tmp);
 
   sldStereoDelay->setValue(curr_stereodelay_idx);
@@ -508,12 +508,12 @@ void RefreshPanelSound(void)
     lblStereoDelayInfo->setCaption("-");
   else
   {
-    snprintf(tmp, 10, "%d", curr_stereodelay_idx);
+    snprintf(tmp, sizeof (tmp) - 1, "%d", curr_stereodelay_idx);
     lblStereoDelayInfo->setCaption(tmp);
   }
 
   sldPaulaVol->setValue(100 - changed_prefs.sound_volume_paula);
-  snprintf(tmp, sizeof (tmp), "%d %%", 100 - changed_prefs.sound_volume_paula);
+  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - changed_prefs.sound_volume_paula);
   lblPaulaVolInfo->setCaption(tmp);
 }
 

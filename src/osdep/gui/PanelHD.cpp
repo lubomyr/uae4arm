@@ -227,7 +227,7 @@ class CDButtonActionListener : public gcn::ActionListener
   	    //---------------------------------------
         // Eject CD from drive
   	    //---------------------------------------
-        strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH);
+        strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH - 1);
         AdjustDropDownControls();
       } 
       else if(actionEvent.getSource() == cmdCDSelect)
@@ -235,15 +235,15 @@ class CDButtonActionListener : public gcn::ActionListener
   	    char tmp[MAX_DPATH];
 
   	    if(strlen(changed_prefs.cdslots[0].name) > 0)
-  	      strncpy(tmp, changed_prefs.cdslots[0].name, MAX_DPATH);
+  	      strncpy(tmp, changed_prefs.cdslots[0].name, MAX_DPATH - 1);
   	    else
-  	      strncpy(tmp, currentDir, MAX_DPATH);
+  	      strncpy(tmp, currentDir, MAX_DPATH - 1);
 
   	    if(SelectFile("Select CD image file", tmp, cdfile_filter))
 	      {
     	    if(strncmp(changed_prefs.cdslots[0].name, tmp, MAX_DPATH))
     	    {
-      	    strncpy(changed_prefs.cdslots[0].name, tmp, sizeof(changed_prefs.cdslots[0].name));
+      	    strncpy(changed_prefs.cdslots[0].name, tmp, sizeof(changed_prefs.cdslots[0].name) - 1);
       	    changed_prefs.cdslots[0].inuse = true;
       	    changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
       	    AddFileToCDList(tmp, 1);
@@ -297,14 +297,14 @@ class CDFileActionListener : public gcn::ActionListener
 
   	    if(idx < 0)
 	      {
-          strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH);
+          strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH - 1);
           AdjustDropDownControls();
 	      }
 	      else
   	    {
     	    if(cdfileList.getElementAt(idx).compare(changed_prefs.cdslots[0].name))
 	        {
-      	    strncpy(changed_prefs.cdslots[0].name, cdfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.cdslots[0].name));
+      	    strncpy(changed_prefs.cdslots[0].name, cdfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.cdslots[0].name) - 1);
       	    changed_prefs.cdslots[0].inuse = true;
       	    changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
       	    lstMRUCDList.erase(lstMRUCDList.begin() + idx);
@@ -351,14 +351,14 @@ void InitPanelHD(const struct _ConfigCategory& category)
     listCmdProps[row] = new gcn::Button("...");
     listCmdProps[row]->setBaseColor(gui_baseCol);
     listCmdProps[row]->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
-    snprintf(tmp, 20, "cmdProp%d", row);
+    snprintf(tmp, sizeof (tmp) - 1, "cmdProp%d", row);
     listCmdProps[row]->setId(tmp);
     listCmdProps[row]->addActionListener(hdEditActionListener);
     
     listCmdDelete[row] = new gcn::ImageButton("data/delete.png");
     listCmdDelete[row]->setBaseColor(gui_baseCol);
     listCmdDelete[row]->setSize(SMALL_BUTTON_HEIGHT, SMALL_BUTTON_HEIGHT);
-    snprintf(tmp, 20, "cmdDel%d", row);
+    snprintf(tmp, sizeof (tmp) - 1, "cmdDel%d", row);
     listCmdDelete[row]->setId(tmp);
     listCmdDelete[row]->addActionListener(hdRemoveActionListener);
     
@@ -580,7 +580,7 @@ void RefreshPanelHD(void)
         else
           listCells[row][COL_READWRITE]->setText("yes");
         listCells[row][COL_SIZE]->setText("n/a");
-				snprintf(tmp, sizeof (tmp), "%d", ci->bootpri);
+				snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri);
         listCells[row][COL_BOOTPRI]->setText(tmp);
       }
       else
@@ -593,13 +593,13 @@ void RefreshPanelHD(void)
         else
           listCells[row][COL_READWRITE]->setText("yes");
   	    if (nosize)
-  	      snprintf (tmp, sizeof (tmp), "n/a");
+  	      snprintf (tmp, sizeof (tmp) - 1, "n/a");
   	    else if (mi.size >= 1024 * 1024 * 1024)
-	        snprintf (tmp, sizeof (tmp), "%.1fG", ((double)(uae_u32)(mi.size / (1024 * 1024))) / 1024.0);
+	        snprintf (tmp, sizeof (tmp) - 1, "%.1fG", ((double)(uae_u32)(mi.size / (1024 * 1024))) / 1024.0);
   	    else
-	        snprintf (tmp, sizeof (tmp), "%.1fM", ((double)(uae_u32)(mi.size / (1024))) / 1024.0);
+	        snprintf (tmp, sizeof (tmp) - 1, "%.1fM", ((double)(uae_u32)(mi.size / (1024))) / 1024.0);
         listCells[row][COL_SIZE]->setText(tmp);
-        snprintf(tmp, sizeof (tmp), "%d", ci->bootpri);
+        snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri);
         listCells[row][COL_BOOTPRI]->setText(tmp);
       }
       listCmdProps[row]->setEnabled(true);
@@ -624,7 +624,7 @@ void RefreshPanelHD(void)
   sldCDVol->setEnabled(changed_prefs.cdslots[0].inuse);
   
   sldCDVol->setValue(100 - changed_prefs.sound_volume_cd);
-  snprintf(tmp, sizeof (tmp), "%d %%", 100 - changed_prefs.sound_volume_cd);
+  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - changed_prefs.sound_volume_cd);
   lblCDVolInfo->setCaption(tmp);
 }
 

@@ -108,7 +108,7 @@ class MainROMActionListener : public gcn::ActionListener
     {
       AvailableROM* rom = mainROMList->getROMat(cboMainROM->getSelected());
       if(rom != NULL)
-        strncpy(changed_prefs.romfile, rom->Path, sizeof(changed_prefs.romfile));
+        strncpy(changed_prefs.romfile, rom->Path, sizeof(changed_prefs.romfile) - 1);
     }
 };
 static MainROMActionListener* mainROMActionListener;
@@ -121,9 +121,9 @@ class ExtROMActionListener : public gcn::ActionListener
     {
       AvailableROM* rom = extROMList->getROMat(cboExtROM->getSelected());
       if(rom != NULL)
-        strncpy(changed_prefs.romextfile, rom->Path, sizeof(changed_prefs.romextfile));
+        strncpy(changed_prefs.romextfile, rom->Path, sizeof(changed_prefs.romextfile) - 1);
       else
-        strncpy(changed_prefs.romextfile, " ", sizeof(changed_prefs.romextfile));
+        strncpy(changed_prefs.romextfile, " ", sizeof(changed_prefs.romextfile) - 1);
     }
 };
 static ExtROMActionListener* extROMActionListener;
@@ -137,9 +137,9 @@ class CartROMActionListener : public gcn::ActionListener
     {
       AvailableROM* rom = cartROMList->getROMat(cboCartROM->getSelected());
       if(rom != NULL)
-        strncpy(changed_prefs.cartfile, rom->Path, sizeof(changed_prefs.cartfile));
+        strncpy(changed_prefs.cartfile, rom->Path, sizeof(changed_prefs.cartfile) - 1);
       else
-        strncpy(changed_prefs.cartfile, " ", sizeof(changed_prefs.cartfile));
+        strncpy(changed_prefs.cartfile, " ", sizeof(changed_prefs.cartfile) - 1);
     }
 };
 static CartROMActionListener* cartROMActionListener;
@@ -155,34 +155,34 @@ class ROMButtonActionListener : public gcn::ActionListener
       
       if (actionEvent.getSource() == cmdMainROM)
       {
-        strncpy(tmp, currentDir, MAX_PATH);
+        strncpy(tmp, currentDir, MAX_PATH - 1);
         if(SelectFile("Select System ROM", tmp, filter))
         {
           AvailableROM *newrom;
           newrom = new AvailableROM();
           extractFileName(tmp, newrom->Name);
           removeFileExtension(newrom->Name);
-          strncpy(newrom->Path, tmp, MAX_PATH);
+          strncpy(newrom->Path, tmp, MAX_PATH - 1);
           newrom->ROMType = ROMTYPE_KICK;
           lstAvailableROMs.push_back(newrom);
-          strncpy(changed_prefs.romfile, tmp, sizeof(changed_prefs.romfile));
+          strncpy(changed_prefs.romfile, tmp, sizeof(changed_prefs.romfile) - 1);
           RefreshPanelROM();
         }
         cmdMainROM->requestFocus();
       }
       else if (actionEvent.getSource() == cmdExtROM)
       {
-        strncpy(tmp, currentDir, MAX_PATH);
+        strncpy(tmp, currentDir, MAX_PATH - 1);
         if(SelectFile("Select Extended ROM", tmp, filter))
         {
           AvailableROM *newrom;
           newrom = new AvailableROM();
           extractFileName(tmp, newrom->Name);
           removeFileExtension(newrom->Name);
-          strncpy(newrom->Path, tmp, MAX_PATH);
+          strncpy(newrom->Path, tmp, MAX_PATH - 1);
           newrom->ROMType = ROMTYPE_EXTCDTV;
           lstAvailableROMs.push_back(newrom);
-          strncpy(changed_prefs.romextfile, tmp, sizeof(changed_prefs.romextfile));
+          strncpy(changed_prefs.romextfile, tmp, sizeof(changed_prefs.romextfile) - 1);
           RefreshPanelROM();
         }
         cmdExtROM->requestFocus();
@@ -190,17 +190,17 @@ class ROMButtonActionListener : public gcn::ActionListener
 #ifdef ACTION_REPLAY
       else if (actionEvent.getSource() == cmdCartROM)
       {
-        strncpy(tmp, currentDir, MAX_PATH);
+        strncpy(tmp, currentDir, MAX_PATH - 1);
         if(SelectFile("Select Cartridge ROM", tmp, filter))
         {
           AvailableROM *newrom;
           newrom = new AvailableROM();
           extractFileName(tmp, newrom->Name);
           removeFileExtension(newrom->Name);
-          strncpy(newrom->Path, tmp, MAX_PATH);
+          strncpy(newrom->Path, tmp, MAX_PATH - 1);
           newrom->ROMType = ROMTYPE_CD32CART;
           lstAvailableROMs.push_back(newrom);
-          strncpy(changed_prefs.romextfile, tmp, sizeof(changed_prefs.romextfile));
+          strncpy(changed_prefs.romextfile, tmp, sizeof(changed_prefs.romextfile) - 1);
           RefreshPanelROM();
         }
         cmdCartROM->requestFocus();

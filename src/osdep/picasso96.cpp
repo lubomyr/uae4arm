@@ -1700,7 +1700,7 @@ static bool addmode(TrapContext *ctx, uaecptr AmigaBoardInfo, uaecptr *amem, str
   memcpy (res->P96ID, "P96-0:", 6);
 	if (name) {
 		char *n2 = ua (name);
-		strncpy (res->Name, n2, MAXRESOLUTIONNAMELENGTH);
+		strncpy (res->Name, n2, MAXRESOLUTIONNAMELENGTH - 1);
 		xfree (n2);
 	} else {
   	sprintf (res->Name, "UAE:%4dx%4d", w, h);

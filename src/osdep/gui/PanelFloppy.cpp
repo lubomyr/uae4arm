@@ -185,7 +185,7 @@ class DFxButtonActionListener : public gcn::ActionListener
           // Eject disk from drive
     	    //---------------------------------------
           disk_eject(i);
-          strncpy(changed_prefs.floppyslots[i].df, "", MAX_DPATH);
+          strncpy(changed_prefs.floppyslots[i].df, "", MAX_DPATH - 1);
           AdjustDropDownControls();
         }
         else if (actionEvent.getSource() == cmdDFxSelect[i])
@@ -196,14 +196,14 @@ class DFxButtonActionListener : public gcn::ActionListener
     	    char tmp[MAX_PATH];
 
     	    if(strlen(changed_prefs.floppyslots[i].df) > 0)
-    	      strncpy(tmp, changed_prefs.floppyslots[i].df, MAX_PATH);
+    	      strncpy(tmp, changed_prefs.floppyslots[i].df, MAX_PATH - 1);
     	    else
-    	      strncpy(tmp, currentDir, MAX_PATH);
+    	      strncpy(tmp, currentDir, MAX_PATH - 1);
     	    if(SelectFile("Select disk image file", tmp, diskfile_filter))
   	      {
       	    if(strncmp(changed_prefs.floppyslots[i].df, tmp, MAX_PATH))
       	    {
-        	    strncpy(changed_prefs.floppyslots[i].df, tmp, sizeof(changed_prefs.floppyslots[i].df));
+        	    strncpy(changed_prefs.floppyslots[i].df, tmp, sizeof(changed_prefs.floppyslots[i].df) - 1);
         	    disk_insert(i, tmp);
         	    AddFileToDiskList(tmp, 1);
         	    extractPath(tmp, currentDir);
@@ -247,14 +247,14 @@ class DiskFileActionListener : public gcn::ActionListener
       	    if(idx < 0)
     	      {
               disk_eject(i);
-              strncpy(changed_prefs.floppyslots[i].df, "", MAX_DPATH);
+              strncpy(changed_prefs.floppyslots[i].df, "", MAX_DPATH - 1);
               AdjustDropDownControls();
     	      }
     	      else
       	    {
         	    if(diskfileList.getElementAt(idx).compare(changed_prefs.floppyslots[i].df))
     	        {
-          	    strncpy(changed_prefs.floppyslots[i].df, diskfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.floppyslots[i].df));
+          	    strncpy(changed_prefs.floppyslots[i].df, diskfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.floppyslots[i].df) - 1);
           	    disk_insert(i, changed_prefs.floppyslots[i].df);
           	    lstMRUDiskList.erase(lstMRUDiskList.begin() + idx);
           	    lstMRUDiskList.insert(lstMRUDiskList.begin(), changed_prefs.floppyslots[i].df);
@@ -313,9 +313,9 @@ class SaveForDiskActionListener : public gcn::ActionListener
         
         fetch_configurationpath(filename, MAX_DPATH);
         strncat(filename, diskname, MAX_DPATH - 1);
-        strncat(filename, ".uae", MAX_DPATH) - 1;
+        strncat(filename, ".uae", MAX_DPATH - 1);
         
-			  snprintf(changed_prefs.description, sizeof (changed_prefs.description), "Configuration for disk '%s'", diskname);
+			  snprintf(changed_prefs.description, sizeof (changed_prefs.description) - 1, "Configuration for disk '%s'", diskname);
         if(cfgfile_save(&changed_prefs, filename, 0))
           RefreshPanelConfig();
       }
@@ -334,7 +334,7 @@ class CreateDiskActionListener : public gcn::ActionListener
         // Create 3.5'' DD Disk
         char tmp[MAX_PATH];
         char diskname[MAX_PATH];
-        strncpy(tmp, currentDir, MAX_PATH);
+        strncpy(tmp, currentDir, MAX_PATH - 1);
         if(SelectFile("Create 3.5'' DD disk file", tmp, diskfile_filter, true))
         {
           extractFileName(tmp, diskname);
@@ -351,7 +351,7 @@ class CreateDiskActionListener : public gcn::ActionListener
         // Create 3.5'' HD Disk
         char tmp[MAX_PATH];
         char diskname[MAX_PATH];
-        strncpy(tmp, currentDir, MAX_PATH);
+        strncpy(tmp, currentDir, MAX_PATH - 1);
         if(SelectFile("Create 3.5'' HD disk file", tmp, diskfile_filter, true))
         {
           extractFileName(tmp, diskname);
@@ -384,7 +384,7 @@ void InitPanelFloppy(const struct _ConfigCategory& category)
 	
 	for(i=0; i<4; ++i)
 	{
-	  char tmp[20];
+	  char tmp[21];
 	  snprintf(tmp, 20, "DF%d:", i); 
 	  chkDFx[i] = new gcn::UaeCheckBox(tmp);
 	  chkDFx[i]->addActionListener(dfxCheckActionListener);

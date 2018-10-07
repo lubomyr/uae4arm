@@ -13949,6 +13949,7 @@ uae_u32 REGPARAM2 op_4c98_0_comp_ff(uae_u32 opcode)
 	get_n_addr(srca,native);
 	for (i=0;i<16;i++) {
 		if ((mask>>i)&1) {
+			if(srca != i)
 			jnf_MVMEL_w(i,native,offset);
 			offset+=2;
 		}
@@ -14216,6 +14217,7 @@ uae_u32 REGPARAM2 op_4cd8_0_comp_ff(uae_u32 opcode)
 	get_n_addr(srca,native);
 	for (i=0;i<16;i++) {
 		if ((mask>>i)&1) {
+			if(srca != i)
 			jnf_MVMEL_l(i,native,offset);
 			offset+=4;
 		}
@@ -41887,6 +41889,7 @@ uae_u32 REGPARAM2 op_4c98_0_comp_nf(uae_u32 opcode)
 	get_n_addr(srca,native);
 	for (i=0;i<16;i++) {
 		if ((mask>>i)&1) {
+			if(srca != i)
 			jnf_MVMEL_w(i,native,offset);
 			offset+=2;
 		}
@@ -42154,6 +42157,7 @@ uae_u32 REGPARAM2 op_4cd8_0_comp_nf(uae_u32 opcode)
 	get_n_addr(srca,native);
 	for (i=0;i<16;i++) {
 		if ((mask>>i)&1) {
+			if(srca != i)
 			jnf_MVMEL_l(i,native,offset);
 			offset+=4;
 		}

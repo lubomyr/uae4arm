@@ -1012,12 +1012,16 @@ static void genmovemel(uae_u16 opcode)
 			"\t\tif ((mask>>i)&1) {\n");
 	switch (table68k[opcode].size) {
 	case sz_long:
-		comprintf("\t\t\tjnf_MVMEL_l(i,native,offset);\n"
-				"\t\t\toffset+=4;\n");
+    if (table68k[opcode].dmode == Aipi)
+      comprintf("\t\t\tif(srca != i)\n");
+    comprintf("\t\t\tjnf_MVMEL_l(i,native,offset);\n");
+    comprintf("\t\t\toffset+=4;\n");
 		break;
 	case sz_word:
-		comprintf("\t\t\tjnf_MVMEL_w(i,native,offset);\n"
-				"\t\t\toffset+=2;\n");
+    if (table68k[opcode].dmode == Aipi)
+      comprintf("\t\t\tif(srca != i)\n");
+    comprintf("\t\t\tjnf_MVMEL_w(i,native,offset);\n");
+    comprintf("\t\t\toffset+=2;\n");
 		break;
 	default: abort();
 	}

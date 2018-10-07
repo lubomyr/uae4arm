@@ -131,7 +131,7 @@ class UnitListModel : public gcn::ListModel
       
       if(i < 0 || i >= 4)
         return "---";
-      snprintf(num, 8, "%d", i);
+      snprintf(num, 7, "%d", i);
       return num;
     }
 };
@@ -145,7 +145,7 @@ class FilesysHardfileActionListener : public gcn::ActionListener
     {
       if(actionEvent.getSource() == cmdPath) {
         char tmp[MAX_PATH];
-        strncpy(tmp, txtPath->getText().c_str(), MAX_PATH);
+        strncpy(tmp, txtPath->getText().c_str(), MAX_PATH - 1);
         wndEditFilesysHardfile->releaseModalFocus();
         if(SelectFile("Select harddisk file", tmp, harddisk_filter))
         {
@@ -489,15 +489,15 @@ bool EditFilesysHardfile(int unit_no)
 
     chkReadWrite->setSelected(!ci->readonly);
     chkAutoboot->setSelected(ci->bootpri != BOOTPRI_NOAUTOBOOT);
-		snprintf(tmp, sizeof (tmp), "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
+		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
     txtBootPri->setText(tmp);
-		snprintf(tmp, sizeof (tmp), "%d", ci->surfaces);
+		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->surfaces);
     txtSurfaces->setText(tmp);
-		snprintf(tmp, sizeof (tmp), "%d", ci->reserved);
+		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->reserved);
     txtReserved->setText(tmp);
-		snprintf(tmp, sizeof (tmp), "%d", ci->sectors);
+		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->sectors);
     txtSectors->setText(tmp);
-		snprintf(tmp, sizeof (tmp), "%d", ci->blocksize);
+		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->blocksize);
     txtBlocksize->setText(tmp);
     int selIndex = 0;
     for(i = 0; i < 2; ++i) {
@@ -536,8 +536,8 @@ bool EditFilesysHardfile(int unit_no)
     extractPath((char *) txtPath->getText().c_str(), currentDir);
 
     uci_set_defaults(&ci, false);
-    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH);
-    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH);
+    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
+    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH - 1);
     ci.type = UAEDEV_HDF;
     ci.controller_type = controller[cboController->getSelected()].type;
     ci.controller_type_unit = 0;

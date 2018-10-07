@@ -200,59 +200,59 @@ TCHAR *target_expand_environment (const TCHAR *path, TCHAR *out, int maxlen)
 
 void fetch_datapath (char *out, int size)
 {
-  strncpy(out, start_path_data, size);
-  strncat(out, "/", size);
+  strncpy(out, start_path_data, size - 1);
+  strncat(out, "/", size - 1);
 }
 
 
 void fetch_saveimagepath (char *out, int size, int dir)
 {
-  strncpy(out, start_path_data, size);
-  strncat(out, "/savestates/", size);
+  strncpy(out, start_path_data, size - 1);
+  strncat(out, "/savestates/", size - 1);
 }
 
 
 void fetch_configurationpath (char *out, int size)
 {
-  strncpy(out, config_path, size);
+  strncpy(out, config_path, size - 1);
 }
 
 
 void set_configurationpath(char *newpath)
 {
-  strncpy(config_path, newpath, MAX_DPATH);
+  strncpy(config_path, newpath, MAX_DPATH - 1);
 }
 
 
 void fetch_rompath (char *out, int size)
 {
-  strncpy(out, rom_path, size);
+  strncpy(out, rom_path, size - 1);
 }
 
 
 void set_rompath(char *newpath)
 {
-  strncpy(rom_path, newpath, MAX_DPATH);
+  strncpy(rom_path, newpath, MAX_DPATH - 1);
 }
 
 
 void fetch_rp9path (char *out, int size)
 {
-  strncpy(out, rp9_path, size);
+  strncpy(out, rp9_path, size - 1);
 }
 
 
 void fetch_savestatepath(char *out, int size)
 {
-  strncpy(out, start_path_data, size);
-  strncat(out, "/savestates/", size);
+  strncpy(out, start_path_data, size - 1);
+  strncat(out, "/savestates/", size - 1);
 }
 
 
 void fetch_screenshotpath(char *out, int size)
 {
-  strncpy(out, start_path_data, size);
-  strncat(out, "/screenshots/", size);
+  strncpy(out, start_path_data, size - 1);
+  strncat(out, "/screenshots/", size - 1);
 }
 
 
@@ -320,12 +320,12 @@ int check_configfile(char *file)
     return 1;
   }
   
-  strncpy(tmp, file, MAX_PATH);
+  strncpy(tmp, file, MAX_PATH - 1);
 	char *ptr = strstr(tmp, ".uae");
 	if(ptr > 0)
   {
     *(ptr + 1) = '\0';
-    strncat(tmp, "conf", MAX_PATH);
+    strncat(tmp, "conf", MAX_PATH - 1);
     f = fopen(tmp, "rt");
     if(f)
     {
@@ -344,13 +344,13 @@ void extractFileName(const char * str,char *buffer)
 	while(*p != '/' && p > str)
 		p--;
 	p++;
-	strncpy(buffer,p, MAX_PATH);
+	strncpy(buffer,p, MAX_PATH - 1);
 }
 
 
 void extractPath(char *str, char *buffer)
 {
-	strncpy(buffer, str, MAX_PATH);
+	strncpy(buffer, str, MAX_PATH - 1);
 	char *p = buffer + strlen(buffer) - 1;
 	while(*p != '/' && p > buffer)
 		p--;
@@ -410,50 +410,50 @@ void saveAdfDir(void)
 	char path[MAX_DPATH];
 	int i;
 	
-	snprintf(path, MAX_DPATH, "%s/conf/adfdir.conf", start_path_data);
+	snprintf(path, MAX_DPATH - 1, "%s/conf/adfdir.conf", start_path_data);
 	FILE *f=fopen(path,"w");
 	if (!f)
 	  return;
 	  
 	char buffer[MAX_DPATH];
-	snprintf(buffer, MAX_DPATH, "path=%s\n", currentDir);
+	snprintf(buffer, MAX_DPATH - 1, "path=%s\n", currentDir);
 	fputs(buffer,f);
 
-	snprintf(buffer, MAX_DPATH, "config_path=%s\n", config_path);
+	snprintf(buffer, MAX_DPATH - 1, "config_path=%s\n", config_path);
 	fputs(buffer, f);
 
-	snprintf(buffer, MAX_DPATH, "rom_path=%s\n", rom_path);
+	snprintf(buffer, MAX_DPATH - 1, "rom_path=%s\n", rom_path);
 	fputs(buffer, f);
 
-  snprintf(buffer, MAX_DPATH, "ROMs=%d\n", lstAvailableROMs.size());
+  snprintf(buffer, MAX_DPATH - 1, "ROMs=%d\n", lstAvailableROMs.size());
   fputs(buffer, f);
   for(i=0; i<lstAvailableROMs.size(); ++i)
   {
-    snprintf(buffer, MAX_DPATH, "ROMName=%s\n", lstAvailableROMs[i]->Name);
+    snprintf(buffer, MAX_DPATH - 1, "ROMName=%s\n", lstAvailableROMs[i]->Name);
     fputs(buffer, f);
-    snprintf(buffer, MAX_DPATH, "ROMPath=%s\n", lstAvailableROMs[i]->Path);
+    snprintf(buffer, MAX_DPATH - 1, "ROMPath=%s\n", lstAvailableROMs[i]->Path);
     fputs(buffer, f);
-    snprintf(buffer, MAX_DPATH, "ROMType=%d\n", lstAvailableROMs[i]->ROMType);
+    snprintf(buffer, MAX_DPATH - 1, "ROMType=%d\n", lstAvailableROMs[i]->ROMType);
     fputs(buffer, f);
   }
   
-  snprintf(buffer, MAX_DPATH, "MRUDiskList=%d\n", lstMRUDiskList.size());
+  snprintf(buffer, MAX_DPATH - 1, "MRUDiskList=%d\n", lstMRUDiskList.size());
   fputs(buffer, f);
   for(i=0; i<lstMRUDiskList.size(); ++i)
   {
-    snprintf(buffer, MAX_DPATH, "Diskfile=%s\n", lstMRUDiskList[i].c_str());
+    snprintf(buffer, MAX_DPATH - 1, "Diskfile=%s\n", lstMRUDiskList[i].c_str());
     fputs(buffer, f);
   }
 
-  snprintf(buffer, MAX_DPATH, "MRUCDList=%d\n", lstMRUCDList.size());
+  snprintf(buffer, MAX_DPATH - 1, "MRUCDList=%d\n", lstMRUCDList.size());
   fputs(buffer, f);
   for(i=0; i<lstMRUCDList.size(); ++i)
   {
-    snprintf(buffer, MAX_DPATH, "CDfile=%s\n", lstMRUCDList[i].c_str());
+    snprintf(buffer, MAX_DPATH - 1, "CDfile=%s\n", lstMRUCDList[i].c_str());
     fputs(buffer, f);
   }
 
-  snprintf(buffer, MAX_DPATH, "Quickstart=%d\n", quickstart_start);
+  snprintf(buffer, MAX_DPATH - 1, "Quickstart=%d\n", quickstart_start);
   fputs(buffer, f);
 
 	fclose(f);
@@ -468,7 +468,7 @@ void get_string(FILE *f, char *dst, int size)
   while (i > 0 && (buffer[i - 1] == '\t' || buffer[i - 1] == ' ' 
   || buffer[i - 1] == '\r' || buffer[i - 1] == '\n'))
 	  buffer[--i] = '\0';
-  strncpy(dst, buffer, size);
+  strncpy(dst, buffer, size - 1);
 }
 
 
@@ -486,27 +486,27 @@ void loadAdfDir(void)
 	char path[MAX_DPATH];
   int i;
 #ifdef ANDROID
-	strncpy(currentDir, getenv("SDCARD"), MAX_DPATH);
+	strncpy(currentDir, getenv("SDCARD"), MAX_DPATH - 1);
 #else
-	strncpy(currentDir, start_path_data, MAX_DPATH);
+	strncpy(currentDir, start_path_data, MAX_DPATH - 1);
 #endif
-	snprintf(config_path, MAX_DPATH, "%s/conf/", start_path_data);
+	snprintf(config_path, MAX_DPATH - 1, "%s/conf/", start_path_data);
 #ifdef ANDROID
     char afepath[MAX_DPATH];
-    snprintf(afepath, MAX_DPATH, "%s/Android/data/com.cloanto.amigaforever.essentials/files/rom/", getenv("SDCARD"));
+    snprintf(afepath, MAX_DPATH - 1, "%s/Android/data/com.cloanto.amigaforever.essentials/files/rom/", getenv("SDCARD"));
     DIR *afedir = opendir(afepath);
     if (afedir) {
-        snprintf(rom_path, MAX_DPATH, "%s", afepath);
+        snprintf(rom_path, MAX_DPATH - 1, "%s", afepath);
         closedir(afedir);
     }
 	else
-        snprintf(rom_path, MAX_DPATH, "%s/kickstarts/", start_path_data);
+        snprintf(rom_path, MAX_DPATH - 1, "%s/kickstarts/", start_path_data);
 #else
-	snprintf(rom_path, MAX_DPATH, "%s/kickstarts/", start_path_data);
+	snprintf(rom_path, MAX_DPATH - 1, "%s/kickstarts/", start_path_data);
 #endif
-	snprintf(rp9_path, MAX_DPATH, "%s/rp9/", start_path_data);
+	snprintf(rp9_path, MAX_DPATH - 1, "%s/rp9/", start_path_data);
 
-	snprintf(path, MAX_DPATH, "%s/conf/adfdir.conf", start_path_data);
+	snprintf(path, MAX_DPATH - 1, "%s/conf/adfdir.conf", start_path_data);
   struct zfile *fh;
   fh = zfile_fopen (path, _T("r"), ZFD_NORMAL);
   if (fh) {
@@ -529,12 +529,12 @@ void loadAdfDir(void)
         || cfgfile_intval(option, value, "ROMType", &romType, 1)) {
           if(strlen(romName) > 0 && strlen(romPath) > 0 && romType != -1) {
             AvailableROM *tmp = new AvailableROM();
-            strncpy(tmp->Name, romName, sizeof(tmp->Name));
-            strncpy(tmp->Path, romPath, sizeof(tmp->Path));
+            strncpy(tmp->Name, romName, sizeof(tmp->Name) - 1);
+            strncpy(tmp->Path, romPath, sizeof(tmp->Path) - 1);
             tmp->ROMType = romType;
             lstAvailableROMs.push_back(tmp);
-            strncpy(romName, "", sizeof(romName));
-            strncpy(romPath, "", sizeof(romPath));
+            strncpy(romName, "", sizeof(romName) - 1);
+            strncpy(romPath, "", sizeof(romPath) - 1);
             romType = -1;
           }
         } else if (cfgfile_string(option, value, "Diskfile", tmpFile, sizeof(tmpFile))) {
@@ -615,7 +615,7 @@ int generic_main (int argc, char *argv[])
 	loadAdfDir();
   rp9_init();
 
-  snprintf(savestate_fname, MAX_PATH, "%s/saves/default.ads", start_path_data);
+  snprintf(savestate_fname, MAX_PATH - 1, "%s/saves/default.ads", start_path_data);
 	logging_init ();
   
   memset(&action, 0, sizeof(action));

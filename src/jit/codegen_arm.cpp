@@ -241,11 +241,11 @@ LOWFUNC(WRITE,READ,2,compemu_raw_cmp_l_mi,(MEMR d, IMM s))
   
  #ifdef ARMV6T2
   if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
+    uae_s32 idx = d - (uae_u32) & regs;
+    LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
     MOVW_ri16(REG_WORK2, s);
     if(s >> 16)
       MOVT_ri16(REG_WORK2, s >> 16);
-    uae_s32 idx = d - (uae_u32) & regs;
-    LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
   } else {
     MOVW_ri16(REG_WORK1, d);
     MOVT_ri16(REG_WORK1, d >> 16);

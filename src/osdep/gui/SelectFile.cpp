@@ -137,11 +137,11 @@ static void checkfoldername (char *current)
 	{ 
 	  fileList->changeDir(current);
 	  ptr = realpath(current, actualpath);
-	  strncpy(workingDir, ptr, MAX_PATH);
+	  strncpy(workingDir, ptr, MAX_PATH - 1);
 	  closedir(dir);
 	}
   else
-    strncpy(workingDir, start_path_data, MAX_PATH);
+    strncpy(workingDir, start_path_data, MAX_PATH - 1);
   txtCurrent->setText(workingDir);
 }
 
@@ -170,14 +170,14 @@ class SelectFileActionListener : public gcn::ActionListener
       char foldername[MAX_PATH] = "";
 
       selected_item = lstFiles->getSelected();
-      strncpy(foldername, workingDir, MAX_PATH);
+      strncpy(foldername, workingDir, MAX_PATH - 1);
       strncat(foldername, "/", MAX_PATH - 1);
       strncat(foldername, fileList->getElementAt(selected_item).c_str(), MAX_PATH - 1);
       if(fileList->isDir(selected_item))
         checkfoldername(foldername);
       else if(!createNew)
       {
-        strncpy(workingDir, foldername, sizeof(workingDir));
+        strncpy(workingDir, foldername, sizeof(workingDir) - 1);
         dialogResult = true;
         dialogFinished = true;
       }
@@ -426,7 +426,7 @@ bool SelectFile(const char *title, char *value, const char *filter[], bool creat
 	}
 	else
 	{
-		strncpy(value, workingDir, MAX_PATH);
+		strncpy(value, workingDir, MAX_PATH - 1);
 		gui_top->add(wndSelectFile);
 		wndSelectFile->setCaption(title);
 		wndSelectFile->requestModalFocus();
@@ -443,8 +443,8 @@ bool SelectFile(const char *title, char *value, const char *filter[], bool creat
 	wndSelectFile->setVisible(false);
   
   if(dialogResult)
-    strncpy(value, workingDir, MAX_PATH);
+    strncpy(value, workingDir, MAX_PATH - 1);
 	else
-		strncpy(workingDir, value, MAX_PATH);
+		strncpy(workingDir, value, MAX_PATH - 1);
   return dialogResult;
 }

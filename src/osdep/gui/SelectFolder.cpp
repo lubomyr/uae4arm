@@ -97,11 +97,11 @@ static void checkfoldername (char *current)
 	{ 
 	  dirList = current;
 	  ptr = realpath(current, actualpath);
-	  strncpy(workingDir, ptr, MAX_PATH);
+	  strncpy(workingDir, ptr, MAX_PATH - 1);
 	  closedir(dir);
 	}
   else
-    strncpy(workingDir, start_path_data, MAX_PATH);
+    strncpy(workingDir, start_path_data, MAX_PATH - 1);
   txtCurrent->setText(workingDir);
 }
 
@@ -317,9 +317,9 @@ bool SelectFolder(const char *title, char *value)
   ExitSelectFolder();
   if(dialogResult)
   {
-    strncpy(value, workingDir, MAX_PATH);
+    strncpy(value, workingDir, MAX_PATH - 1);
     if(value[strlen(value) - 1] != '/')
-      strncat(value, "/", MAX_PATH);
+      strncat(value, "/", MAX_PATH - 1);
   }
   return dialogResult;
 }

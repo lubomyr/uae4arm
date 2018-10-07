@@ -61,7 +61,7 @@ class FilesysVirtualActionListener : public gcn::ActionListener
       if(actionEvent.getSource() == cmdPath)
       {
         char tmp[MAX_PATH];
-        strncpy(tmp, txtPath->getText().c_str(), MAX_PATH);
+        strncpy(tmp, txtPath->getText().c_str(), MAX_PATH - 1);
         wndEditFilesysVirtual->releaseModalFocus();
         if(SelectFolder("Select folder", tmp)) {
           txtPath->setText(tmp);
@@ -322,7 +322,7 @@ bool EditFilesysVirtual(int unit_no)
     txtPath->setText(strroot);
     chkReadWrite->setSelected(!ci->readonly);
     chkAutoboot->setSelected(ci->bootpri != BOOTPRI_NOAUTOBOOT);
-		snprintf(tmp, sizeof (tmp), "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
+		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
     txtBootPri->setText(tmp);
   }
   else
@@ -345,9 +345,9 @@ bool EditFilesysVirtual(int unit_no)
     extractPath((char *) txtPath->getText().c_str(), currentDir);
     
     uci_set_defaults(&ci, true);
-    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH);
-    strncpy(ci.volname, (char *) txtVolume->getText().c_str(), MAX_DPATH);
-    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH);
+    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
+    strncpy(ci.volname, (char *) txtVolume->getText().c_str(), MAX_DPATH - 1);
+    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH - 1);
     ci.type = UAEDEV_DIR;
     ci.readonly = !chkReadWrite->isSelected();
     ci.bootpri = bp;

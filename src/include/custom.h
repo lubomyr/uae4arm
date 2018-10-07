@@ -109,7 +109,7 @@ STATIC_INLINE uae_u16 INTREQR (void)
 #define EQU_ENDLINE_PAL 8
 #define EQU_ENDLINE_NTSC 10
 
-extern int maxhpos;
+const int maxhpos = MAXHPOS_PAL; // MAXHPOS_NTSC has same value and programmed mode not supported.
 extern int maxvpos, maxvpos_nom, maxvpos_display;
 extern int minfirstline;
 extern double vblank_hz, fake_vblank_hz;

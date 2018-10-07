@@ -121,11 +121,10 @@ uae_u32 last_custom_value1;
 
 static uae_u32 cop1lc,cop2lc,copcon;
  
-int maxhpos = MAXHPOS_PAL;
 int maxvpos = MAXVPOS_PAL;
 int maxvpos_nom = MAXVPOS_PAL; // nominal value (same as maxvpos but "faked" maxvpos in fake 60hz modes)
 int maxvpos_display = MAXVPOS_PAL; // value used for display size
-int hsyncstartpos;
+const int hsyncstartpos = maxhpos + 13;
 static int maxvpos_total = 511;
 int minfirstline = VBLANK_ENDLINE_PAL;
 static int equ_vblank_endline = EQU_ENDLINE_PAL;
@@ -483,8 +482,6 @@ static void decide_diw (int hpos)
 	int hdiw = hpos >= maxhpos ? maxhpos * 2 + 1 : hpos * 2 + 2;
 	if (!(currprefs.chipset_mask & CSMASK_ECS_DENISE) && vpos <= get_equ_vblank_endline ())
 		hdiw = diw_hcounter;
-	/* always mask, bad programs may have set maxhpos = 256 */
-	hdiw &= 511;
 	for (;;) {
 		int lhdiw = hdiw;
 		if (last_hdiw > lhdiw)
@@ -2902,7 +2899,7 @@ STATIC_INLINE void finish_decisions (void)
 {
 	struct draw_info *dip;
 	struct decision *dp;
-	int hpos = maxhpos;
+	const int hpos = maxhpos;
 	
 	if (nodraw ())
 		return;
@@ -3225,7 +3222,6 @@ static void init_hz (bool checkvposw)
 	int clk = currprefs.ntscmode ? CHIPSET_CLOCK_NTSC : CHIPSET_CLOCK_PAL;
   if (!isntsc) {
 	  maxvpos = MAXVPOS_PAL;
-	  maxhpos = MAXHPOS_PAL;
 	  minfirstline = VBLANK_ENDLINE_PAL;
 		vblank_hz_nom = vblank_hz = VBLANK_HZ_PAL;
     sprite_vblank_endline = VBLANK_SPRITE_PAL;
@@ -3236,7 +3232,6 @@ static void init_hz (bool checkvposw)
 		vblank_hz_lace = (float)((double)clk / ((maxvpos + 0.5) * maxhpos));
   } else {
 	  maxvpos = MAXVPOS_NTSC;
-	  maxhpos = MAXHPOS_NTSC;
 	  minfirstline = VBLANK_ENDLINE_NTSC;
 		vblank_hz_nom = vblank_hz = VBLANK_HZ_NTSC;
     sprite_vblank_endline = VBLANK_SPRITE_NTSC;
@@ -3288,8 +3283,6 @@ static void init_hz (bool checkvposw)
   if (vblank_hz > 300)
 	  vblank_hz = 300;
 	set_delay_lastcycle ();
-
-		hsyncstartpos = maxhpos + 13;
 
   eventtab[ev_hsync].oldcycles = get_cycles ();
   eventtab[ev_hsync].evtime = get_cycles() + HSYNCTIME;
@@ -4543,11 +4536,8 @@ static void COLOR_WRITE (int hpos, uae_u16 v, int num)
 
 STATIC_INLINE int copper_cant_read (int hpos)
 {
-  if (hpos + 1 >= maxhpos) // first refresh slot
+  if (hpos == maxhpos - 3)
     return 1;
-	if ((hpos == maxhpos - 3) && (maxhpos & 1)) {
-		return -1;
-	}
   return is_bitplane_dma (hpos);
 }
 
@@ -4637,7 +4627,7 @@ static void predict_copper (void)
 	/* Only needed for COP_wait, but let's shut up the compiler.  */
 	cop_state.first_sync = c_hpos;
 	
-	while (c_hpos + 1 < maxhpos) {
+	while (c_hpos < maxhpos - 1) {
 		if (state == COP_read1) {
 			w1 = chipmem_wget_indirect (ip);
 			if (w1 & 1) {
@@ -4783,7 +4773,7 @@ static void update_copper (int until_hpos)
 	      goto out;
 	  }
 
-		if ((c_hpos == maxhpos - 3) && (maxhpos & 1))
+		if (c_hpos == maxhpos - 3)
 			c_hpos += 1;
 		else
 		  c_hpos += 2;

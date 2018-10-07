@@ -247,7 +247,7 @@ void RefreshPanelDisplay(void)
     if(changed_prefs.gfx_size.width == amigawidth_values[i])
     {
       sldAmigaWidth->setValue(i);
-      snprintf(tmp, 32, "%d", changed_prefs.gfx_size.width);
+      snprintf(tmp, 31, "%d", changed_prefs.gfx_size.width);
       lblAmigaWidthInfo->setCaption(tmp);
       break;
     }
@@ -258,7 +258,7 @@ void RefreshPanelDisplay(void)
     if(changed_prefs.gfx_size.height == amigaheight_values[i])
     {
       sldAmigaHeight->setValue(i);
-      snprintf(tmp, 32, "%d", changed_prefs.gfx_size.height);
+      snprintf(tmp, 31, "%d", changed_prefs.gfx_size.height);
       lblAmigaHeightInfo->setCaption(tmp);
       break;
     }
@@ -270,7 +270,7 @@ void RefreshPanelDisplay(void)
     if(changed_prefs.gfx_fullscreen_ratio == FullscreenRatio[i])
     {
       sldFSRatio->setValue(i);
-      snprintf(tmp, 32, "%d%%", changed_prefs.gfx_fullscreen_ratio);
+      snprintf(tmp, 31, "%d%%", changed_prefs.gfx_fullscreen_ratio);
       lblFSRatioInfo->setCaption(tmp);
       break;
     }
@@ -280,7 +280,7 @@ void RefreshPanelDisplay(void)
 #endif
   
   sldVertPos->setValue(changed_prefs.pandora_vertical_offset - OFFSET_Y_ADJUST);
-  snprintf(tmp, 32, "%d", changed_prefs.pandora_vertical_offset - OFFSET_Y_ADJUST);
+  snprintf(tmp, 31, "%d", changed_prefs.pandora_vertical_offset - OFFSET_Y_ADJUST);
   lblVertPosInfo->setCaption(tmp);
   
   chkLineDbl->setSelected(changed_prefs.gfx_vresolution != VRES_NONDOUBLE);

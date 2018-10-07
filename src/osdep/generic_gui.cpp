@@ -139,9 +139,9 @@ static void addrom(struct romdata *rd, const char *path)
   char tmpName[MAX_DPATH];
   tmp = new AvailableROM();
   getromname(rd, tmpName);
-  strncpy(tmp->Name, tmpName, MAX_PATH);
+  strncpy(tmp->Name, tmpName, MAX_PATH - 1);
   if(path != NULL)
-    strncpy(tmp->Path, path, MAX_PATH);
+    strncpy(tmp->Path, path, MAX_PATH - 1);
   tmp->ROMType = rd->type;
   lstAvailableROMs.push_back(tmp);
   romlist_add(path, rd);
@@ -206,7 +206,7 @@ static struct romdata *scan_single_rom (char *path)
   char tmp[MAX_DPATH];
   struct romdata *rd;
 
-  strncpy (tmp, path, MAX_PATH);
+  strncpy (tmp, path, MAX_PATH - 1);
   rd = getromdatabypath(path);
   if (rd && rd->crc32 == 0xffffffff)
   	return rd;
@@ -322,11 +322,11 @@ void ReadConfigFileList(void)
   for (int i=0; i<files.size(); ++i)
   {
     ConfigFileInfo *tmp = new ConfigFileInfo();
-    strncpy(tmp->FullPath, path, MAX_DPATH);
-    strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH);
-    strncpy(tmp->Name, files[i].c_str(), MAX_DPATH);
+    strncpy(tmp->FullPath, path, MAX_DPATH - 1);
+    strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH - 1);
+    strncpy(tmp->Name, files[i].c_str(), MAX_DPATH - 1);
     removeFileExtension(tmp->Name);
-    strncpy(tmp->Description, _T("rp9"), MAX_PATH);
+    strncpy(tmp->Description, _T("rp9"), MAX_PATH - 1);
     ConfigFilesList.push_back(tmp);
   }
   
@@ -337,9 +337,9 @@ void ReadConfigFileList(void)
   for (int i=0; i<files.size(); ++i)
   {
     ConfigFileInfo *tmp = new ConfigFileInfo();
-    strncpy(tmp->FullPath, path, MAX_DPATH);
-    strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH);
-    strncpy(tmp->Name, files[i].c_str(), MAX_DPATH);
+    strncpy(tmp->FullPath, path, MAX_DPATH - 1);
+    strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH - 1);
+    strncpy(tmp->Name, files[i].c_str(), MAX_DPATH - 1);
     removeFileExtension(tmp->Name);
     cfgfile_get_description(tmp->FullPath, tmp->Description);
     ConfigFilesList.push_back(tmp);
@@ -457,7 +457,7 @@ int gui_update (void)
   if(strlen(currprefs.floppyslots[0].df) > 0)
     extractFileName(currprefs.floppyslots[0].df, tmp);
   else
-    strncpy(tmp, last_loaded_config, MAX_PATH);
+    strncpy(tmp, last_loaded_config, MAX_PATH - 1);
 
   strncat(savestate_fname, tmp, MAX_DPATH - 1);
   strncat(screenshot_filename, tmp, MAX_DPATH - 1);
@@ -650,7 +650,7 @@ void notify_user_parms (int msg, const TCHAR *parms, ...)
   {
     if(gui_msglist[i].num == msg)
     {
-      strncpy(tmp, gui_msglist[i].msg, MAX_DPATH);
+      strncpy(tmp, gui_msglist[i].msg, MAX_DPATH - 1);
     	va_start (parms2, parms);
     	_vsntprintf (msgtxt, sizeof msgtxt / sizeof (TCHAR), tmp, parms2);
       gui_message(msgtxt);
@@ -669,7 +669,7 @@ int translate_message (int msg,	TCHAR *out)
   {
     if(gui_msglist[i].num == msg)
     {
-      strncpy(out, gui_msglist[i].msg, MAX_DPATH);
+      strncpy(out, gui_msglist[i].msg, MAX_DPATH - 1);
       return 1;
     }
     ++i;

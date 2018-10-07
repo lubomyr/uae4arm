@@ -55,7 +55,7 @@ bool LoadConfigByName(const char *name)
       txtName->setText(config->Name);
       txtDesc->setText(config->Description);
       target_cfgfile_load(&changed_prefs, config->FullPath, 0, 0);
-      strncpy(last_active_config, config->Name, MAX_PATH);
+      strncpy(last_active_config, config->Name, MAX_PATH - 1);
       DisableResume();
       RefreshAllPanels();
 #ifndef ANDROID
@@ -100,7 +100,7 @@ class ConfigsListModel : public gcn::ListModel
       for(int i=0; i<ConfigFilesList.size(); ++i)
       {
         char tmp[MAX_DPATH];
-        strncpy(tmp, ConfigFilesList[i]->Name, MAX_DPATH);
+        strncpy(tmp, ConfigFilesList[i]->Name, MAX_DPATH - 1);
         if(strlen(ConfigFilesList[i]->Description) > 0)
         {
           strncat(tmp, " (", MAX_DPATH - 1);
@@ -132,7 +132,7 @@ class ConfigButtonActionListener : public gcn::ActionListener
         } else {
 #endif
           target_cfgfile_load(&changed_prefs, ConfigFilesList[i]->FullPath, 0, 0);
-          strncpy(last_active_config, ConfigFilesList[i]->Name, MAX_PATH);
+          strncpy(last_active_config, ConfigFilesList[i]->Name, MAX_PATH - 1);
           DisableResume();
           RefreshAllPanels();
 #ifndef ANDROID
@@ -149,8 +149,8 @@ class ConfigButtonActionListener : public gcn::ActionListener
         {
           fetch_configurationpath(filename, MAX_DPATH);
           strncat(filename, txtName->getText().c_str(), MAX_DPATH - 1);
-          strncat(filename, ".uae", MAX_DPATH);
-          strncpy(changed_prefs.description, txtDesc->getText().c_str(), 256);
+          strncat(filename, ".uae", MAX_DPATH - 1);
+          strncpy(changed_prefs.description, txtDesc->getText().c_str(), 255);
           if(cfgfile_save(&changed_prefs, filename, 0))
             RefreshPanelConfig();
         }
@@ -170,7 +170,7 @@ class ConfigButtonActionListener : public gcn::ActionListener
         i = lstConfigs->getSelected();
         if(i >= 0 && strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME))
         {
-          snprintf(msg, 256, "Do you want to delete '%s' ?", ConfigFilesList[i]->Name);
+          snprintf(msg, 255, "Do you want to delete '%s' ?", ConfigFilesList[i]->Name);
           if(ShowMessage("Delete Configuration", msg, "", "Yes", "No"))
           {
             remove(ConfigFilesList[i]->FullPath);
@@ -209,7 +209,7 @@ class ConfigsListActionListener : public gcn::ActionListener
   			} else {
 #endif
           target_cfgfile_load(&changed_prefs, ConfigFilesList[selected_item]->FullPath, 0, 0);
-          strncpy(last_active_config, ConfigFilesList[selected_item]->Name, MAX_PATH);
+          strncpy(last_active_config, ConfigFilesList[selected_item]->Name, MAX_PATH - 1);
           DisableResume();
           RefreshAllPanels();
   			  uae_reset(0, 1);
@@ -318,7 +318,7 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   category.panel->add(txtDesc, DISTANCE_BORDER + lblName->getWidth() + 8, buttonY - DISTANCE_NEXT_Y - TEXTFIELD_HEIGHT);
 
   if(strlen(last_active_config) == 0)
-    strncpy(last_active_config, OPTIONSFILENAME, MAX_PATH);
+    strncpy(last_active_config, OPTIONSFILENAME, MAX_PATH - 1);
   txtName->setText(last_active_config);
   txtDesc->setText(changed_prefs.description);
   ensureVisible = -1;

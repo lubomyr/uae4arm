@@ -6145,7 +6145,7 @@ MIDFUNC(2,jnf_ROXR_l,(RW4 d, RR4 i))
 	RSB_rri(REG_WORK3, REG_WORK1, 32);
 	ORR_rrrLSLr(REG_WORK2, REG_WORK2, x, REG_WORK3);
 	
-	ADD_rri(REG_WORK3, REG_WORK1, 1);	
+	ADD_rri(REG_WORK3, REG_WORK3, 1);	
 	ORR_rrrLSLr(d, REG_WORK2, d, REG_WORK3);
 
 // end of op
@@ -6298,7 +6298,7 @@ MIDFUNC(2,jff_ROXR_l,(RW4 d, RR4 i))
 	RSB_rri(REG_WORK3, REG_WORK1, 32);
 	ORR_rrrLSLr(REG_WORK2, REG_WORK2, x, REG_WORK3);
 	
-	ADD_rri(REG_WORK3, REG_WORK1, 1);	
+	ADD_rri(REG_WORK3, REG_WORK3, 1);	
 	ORR_rrrLSLr(d, REG_WORK2, d, REG_WORK3);
 	
   // Duplicate carry

@@ -61,7 +61,7 @@ class CreateFilesysHardfileActionListener : public gcn::ActionListener
       if(actionEvent.getSource() == cmdPath)
       {
         char tmp[MAX_PATH];
-        strncpy(tmp, txtPath->getText().c_str(), MAX_PATH);
+        strncpy(tmp, txtPath->getText().c_str(), MAX_PATH - 1);
         wndCreateFilesysHardfile->releaseModalFocus();
         if(SelectFile("Create harddisk file", tmp, harddisk_filter, true))
         {
@@ -336,8 +336,8 @@ bool CreateFilesysHardfile(void)
   	struct uaedev_config_info ci;
 
     uci_set_defaults(&ci, false);
-    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH);
-    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH);
+    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
+    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH - 1);
     ci.type = UAEDEV_HDF;
     ci.surfaces = (size / 1024) + 1;
     ci.bootpri = bp;
