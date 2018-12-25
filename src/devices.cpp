@@ -21,8 +21,8 @@
 #include "newcpu.h"
 #include "savestate.h"
 #include "blitter.h"
-#include "custom.h"
 #include "xwin.h"
+#include "custom.h"
 #include "bsdsocket.h"
 #include "uaeresource.h"
 #include "native2amiga.h"
@@ -51,7 +51,6 @@ void devices_reset(int hardreset)
   compemu_reset ();
 #endif
 #ifdef AUTOCONFIG
-	expamem_reset ();
 	rtarea_reset();
 #endif
 	uae_int_requested = 0;
@@ -117,6 +116,7 @@ void reset_all_systems (void)
   hardfile_reset ();
 #endif
   native2amiga_reset ();
+	device_func_reset();
 	uae_int_requested = 0;
 }
 
@@ -135,9 +135,6 @@ void do_leave_program (void)
 	cd32_fmv_free();
 #endif
  	gui_exit ();
-#ifdef USE_SDL
-  SDL_Quit ();
-#endif
   hardfile_reset();
 #ifdef AUTOCONFIG
   expansion_cleanup ();
@@ -149,8 +146,9 @@ void do_leave_program (void)
   bsdlib_reset ();
 #endif
 	gayle_free ();
-	device_func_reset ();
+	device_func_free();
   memory_cleanup ();
+	free_shm ();
   cfgfile_addcfgparam (0);
   machdep_free ();
 	rtarea_free();

@@ -401,10 +401,10 @@ bool mapped_malloc (addrbank *ab)
 void mapped_free (addrbank *ab)
 {
   if(ab->label != NULL && !strcmp(ab->label, "filesys") && ab->baseaddr != NULL) {
-    free(ab->baseaddr);
     write_log("mapped_free(): 0x%08x - 0x%08x (0x%08x - 0x%08x) -> %s (%s)\n", 
       ab->baseaddr - regs.natmem_offset, ab->baseaddr - regs.natmem_offset + ab->allocated_size,
       ab->baseaddr, ab->baseaddr + ab->allocated_size, ab->name, ab->label);
+    free(ab->baseaddr);
   }
   ab->baseaddr = NULL;
   ab->allocated_size = 0;
@@ -483,4 +483,11 @@ bool init_shm (void)
 
 	memory_hardreset (2);
 	return true;
+}
+
+void free_shm (void)
+{
+	for (int i = 0; i < MAX_RAM_BOARDS; i++) {
+		ortgmem_type[i] = -1;
+	}
 }

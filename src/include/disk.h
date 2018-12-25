@@ -11,7 +11,7 @@
 
 #include "uae/types.h"
 
-typedef enum { DRV_NONE = -1, DRV_35_DD = 0, DRV_35_HD, DRV_525_SD, DRV_35_DD_ESCOM, DRV_PC_ONLY_40, DRV_PC_ONLY_80, DRV_525_DD } drive_type;
+typedef enum { DRV_NONE = -1, DRV_35_DD = 0, DRV_35_HD, DRV_525_SD, DRV_35_DD_ESCOM, DRV_PC_525_ONLY_40, DRV_PC_35_ONLY_80, DRV_PC_525_40_80, DRV_525_DD } drive_type;
 
 #define HISTORY_FLOPPY 0
 #define HISTORY_CD 1
@@ -40,9 +40,8 @@ extern void disk_eject (int num);
 extern int disk_empty (int num);
 extern void disk_insert (int num, const TCHAR *name);
 extern void disk_insert (int num, const TCHAR *name, bool forcedwriteprotect);
-extern void disk_insert_force (int num, const TCHAR *name, bool forcedwriteprotect);
 extern void DISK_vsync (void);
-extern int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname, int leave_open, bool *wrprot, uae_u32 *crc32, struct zfile **zf);
+extern int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname, TCHAR *outfname, int leave_open, bool *wrprot, uae_u32 *crc32, struct zfile **zf);
 extern void DISK_handler (uae_u32);
 extern void DISK_update (int hpos);
 extern void DISK_update_adkcon (int hpos, uae_u16 v);

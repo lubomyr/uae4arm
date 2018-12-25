@@ -18,8 +18,19 @@
 unsigned long int nextevent, currcycle;
 int is_syncline;
 
-frame_time_t vsyncmintime, vsyncmaxtime, vsyncwaittime;
+frame_time_t vsyncmintime;
 int vsynctimebase;
+
+static void events_fast(void)
+{
+	cycles_do_special();
+}
+
+void events_reset_syncline(void)
+{
+	is_syncline = 0;
+	events_fast();
+}
 
 void events_schedule (void)
 {
@@ -36,14 +47,8 @@ void events_schedule (void)
   nextevent = currcycle + mintime;
 }
 
-void do_cycles_cpu_fastest (unsigned long cycles_to_add)
+static bool event_check_vsync(void)
 {
-  if ((regs.pissoff -= cycles_to_add) > 0)
-  	return;
-
-  cycles_to_add = -regs.pissoff;
-  regs.pissoff = 0;
-
 	/* Keep only CPU emulation running while waiting for sync point. */
   if (is_syncline) {
 	  int rpt = read_processor_time ();
@@ -53,18 +58,32 @@ void do_cycles_cpu_fastest (unsigned long cycles_to_add)
     }
   	if (v < speedup_timelimit) {
 	    regs.pissoff = pissoff_value;
-	    return;
+	    return true;
   	}
-  	is_syncline = 0;
+  	events_reset_syncline();
   }
+  return false;
+}
+
+void do_cycles_cpu_fastest (unsigned long cycles_to_add)
+{
+  if ((regs.pissoff -= cycles_to_add) > 0)
+  	return;
+
+  cycles_to_add = -regs.pissoff;
+  regs.pissoff = 0;
+
+	if (is_syncline) {
+		if (event_check_vsync())
+			return;
+	}
 
   while ((nextevent - currcycle) <= cycles_to_add) {
-	  int i;
 
-	  cycles_to_add -= (nextevent - currcycle);
+	  cycles_to_add -= nextevent - currcycle;
 	  currcycle = nextevent;
 
-  	for (i = 0; i < ev_max; i++) {
+  	for (int i = 0; i < ev_max; i++) {
 	    if (eventtab[i].active && eventtab[i].evtime == currcycle) {
     		(*eventtab[i].handler)();
 	    }
@@ -77,12 +96,11 @@ void do_cycles_cpu_fastest (unsigned long cycles_to_add)
 void do_cycles_cpu_norm (unsigned long cycles_to_add)
 {
   while ((nextevent - currcycle) <= cycles_to_add) {
-	  int i;
 
-	  cycles_to_add -= (nextevent - currcycle);
+	  cycles_to_add -= nextevent - currcycle;
 	  currcycle = nextevent;
 
-  	for (i = 0; i < ev_max; i++) {
+  	for (int i = 0; i < ev_max; i++) {
 	    if (eventtab[i].active && eventtab[i].evtime == currcycle) {
     		(*eventtab[i].handler)();
 	    }
@@ -168,18 +186,4 @@ void event2_newevent_xx (int no, evt t, uae_u32 data, evfunc2 func)
 	eventtab2[no].handler = func;
 	eventtab2[no].data = data;
 	MISC_handler ();
-}
-
-void event2_newevent_x_replace(evt t, uae_u32 data, evfunc2 func)
-{
-	for (int i = 0; i < ev2_max; i++) {
-		if (eventtab2[i].active && eventtab2[i].handler == func) {
-			eventtab2[i].active = false;
-		}
-	}
-	if (((int)t) <= 0) {
-		func(data);
-		return;
-	}
-	event2_newevent_xx(-1, t * CYCLE_UNIT, data, func);
 }

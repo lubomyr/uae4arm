@@ -28,6 +28,7 @@
 #include "fsdb.h"
 #include "disk.h"
 #include "blkdev.h"
+#include "statusline.h"
 #include "calc.h"
 #include "gfxboard.h"
 #include "native2amiga_api.h"
@@ -54,16 +55,15 @@ static const TCHAR *guimode3[] = { _T("0"), _T("1"), _T("nowait"), 0 };
 static const TCHAR *csmode[] = { _T("ocs"), _T("ecs_agnus"), _T("ecs_denise"), _T("ecs"), _T("aga"), 0 };
 static const TCHAR *linemode[] = {
 	_T("none"),
-	_T("double"), _T("scanlines"), _T("scanlines2p"), _T("scanlines3p"),
-	_T("double2"), _T("scanlines2"), _T("scanlines2p2"), _T("scanlines2p3"),
-	_T("double3"), _T("scanlines3"), _T("scanlines3p2"), _T("scanlines3p3"),
+	_T("double"),
 	0 };
 static const TCHAR *speedmode[] = { _T("max"), _T("real"), 0 };
 static const TCHAR *soundmode1[] = { _T("none"), _T("interrupts"), _T("normal"), _T("exact"), 0 };
 static const TCHAR *soundmode2[] = { _T("none"), _T("interrupts"), _T("good"), _T("best"), 0 };
-static const TCHAR *stereomode[] = { _T("mono"), _T("stereo"), _T("clonedstereo"), _T("4ch"), _T("clonedstereo6ch"), _T("6ch"), _T("mixed"), 0 };
+static const TCHAR *stereomode[] = { _T("mono"), _T("stereo"),  0 };
 static const TCHAR *interpolmode[] = { _T("none"), _T("anti"), _T("sinc"), _T("rh"), _T("crux"), 0 };
 static const TCHAR *collmode[] = { _T("none"), _T("sprites"), _T("playfields"), _T("full"), 0 };
+static const TCHAR *kbleds[] = { _T("none"), _T("POWER"), _T("DF0"), _T("DF1"), _T("DF2"), _T("DF3"), _T("HD"), _T("CD"), _T("DFx"), 0 };
 static const TCHAR *soundfiltermode1[] = { _T("off"), _T("emulated"), _T("on"), 0 };
 static const TCHAR *soundfiltermode2[] = { _T("standard"), _T("enhanced"), 0 };
 static const TCHAR *lorestype1[] = { _T("lores"), _T("hires"), _T("superhires"), 0 };
@@ -82,10 +82,11 @@ static const TCHAR *qsmodes[] = {
 static const TCHAR *abspointers[] = { _T("none"), _T("mousehack"), _T("tablet"), 0 };
 static const TCHAR *joyportmodes[] = { _T(""), _T("mouse"), _T("mousenowheel"), _T("djoy"), _T("gamepad"), _T("ajoy"), _T("cd32joy"), 0 };
 static const TCHAR *joyaf[] = { _T("none"), _T("normal"), _T("toggle"), _T("always"), 0 };
-static const TCHAR *cdmodes[] = { _T("disabled"), _T(""), _T("image"), _T("ioctl"), _T("spti"), _T("aspi"), 0 };
-static const TCHAR *cdconmodes[] = { _T(""), _T("uae"), _T("ide"), _T("scsi"), _T("cdtv"), _T("cd32"), 0 };
+static const TCHAR *cdmodes[] = { _T("disabled"), _T(""), _T("image"), 0 };
 static const TCHAR *waitblits[] = { _T("disabled"), _T("automatic"), _T("noidleonly"), _T("always"), 0 };
 static const TCHAR *autoext2[] = { _T("disabled"), _T("copy"), _T("replace"), 0 };
+static const TCHAR *leds[] = { _T("power"), _T("df0"), _T("df1"), _T("df2"), _T("df3"), _T("hd"), _T("cd"), _T("fps"), _T("cpu"), _T("snd"), _T("md"), _T("net"), 0 };
+static const int leds_order[] = { 3, 6, 7, 8, 9, 4, 5, 2, 1, 0, 9, 10 };
 static const TCHAR *unmapped[] = { _T("floating"), _T("zero"), _T("one"), 0 };
 static const TCHAR *ciatype[] = { _T("default"), _T("391078-01"), 0 };
 
@@ -131,7 +132,7 @@ static const TCHAR *obsolete[] = {
 	_T("gfx_test_speed"), _T("gfxlib_replacement"), _T("enforcer"), _T("catweasel_io"),
   _T("kickstart_key_file"), _T("sound_adjust"), _T("sound_latency"),
 	_T("serial_hardware_dtrdsr"), _T("gfx_filter_upscale"),
-	_T("gfx_autoscale"), _T("parallel_sampler"), _T("parallel_ascii_emulation"),
+	_T("gfx_correct_aspect"), _T("gfx_autoscale"), _T("parallel_sampler"), _T("parallel_ascii_emulation"),
 	_T("avoid_vid"), _T("avoid_dga"), _T("z3chipmem_size"), _T("state_replay_buffer"), _T("state_replay"),
 	_T("z3realmapping"), _T("force_0x10000000_z3"),
 	_T("fpu_arithmetic_exceptions"),
@@ -139,6 +140,7 @@ static const TCHAR *obsolete[] = {
 	_T("gfx_filter_vert_zoom"),_T("gfx_filter_horiz_zoom"),
 	_T("gfx_filter_vert_zoom_mult"), _T("gfx_filter_horiz_zoom_mult"),
 	_T("gfx_filter_vert_offset"), _T("gfx_filter_horiz_offset"),
+	_T("gfx_tearing"), _T("gfx_tearing_rtg"),
 
 	_T("pcibridge_rom_file"),
 	_T("pcibridge_rom_options"),
@@ -245,13 +247,11 @@ static TCHAR *cfgfile_option_find_it(const TCHAR *s, const TCHAR *option, bool c
 			if (checkequals && tmpp2) {
 				if (tmpp2[0] == '"') {
 					TCHAR *n = cfgfile_unescape_min(tmpp2);
-					_tcscpy(tmpp2, n);
-					xfree(n);
-				  return tmpp2;
+					return n;
 				}
-				return tmpp2;
+				return my_strdup(tmpp2);
 			}
-			return p;
+			return my_strdup(p);
 		}
 		p = tmpp;
 	}
@@ -259,7 +259,9 @@ static TCHAR *cfgfile_option_find_it(const TCHAR *s, const TCHAR *option, bool c
 
 static bool cfgfile_option_find(const TCHAR *s, const TCHAR *option)
 {
-	return cfgfile_option_find_it(s, option, false) != NULL;
+	TCHAR *ss = cfgfile_option_find_it(s, option, false);
+	xfree(ss);
+	return ss != NULL;
 }
 
 static TCHAR *cfgfile_option_get(const TCHAR *s, const TCHAR *option)
@@ -308,7 +310,7 @@ static TCHAR *cfgfile_escape (const TCHAR *s, const TCHAR *escstr, bool quote)
 	}
 	if (escstr == NULL && quote)
 		doquote = true;
-	TCHAR *s2 = xmalloc (TCHAR, _tcslen (s) + cnt * 4 + 1);
+	TCHAR *s2 = xmalloc (TCHAR, _tcslen (s) + cnt * 4 + 2 + 1);
 	TCHAR *p = s2;
 	if (doquote)
 		*p++ = '\"';
@@ -394,7 +396,7 @@ static TCHAR *getnextentry (const TCHAR **valuep, const TCHAR separator)
 static TCHAR *cfgfile_subst_path2 (const TCHAR *path, const TCHAR *subst, const TCHAR *file)
 {
   /* @@@ use _tcsicmp for some targets.  */
-  if (_tcslen (path) > 0 && _tcsncmp (file, path, _tcslen (path)) == 0) {
+  if (path != NULL && subst != NULL && _tcslen (path) > 0 && _tcsncmp (file, path, _tcslen (path)) == 0) {
   	int l;
   	TCHAR *p2, *p = xmalloc (TCHAR, _tcslen (file) + _tcslen (subst) + 2);
   	_tcscpy (p, subst);
@@ -413,13 +415,61 @@ static TCHAR *cfgfile_subst_path2 (const TCHAR *path, const TCHAR *subst, const 
 	return NULL;
 }
 
-TCHAR *cfgfile_subst_path (const TCHAR *path, const TCHAR *subst, const TCHAR *file)
+static TCHAR *cfgfile_subst_path (const TCHAR *path, const TCHAR *subst, const TCHAR *file)
 {
 	TCHAR *s = cfgfile_subst_path2 (path, subst, file);
 	if (s)
 		return s;
 	s = target_expand_environment (file, NULL, 0);
 	return s;
+}
+
+static TCHAR *cfgfile_get_multipath2 (struct multipath *mp, const TCHAR *path, const TCHAR *file, bool dir)
+{
+	for (int i = 0; i < MAX_PATHS; i++) {
+		if (mp->path[i][0] && _tcscmp (mp->path[i], _T(".\\")) != 0 && _tcscmp (mp->path[i], _T("./")) != 0 && (file[0] != '/' && file[0] != '\\' && !_tcschr(file, ':'))) {
+			TCHAR *s = NULL;
+			if (path)
+				s = cfgfile_subst_path2 (path, mp->path[i], file);
+			if (!s) {
+				TCHAR np[MAX_DPATH];
+				_tcscpy (np, mp->path[i]);
+				fixtrailing (np);
+				_tcscat (np, file);
+				s = my_strdup (np);
+			}
+			if (dir) {
+				if (my_existsdir (s))
+					return s;
+			} else {
+				if (zfile_exists (s))
+					return s;
+			}
+			xfree (s);
+		}
+	}
+	return NULL;
+}
+
+static TCHAR *cfgfile_put_multipath (struct multipath *mp, const TCHAR *s)
+{
+	for (int i = 0; i < MAX_PATHS; i++) {
+		if (mp->path[i][0] && _tcscmp (mp->path[i], _T(".\\")) != 0 && _tcscmp (mp->path[i], _T("./")) != 0) {
+			if (_tcsnicmp (mp->path[i], s, _tcslen (mp->path[i])) == 0) {
+				return my_strdup (s + _tcslen (mp->path[i]));
+			}
+		}
+	}
+	return my_strdup (s);
+}
+
+
+static TCHAR *cfgfile_subst_path_load (const TCHAR *path, struct multipath *mp, const TCHAR *file, bool dir)
+{
+	TCHAR *s = cfgfile_get_multipath2 (mp, path, file, dir);
+	if (s)
+		return s;
+	return cfgfile_subst_path (path, mp->path[0], file);
 }
 
 static bool isdefault (const TCHAR *s)
@@ -526,20 +576,6 @@ void cfgfile_target_dwrite_str (struct zfile *f, const TCHAR *option, const TCHA
   cfg_dowrite (f, option, value, 1, 1);
 }
 
-static void cfgfile_write_ext (struct zfile *f, const TCHAR *option, const TCHAR *optionext, const TCHAR *format,...)
-{
-	va_list parms;
-	TCHAR tmp[CONFIG_BLEN], tmp2[CONFIG_BLEN];
-
-	if (optionext) {
-		_tcscpy (tmp2, option);
-		_tcscat (tmp2, optionext);
-	}
-	va_start (parms, format);
-	_vsntprintf (tmp, CONFIG_BLEN, format, parms);
-	cfg_dowrite (f, optionext ? tmp2 : option, tmp, 0, 0);
-	va_end (parms);
-}
 void cfgfile_write (struct zfile *f, const TCHAR *option, const TCHAR *format,...)
 {
   va_list parms;
@@ -551,20 +587,6 @@ void cfgfile_write (struct zfile *f, const TCHAR *option, const TCHAR *format,..
   va_end (parms);
 }
 
-static void cfgfile_dwrite_ext (struct zfile *f, const TCHAR *option, const TCHAR *optionext, const TCHAR *format,...)
-{
-	va_list parms;
-	TCHAR tmp[CONFIG_BLEN], tmp2[CONFIG_BLEN];
-
-	if (optionext) {
-		_tcscpy (tmp2, option);
-		_tcscat (tmp2, optionext);
-	}
-	va_start (parms, format);
-	_vsntprintf (tmp, CONFIG_BLEN, format, parms);
-	cfg_dowrite (f, optionext ? tmp2 : option, tmp, 1, 0);
-	va_end (parms);
-}
 void cfgfile_dwrite (struct zfile *f, const TCHAR *option, const TCHAR *format,...)
 {
   va_list parms;
@@ -596,9 +618,10 @@ void cfgfile_target_dwrite (struct zfile *f, const TCHAR *option, const TCHAR *f
   va_end (parms);
 }
 
-static void cfgfile_write_rom (struct zfile *f, const TCHAR *path, const TCHAR *romfile, const TCHAR *name)
+static void cfgfile_write_rom (struct zfile *f, struct multipath *mp, const TCHAR *romfile, const TCHAR *name)
 {
-	TCHAR *str = cfgfile_subst_path (path, UNEXPANDED, romfile);
+	TCHAR *str = cfgfile_subst_path (mp->path[0], UNEXPANDED, romfile);
+	str = cfgfile_put_multipath (mp, str);
 	cfgfile_write_str (f, name, str);
 	struct zfile *zf = zfile_fopen (str, _T("rb"), ZFD_ALL);
 	if (zf) {
@@ -613,25 +636,115 @@ static void cfgfile_write_rom (struct zfile *f, const TCHAR *path, const TCHAR *
 		zfile_fclose (zf);
 	}
 	xfree (str);
-
 }
 
-static void cfgfile_write_path (struct zfile *f, const TCHAR *path, const TCHAR *option, const TCHAR *value)
+static void cfgfile_to_path_save(const TCHAR *in, TCHAR *out, int type)
 {
-  	TCHAR *s = cfgfile_subst_path (path, UNEXPANDED, value);
-  	cfgfile_write_str (f, option, s);
-  	xfree (s);
+	if (_tcschr(in, '%')) {
+		_tcscpy(out, in);
+	} else {
+		cfgfile_resolve_path_out_save(in, out, MAX_DPATH, type);
+	}
 }
 
-static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
-				  const TCHAR *default_path, struct zfile *f)
+static void cfgfile_write_path2(struct zfile *f, const TCHAR *option, const TCHAR *value, int type)
 {
-	TCHAR tmp[MAX_DPATH], tmp2[MAX_DPATH], tmp3[MAX_DPATH], hdcs[MAX_DPATH];
+	if (_tcschr(value, '%')) {
+		cfgfile_write_str(f, option, value);
+	} else {
+		TCHAR path[MAX_DPATH];
+		cfgfile_resolve_path_out_save(value, path, MAX_DPATH, type);
+		cfgfile_write_str(f, option, path);
+	}
+}
+
+static void cfgfile_write_path (struct zfile *f, struct multipath *mp, const TCHAR *option, const TCHAR *value)
+{
+	TCHAR *s = cfgfile_put_multipath (mp, value);
+	cfgfile_write_str (f, option, s);
+	xfree (s);
+}
+
+
+static void cfgfile_adjust_path(TCHAR *path, int maxsz, struct multipath *mp)
+{
+	if (path[0] == 0)
+		return;
+	TCHAR *s = target_expand_environment(path, NULL, 0);
+	_tcsncpy(path, s, maxsz - 1);
+	path[maxsz - 1] = 0;
+	if (mp) {
+		for (int i = 0; i < MAX_PATHS; i++) {
+			if (mp->path[i][0] && _tcscmp(mp->path[i], _T(".\\")) != 0 && _tcscmp(mp->path[i], _T("./")) != 0 && (path[0] != '/' && path[0] != '\\' && !_tcschr(path, ':'))) {
+				TCHAR np[MAX_DPATH];
+				_tcscpy(np, mp->path[i]);
+				fixtrailing(np);
+				_tcscat(np, s);
+				if (zfile_exists(np)) {
+					_tcsncpy(path, np, maxsz - 1);
+					path[maxsz - 1] = 0;
+					xfree(s);
+					return;
+				}
+			}
+		}
+	}
+	xfree(s);
+}
+
+static void cfgfile_resolve_path_out_all(const TCHAR *path, TCHAR *out, int size, int type, bool save)
+{
+	struct uae_prefs *p = &currprefs;
+	TCHAR *s = NULL;
+	switch (type)
+	{
+	case PATH_DIR:
+		s = cfgfile_subst_path_load(UNEXPANDED, &p->path_hardfile, path, true);
+		break;
+	case PATH_HDF:
+		s = cfgfile_subst_path_load(UNEXPANDED, &p->path_hardfile, path, false);
+		break;
+	case PATH_CD:
+		s = cfgfile_subst_path_load(UNEXPANDED, &p->path_cd, path, false);
+		break;
+	case PATH_ROM:
+		s = cfgfile_subst_path_load(UNEXPANDED, &p->path_rom, path, false);
+		break;
+	case PATH_FLOPPY:
+		_tcscpy(out, path);
+		cfgfile_adjust_path(out, MAX_DPATH, &p->path_floppy);
+		break;
+	default:
+		s = cfgfile_subst_path(NULL, NULL, path);
+		break;
+	}
+	if (s) {
+		_tcscpy(out, s);
+		xfree(s);
+	}
+}
+
+void cfgfile_resolve_path_out_load(const TCHAR *path, TCHAR *out, int size, int type)
+{
+	cfgfile_resolve_path_out_all(path, out, size, type, false);
+}
+void cfgfile_resolve_path_load(TCHAR *path, int size, int type)
+{
+	cfgfile_resolve_path_out_all(path, path, size, type, false);
+}
+void cfgfile_resolve_path_out_save(const TCHAR *path, TCHAR *out, int size, int type)
+{
+	cfgfile_resolve_path_out_all(path, out, size, type, true);
+}
+
+static void write_filesys_config (struct uae_prefs *p, struct zfile *f)
+{
+	TCHAR tmp[MAX_DPATH], tmp2[MAX_DPATH], tmp3[MAX_DPATH], str1[MAX_DPATH], hdcs[MAX_DPATH];
 
   for (int i = 0; i < p->mountitems; i++) {
 	  struct uaedev_config_data *uci = &p->mountconfig[i];
 		struct uaedev_config_info *ci = &uci->ci;
-		TCHAR *str1, *str1b, *str1c, *str2b;
+		TCHAR *str1b, *str1c, *str2b;
 		const TCHAR *str2;
     int bp = ci->bootpri;
 
@@ -639,7 +752,7 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 		if (ci->rootdir[0] == ':') {
 			TCHAR *ptr;
 			// separate harddrive names
-			str1 = my_strdup (ci->rootdir);
+			_tcscpy(str1, ci->rootdir);
 			ptr = _tcschr (str1 + 1, ':');
 			if (ptr) {
 				*ptr++ = 0;
@@ -649,18 +762,13 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 					*ptr = 0;
 			}
 		} else {
-    	str1 = cfgfile_subst_path (default_path, unexpanded, ci->rootdir);
+			cfgfile_to_path_save(ci->rootdir, str1, ci->type == UAEDEV_DIR ? PATH_DIR : PATH_HDF);
     }
 		int ct = ci->controller_type;
 		int romtype = 0;
-		if (ct >= HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST && ct <= HD_CONTROLLER_TYPE_SCSI_LAST) {
-			_stprintf(hdcs, _T("scsi%d_%s"), ci->controller_unit, expansionroms[ct - HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST].name);
-			romtype = expansionroms[ct - HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST].romtype;
-		} else if (ct >= HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST && ct <= HD_CONTROLLER_TYPE_IDE_LAST) {
+		if (ct >= HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST && ct <= HD_CONTROLLER_TYPE_IDE_LAST) {
 			_stprintf(hdcs, _T("ide%d_%s"), ci->controller_unit, expansionroms[ct - HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST].name);
 			romtype = expansionroms[ct - HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST].romtype;
-		} else if (ct == HD_CONTROLLER_TYPE_SCSI_AUTO) {
-			_stprintf(hdcs, _T("scsi%d"), ci->controller_unit);
 		} else if (ct == HD_CONTROLLER_TYPE_IDE_AUTO) {
 			_stprintf(hdcs, _T("ide%d"), ci->controller_unit);
 		} else if (ct == HD_CONTROLLER_TYPE_PCMCIA) {
@@ -692,7 +800,7 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 			_tcscpy (tmp3, tmp);
 	  } else  if (ci->type == UAEDEV_HDF) {
 			TCHAR filesyspath[MAX_DPATH];
-			_tcscpy(filesyspath, ci->filesys);
+			cfgfile_to_path_save(ci->filesys, filesyspath, PATH_HDF);
 			TCHAR *sfilesys = cfgfile_escape_min(filesyspath);
 	    _stprintf (tmp, _T("%s,%s:%s,%d,%d,%d,%d,%d,%s,%s"),
 		    ci->readonly ? _T("ro") : _T("rw"),
@@ -704,14 +812,10 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 				ci->devname ? ci->devname : _T(""), str1b, str2b[0] ? _T(":") : _T(""), str2b,
 		    ci->sectors, ci->surfaces, ci->reserved, ci->blocksize,
 				bp, ci->filesys[0] ? sfilesys : _T(""), hdcs);
-			if (ci->highcyl || ci->physical_geometry) {
+			if (ci->highcyl) {
 				TCHAR *s = tmp + _tcslen (tmp);
 				TCHAR *s2 = s;
 				_stprintf (s2, _T(",%d"), ci->highcyl);
-				if (ci->physical_geometry && ci->pheads && ci->psecs) {
-					s = tmp + _tcslen (tmp);
-					_stprintf (s, _T(",%d/%d/%d"), ci->pcyls, ci->pheads, ci->psecs);
-				}
 				_tcscat (tmp3, s2);
 				xfree(sfilesys);
 			}
@@ -749,20 +853,9 @@ static void write_filesys_config (struct uae_prefs *p, const TCHAR *unexpanded,
 	  }
 	  _stprintf (tmp2, _T("uaehf%d"), i);
 		cfgfile_write (f, tmp2, _T("%s,%s"), ci->type == UAEDEV_HDF ? _T("hdf") : _T("dir"), tmp3);
-		if (ci->type == UAEDEV_DIR) {
-			bool add_extra = false;
-			if (ci->inject_icons) {
-				add_extra = true;
-			}
-			if (add_extra) {
-				_stprintf(tmp2, _T("%s,inject_icons=%s"), ci->devname, ci->inject_icons ? _T("true") : _T("false"));
-				cfgfile_write(f, _T("filesystem_extra"), tmp2);
-			}
-		}
 		xfree (str1b);
 		xfree (str1c);
 		xfree (str2b);
-		xfree (str1);
   }
 }
 
@@ -774,6 +867,8 @@ static void write_compatibility_cpu(struct zfile *f, struct uae_prefs *p)
   model = p->cpu_model;
   if (model == 68030)
   	model = 68020;
+	if (model == 68060)
+		model = 68040;
   if (p->address_space_24 && model == 68020)
   	_tcscpy (tmp, _T("68ec020"));
   else
@@ -783,13 +878,37 @@ static void write_compatibility_cpu(struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, _T("cpu_type"), tmp);
 }
 
+static void write_leds (struct zfile *f, const TCHAR *name, int mask)
+{
+	TCHAR tmp[MAX_DPATH];
+	tmp[0] = 0;
+	for (int i = 0; leds[i]; i++) {
+		bool got = false;
+		for (int j = 0; leds[j]; j++) {
+			if (leds_order[j] == i) {
+				if (mask & (1 << j)) {
+					if (got)
+						_tcscat (tmp, _T(":"));
+					_tcscat (tmp, leds[j]);
+					got = true;
+				}
+			}
+		}
+		if (leds[i + 1] && got)
+			_tcscat (tmp, _T(","));
+	}
+	while (tmp[0] && tmp[_tcslen (tmp) - 1] == ',')
+		tmp[_tcslen (tmp) - 1] = 0;
+	cfgfile_dwrite_str (f, name, tmp);
+}
+
 static void write_resolution (struct zfile *f, const TCHAR *ws, const TCHAR *hs, struct wh *wh)
 {
 	cfgfile_write (f, ws, _T("%d"), wh->width);
 	cfgfile_write (f, hs, _T("%d"), wh->height);
 }
 
-static void cfgfile_write_board_rom(struct uae_prefs *prefs, struct zfile *f, const TCHAR *path, struct boardromconfig *br)
+static void cfgfile_write_board_rom(struct uae_prefs *prefs, struct zfile *f, struct multipath *mp, struct boardromconfig *br)
 {
 	TCHAR buf[MAX_DPATH];
 	TCHAR name[256];
@@ -801,34 +920,21 @@ static void cfgfile_write_board_rom(struct uae_prefs *prefs, struct zfile *f, co
 	if (!ert)
 		return;
 	for (int i = 0; i < MAX_BOARD_ROMS; i++) {
+		struct romconfig *rc = &br->roms[i];
 		if (br->device_num == 0)
 			_tcscpy(name, ert->name);
 		else
 			_stprintf(name, _T("%s-%d"), ert->name, br->device_num + 1);
 		if (i == 0 || _tcslen(br->roms[i].romfile)) {
 			_stprintf(buf, _T("%s%s_rom_file"), name, i ? _T("_ext") : _T(""));
-			cfgfile_write_rom (f, path, br->roms[i].romfile, buf);
-			if (br->roms[i].romident[0]) {
+			cfgfile_write_rom (f, mp, br->roms[i].romfile, buf);
+			if (rc->romident[0]) {
 				_stprintf(buf, _T("%s%s_rom"), name, i ? _T("_ext") : _T(""));
-				cfgfile_dwrite_str (f, buf, br->roms[i].romident);
+				cfgfile_dwrite_str (f, buf, rc->romident);
 			}
-			if (br->roms[i].autoboot_disabled || br->device_order > 0) {
-				TCHAR buf2[256], *p;
-				buf2[0] = 0;
-				p = buf2;
-				_stprintf(buf, _T("%s%s_rom_options"), name, i ? _T("_ext") : _T(""));
-				if (br->roms[i].autoboot_disabled) {
-					if (buf2[0])
-						_tcscat(buf2, _T(","));
-					_tcscat(buf2, _T("autoboot_disabled=true"));
-				}
-				if (buf2[0])
-					cfgfile_dwrite_str (f, buf, buf2);
-			}
-
-			if (br->roms[i].board_ram_size) {
+			if (rc->board_ram_size) {
 				_stprintf(buf, _T("%s%s_mem_size"), name, i ? _T("_ext") : _T(""));
-				cfgfile_write(f, buf, _T("%d"), br->roms[i].board_ram_size / 0x40000);
+				cfgfile_write(f, buf, _T("%d"), rc->board_ram_size / 0x40000);
 			}
 		}
 	}
@@ -866,22 +972,11 @@ static bool cfgfile_readramboard(const TCHAR *option, const TCHAR *value, const 
 
 static void cfgfile_writeramboard(struct uae_prefs *prefs, struct zfile *f, const TCHAR *name, int num, struct ramboard *rb)
 {
-	TCHAR tmp1[MAX_DPATH], tmp2[MAX_DPATH];
+	TCHAR tmp1[MAX_DPATH];
 	if (num > 0)
 		_stprintf(tmp1, _T("%s%d_options"), name, num + 1);
 	else
 		_stprintf(tmp1, _T("%s_options"), name);
-	tmp2[0] = 0;
-	TCHAR *p = tmp2;
-	if (rb->manufacturer) {
-		if (tmp2[0])
-			*p++ = ',';
-		_stprintf(p, _T("mid=%u,pid=%u"), rb->manufacturer, rb->product);
-		p += _tcslen(p);
-	}
-	if (tmp2[0]) {
-		cfgfile_write(f, tmp1, tmp2);
-	}
 }
 
 void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
@@ -904,14 +999,30 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
     }
   }
 
-  _stprintf (tmp, _T("%s.rom_path"), TARGET_NAME);
-  cfgfile_write_str (f, tmp, p->path_rom);
-  _stprintf (tmp, _T("%s.floppy_path"), TARGET_NAME);
-  cfgfile_write_str (f, tmp, p->path_floppy);
-  _stprintf (tmp, _T("%s.hardfile_path"), TARGET_NAME);
-  cfgfile_write_str (f, tmp, p->path_hardfile);
-	_stprintf (tmp, _T("%s.cd_path"), TARGET_NAME);
-	cfgfile_write_str (f, tmp, p->path_cd);
+	for (i = 0; i < MAX_PATHS; i++) {
+		if (p->path_rom.path[i][0]) {
+      _stprintf (tmp, _T("%s.rom_path"), TARGET_NAME);
+      cfgfile_write_str (f, tmp, p->path_rom.path[i]);
+		}
+	}
+	for (i = 0; i < MAX_PATHS; i++) {
+		if (p->path_floppy.path[i][0]) {
+      _stprintf (tmp, _T("%s.floppy_path"), TARGET_NAME);
+      cfgfile_write_str (f, tmp, p->path_floppy.path[i]);
+		}
+	}
+	for (i = 0; i < MAX_PATHS; i++) {
+		if (p->path_hardfile.path[i][0]) {
+      _stprintf (tmp, _T("%s.hardfile_path"), TARGET_NAME);
+      cfgfile_write_str (f, tmp, p->path_hardfile.path[i]);
+		}
+	}
+	for (i = 0; i < MAX_PATHS; i++) {
+		if (p->path_cd.path[i][0]) {
+	    _stprintf (tmp, _T("%s.cd_path"), TARGET_NAME);
+	    cfgfile_write_str (f, tmp, p->path_cd.path[i]);
+    }
+  }
 
   cfg_write (_T("; host-specific"), f);
 
@@ -921,26 +1032,26 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 
   cfgfile_write_str (f, _T("use_gui"), guimode1[p->start_gui]);
 
-	cfgfile_write_rom (f, p->path_rom, p->romfile, _T("kickstart_rom_file"));
-  cfgfile_write_rom (f, p->path_rom, p->romextfile, _T("kickstart_ext_rom_file"));
+	cfgfile_write_rom (f, &p->path_rom, p->romfile, _T("kickstart_rom_file"));
+  cfgfile_write_rom (f, &p->path_rom, p->romextfile, _T("kickstart_ext_rom_file"));
 	if (p->romident[0])
 		cfgfile_dwrite_str (f, _T("kickstart_rom"), p->romident);
 	if (p->romextident[0])
 		cfgfile_write_str (f, _T("kickstart_ext_rom="), p->romextident);
 
 	for (int i = 0; i < MAX_EXPANSION_BOARDS; i++) {
-		cfgfile_write_board_rom(p, f, p->path_rom, &p->expansionboard[i]);
+		cfgfile_write_board_rom(p, f, &p->path_rom, &p->expansionboard[i]);
 	}
 
-	cfgfile_write_str (f, _T("flash_file"), p->flashfile);
-	cfgfile_write_str (f, _T("cart_file"), p->cartfile);
+	cfgfile_write_path2(f, _T("flash_file"), p->flashfile, PATH_ROM);
+	cfgfile_write_path (f, &p->path_rom, _T("cart_file"), p->cartfile);
 	if (p->cartident[0])
 		cfgfile_write_str (f, _T("cart"), p->cartident);
 
   p->nr_floppies = 4;
   for (i = 0; i < 4; i++) {
     _stprintf (tmp, _T("floppy%d"), i);
-    cfgfile_write_path(f, p->path_floppy, tmp, p->floppyslots[i].df);
+		cfgfile_write_path2(f, tmp, p->floppyslots[i].df, PATH_FLOPPY);
 		_stprintf (tmp, _T("floppy%dwp"), i);
 		cfgfile_dwrite_bool (f, tmp, p->floppyslots[i].forcedwriteprotect);
   	_stprintf (tmp, _T("floppy%dtype"), i);
@@ -953,9 +1064,7 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 		if (p->cdslots[i].name[0] || p->cdslots[i].inuse) {
 			TCHAR tmp2[MAX_DPATH];
 			_stprintf (tmp, _T("cdimage%d"), i);
-			TCHAR *s = cfgfile_subst_path (p->path_cd, UNEXPANDED, p->cdslots[i].name);
-			_tcscpy (tmp2, s);
-			xfree (s);
+			cfgfile_to_path_save(p->cdslots[i].name, tmp2, PATH_CD);
 			if (p->cdslots[i].type != SCSI_UNIT_DEFAULT || _tcschr (p->cdslots[i].name, ',') || p->cdslots[i].delayed) {
 				_tcscat (tmp2, _T(","));
 				if (p->cdslots[i].delayed) {
@@ -998,10 +1107,8 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 		TCHAR tmp1[MAX_DPATH], tmp2[MAX_DPATH];
 		if (v == JPORT_NONE) {
 			_tcscpy (tmp2, _T("none"));
-		} else if (v < JSEM_CUSTOM) {
-			_stprintf(tmp2, _T("kbd%d"), v + 1);
 		} else if (v < JSEM_JOYS) {
-			_stprintf(tmp2, _T("custom%d"), v - JSEM_CUSTOM);
+			_stprintf(tmp2, _T("kbd%d"), v + 1);
 		} else if (v < JSEM_MICE) {
 			_stprintf (tmp2, _T("joy%d"), v - JSEM_JOYS);
 		} else {
@@ -1040,7 +1147,9 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
   cfgfile_dwrite_str (f, _T("absolute_mouse"), abspointers[p->input_tablet]);
 
   cfgfile_write (f, _T("gfx_framerate"), _T("%d"), p->gfx_framerate);
-  write_resolution (f, _T("gfx_width"), _T("gfx_height"), &p->gfx_size); /* compatibility with old versions */
+  write_resolution (f, _T("gfx_width"), _T("gfx_height"), &p->gfx_monitor.gfx_size); /* compatibility with old versions */
+	cfgfile_write (f, _T("gfx_top_windowed"), _T("%d"), p->gfx_monitor.gfx_size.y);
+	cfgfile_write(f, _T("gfx_left_windowed"), _T("%d"), p->gfx_monitor.gfx_size.x);
 	cfgfile_write (f, _T("gfx_refreshrate"), _T("%d"), p->gfx_apmode[0].gfx_refreshrate);
 	cfgfile_dwrite (f, _T("gfx_refreshrate_rtg"), _T("%d"), p->gfx_apmode[1].gfx_refreshrate);
 
@@ -1053,7 +1162,11 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
   cfgfile_write_bool (f, _T("fast_copper"), p->fast_copper);
   cfgfile_write_bool (f, _T("ntsc"), p->ntscmode);
 
-  cfgfile_dwrite_bool (f, _T("show_leds"), p->leds_on_screen);
+	cfgfile_dwrite_bool (f, _T("show_leds"), !!(p->leds_on_screen & STATUSLINE_CHIPSET));
+	cfgfile_dwrite_bool (f, _T("show_leds_rtg"), !!(p->leds_on_screen & STATUSLINE_RTG));
+	write_leds(f, _T("show_leds_enabled"), p->leds_on_screen_mask[0]);
+	write_leds(f, _T("show_leds_enabled_rtg"), p->leds_on_screen_mask[1]);
+
   if (p->chipset_mask & CSMASK_AGA)
   	cfgfile_write (f, _T("chipset"), _T("aga"));
   else if ((p->chipset_mask & CSMASK_ECS_AGNUS) && (p->chipset_mask & CSMASK_ECS_DENISE))
@@ -1099,14 +1212,8 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 			if (cr->resolution & 4)
 				_tcscat(s, _T(",shres"));
 		}
-		if (cr->vsync > 0)
-			_tcscat (s, _T(",vsync"));
-		else if (cr->vsync == 0)
-			_tcscat (s, _T(",nvsync"));
 		if (cr->rtg)
 			_tcscat (s, _T(",rtg"));
-		if (cr->defaultdata)
-			_tcscat(s, _T(",default"));
 		if (i == CHIPSET_REFRESH_PAL) {
 		} else if (i == CHIPSET_REFRESH_NTSC) {
 		} else {
@@ -1229,13 +1336,9 @@ void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 		: _T("FOO")));
 
 #ifdef FILESYS
-  write_filesys_config (p, UNEXPANDED, p->path_hardfile, f);
+	write_filesys_config (p, f);
 	cfgfile_dwrite (f, _T("filesys_max_size"), _T("%d"), p->filesys_limit);
 	cfgfile_dwrite (f, _T("filesys_max_name_length"), _T("%d"), p->filesys_max_name);
-	cfgfile_dwrite_bool (f, _T("filesys_inject_icons"), p->filesys_inject_icons);
-	cfgfile_dwrite_str (f, _T("filesys_inject_icons_drawer"), p->filesys_inject_icons_drawer);
-	cfgfile_dwrite_str (f, _T("filesys_inject_icons_project"), p->filesys_inject_icons_project);
-	cfgfile_dwrite_str (f, _T("filesys_inject_icons_tool"), p->filesys_inject_icons_tool);
 #endif
 	cfgfile_dwrite_bool(f, _T("harddrive_write_protect"), p->harddrive_read_only);
 
@@ -1447,14 +1550,34 @@ static int cfgfile_string (const TCHAR *option, const TCHAR *value, const TCHAR 
 	return 1;
 }
 
-static int cfgfile_path (const TCHAR *option, const TCHAR *value, const TCHAR *name, TCHAR *location, int maxsz)
+static int cfgfile_path (const TCHAR *option, const TCHAR *value, const TCHAR *name, TCHAR *location, int maxsz, struct multipath *mp)
 {
 	if (!cfgfile_string (option, value, name, location, maxsz))
 		return 0;
-	TCHAR *s = target_expand_environment (location, NULL, 0);
-	_tcsncpy (location, s, maxsz - 1);
-	location[maxsz - 1] = 0;
-	xfree (s);
+	cfgfile_adjust_path(location, maxsz, mp);
+	return 1;
+}
+
+static int cfgfile_path (const TCHAR *option, const TCHAR *value, const TCHAR *name, TCHAR *location, int maxsz)
+{
+	return cfgfile_path (option, value, name, location, maxsz, NULL);
+}
+
+static int cfgfile_multipath (const TCHAR *option, const TCHAR *value, const TCHAR *name, struct multipath *mp, struct uae_prefs *p)
+{
+	TCHAR tmploc[MAX_DPATH];
+	if (!cfgfile_string (option, value, name, tmploc, MAX_DPATH))
+		return 0;
+	for (int i = 0; i < MAX_PATHS; i++) {
+		if (mp->path[i][0] == 0 || (i == 0 && (!_tcscmp (mp->path[i], _T(".\\")) || !_tcscmp (mp->path[i], _T("./"))))) {
+			TCHAR *s = target_expand_environment (tmploc, NULL, 0);
+			_tcsncpy (mp->path[i], s, PATH_MAX - 1);
+			mp->path[i][PATH_MAX - 1] = 0;
+			fixtrailing (mp->path[i]);
+			xfree (s);
+			return 1;
+		}
+	}
 	return 1;
 }
 
@@ -1556,67 +1679,6 @@ static int getintval2 (TCHAR **p, int *result, int delim, bool last)
   return 1;
 }
 
-static int cfgfile_option_select(TCHAR *s, const TCHAR *option, const TCHAR *select)
-{
-	TCHAR buf[MAX_DPATH];
-	if (!s)
-		return -1;
-	_tcscpy(buf, s);
-	_tcscat(buf, _T(","));
-	TCHAR *p = buf;
-	for (;;) {
-		TCHAR *tmpp = _tcschr (p, ',');
-		if (tmpp == NULL)
-			return -1;
-		*tmpp++ = 0;
-		TCHAR *tmpp2 = _tcschr(p, '=');
-		if (!tmpp2)
-			return -1;
-		*tmpp2++ = 0;
-		if (!_tcsicmp(p, option)) {
-			int idx = 0;
-			while (select[0]) {
-				if (!_tcsicmp(select, tmpp2))
-					return idx;
-				idx++;
-				select += _tcslen(select) + 1;
-			}
-		}
-		p = tmpp;
-	}
-}
-
-static int cfgfile_option_bool(TCHAR *s, const TCHAR *option)
-{
-	TCHAR buf[MAX_DPATH];
-	if (!s)
-		return -1;
-	_tcscpy(buf, s);
-	_tcscat(buf, _T(","));
-	TCHAR *p = buf;
-	for (;;) {
-		TCHAR *tmpp = _tcschr (p, ',');
-		if (tmpp == NULL)
-			return -1;
-		*tmpp++ = 0;
-		TCHAR *tmpp2 = _tcschr(p, '=');
-		if (tmpp2)
-			*tmpp2++ = 0;
-		if (!_tcsicmp(p, option)) {
-			if (!tmpp2)
-				return 0;
-			TCHAR *tmpp3 = _tcschr (tmpp2, ',');
-			if (tmpp3)
-				*tmpp3 = 0;
-			if (tmpp2 && !_tcsicmp(tmpp2, _T("true")))
-				return 1;
-			if (tmpp2 && !_tcsicmp(tmpp2, _T("false")))
-				return 0;
-			return 1;
-		}
-		p = tmpp;
-	}
-}
 static void set_chipset_mask (struct uae_prefs *p, int val)
 {
   p->chipset_mask = (val == 0 ? 0
@@ -1649,10 +1711,10 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
     *tmpp = '\0';
     if (_tcscmp (section, TARGET_NAME) == 0) {
 	    /* We special case the various path options here.  */
-      if (cfgfile_path (option, value, _T("rom_path"), p->path_rom, sizeof p->path_rom / sizeof (TCHAR))
-  		|| cfgfile_path (option, value, _T("floppy_path"), p->path_floppy, sizeof p->path_floppy / sizeof (TCHAR))
-  		|| cfgfile_path (option, value, _T("cd_path"), p->path_cd, sizeof p->path_cd / sizeof (TCHAR))
-  		|| cfgfile_path (option, value, _T("hardfile_path"), p->path_hardfile, sizeof p->path_hardfile / sizeof (TCHAR)))
+      if (cfgfile_multipath (option, value, _T("rom_path"), &p->path_rom, p)
+  		|| cfgfile_multipath (option, value, _T("floppy_path"), &p->path_floppy, p)
+  		|| cfgfile_multipath (option, value, _T("cd_path"), &p->path_cd, p)
+  		|| cfgfile_multipath (option, value, _T("hardfile_path"), &p->path_hardfile, p))
 	    	return 1;
   	  return target_parse_option (p, option, value);
   	}
@@ -1671,7 +1733,6 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 				p->cdslots[i].delayed = false;
 				TCHAR *next = _tcsrchr (value, ',');
 				int type = SCSI_UNIT_DEFAULT;
-				int mode = 0;
 				int unitnum = 0;
 				for (;;) {
 					if (!next)
@@ -1700,9 +1761,6 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 					next2 = _tcschr (next, ':');
 					if (next2)
 						*next2++ = 0;
-					mode = match_string (cdconmodes, next);
-					if (mode < 0)
-						mode = 0;
 					next = next2;
 					if (!next)
 						break;
@@ -1711,10 +1769,12 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 						*next2++ = 0;
 					cfgfile_intval (option, next, tmp, &unitnum, 1);
 				}
+				if (value[0] == 0 || !_tcsicmp(value, _T("empty")) || !_tcscmp(value, _T("."))) {
+					value[0] = 0;
+					p->cdslots[i].name[0] = 0;
+				}
 				if (_tcslen (value) > 0) {
-					TCHAR *s = cfgfile_subst_path (UNEXPANDED, p->path_cd, value);
-					_tcsncpy (p->cdslots[i].name, s, sizeof p->cdslots[i].name / sizeof (TCHAR));
-					xfree (s);
+					_tcsncpy (p->cdslots[i].name, value, sizeof p->cdslots[i].name / sizeof (TCHAR));
 				}
 				p->cdslots[i].name[sizeof p->cdslots[i].name - 1] = 0;
 				p->cdslots[i].inuse = true;
@@ -1737,15 +1797,13 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 	  || cfgfile_intval (option, value, _T("sound_stereo_mixing_delay"), &p->sound_mixed_stereo_delay, 1)
 
 	  || cfgfile_intval (option, value, _T("gfx_framerate"), &p->gfx_framerate, 1)
+		|| cfgfile_intval(option, value, _T("gfx_top_windowed"), &p->gfx_monitor.gfx_size.y, 1)
+		|| cfgfile_intval(option, value, _T("gfx_left_windowed"), &p->gfx_monitor.gfx_size.x, 1)
 		|| cfgfile_intval (option, value, _T("gfx_refreshrate"), &p->gfx_apmode[APMODE_NATIVE].gfx_refreshrate, 1)
 		|| cfgfile_intval (option, value, _T("gfx_refreshrate_rtg"), &p->gfx_apmode[APMODE_RTG].gfx_refreshrate, 1)
 
 		|| cfgfile_intval (option, value, _T("filesys_max_size"), &p->filesys_limit, 1)
-		|| cfgfile_intval (option, value, _T("filesys_max_name_length"), &p->filesys_max_name, 1)
-		|| cfgfile_yesno (option, value, _T("filesys_inject_icons"), &p->filesys_inject_icons)
-		|| cfgfile_string (option, value, _T("filesys_inject_icons_drawer"), p->filesys_inject_icons_drawer, sizeof p->filesys_inject_icons_drawer / sizeof (TCHAR))
-		|| cfgfile_string (option, value, _T("filesys_inject_icons_project"), p->filesys_inject_icons_project, sizeof p->filesys_inject_icons_project / sizeof (TCHAR))
-		|| cfgfile_string (option, value, _T("filesys_inject_icons_tool"), p->filesys_inject_icons_tool, sizeof p->filesys_inject_icons_tool / sizeof (TCHAR)))
+		|| cfgfile_intval (option, value, _T("filesys_max_name_length"), &p->filesys_max_name, 1))
 	  return 1;
 
 	if (cfgfile_string (option, value, _T("config_info"), p->info, sizeof p->info / sizeof (TCHAR))
@@ -1786,7 +1844,7 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 	}
 
 	if (_tcscmp (option, _T("gfx_linemode")) == 0) {
-		int v;
+		int v = 0;
 		p->gfx_vresolution = VRES_DOUBLE;
 		if (cfgfile_strval(option, value, _T("gfx_linemode"), &v, linemode, 0)) {
 			p->gfx_vresolution = VRES_NONDOUBLE;
@@ -1798,13 +1856,48 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 	}
 
   if(cfgfile_yesno (option, value, _T("show_leds"), &vb)) {
-    p->leds_on_screen = vb;
+		if (vb)
+			p->leds_on_screen |= STATUSLINE_CHIPSET;
+		else
+			p->leds_on_screen &= ~STATUSLINE_CHIPSET;
 		return 1;
   }
+	if (cfgfile_yesno (option, value, _T("show_leds_rtg"), &vb)) {
+		if (vb)
+			p->leds_on_screen |= STATUSLINE_RTG;
+		else
+			p->leds_on_screen &= ~STATUSLINE_RTG;
+		return 1;
+	}
+	if (_tcscmp (option, _T("show_leds_enabled")) == 0 || _tcscmp (option, _T("show_leds_enabled_rtg")) == 0) {
+		TCHAR tmp[MAX_DPATH];
+		int idx = _tcscmp (option, _T("show_leds_enabled")) == 0 ? 0 : 1;
+		p->leds_on_screen_mask[idx] = 0;
+		_tcscpy (tmp, value);
+		_tcscat (tmp, _T(","));
+		TCHAR *s = tmp;
+		for (;;) {
+			TCHAR *s2 = s;
+			TCHAR *s3 = _tcschr (s, ':');
+			s = _tcschr (s, ',');
+			if (!s)
+				break;
+			if (s3 && s3 < s)
+				s = s3;
+			*s = 0;
+			for (int i = 0; leds[i]; i++) {
+				if (!_tcsicmp (s2, leds[i])) {
+					p->leds_on_screen_mask[idx] |= 1 << i;
+				}
+			}
+			s++;
+		}
+		return 1;
+	}
 
   if (_tcscmp (option, _T("gfx_width")) == 0 || _tcscmp (option, _T("gfx_height")) == 0) {
-	  cfgfile_intval (option, value, _T("gfx_width"), &p->gfx_size.width, 1);
-	  cfgfile_intval (option, value, _T("gfx_height"), &p->gfx_size.height, 1);
+	  cfgfile_intval (option, value, _T("gfx_width"), &p->gfx_monitor.gfx_size.width, 1);
+	  cfgfile_intval (option, value, _T("gfx_height"), &p->gfx_monitor.gfx_size.height, 1);
 	  return 1;
   }
 
@@ -1825,11 +1918,17 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 		return 1;
 	}
 	if (_tcscmp (option, _T("joyport0")) == 0 || _tcscmp (option, _T("joyport1")) == 0) {
-		inputdevice_joyport_config_store(p, value, _tcscmp (option, _T("joyport0")) == 0 ? 0 : 1, -1, 0);
+    int port = _tcscmp (option, _T("joyport0")) == 0 ? 0 : 1;
+		inputdevice_joyport_config_store(p, _T(""), port, -1, 1);
+		inputdevice_joyport_config_store(p, _T(""), port, -1, 2);
+		inputdevice_joyport_config_store(p, value, port, -1, 0);
 		return 1;
 	}
 	if (_tcscmp (option, _T("joyport2")) == 0 || _tcscmp (option, _T("joyport3")) == 0) {
-		inputdevice_joyport_config_store(p, value, _tcscmp (option, _T("joyport2")) == 0 ? 2 : 3, -1, 0);
+    int port = _tcscmp (option, _T("joyport2")) == 0 ? 2 : 3;
+		inputdevice_joyport_config_store(p, _T(""), port, -1, 1);
+		inputdevice_joyport_config_store(p, _T(""), port, -1, 2);
+		inputdevice_joyport_config_store(p, value, port, -1, 0);
 		return 1;
 	}
 	if (cfgfile_strval (option, value, _T("joyport0mode"), &p->jports[0].mode, joyportmodes, 0))
@@ -1939,9 +2038,8 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 		_tcsncpy (tmpbuf, value, sizeof tmpbuf / sizeof (TCHAR) - 1);
 		tmpbuf[sizeof tmpbuf / sizeof (TCHAR) - 1] = '\0';
 
-		int vert = -1, horiz = -1, lace = -1, ntsc = -1, vsync = -1, hres = 0;
+		int vert = -1, horiz = -1, lace = -1, ntsc = -1, hres = 0;
 		bool rtg = false;
-		bool defaultdata = false;
 		double rate = -1;
 		TCHAR label[16] = { 0 };
 		TCHAR *tmpp = tmpbuf;
@@ -1976,18 +2074,12 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 				hres |= 1 << RES_HIRES;
 			if (!_tcsnicmp(tmpp, _T("shres"), 5))
 				hres |= 1 << RES_SUPERHIRES;
-			if (!_tcsnicmp(tmpp, _T("nvsync"), 5))
-				vsync = 0;
-			if (!_tcsnicmp(tmpp, _T("vsync"), 4))
-				vsync = 1;
 			if (!_tcsnicmp(tmpp, _T("ntsc"), 4))
 				ntsc = 1;
 			if (!_tcsnicmp(tmpp, _T("pal"), 3))
 				ntsc = 0;
 			if (!_tcsnicmp(tmpp, _T("rtg"), 3))
 				rtg = true;
-			if (!_tcsnicmp(tmpp, _T("default"), 7))
-				defaultdata = true;
 
 			tmpp = next;
 			if (tmpp >= end)
@@ -2014,10 +2106,8 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 				cr->lace = lace;
 				cr->resolution = hres ? hres : 1 + 2 + 4;
 				cr->ntsc = ntsc;
-				cr->vsync = vsync;
 				cr->rtg = rtg;
 				cr->rate = rate;
-				cr->defaultdata = defaultdata;
 				_tcscpy(cr->label, label);
 				break;
 			}
@@ -2134,8 +2224,6 @@ struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int index, s
 						cunit++;
 						if (ctrl >= HD_CONTROLLER_TYPE_IDE_FIRST && ctrl <= HD_CONTROLLER_TYPE_IDE_LAST && cunit == 4)
 							return NULL;
-						if (ctrl >= HD_CONTROLLER_TYPE_SCSI_FIRST && ctrl <= HD_CONTROLLER_TYPE_SCSI_LAST && cunit >= 7)
-							return NULL;
 					}
 				}
 				if (i == p->mountitems) {
@@ -2227,11 +2315,6 @@ static void get_filesys_controller (const TCHAR *hdc, int *type, int *typenum, i
 		hdunit = hdc[3] - '0';
 		if (hdunit < 0 || hdunit >= 6)
 			hdunit = 0;
-	} else if(_tcslen (hdc) >= 5 && !_tcsncmp (hdc, _T("scsi"), 4)) {
-		hdcv = HD_CONTROLLER_TYPE_SCSI_AUTO;
-		hdunit = hdc[4] - '0';
-		if (hdunit < 0 || hdunit >= 8 + 2)
-			hdunit = 0;
 	} else if (_tcslen (hdc) >= 6 && !_tcsncmp (hdc, _T("scsram"), 6)) {
 		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
 		hdunit = 0;
@@ -2268,15 +2351,13 @@ static void get_filesys_controller (const TCHAR *hdc, int *type, int *typenum, i
 						if (hdcontrollers[i].romtype) {
 							for (int j = 0; expansionroms[j].name; j++) {
 								if ((expansionroms[j].romtype & ROMTYPE_MASK) == hdcontrollers[i].romtype) {
-									hdcv = hdcv == HD_CONTROLLER_TYPE_IDE_AUTO ? j + HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST : j + HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST;
+									hdcv = j + HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST;
 									break;
 								}
 							}
 						}
 						if (hdcv == HD_CONTROLLER_TYPE_IDE_AUTO) {
-						hdcv = i;
-						} else if (hdcv == HD_CONTROLLER_TYPE_SCSI_AUTO) {
-							hdcv = i + HD_CONTROLLER_EXPANSION_MAX;
+						  hdcv = i;
 						}
 						found = true;
 						break;
@@ -2289,8 +2370,6 @@ static void get_filesys_controller (const TCHAR *hdc, int *type, int *typenum, i
 					if (_tcslen(ert->name) == len && !_tcsnicmp(ext, ert->name, len)) {
 						if (hdcv == HD_CONTROLLER_TYPE_IDE_AUTO) {
 							hdcv = HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST + i;
-						} else {
-							hdcv = HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST + i;
 						}
 						break;
 					}
@@ -2402,7 +2481,7 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
 		_tcscpy (uci.devname, devname);
 		if (! getintval (&tmpp, &uci.bootpri, 0))
   		goto empty_fs;
-	} else if (type == 1 || ((type == 2 || type == 3) && uaehfentry)) {
+	} else if (type == 1 || ((type == 3) && uaehfentry)) {
     tmpp = _tcschr (value, ':');
     if (tmpp == 0)
 	    goto invalid_fs;
@@ -2456,15 +2535,7 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
 			if (tmpp2) {
 				tmpp2++;
 				if (getintval2 (&tmpp2, &uci.highcyl, ',', false)) {
-					getintval (&tmpp2, &uci.pcyls, '/');
-					getintval (&tmpp2, &uci.pheads, '/');
-					getintval2 (&tmpp2, &uci.psecs, '/', true);
-					if (uci.pheads && uci.psecs) {
-						uci.physical_geometry = true;
-					} else {
-						uci.pheads = uci.psecs = uci.pcyls = 0;
-						uci.physical_geometry = false;
-					}
+					uci.pheads = uci.psecs = uci.pcyls = 0;
 				}
 			}
 		  uci.controller_media_type = 0;
@@ -2478,6 +2549,7 @@ static int cfgfile_parse_newfilesys (struct uae_prefs *p, int nr, int type, TCHA
 		  TCHAR *pflags;
 		  if ((pflags = cfgfile_option_get(tmpp2, _T("flags")))) {
 			  getintval(&pflags, &uci.unit_special_flags, 0);
+				xfree(pflags);
 		  }
 
 			if (cfgfile_option_find(tmpp2, _T("lock")))
@@ -2510,8 +2582,6 @@ empty_fs:
 			memmove (uci.rootdir, uci.rootdir + 2, (_tcslen (uci.rootdir + 2) + 1) * sizeof (TCHAR));
 			uci.rootdir[0] = ':';
 		}
-    str = cfgfile_subst_path (UNEXPANDED, p->path_hardfile, uci.rootdir);
-		_tcscpy (uci.rootdir, str);
 	}
 #ifdef FILESYS
 	add_filesys_config (p, nr, &uci);
@@ -2628,7 +2698,7 @@ static int cfgfile_parse_filesys (struct uae_prefs *p, const TCHAR *option, TCHA
     		goto invalid_fs;
 			_tcscpy (uci.rootdir, value);
   	}
-  	str = cfgfile_subst_path (UNEXPANDED, p->path_hardfile, uci.rootdir);
+		str = cfgfile_subst_path_load (UNEXPANDED, &p->path_hardfile, uci.rootdir, true);
 #ifdef FILESYS
 		uci.type = hdf ? UAEDEV_HDF : UAEDEV_DIR;
 		add_filesys_config (p, -1, &uci);
@@ -2672,9 +2742,6 @@ invalid_fs:
 					if (!_tcsicmp(tmpp2, _T("false")))
 						b = false;
 				}
-				if (!_tcsicmp(s, _T("inject_icons"))) {
-					ci->inject_icons = b;
-				}
 			}
 			idx++;
 			s = tmpp;
@@ -2684,7 +2751,7 @@ invalid_fs:
 	return 0;
 }
 
-static bool cfgfile_read_board_rom(struct uae_prefs *p, const TCHAR *option, const TCHAR *value)
+static bool cfgfile_read_board_rom(struct uae_prefs *p, const TCHAR *option, const TCHAR *value, struct multipath *mp)
 {
 	TCHAR buf[256], buf2[MAX_DPATH], buf3[MAX_DPATH];
 	bool dummy;
@@ -2710,7 +2777,7 @@ static bool cfgfile_read_board_rom(struct uae_prefs *p, const TCHAR *option, con
 			}
 
 			_stprintf(buf, _T("%s_rom_file"), name);
-			if (cfgfile_path(option, value, buf, buf2, MAX_DPATH / sizeof (TCHAR))) {
+			if (cfgfile_path(option, value, buf, buf2, MAX_DPATH / sizeof (TCHAR), mp)) {
 				if (buf2[0]) {
 					brc = get_device_rom_new(p, ert->romtype, j, &idx);
 					_tcscpy(brc->roms[idx].romfile, buf2);
@@ -2745,13 +2812,11 @@ static bool cfgfile_read_board_rom(struct uae_prefs *p, const TCHAR *option, con
 				brc = get_device_rom(p, ert->romtype, j, &idx);
 				if (brc) {
 					TCHAR *p;
-					if (cfgfile_option_bool(buf2, _T("autoboot_disabled")) == 1) {
-						brc->roms[idx].autoboot_disabled = true;
-					}
 					p = cfgfile_option_get(buf2, _T("order"));
 					if (p) {
 						brc->device_order = _tstol(p);
 					}
+					xfree(p);
 				}
 				return true;
 			}
@@ -2845,16 +2910,19 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 		return 1;
 	}
 
-  if (cfgfile_path (option, value, _T("kickstart_rom_file"), p->romfile, sizeof p->romfile / sizeof (TCHAR))
-	  || cfgfile_path (option, value, _T("kickstart_ext_rom_file"), p->romextfile, sizeof p->romextfile / sizeof (TCHAR))
-    || cfgfile_path (option, value, _T("flash_file"), p->flashfile, sizeof p->flashfile / sizeof (TCHAR))
-    || cfgfile_path (option, value, _T("cart_file"), p->cartfile, sizeof p->cartfile / sizeof (TCHAR)))
+  if (cfgfile_path (option, value, _T("kickstart_rom_file"), p->romfile, sizeof p->romfile / sizeof (TCHAR), &p->path_rom)
+	  || cfgfile_path (option, value, _T("kickstart_ext_rom_file"), p->romextfile, sizeof p->romextfile / sizeof (TCHAR), &p->path_rom)
+		|| cfgfile_rom(option, value, _T("kickstart_rom_file_id"), p->romfile, sizeof p->romfile / sizeof(TCHAR))
+		|| cfgfile_rom (option, value, _T("kickstart_ext_rom_file_id"), p->romextfile, sizeof p->romextfile / sizeof (TCHAR))
+    || cfgfile_string (option, value, _T("flash_file"), p->flashfile, sizeof p->flashfile / sizeof (TCHAR))
+    || cfgfile_path (option, value, _T("cart_file"), p->cartfile, sizeof p->cartfile / sizeof (TCHAR), &p->path_rom))
 	  return 1;
 
 	if (cfgfile_string(option, value, _T("uaeboard_options"), tmpbuf, sizeof tmpbuf / sizeof(TCHAR))) {
 		TCHAR *s = cfgfile_option_get(value, _T("order"));
 		if (s)
 			p->uaeboard_order = _tstol(s);
+		xfree(s);
 		return 1;
 	}
 
@@ -2899,6 +2967,7 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 			TCHAR *s = cfgfile_option_get(value, _T("order"));
 			if (s) {
 				rbc->device_order = _tstol(s);
+				xfree(s);
 			}
 			return 1;
 		}
@@ -2951,13 +3020,16 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 		return 1;
 	}
 
-	if (cfgfile_read_board_rom(p, option, value))
+	if (cfgfile_read_board_rom(p, option, value, &p->path_rom))
 		return 1;
 
   for (i = 0; i < 4; i++) {
 	  _stprintf (tmpbuf, _T("floppy%d"), i);
-	  if (cfgfile_path (option, value, tmpbuf, p->floppyslots[i].df, sizeof p->floppyslots[i].df / sizeof (TCHAR)))
+		if (cfgfile_string(option, value, tmpbuf, p->floppyslots[i].df, sizeof p->floppyslots[i].df / sizeof(TCHAR))) {
+			if (!_tcscmp(p->floppyslots[i].df, _T(".")))
+				p->floppyslots[i].df[0] = 0;
 	    return 1;
+		}
   }
 
   if (cfgfile_intval (option, value, _T("chipmem_size"), &dummyint, 1)) {
@@ -3131,7 +3203,6 @@ void cfgfile_compatibility_romtype(struct uae_prefs *p)
 	addbcromtype(p, ROMTYPE_CD32CART, p->cs_cd32fmv, p->cartfile,0);
 }
 
-static bool createconfigstore (struct uae_prefs*);
 static int getconfigstoreline (const TCHAR *option, TCHAR *value);
 
 static void calcformula (struct uae_prefs *prefs, TCHAR *in)
@@ -3145,7 +3216,7 @@ static void calcformula (struct uae_prefs *prefs, TCHAR *in)
 	if (_tcslen (in) < 2 || in[0] != '[' || in[_tcslen (in) - 1] != ']')
 		return;
 	if (!configstore || updatestore)
-		createconfigstore (prefs);
+		cfgfile_createconfigstore (prefs);
 	updatestore = false;
 	if (!configstore)
 		return;
@@ -3400,7 +3471,7 @@ static int getconfigstoreline (const TCHAR *option, TCHAR *value)
 	}
 }
 
-static bool createconfigstore (struct uae_prefs *p)
+bool cfgfile_createconfigstore (struct uae_prefs *p)
 {
 	uae_u8 zeros[4] = { 0 };
 	zfile_fclose (configstore);
@@ -3412,6 +3483,7 @@ static bool createconfigstore (struct uae_prefs *p)
 	cfgfile_save_options (configstore, p, 0);
 	uaeconfig--;
 	zfile_fwrite (zeros, 1, sizeof zeros, configstore);
+	zfile_truncate(configstore, zfile_ftell(configstore));
 	zfile_fseek (configstore, 0, SEEK_SET);
 	return true;
 }
@@ -3475,6 +3547,7 @@ static int cfgfile_load_2 (struct uae_prefs *p, const TCHAR *filename, bool real
 	    if (real) {
     		cfgfile_parse_separated_line (p, line1b, line2b, askedtype);
 	    } else {
+				// metadata
     		cfgfile_string (line1b, line2b, _T("config_description"), p->description, sizeof p->description / sizeof (TCHAR));
 	    }
 	  }
@@ -3493,23 +3566,23 @@ static int cfgfile_load_2 (struct uae_prefs *p, const TCHAR *filename, bool real
   }
 
   for (i = 0; i < 4; i++) {
-  	subst (p->path_floppy, p->floppyslots[i].df, sizeof p->floppyslots[i].df / sizeof (TCHAR));
+  	subst (p->path_floppy.path[0], p->floppyslots[i].df, sizeof p->floppyslots[i].df / sizeof (TCHAR));
   	if(i >= p->nr_floppies)
   	  p->floppyslots[i].dfxtype = DRV_NONE;
   }
-  subst (p->path_rom, p->romfile, sizeof p->romfile / sizeof (TCHAR));
-  subst (p->path_rom, p->romextfile, sizeof p->romextfile / sizeof (TCHAR));
+  subst (p->path_rom.path[0], p->romfile, sizeof p->romfile / sizeof (TCHAR));
+  subst (p->path_rom.path[0], p->romextfile, sizeof p->romextfile / sizeof (TCHAR));
 
 	for (i = 0; i < MAX_EXPANSION_BOARDS; i++) {
 		for (int j = 0; j < MAX_BOARD_ROMS; j++) {
-			subst(p->path_rom, p->expansionboard[i].roms[j].romfile, MAX_DPATH / sizeof(TCHAR));
+			subst(p->path_rom.path[0], p->expansionboard[i].roms[j].romfile, MAX_DPATH / sizeof(TCHAR));
 		}
 	}
 
   return 1;
 }
 
-int cfgfile_load (struct uae_prefs *p, const TCHAR *filename, int *type, int ignorelink, int userconfig)
+int cfgfile_load (struct uae_prefs *p, const TCHAR *filename, int *type, int userconfig)
 {
   int v;
   static int recursive;
@@ -3546,27 +3619,40 @@ int cfgfile_save (struct uae_prefs *p, const TCHAR *filename, int type)
   return 1;
 }
 
-int cfgfile_get_description (const TCHAR *filename, TCHAR *description)
+struct uae_prefs *cfgfile_open(const TCHAR *filename, int *type)
 {
-  int result = 0;
-  struct uae_prefs *p = xmalloc (struct uae_prefs, 1);
-
-  p->description[0] = 0;
-  if (cfgfile_load_2 (p, filename, 0, 0)) {
-  	result = 1;
-	  if (description)
-	    _tcscpy (description, p->description);
-  }
-  xfree (p);
-  return result;
+	struct uae_prefs *p = xcalloc(struct uae_prefs, 1);
+	if (cfgfile_load_2(p, filename, false, type))
+		return p;
+	xfree(p);
+	return NULL;
 }
 
-int cfgfile_configuration_change(int v)
+void cfgfile_close(struct uae_prefs *p)
 {
-  static int mode;
-  if (v >= 0)
-  	mode = v;
-  return mode;
+	xfree(p);
+}
+
+int cfgfile_get_description (struct uae_prefs *p, const TCHAR *filename, TCHAR *description, int *type)
+{
+	bool alloc = false;
+
+	if (!p) {
+		p = xmalloc(struct uae_prefs, 1);
+		alloc = true;
+	}
+	if (!p) {
+		alloc = true;
+		p = cfgfile_open(filename, type);
+	}
+	if (!p)
+		return 0;
+	if (description)
+		_tcscpy (description, p->description);
+	if (alloc) {
+		cfgfile_close(p);
+	}
+	return 1;
 }
 
 static void parse_sound_spec (struct uae_prefs *p, const TCHAR *spec)
@@ -3754,7 +3840,7 @@ static void cmdpath (TCHAR *dst, const TCHAR *src, int maxsz)
 int parse_cmdline_option (struct uae_prefs *p, TCHAR c, const TCHAR *arg)
 {
   struct strlist *u = xcalloc (struct strlist, 1);
-	const TCHAR arg_required[] = _T("0123rKpImWSAJwNCZUFcblOdHRv");
+	const TCHAR arg_required[] = _T("0123rKMWSRJwGnvCZUFbcl");
 
   if (_tcschr (arg_required, c) && ! arg) {
 		write_log (_T("Missing argument for option `-%c'!\n"), c);
@@ -3882,6 +3968,7 @@ static int cmdlineparser (const TCHAR *s, TCHAR *outp[], int max)
 	prev = s;
 	j = 0;
 	outp[0] = 0;
+	tmp1[0] = 0;
 	while (cnt < max) {
 		TCHAR c = *s++;
 		if (!c)
@@ -3949,13 +4036,20 @@ static int cfgfile_searchconfig(const TCHAR *in, int index, TCHAR *out, int outs
 	*out = 0;
 
 	if (!configstore)
-		createconfigstore(&currprefs);
+		cfgfile_createconfigstore(&currprefs);
 	if (!configstore)
 		return 20;
 
-	if (index < 0)
+	if (index < 0) {
+		index = 0;
 		zfile_fseek(configstore, 0, SEEK_SET);
+	} else {
+		// if seek position==0: configstore was reset, always start from the beginning.
+		if (zfile_ftell(configstore) > 0)
+			index = 0;
+	}
 
+	tmp[0] = 0;
 	for (;;) {
 		uae_u8 b = 0;
 
@@ -3975,23 +4069,27 @@ static int cfgfile_searchconfig(const TCHAR *in, int index, TCHAR *out, int outs
 		}
 		if (b == '\n') {
 			if (!_tcsncmp (tmp, in, inlen) && ((inlen > 0 && _tcslen (tmp) > inlen && tmp[inlen] == '=') || (joker))) {
-				TCHAR *p;
-				if (joker)
-					p = tmp - 1;
-				else
-					p = _tcschr (tmp, '=');
-				if (p) {
-					for (int i = 0; out && i < outsize - 1; i++) {
-						TCHAR b = *++p;
-						out[i] = b;
-						out[i + 1] = 0;
-						if (!b)
-							break;
-					}
+				if (index <= 0) {
+				  TCHAR *p;
+				  if (joker)
+					  p = tmp - 1;
+				  else
+					  p = _tcschr (tmp, '=');
+				  if (p) {
+					  for (int i = 0; out && i < outsize - 1; i++) {
+						  TCHAR b = *++p;
+						  out[i] = b;
+						  out[i + 1] = 0;
+						  if (!b)
+							  break;
+					  }
+				  }
+				  err = 0xffffffff;
+				  configsearchfound = true;
+				  goto end;
+				} else {
+					index--;
 				}
-				err = 0xffffffff;
-				configsearchfound = true;
-				goto end;
 			}
 			j = 0;
 		} else {
@@ -4003,7 +4101,7 @@ end:
 	return err;
 }
 
-uae_u32 cfgfile_modify (uae_u32 index, const TCHAR *parms, uae_u32 size, TCHAR *out, uae_u32 outsize)
+static uae_u32 cfgfile_modify (uae_u32 index, const TCHAR *parms, uae_u32 size, TCHAR *out, uae_u32 outsize)
 {
 	TCHAR *p;
 	TCHAR *argc[UAELIB_MAX_PARSE];
@@ -4046,7 +4144,7 @@ uae_u32 cfgfile_modify (uae_u32 index, const TCHAR *parms, uae_u32 size, TCHAR *
 	argv = cmdlineparser (parms, argc, UAELIB_MAX_PARSE);
 
 	if (argv <= 1 && index == 0xffffffff) {
-		createconfigstore (&currprefs);
+		cfgfile_createconfigstore (&currprefs);
 		xfree (configsearch);
 		configsearch = NULL;
 		if (!configstore) {
@@ -4165,6 +4263,11 @@ uae_u32 cfgfile_uaelib(TrapContext *ctx, int mode, uae_u32 name, uae_u32 dst, ua
 
 #include "sounddep/sound.h"
 
+void copy_prefs(struct uae_prefs *src, struct uae_prefs *dst)
+{
+	memcpy(dst, src, sizeof(struct uae_prefs));
+}
+
 void default_prefs (struct uae_prefs *p, bool reset, int type)
 {
   int i;
@@ -4193,7 +4296,11 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	p->jports[3].id = -1;
 	if (reset) {
 		inputdevice_joyport_config_store(p, _T("mouse"), 0, -1, 0);
+#ifdef PANDORA
 		inputdevice_joyport_config_store(p, _T("joy1"), 1, -1, 0);
+#else
+		inputdevice_joyport_config_store(p, _T("kbd1"), 1, -1, 0);
+#endif
 	}
 	p->keyboard_lang = KBD_LANG_US;
 
@@ -4215,12 +4322,12 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->gfx_framerate = 0;
 
 #if defined(RASPBERRY) || defined(ANDROID)
-	p->gfx_size.width = 640;
-	p->gfx_size.height = 262;
+	p->gfx_monitor.gfx_size.width = 640;
+	p->gfx_monitor.gfx_size.height = 262;
   p->gfx_resolution = RES_HIRES;
 #else
-  p->gfx_size.width = 320;
-  p->gfx_size.height = 240;
+  p->gfx_monitor.gfx_size.width = 320;
+   p->gfx_monitor.gfx_size.height = 240;
   p->gfx_resolution = RES_LORES;
 #endif
 	p->gfx_vresolution = VRES_NONDOUBLE;
@@ -4230,6 +4337,7 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->chipset_refreshrate = 50;
   p->collision_level = 2;
   p->leds_on_screen = 0;
+	p->leds_on_screen_mask[0] = p->leds_on_screen_mask[1] = 0x01fe;
 	p->boot_rom = 0;
 #ifdef PANDORA
   p->fast_copper = 1;
@@ -4266,10 +4374,10 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	_tcscpy (p->flashfile, _T(""));
 	_tcscpy (p->cartfile, _T(""));
 
-  sprintf (p->path_rom, _T("%s/kickstarts/"), start_path_data);
-  sprintf (p->path_floppy, _T("%s/disks/"), start_path_data);
-  sprintf (p->path_hardfile, _T("%s/"), start_path_data);
-  sprintf (p->path_cd, _T("%s/cd32/"), start_path_data);
+  sprintf (p->path_rom.path[0], _T("%s/kickstarts/"), start_path_data);
+  sprintf (p->path_floppy.path[0], _T("%s/disks/"), start_path_data);
+  sprintf (p->path_hardfile.path[0], _T("%s/"), start_path_data);
+  sprintf (p->path_cd.path[0], _T("%s/cd32/"), start_path_data);
 
   p->fpu_model = 0;
   p->cpu_model = 68000;
@@ -4327,7 +4435,6 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	cr->horiz = -1;
 	cr->vert = -1;
 	cr->lace = -1;
-	cr->vsync = - 1;
 	cr->rate = 50.0;
 	cr->ntsc = 0;
 	cr->inuse = true;
@@ -4337,7 +4444,6 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	cr->horiz = -1;
 	cr->vert = -1;
 	cr->lace = -1;
-	cr->vsync = - 1;
 	cr->rate = 60.0;
 	cr->ntsc = 1;
 	cr->inuse = true;
@@ -4389,8 +4495,9 @@ static void buildin_default_prefs (struct uae_prefs *p)
 	p->immediate_blits = 0;
 	p->waiting_blits = 0;
 	p->collision_level = 2;
-	if (p->produce_sound < 1)
-		p->produce_sound = 1;
+	if (p->produce_sound < 2)
+		p->produce_sound = 2;
+	p->cachesize = 0;
 	p->socket_emu = 0;
 	p->sound_volume_cd = 0;
 
@@ -4560,8 +4667,8 @@ static int bip_cd32 (struct uae_prefs *p, int config, int compa, int romcheck)
 	p->cdslots[0].inuse = true;
 	p->cdslots[0].type = SCSI_UNIT_IMAGE;
 	
-	p->gfx_size.width = 384;
-	p->gfx_size.height = 256;
+	p->gfx_monitor.gfx_size.width = 384;
+	p->gfx_monitor.gfx_size.height = 256;
 
 	p->m68k_speed = M68K_SPEED_14MHZ_CYCLES;
 
@@ -4751,6 +4858,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 	p->cs_z3autoconfig = false;
 	p->cs_bytecustomwritebug = false;
 	p->cs_unmapped_space = 0;
+	p->cs_ciatype[0] = p->cs_ciatype[1] = 0;
 
 	switch (p->cs_compatible)
 	{

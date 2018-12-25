@@ -27,6 +27,8 @@
 ; 2015.09.27 KS 1.2 boot hack supported
 ; 2015.09.28 KS 1.2 boot hack improved, 1.1 and older BCPL-only DOS support.
 ; 2016.01.14 'Indirect' boot ROM trap support.
+; 2018.03.22 Segment tracking
+; 2018.07.08 68060 FPU disable
 
 AllocMem = -198
 FreeMem = -210
@@ -83,23 +85,25 @@ NRF_NOTIFY_INITIAL = 16
 NRF_MAGIC = $80000000
 
 ; normal filehandler segment entrypoint
-	dc.l 16 								; 4
+	dc.l (rom_end-start)>>2 					; 4
 our_seglist:
 	dc.l 0 									; 8 /* NextSeg */
 start:
 	bra.s startjmp
-	dc.w 11						;0 12
+	dc.w 13						            ;  0 12
 startjmp:
-	bra.w filesys_mainloop		;1 16
-	dc.l make_dev-start			;2 20
-	dc.l filesys_init-start		;3 24
-	dc.l moverom-start				;  4 28
-	dc.l bootcode-start			;5 32
-	dc.l setup_exter-start		;6 36
-	dc.l bcplwrapper-start ;7 40
-	dc.l afterdos-start 	;8 44
-	dc.l hwtrap_install-start ;  9 48
-	dc.l hwtrap_entry-start 	; 10 52
+	bra.w filesys_mainloop		    ;  1 16
+	dc.l make_dev-start			      ;  2 20
+	dc.l filesys_init-start		    ;  3 24
+	dc.l moverom-start				    ;  4 28
+	dc.l bootcode-start			      ;  5 32
+	dc.l setup_exter-start		    ;  6 36
+	dc.l bcplwrapper-start        ;  7 40
+	dc.l afterdos-start 	        ;  8 44
+	dc.l hwtrap_install-start     ;  9 48
+	dc.l hwtrap_entry-start   	  ; 10 52
+	dc.l 0 ; keymaphack-start		  ; 11 56
+	dc.l 0 ; fpu060disable-start	; 12 60
 
 bootcode:
 	lea.l doslibname(pc),a1
@@ -128,6 +132,15 @@ bcpl_start:
 	dc.l 4
 	dc.l 2
 bcpl_end:
+
+resident
+	dc.w $4afc
+	dc.l 0
+	dc.l rom_end-resident
+	dc.b 0,1,0,0
+	dc.l exter_name-resident
+	dc.l 0
+	dc.l start-resident
 
 afterdos:
 	movem.l d2-d7/a2-a6,-(sp)
@@ -252,7 +265,6 @@ FSIN_none:
 	cmp.w #34,20(a6) ; 1.2 or older?
 	bcs.w FSIN_tooold
 
-	; add MegaChipRAM
 	moveq #3,d4 ; MEMF_CHIP | MEMF_PUBLIC
 	cmp.w #36,20(a6)
 	bcs.s FSIN_ksold
@@ -260,16 +272,8 @@ FSIN_none:
 FSIN_ksold
 	move.w #$FF80,d0
 	bsr.w getrtbase
-	jsr (a0) ; d1 = size, a1 = start address
+	jsr (a0)
 	move.l d0,d5
-	move.l a1,a0
-	move.l d1,d0
-	beq.s FSIN_fchip_done
-	move.l d4,d1
-	moveq #-5,d2
-	lea fchipname(pc),a1
-	jsr -618(a6) ; AddMemList
-FSIN_fchip_done
 
 	; only if >=4M chip
 	cmp.l #$400000,d5
@@ -752,8 +756,7 @@ relocate: ;a0=pointer to executable, returns first segment in A0
 	addq.l #1,d7
 	move.l a2,a3
 	move.l d7,d0
-	add.l d0,d0
-	add.l d0,d0
+	lsl.l #2,d0
 	add.l d0,a3
 	move.l a2,a4
 
@@ -790,8 +793,7 @@ r18	addq.l #1,d6
 
 	moveq #0,d6
 r3	move.l d6,d1
-	add.l d1,d1
-	add.l d1,d1
+	lsl.l #2,d1
 	move.l 0(a4,d1.l),a0
 	addq.l #4,a0
 	move.l (a3)+,d3 ; hunk type
@@ -813,22 +815,20 @@ r5
 	cmp.l #$3eb,d3 ;bss
 	bne.s ree
 
-r7 ; scan for reloc32 or hunk_end
+r7 ; scan for reloc32, symbol, debug or hunk_end
 	move.l (a3)+,d3
 	cmp.l #$3ec,d3 ;reloc32
 	bne.s r13
 
 	; relocate
 	move.l d6,d1
-	add.l d1,d1
-	add.l d1,d1
+	lsl.l #2,d1
 	move.l 0(a4,d1.l),a0 ; current hunk
 	addq.l #4,a0
 r11	move.l (a3)+,d0 ;number of relocs
 	beq.s r7
 	move.l (a3)+,d1 ;hunk
-	add.l d1,d1
-	add.l d1,d1
+	lsl.l #2,d1
 	move.l 0(a4,d1.l),d3 ;hunk start address
 	addq.l #4,d3
 r9	move.l (a3)+,d2 ;offset
@@ -837,6 +837,25 @@ r9	move.l (a3)+,d2 ;offset
 	bne.s r9
 	bra.s r11
 r13
+	cmp.l #$3f0,d3 ;symbol
+	bne.s r20
+r21
+	move.l (a3)+,d0
+	beq.s r7
+	and.l #$ffffff,d0
+	addq.l #1,d0
+	lsl.l #2,d0
+	add.l d0,a3
+	bra.s r21
+r20
+	cmp.l #$3f1,d3 ;debug
+	bne.s r22
+	move.l (a3)+,d0
+	lsl.l #2,d0
+	add.l d0,a3
+	bra.s r7
+
+r22
 	cmp.l #$3f2,d3 ;end
 	bne.s ree
 	
@@ -1249,8 +1268,7 @@ make_dev: ; IN: A0 param_packet, D6: unit_no
 mountalways
 	; allocate memory for loaded filesystem
 	move.l PP_FSSIZE(a0),d0
-	beq.s .nordbfs1
-	bmi.s .nordbfs1
+	ble.s .nordbfs1
 	move.l a0,-(sp)
 	moveq #1,d1
 	move.l 4.w,a6
@@ -1287,6 +1305,13 @@ do_mount:
 dont_mount:
 	move.l PP_FSPTR(a1),a0
 	tst.l PP_FSSIZE(a1)
+	bpl.s nordbfs4
+	moveq #0,d0
+	move.l d0,PP_FSPTR(a1)
+	move.l d0,a0
+	clr.l PP_FSSIZE(a1)
+	bra.s nordbfs3
+nordbfs4		
 	beq.s nordbfs3
 	; filesystem needs relocation?
 	move.l a0,d0
@@ -1618,33 +1643,17 @@ FSML_loop:
 	bclr #1,173(a3)
 .nodebug
 	; disk change notification from native code
-	tst.b 172(a3)
-	beq.s .nodc
-	; call filesys_media_change_reply (pre)
-	move.w #$ff58,d0 ; fsmisc_helper
-	bsr.w getrtbaselocal
-	moveq #1,d0 ; filesys_media_change_reply
-	jsr (a0)
-	tst.l d0
-	beq.s .nodc2
-	bsr.w diskchange
-.nodc2
 	clr.b 172(a3)
-	; call filesys_media_change_reply (post)
-	move.w #$ff58,d0 ; fsmisc_helper
-	bsr.w getrtbaselocal
-	moveq #2,d0 ; filesys_media_change_reply
-	jsr (a0)
-.nodc
+
 	move.l a4,d0
 	beq.s nonnotif
 
 	; notify reply?
-	cmp.w #38, 18(a4)
-	bne.s nonnotif
 	cmp.l #NOTIFY_CLASS, 20(a4)
 	bne.s nonnotif
 	cmp.w #NOTIFY_CODE, 24(a4)
+	bne.s nonnotif
+	cmp.w #38, 18(a4)
 	bne.s nonnotif
 	move.l 26(a4),a0 ; NotifyRequest
 	move.l 12(a0),d0 ; flags
@@ -2050,6 +2059,8 @@ getgfxlimits:
 	sub.l a2,a2
 	sub.l a3,a3
 	sub.l a4,a4
+	moveq #-1,d1
+	moveq #-1,d2
 	moveq #0,d4
 
 	move.l MH_FOO_GFXBASE(a5),a6
@@ -2093,10 +2104,13 @@ getgfxlimits:
 	move.l 54(a2),d2
 .end
 
+	move.l a4,d0
+	beq.s .novp
 	move.l 28(a4),d0
-	cmp.w MH_FOO_MOFFSET(a5),d4
-	bne.s .dosend
 	cmp.l MH_FOO_VPXY(a5),d0
+	bne.s .dosend
+.novp
+	cmp.w MH_FOO_MOFFSET(a5),d4
 	bne.s .dosend
 	cmp.l MH_FOO_DIMS_X(a5),d1
 	bne.s .dosend
@@ -2109,12 +2123,13 @@ getgfxlimits:
 	move.w d4,MH_FOO_MOFFSET(a5)
 
 	; This only for doublescan properties bit..
+	move.l d3,d2
+	beq.s .nomntr
 	sub.l a0,a0
 	lea MH_FOO_DISP(a5),a1
 	moveq #0,d0
 	move.w #88,d0
 	move.l #DTAG_DISP,d1
-	move.l d3,d2
 	jsr -$2f4(a6) ;GetDisplayInfoData
 	tst.l d0
 	bmi.s .nomntr
@@ -3289,10 +3304,8 @@ intlibname: dc.b 'intuition.library',0
 gfxlibname: dc.b 'graphics.library',0
 explibname: dc.b 'expansion.library',0
 fsresname: dc.b 'FileSystem.resource',0
-fchipname: dc.b 'megachip memory',0
 bcplfsname: dc.b "File System",0
-hwtrap_name:
-	dc.b "UAE board",0
+hwtrap_name: dc.b "UAE board",0
 	even
 rom_end:
 

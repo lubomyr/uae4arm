@@ -13,7 +13,7 @@
 
 uae_u8 get_clock_msm(struct rtc_msm_data *data, int addr, struct tm *ct)
 {
-	uae_u8 v;
+	uae_u8 v = 0;
 	int year;
 
 	if (!ct) {
@@ -75,9 +75,6 @@ uae_u8 get_clock_ricoh(struct rtc_ricoh_data *data, int addr, struct tm *ct)
 	/* alarm */
 	if (bank == 1 && addr < 0x0d) {
 		v = data->rtc_alarm[addr];
-#if CLOCK_DEBUG
-		write_log (_T("CLOCK ALARM R %X: %X\n"), addr, v);
-#endif
 		return v;
 	}
 	if (!ct) {

@@ -10,8 +10,6 @@
 #include "sdltruetypefont.hpp"
 #endif
 #include "SelectorEntry.hpp"
-#include "UaeRadioButton.hpp"
-#include "UaeDropDown.hpp"
 #include "UaeCheckBox.hpp"
 
 #include "sysconfig.h"
@@ -52,54 +50,98 @@ static gcn::UaeCheckBox* chkAspect;
 #endif
 
 
+static void RefreshPanelDisplay(void)
+{
+  int i;
+  char tmp[32];
+  
+  for(i=0; i<6; ++i)
+  {
+    if(workprefs.gfx_monitor.gfx_size.width == amigawidth_values[i])
+    {
+      sldAmigaWidth->setValue(i);
+      snprintf(tmp, 31, "%d", workprefs.gfx_monitor.gfx_size.width);
+      lblAmigaWidthInfo->setCaption(tmp);
+      break;
+    }
+  }
+
+  for(i=0; i<6; ++i)
+  {
+    if(workprefs.gfx_monitor.gfx_size.height == amigaheight_values[i])
+    {
+      sldAmigaHeight->setValue(i);
+      snprintf(tmp, 31, "%d", workprefs.gfx_monitor.gfx_size.height);
+      lblAmigaHeightInfo->setCaption(tmp);
+      break;
+    }
+  }
+
+#if defined(RASPBERRY) && !defined(USE_SDL2)
+  for(i=0; i<21; ++i)
+  {
+    if(workprefs.gfx_fullscreen_ratio == FullscreenRatio[i])
+    {
+      sldFSRatio->setValue(i);
+      snprintf(tmp, 31, "%d%%", workprefs.gfx_fullscreen_ratio);
+      lblFSRatioInfo->setCaption(tmp);
+      break;
+    }
+  }
+
+  chkAspect->setSelected(workprefs.gfx_correct_aspect);
+#endif
+  
+  sldVertPos->setValue(workprefs.gfx_monitor.gfx_size.y - OFFSET_Y_ADJUST);
+  snprintf(tmp, 31, "%d", workprefs.gfx_monitor.gfx_size.y - OFFSET_Y_ADJUST);
+  lblVertPosInfo->setCaption(tmp);
+  
+  chkLineDbl->setSelected(workprefs.gfx_vresolution != VRES_NONDOUBLE);
+  chkFrameskip->setSelected(workprefs.gfx_framerate);
+}
+
+
 class AmigaScreenActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      if (actionEvent.getSource() == sldAmigaWidth) 
-      {
-        if(changed_prefs.gfx_size.width != amigawidth_values[(int)(sldAmigaWidth->getValue())])
-        {
-      		changed_prefs.gfx_size.width = amigawidth_values[(int)(sldAmigaWidth->getValue())];
+      if (actionEvent.getSource() == sldAmigaWidth) {
+        if(workprefs.gfx_monitor.gfx_size.width != amigawidth_values[(int)(sldAmigaWidth->getValue())]) {
+      		workprefs.gfx_monitor.gfx_size.width = amigawidth_values[(int)(sldAmigaWidth->getValue())];
       		RefreshPanelDisplay();
     	  }
-      }
-      else if (actionEvent.getSource() == sldAmigaHeight) 
-      {
-        if(changed_prefs.gfx_size.height != amigaheight_values[(int)(sldAmigaHeight->getValue())])
-        {
-      		changed_prefs.gfx_size.height = amigaheight_values[(int)(sldAmigaHeight->getValue())];
+
+      } else if (actionEvent.getSource() == sldAmigaHeight) {
+        if(workprefs.gfx_monitor.gfx_size.height != amigaheight_values[(int)(sldAmigaHeight->getValue())]) {
+      		workprefs.gfx_monitor.gfx_size.height = amigaheight_values[(int)(sldAmigaHeight->getValue())];
       		RefreshPanelDisplay();
     	  }
-      }
-      else if (actionEvent.getSource() == sldVertPos) 
-      {
-        if(changed_prefs.pandora_vertical_offset != (int)(sldVertPos->getValue()) + OFFSET_Y_ADJUST)
-        {
-      		changed_prefs.pandora_vertical_offset = (int)(sldVertPos->getValue()) + OFFSET_Y_ADJUST;
+
+      } else if (actionEvent.getSource() == sldVertPos) {
+        if(workprefs.gfx_monitor.gfx_size.y != (int)(sldVertPos->getValue()) + OFFSET_Y_ADJUST) {
+      		workprefs.gfx_monitor.gfx_size.y = (int)(sldVertPos->getValue()) + OFFSET_Y_ADJUST;
       		RefreshPanelDisplay();
     	  }
-      }
-      else if (actionEvent.getSource() == chkFrameskip) 
-      {
-        changed_prefs.gfx_framerate = chkFrameskip->isSelected() ? 1 : 0;
-      }
-      else if (actionEvent.getSource() == chkLineDbl) 
-      {
-        changed_prefs.gfx_vresolution = chkLineDbl->isSelected() ? VRES_DOUBLE : VRES_NONDOUBLE;
+
+      } else if (actionEvent.getSource() == chkFrameskip) {
+        workprefs.gfx_framerate = chkFrameskip->isSelected() ? 1 : 0;
+
+      } else if (actionEvent.getSource() == chkLineDbl) {
+        workprefs.gfx_vresolution = chkLineDbl->isSelected() ? VRES_DOUBLE : VRES_NONDOUBLE;
+
       }
 #if defined(RASPBERRY) && !defined(USE_SDL2)
-      else if (actionEvent.getSource() == sldFSRatio)
-      {
-        if(changed_prefs.gfx_fullscreen_ratio != FullscreenRatio[(int)(sldFSRatio->getValue())])
-        {
-          changed_prefs.gfx_fullscreen_ratio = FullscreenRatio[(int)(sldFSRatio->getValue())];
+      else if (actionEvent.getSource() == sldFSRatio) {
+        if(workprefs.gfx_fullscreen_ratio != FullscreenRatio[(int)(sldFSRatio->getValue())]) {
+          workprefs.gfx_fullscreen_ratio = FullscreenRatio[(int)(sldFSRatio->getValue())];
           RefreshPanelDisplay();
         }
+
+      } else if (actionEvent.getSource() == chkAspect) {
+        workprefs.gfx_correct_aspect = chkAspect->isSelected();
+
       }
-      else if (actionEvent.getSource() == chkAspect)
-        changed_prefs.gfx_correct_aspect = chkAspect->isSelected();
 #endif
     }
 };
@@ -213,8 +255,10 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelDisplay(void)
+void ExitPanelDisplay(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete lblAmigaWidth;
   delete sldAmigaWidth;
   delete lblAmigaWidthInfo;
@@ -227,64 +271,14 @@ void ExitPanelDisplay(void)
   delete grpAmigaScreen;
   delete chkLineDbl;
   delete chkFrameskip;
-  delete amigaScreenActionListener;
 #if defined(RASPBERRY) && !defined(USE_SDL2)
   delete lblFSRatio;
   delete sldFSRatio;
   delete lblFSRatioInfo;
   delete chkAspect;
 #endif
-}
 
-
-void RefreshPanelDisplay(void)
-{
-  int i;
-  char tmp[32];
-  
-  for(i=0; i<6; ++i)
-  {
-    if(changed_prefs.gfx_size.width == amigawidth_values[i])
-    {
-      sldAmigaWidth->setValue(i);
-      snprintf(tmp, 31, "%d", changed_prefs.gfx_size.width);
-      lblAmigaWidthInfo->setCaption(tmp);
-      break;
-    }
-  }
-
-  for(i=0; i<6; ++i)
-  {
-    if(changed_prefs.gfx_size.height == amigaheight_values[i])
-    {
-      sldAmigaHeight->setValue(i);
-      snprintf(tmp, 31, "%d", changed_prefs.gfx_size.height);
-      lblAmigaHeightInfo->setCaption(tmp);
-      break;
-    }
-  }
-
-#if defined(RASPBERRY) && !defined(USE_SDL2)
-  for(i=0; i<21; ++i)
-  {
-    if(changed_prefs.gfx_fullscreen_ratio == FullscreenRatio[i])
-    {
-      sldFSRatio->setValue(i);
-      snprintf(tmp, 31, "%d%%", changed_prefs.gfx_fullscreen_ratio);
-      lblFSRatioInfo->setCaption(tmp);
-      break;
-    }
-  }
-
-  chkAspect->setSelected(changed_prefs.gfx_correct_aspect);
-#endif
-  
-  sldVertPos->setValue(changed_prefs.pandora_vertical_offset - OFFSET_Y_ADJUST);
-  snprintf(tmp, 31, "%d", changed_prefs.pandora_vertical_offset - OFFSET_Y_ADJUST);
-  lblVertPosInfo->setCaption(tmp);
-  
-  chkLineDbl->setSelected(changed_prefs.gfx_vresolution != VRES_NONDOUBLE);
-  chkFrameskip->setSelected(changed_prefs.gfx_framerate);
+  delete amigaScreenActionListener;
 }
 
 

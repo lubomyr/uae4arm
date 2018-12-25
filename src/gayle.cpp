@@ -6,10 +6,6 @@
 * (c) 2006 - 2015 Toni Wilen
 */
 
-#define GAYLE_LOG 0
-#define MBRES_LOG 0
-#define PCMCIA_LOG 0
-
 #include "sysconfig.h"
 #include "sysdeps.h"
 
@@ -69,7 +65,7 @@ DE0000 to DEFFFF	64 KB Motherboard resources
 #define GAYLE_RESET     0xa40000      /* write 0x00 to start reset, read 1 byte to stop reset */
 
 /*  Bases of the IDE interfaces */
-#define GAYLE_BASE_4000 0xdd2020    /* A4000/A4000T */
+#define GAYLE_BASE_4000 0xdd2020    /* A4000 */
 #define GAYLE_BASE_1200 0xda0000    /* A1200/A600 and E-Matrix 530 */
 
 /*
@@ -152,8 +148,6 @@ static void pcmcia_reset (void)
 {
 	memset (pcmcia_configuration, 0, sizeof pcmcia_configuration);
 	pcmcia_configured = -1;
-	if (PCMCIA_LOG > 0)
-		write_log (_T("PCMCIA reset\n"));
 }
 
 static uae_u8 checkpcmciaideirq (void)
@@ -194,8 +188,8 @@ void rethink_gayle (void)
 
 	if (currprefs.cs_ide == IDE_A4000) {
 		gayle_irq |= checkgayleideirq ();
-		if ((gayle_irq & GAYLE_IRQ_IDE) && !(intreq & 0x0008))
-			INTREQ_0 (0x8000 | 0x0008);
+		if (gayle_irq & GAYLE_IRQ_IDE)
+			safe_interrupt_set(false);
 		return;
 	}
 
@@ -220,10 +214,10 @@ void rethink_gayle (void)
 		else
 			lev2 = 1;
 	}
-	if (lev2 && !(intreq & 0x0008))
-		INTREQ_0 (0x8000 | 0x0008);
-	if (lev6 && !(intreq & 0x2000))
-		INTREQ_0 (0x8000 | 0x2000);
+	if (lev2)
+		safe_interrupt_set(false);
+	if (lev6)
+		safe_interrupt_set(true);
 }
 
 static void gayle_cs_change (uae_u8 mask, int onoff)
@@ -305,8 +299,6 @@ static void write_gayle_cs (uae_u8 val)
 		gayle_map_pcmcia ();
 		/* PCMCIA disable -> enable */
 		card_trigger (!(gayle_cs & GAYLE_CS_DIS) ? 1 : 0);
-		if (PCMCIA_LOG)
-			write_log (_T("PCMCIA slot: %s PC=%08X\n"), !(gayle_cs & 1) ? _T("enabled") : _T("disabled"), M68K_GETPC);
 	}
 }
 static uae_u8 read_gayle_cs (void)
@@ -346,8 +338,6 @@ static uae_u32 gayle_read2 (uaecptr addr)
 	int ide_reg;
 
 	addr &= 0xffff;
-	if ((GAYLE_LOG > 3 && (addr != 0x2000 && addr != 0x2001 && addr != 0x3020 && addr != 0x3021 && addr != GAYLE_IRQ_1200)) || GAYLE_LOG > 5)
-		write_log (_T("IDE_READ %08X PC=%X\n"), addr, M68K_GETPC);
 	if (currprefs.cs_ide <= 0) {
 		if (addr == 0x201c) // AR1200 IDE detection hack
 			return 0x7f;
@@ -385,8 +375,6 @@ static void gayle_write2 (uaecptr addr, uae_u32 val)
 	struct ide_hdf *ide = NULL;
 	int ide_reg;
 
-	if ((GAYLE_LOG > 3 && (addr != 0x2000 && addr != 0x2001 && addr != 0x3020 && addr != 0x3021 && addr != GAYLE_IRQ_1200)) || GAYLE_LOG > 5)
-		write_log (_T("IDE_WRITE %08X=%02X PC=%X\n"), addr, (uae_u32)val & 0xff, M68K_GETPC);
 	if (currprefs.cs_ide <= 0)
 		return;
 	if (currprefs.cs_ide == IDE_A600A1200) {
@@ -428,19 +416,13 @@ static int gayle_read (uaecptr addr)
 		if (addr == GAYLE_CS_1200) {
 			v = read_gayle_cs ();
 			got = 1;
-			if (PCMCIA_LOG)
-				write_log (_T("PCMCIA STATUS READ %08X=%02X PC=%08X\n"), oaddr, (uae_u32)v & 0xff, M68K_GETPC);
 		} else if (addr == GAYLE_CFG_1200) {
 			v = read_gayle_cfg ();
 			got = 1;
-			if (PCMCIA_LOG)
-				write_log (_T("PCMCIA CONFIG READ %08X=%02X PC=%08X\n"), oaddr, (uae_u32)v & 0xff, M68K_GETPC);
 		}
 	}
 	if (!got)
 		v = gayle_read2 (addr);
-	if (GAYLE_LOG)
-		write_log (_T("GAYLE_READ %08X=%02X PC=%08X\n"), oaddr, (uae_u32)v & 0xff, M68K_GETPC);
 	return v;
 }
 
@@ -466,18 +448,12 @@ static void gayle_write (uaecptr addr, int val)
 		if (addr == GAYLE_CS_1200) {
 			write_gayle_cs (val);
 			got = 1;
-			if (PCMCIA_LOG > 1)
-				write_log (_T("PCMCIA STATUS WRITE %08X=%02X PC=%08X\n"), oaddr, (uae_u32)val & 0xff, M68K_GETPC);
 		} else if (addr == GAYLE_CFG_1200) {
 			write_gayle_cfg (val);
 			got = 1;
-			if (PCMCIA_LOG > 1)
-				write_log (_T("PCMCIA CONFIG WRITE %08X=%02X PC=%08X\n"), oaddr, (uae_u32)val & 0xff, M68K_GETPC);
 		}
 	}
 
-	if (GAYLE_LOG)
-		write_log (_T("GAYLE_WRITE %08X=%02X PC=%08X\n"), oaddr, (uae_u32)val & 0xff, M68K_GETPC);
 	if (!got)
 		gayle_write2 (addr, val);
 }
@@ -487,7 +463,7 @@ addrbank gayle_bank = {
 	gayle_lget, gayle_wget, gayle_bget,
 	gayle_lput, gayle_wput, gayle_bput,
 	default_xlate, default_check, NULL, NULL, _T("Gayle (low)"),
-	dummy_lgeti, dummy_wgeti,
+	dummy_wgeti,
 	ABFLAG_IO, S_READ, S_WRITE
 };
 
@@ -500,8 +476,6 @@ static uae_u32 REGPARAM2 gayle_lget (uaecptr addr)
 	if (ide_reg == IDE_DATA) {
 		v = ide_get_data (ide) << 16;
 		v |= ide_get_data (ide);
-		if (GAYLE_LOG > 4)
-			write_log(_T("IDE_DATA_LONG %08X=%08X PC=%X\n"), addr, v, M68K_GETPC);
 		return v;
 	}
 	v = gayle_wget (addr) << 16;
@@ -516,8 +490,6 @@ static uae_u32 REGPARAM2 gayle_wget (uaecptr addr)
 	ide_reg = get_gayle_ide_reg (addr, &ide);
 	if (ide_reg == IDE_DATA) {
 		v = ide_get_data (ide);
-		if (GAYLE_LOG > 4)
-			write_log(_T("IDE_DATA_WORD %08X=%04X PC=%X\n"), addr, v & 0xffff, M68K_GETPC);
 		return v;
 	}
 	v = gayle_bget (addr) << 8;
@@ -588,7 +560,7 @@ addrbank gayle2_bank = {
 	gayle2_lget, gayle2_wget, gayle2_bget,
 	gayle2_lput, gayle2_wput, gayle2_bput,
 	default_xlate, default_check, NULL, NULL, _T("Gayle (high)"),
-	dummy_lgeti, dummy_wgeti,
+	dummy_wgeti,
 	ABFLAG_IO, S_READ, S_WRITE
 };
 
@@ -631,14 +603,12 @@ static void REGPARAM2 gayle2_bput (uaecptr addr, uae_u32 value)
 static uae_u8 ramsey_config;
 static int garyidoffset;
 static int gary_coldboot;
-int gary_timeout;
+static int gary_timeout;
 int gary_toenb;
 
 static void mbres_write (uaecptr addr, uae_u32 val, int size)
 {
 	addr &= 0xffff;
-	if (MBRES_LOG > 0)
-		write_log (_T("MBRES_WRITE %08X=%08X (%d) PC=%08X S=%d\n"), addr, val, size, M68K_GETPC, regs.s);
 	if (addr < 0x8000 && (1 || regs.s)) { /* CPU FC = supervisor only */
 		uae_u32 addr2 = addr & 3;
 		uae_u32 addr64 = (addr >> 6) & 3;
@@ -703,8 +673,6 @@ static uae_u32 mbres_read (uaecptr addr, int size)
 	} else {
 		v = 0xff;
 	}
-	if (MBRES_LOG > 0)
-		write_log (_T("MBRES_READ %08X=%08X (%d) PC=%08X S=%d\n"), addr, v, size, M68K_GETPC, regs.s);
 	return v;
 }
 
@@ -751,7 +719,7 @@ static addrbank mbres_sub_bank = {
 	mbres_lget, mbres_wget, mbres_bget,
 	mbres_lput, mbres_wput, mbres_bput,
 	default_xlate, default_check, NULL, NULL, _T("Motherboard Resources"),
-	dummy_lgeti, dummy_wgeti,
+	dummy_wgeti,
 	ABFLAG_IO, S_READ, S_WRITE
 };
 
@@ -765,7 +733,7 @@ addrbank mbres_bank = {
 	sub_bank_lget, sub_bank_wget, sub_bank_bget,
 	sub_bank_lput, sub_bank_wput, sub_bank_bput,
 	sub_bank_xlate, sub_bank_check, NULL, NULL, _T("Motherboard Resources"),
-	sub_bank_lgeti, sub_bank_wgeti,
+	sub_bank_wgeti,
 	ABFLAG_IO, S_READ, S_WRITE, mbres_sub_banks
 };
 
@@ -845,12 +813,8 @@ static uae_u32 gayle_attr_read (uaecptr addr)
 	struct ide_hdf *ide = NULL;
 	uae_u8 v = 0;
 
-	if (PCMCIA_LOG > 1)
-		write_log (_T("PCMCIA ATTR R: %x %x\n"), addr, M68K_GETPC);
 	addr &= 0x80000 - 1;
 	if (addr >= 0x40000) {
-		if (PCMCIA_LOG > 0)
-			write_log (_T("GAYLE: Reset disabled\n"));
 		return v;
 	}
 	if (addr >= pcmcia_attrs_size)
@@ -883,12 +847,8 @@ static uae_u32 gayle_attr_read (uaecptr addr)
 static void gayle_attr_write (uaecptr addr, uae_u32 v)
 {
 	struct ide_hdf *ide = NULL;
-	if (PCMCIA_LOG > 1)
-		write_log (_T("PCMCIA ATTR W: %x=%x %x\n"), addr, v, M68K_GETPC);
 	addr &= 0x80000 - 1;
 	if (addr >= 0x40000) {
-		if (PCMCIA_LOG > 0)
-			write_log (_T("GAYLE: Reset enabled\n"));
 		pcmcia_reset ();
 	} else if (addr < pcmcia_attrs_size) {
 		 if (pcmcia_type == PCMCIA_IDE) {
@@ -1222,8 +1182,6 @@ static int initpcmcia (const TCHAR *path, int readonly, int type, int reset, str
 static uae_u32 gayle_common_read (uaecptr addr)
 {
 	uae_u8 v = 0;
-	if (PCMCIA_LOG > 2)
-		write_log (_T("PCMCIA COMMON R: %x %x\n"), addr, M68K_GETPC);
 	if (!pcmcia_common_size)
 		return 0;
 	addr -= PCMCIA_COMMON_START & (PCMCIA_COMMON_SIZE - 1);
@@ -1235,8 +1193,6 @@ static uae_u32 gayle_common_read (uaecptr addr)
 
 static void gayle_common_write (uaecptr addr, uae_u32 v)
 {
-	if (PCMCIA_LOG > 2)
-		write_log (_T("PCMCIA COMMON W: %x=%x %x\n"), addr, v, M68K_GETPC);
 	if (!pcmcia_common_size)
 		return;
 	if (pcmcia_readonly)
@@ -1278,7 +1234,7 @@ static addrbank gayle_common_bank = {
 	gayle_common_lget, gayle_common_wget, gayle_common_bget,
 	gayle_common_lput, gayle_common_wput, gayle_common_bput,
 	gayle_common_xlate, gayle_common_check, NULL, NULL, _T("Gayle PCMCIA Common"),
-	gayle_common_lget, gayle_common_wget,
+	gayle_common_wget,
 	ABFLAG_RAM | ABFLAG_SAFE, S_READ, S_WRITE
 };
 
@@ -1294,7 +1250,7 @@ static addrbank gayle_attr_bank = {
 	gayle_attr_lget, gayle_attr_wget, gayle_attr_bget,
 	gayle_attr_lput, gayle_attr_wput, gayle_attr_bput,
 	default_xlate, default_check, NULL, NULL, _T("Gayle PCMCIA Attribute/Misc"),
-	dummy_lgeti, dummy_wgeti,
+	dummy_wgeti,
 	ABFLAG_IO | ABFLAG_SAFE, S_READ, S_WRITE
 };
 

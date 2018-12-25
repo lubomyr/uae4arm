@@ -18,129 +18,99 @@
 #include "options.h"
 #include "uae.h"
 #include "blkdev.h"
+#include "inputdevice.h"
 #include "gui.h"
 #include "gui_handling.h"
+#include "GenericListModel.h"
 
 
-static char last_active_config[MAX_PATH] = { '\0' };
 static int ensureVisible = -1;
 
 static gcn::Button *cmdLoad;
 static gcn::Button *cmdSave;
-static gcn::Button *cmdLoadFrom;
-static gcn::Button *cmdSaveAs;
 static gcn::Button *cmdDelete;
 static gcn::Label *lblName;
-#ifdef ANDROID
-gcn::TextField *txtName;
-#else
 static gcn::TextField *txtName;
-#endif
 static gcn::Label *lblDesc;
 static gcn::TextField *txtDesc;
 static gcn::UaeListBox* lstConfigs;
 static gcn::ScrollArea* scrAreaConfigs;
 
 
-bool LoadConfigByName(const char *name)
+static gcn::GenericListModel configsList;
+
+
+static void InitConfigsList(void)
 {
-  ConfigFileInfo* config = SearchConfigInList(name);
-  if(config != NULL)
-  {
-#ifndef ANDROID
-    if(emulating) {
-		  uae_restart(-1, config->FullPath);
-    } else {
-#endif
-      txtName->setText(config->Name);
-      txtDesc->setText(config->Description);
-      target_cfgfile_load(&changed_prefs, config->FullPath, 0, 0);
-      strncpy(last_active_config, config->Name, MAX_PATH - 1);
-      DisableResume();
-      RefreshAllPanels();
-#ifndef ANDROID
+  configsList.clear();
+  for(int i=0; i<ConfigFilesList.size(); ++i) {
+    char tmp[MAX_DPATH];
+    strncpy(tmp, ConfigFilesList[i]->Name, MAX_DPATH - 1);
+    if(strlen(ConfigFilesList[i]->Description) > 0) {
+      strncat(tmp, " (", MAX_DPATH - 1);
+      strncat(tmp, ConfigFilesList[i]->Description, MAX_DPATH - 1);
+      strncat(tmp, ")", MAX_DPATH - 1);
     }
-#endif
+    configsList.add(tmp);
   }
-
-  return false;
-}
-
-void SetLastActiveConfig(const char *filename)
-{
-  extractFileName(filename, last_active_config);
-  removeFileExtension(last_active_config);
 }
 
 
-class ConfigsListModel : public gcn::ListModel
+static void MakeCurrentVisible(void)
 {
-  std::vector<std::string> configs;
+  if(ensureVisible >= 0) {
+    scrAreaConfigs->setVerticalScrollAmount(ensureVisible * 19);
+    ensureVisible = -1;
+  }
+}
 
-  public:
-    ConfigsListModel()
-    {
-    }
-      
-    int getNumberOfElements()
-    {
-      return configs.size();
-    }
-      
-    std::string getElementAt(int i)
-    {
-      if(i >= configs.size() || i < 0)
-        return "---";
-      return configs[i];
-    }
-      
-    void InitConfigsList(void)
-    {
-      configs.clear();
-      for(int i=0; i<ConfigFilesList.size(); ++i)
-      {
-        char tmp[MAX_DPATH];
-        strncpy(tmp, ConfigFilesList[i]->Name, MAX_DPATH - 1);
-        if(strlen(ConfigFilesList[i]->Description) > 0)
-        {
-          strncat(tmp, " (", MAX_DPATH - 1);
-          strncat(tmp, ConfigFilesList[i]->Description, MAX_DPATH - 1);
-          strncat(tmp, ")", MAX_DPATH - 1);
-        }
-        configs.push_back(tmp);
+
+static void RefreshPanelConfig(void)
+{
+  ReadConfigFileList();
+  InitConfigsList();
+
+  txtName->setText(last_active_config);
+  txtDesc->setText("");
+
+  // Search current entry
+  if(!txtName->getText().empty()) {
+    for(int i=0; i<ConfigFilesList.size(); ++i) {
+      if(!_tcscmp(ConfigFilesList[i]->Name, last_active_config)) {
+        // Select current entry
+        txtDesc->setText(ConfigFilesList[i]->Description);
+        lstConfigs->setSelected(i);
+        ensureVisible = i;
+        RegisterRefreshFunc(MakeCurrentVisible);
+        break;
       }
     }
-};
-static ConfigsListModel *configsList;
+  }
+}
 
 
-class ConfigButtonActionListener : public gcn::ActionListener
+class ConfigActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
       int i;
-      if (actionEvent.getSource() == cmdLoad)
-      {
+      if (actionEvent.getSource() == cmdLoad) {
         //-----------------------------------------------
         // Load selected configuration
         //-----------------------------------------------
         i = lstConfigs->getSelected();
-#ifndef ANDROID
         if(emulating) {
   			  uae_restart(-1, ConfigFilesList[i]->FullPath);
         } else {
-#endif
-          target_cfgfile_load(&changed_prefs, ConfigFilesList[i]->FullPath, 0, 0);
+          target_cfgfile_load(&workprefs, ConfigFilesList[i]->FullPath, 0, 0);
           strncpy(last_active_config, ConfigFilesList[i]->Name, MAX_PATH - 1);
           DisableResume();
-          RefreshAllPanels();
-#ifndef ANDROID
+  				inputdevice_updateconfig (NULL, &workprefs);
+          RefreshPanelConfig();
         }
-#endif
-      }
-      else if(actionEvent.getSource() == cmdSave)
-      {
+
+      } else if(actionEvent.getSource() == cmdSave) {
         //-----------------------------------------------
         // Save current configuration
         //-----------------------------------------------
@@ -150,32 +120,24 @@ class ConfigButtonActionListener : public gcn::ActionListener
           fetch_configurationpath(filename, MAX_DPATH);
           strncat(filename, txtName->getText().c_str(), MAX_DPATH - 1);
           strncat(filename, ".uae", MAX_DPATH - 1);
-          strncpy(changed_prefs.description, txtDesc->getText().c_str(), 255);
-          if(cfgfile_save(&changed_prefs, filename, 0))
+          strncpy(workprefs.description, txtDesc->getText().c_str(), 255);
+          if(cfgfile_save(&workprefs, filename, 0)) {
+            strncpy(last_active_config, txtName->getText().c_str(), MAX_PATH - 1);
             RefreshPanelConfig();
+          }
         }
-      }
-      else if(actionEvent.getSource() == cmdLoadFrom)
-      {
-      }
-      else if(actionEvent.getSource() == cmdSaveAs)
-      {
-      }
-      else if(actionEvent.getSource() == cmdDelete)
-      {
+
+      } else if(actionEvent.getSource() == cmdDelete) {
         //-----------------------------------------------
         // Delete selected config
         //-----------------------------------------------
         char msg[256];
         i = lstConfigs->getSelected();
-        if(i >= 0 && strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME))
-        {
+        if(i >= 0 && strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME)) {
           snprintf(msg, 255, "Do you want to delete '%s' ?", ConfigFilesList[i]->Name);
-          if(ShowMessage("Delete Configuration", msg, "", "Yes", "No"))
-          {
+          if(ShowMessage("Delete Configuration", msg, "", "Yes", "No")) {
             remove(ConfigFilesList[i]->FullPath);
-            if(!strcmp(last_active_config, ConfigFilesList[i]->Name))
-            {
+            if(!strcmp(last_active_config, ConfigFilesList[i]->Name)) {
               txtName->setText("");
               txtDesc->setText("");
               last_active_config[0] = '\0';
@@ -185,84 +147,58 @@ class ConfigButtonActionListener : public gcn::ActionListener
           }
           cmdDelete->requestFocus();
         }
+
+      } else if(actionEvent.getSource() == lstConfigs) {
+        int selected_item;
+        selected_item = lstConfigs->getSelected();
+        if(!txtName->getText().compare(ConfigFilesList[selected_item]->Name))
+        {
+          //-----------------------------------------------
+          // Selected same config again -> load and start it
+          //-----------------------------------------------
+    			if(emulating) {
+    			  uae_restart(0, ConfigFilesList[selected_item]->FullPath);
+    			} else {
+            target_cfgfile_load(&workprefs, ConfigFilesList[selected_item]->FullPath, 0, 0);
+            strncpy(last_active_config, ConfigFilesList[selected_item]->Name, MAX_PATH - 1);
+            DisableResume();
+    				inputdevice_updateconfig (NULL, &workprefs);
+            RefreshPanelConfig();
+    			  uae_reset(0, 1);
+    			}
+    			gui_running = false;
+        } else {
+          txtName->setText(ConfigFilesList[selected_item]->Name);
+          txtDesc->setText(ConfigFilesList[selected_item]->Description);
+        }
+
       }
     }
 };
-static ConfigButtonActionListener* configButtonActionListener;
-
-
-class ConfigsListActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      int selected_item;
-      selected_item = lstConfigs->getSelected();
-      if(!txtName->getText().compare(ConfigFilesList[selected_item]->Name))
-      {
-        //-----------------------------------------------
-        // Selected same config again -> load and start it
-        //-----------------------------------------------
-#ifndef ANDROID
-  			if(emulating) {
-  			  uae_restart(0, ConfigFilesList[selected_item]->FullPath);
-  			} else {
-#endif
-          target_cfgfile_load(&changed_prefs, ConfigFilesList[selected_item]->FullPath, 0, 0);
-          strncpy(last_active_config, ConfigFilesList[selected_item]->Name, MAX_PATH - 1);
-          DisableResume();
-          RefreshAllPanels();
-  			  uae_reset(0, 1);
-#ifndef ANDROID
-  			}
-#endif
-  			gui_running = false;
-      }
-      else
-      {
-        txtName->setText(ConfigFilesList[selected_item]->Name);
-        txtDesc->setText(ConfigFilesList[selected_item]->Description);
-      }
-    }
-};
-static ConfigsListActionListener* configsListActionListener;
+static ConfigActionListener* configActionListener;
 
 
 void InitPanelConfig(const struct _ConfigCategory& category)
 {
-  configButtonActionListener = new ConfigButtonActionListener();
+  configActionListener = new ConfigActionListener();
 
   cmdLoad = new gcn::Button("Load");
   cmdLoad->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
   cmdLoad->setBaseColor(gui_baseCol);
   cmdLoad->setId("ConfigLoad");
-  cmdLoad->addActionListener(configButtonActionListener);
+  cmdLoad->addActionListener(configActionListener);
 
   cmdSave = new gcn::Button("Save");
   cmdSave->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
   cmdSave->setBaseColor(gui_baseCol);
   cmdSave->setId("ConfigSave");
-  cmdSave->addActionListener(configButtonActionListener);
+  cmdSave->addActionListener(configActionListener);
 
-  cmdLoadFrom = new gcn::Button("Load From...");
-  cmdLoadFrom->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-  cmdLoadFrom->setBaseColor(gui_baseCol);
-  cmdLoadFrom->setId("CfgLoadFrom");
-  cmdLoadFrom->addActionListener(configButtonActionListener);
-  cmdLoadFrom->setEnabled(false);
-  
-  cmdSaveAs = new gcn::Button("Save As...");
-  cmdSaveAs->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-  cmdSaveAs->setBaseColor(gui_baseCol);
-  cmdSaveAs->setId("CfgSaveAs");
-  cmdSaveAs->addActionListener(configButtonActionListener);
-  cmdSaveAs->setEnabled(false);
-  
   cmdDelete = new gcn::Button("Delete");
   cmdDelete->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
   cmdDelete->setBaseColor(gui_baseCol);
   cmdDelete->setId("CfgDelete");
-  cmdDelete->addActionListener(configButtonActionListener);
+  cmdDelete->addActionListener(configActionListener);
 
   int buttonX = DISTANCE_BORDER;
   int buttonY = category.panel->getHeight() - DISTANCE_BORDER - BUTTON_HEIGHT;
@@ -288,17 +224,12 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   txtDesc->setSize(300, TEXTFIELD_HEIGHT);
   txtDesc->setId("ConfigDesc");
   
-  ReadConfigFileList();
-  configsList = new ConfigsListModel();
-  configsList->InitConfigsList();
-  configsListActionListener = new ConfigsListActionListener();
-
-  lstConfigs = new gcn::UaeListBox(configsList);
+  lstConfigs = new gcn::UaeListBox(&configsList);
   lstConfigs->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER - 22, 232);
   lstConfigs->setBaseColor(gui_baseCol);
   lstConfigs->setWrappingEnabled(true);
   lstConfigs->setId("ConfigList");
-  lstConfigs->addActionListener(configsListActionListener);
+  lstConfigs->addActionListener(configActionListener);
   
   scrAreaConfigs = new gcn::ScrollArea(lstConfigs);
 #ifdef USE_SDL2
@@ -320,64 +251,30 @@ void InitPanelConfig(const struct _ConfigCategory& category)
   if(strlen(last_active_config) == 0)
     strncpy(last_active_config, OPTIONSFILENAME, MAX_PATH - 1);
   txtName->setText(last_active_config);
-  txtDesc->setText(changed_prefs.description);
+  txtDesc->setText(workprefs.description);
   ensureVisible = -1;
+  
   RefreshPanelConfig();
 }
 
 
-void ExitPanelConfig(void)
+void ExitPanelConfig(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete lstConfigs;
   delete scrAreaConfigs;
-  delete configsListActionListener;
-  delete configsList;
   
   delete cmdLoad;
   delete cmdSave;
-  delete cmdLoadFrom;
-  delete cmdSaveAs;
   delete cmdDelete;
-
-  delete configButtonActionListener;
 
   delete lblName;
   delete txtName;
   delete lblDesc;
   delete txtDesc;
-}
 
-
-static void MakeCurrentVisible(void)
-{
-  if(ensureVisible >= 0)
-  {
-    scrAreaConfigs->setVerticalScrollAmount(ensureVisible * 19);
-    ensureVisible = -1;
-  }
-}
-
-
-void RefreshPanelConfig(void)
-{
-  ReadConfigFileList();
-  configsList->InitConfigsList();
-    
-  // Search current entry
-  if(!txtName->getText().empty())
-  {
-    for(int i=0; i<ConfigFilesList.size(); ++i)
-    {
-      if(!_tcscmp(ConfigFilesList[i]->Name, txtName->getText().c_str()))
-      {
-        // Select current entry
-        lstConfigs->setSelected(i);
-        ensureVisible = i;
-        RegisterRefreshFunc(MakeCurrentVisible);
-        break;
-      }
-    }
-  }
+  delete configActionListener;
 }
 
 

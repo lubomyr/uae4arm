@@ -21,8 +21,7 @@
 
 /* Commonly used autoconfig strings */
 
-uaecptr EXPANSION_explibname, EXPANSION_doslibname, EXPANSION_uaeversion;
-uaecptr EXPANSION_uaedevname, EXPANSION_explibbase = 0;
+uaecptr EXPANSION_explibname, EXPANSION_doslibname;
 uaecptr EXPANSION_bootcode, EXPANSION_nullfunc;
 
 /* ROM tag area memory access */
@@ -34,7 +33,7 @@ addrbank rtarea_bank = {
   rtarea_lget, rtarea_wget, rtarea_bget,
   rtarea_lput, rtarea_wput, rtarea_bput,
 	rtarea_xlate, rtarea_check, NULL, _T("rtarea"), _T("UAE Boot ROM"),
-	rtarea_lget, rtarea_wget,
+	rtarea_wget,
 	ABFLAG_ROMIN, S_READ, S_WRITE
 };
 
@@ -179,7 +178,7 @@ void dl (uae_u32 data)
 
 uae_u8 dbg (uaecptr addr)
 {
-  addr -= rtarea_base;
+	addr &= 0xffff;
 	return rtarea_bank.baseaddr[addr];
 }
 
@@ -250,20 +249,10 @@ static uae_u32 REGPARAM2 nullfunc(TrapContext *ctx)
 
 static uae_u32 REGPARAM2 getchipmemsize (TrapContext *ctx)
 {
-	trap_set_dreg(ctx, 1, 0);
-	trap_set_areg(ctx, 1, 0);
   return chipmem_bank.allocated_size;
 }
 
-static uae_u32 REGPARAM2 uae_puts (TrapContext *ctx)
-{
-	uae_char buf[MAX_DPATH];
-	trap_get_string(ctx, buf, trap_get_areg(ctx, 0), sizeof (uae_char));
-	write_log(_T("%s"), buf);
-  return 0;
-}
-
-void rtarea_init_mem (void)
+static void rtarea_init_mem (void)
 {
 	rtarea_bank.reserved_size = RTAREA_SIZE;
 	rtarea_bank.start = rtarea_base;
@@ -271,7 +260,6 @@ void rtarea_init_mem (void)
   	write_log (_T("virtual memory exhausted (rtarea)!\n"));
     target_startup_msg(_T("Internal error"), _T("Virtual memory exhausted (rtarea)."));
     uae_restart(1, NULL);
-    return;
   }
 }
 
@@ -295,10 +283,10 @@ void rtarea_init (void)
 
   _stprintf (uaever, _T("uae-%d.%d.%d"), UAEMAJOR, UAEMINOR, UAESUBREV);
 
-  EXPANSION_uaeversion = ds (uaever);
+  ds (uaever);
   EXPANSION_explibname = ds (_T("expansion.library"));
   EXPANSION_doslibname = ds (_T("dos.library"));
-  EXPANSION_uaedevname = ds (_T("uae.device"));
+  ds (_T("uae.device"));
 
   dw (0);
   dw (0);
@@ -317,10 +305,6 @@ void rtarea_init (void)
   org (rtarea_base + 0xFF80);
   calltrap (deftrapres (getchipmemsize, TRAPFLAG_DORET, _T("getchipmemsize")));
 	dw(RTS);
-
-  org (rtarea_base + 0xFF10);
-  calltrap (deftrapres (uae_puts, TRAPFLAG_NO_RETVAL, _T("uae_puts")));
-  dw (RTS);
 
   org (a);
     

@@ -45,8 +45,7 @@ class ButtonActionListener : public gcn::ActionListener
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      if (actionEvent.getSource() == cmdOK)
-      {
+      if (actionEvent.getSource() == cmdOK) {
         dialogResult = true;
       }
       dialogFinished = true;
@@ -93,14 +92,12 @@ static void checkfoldername (char *current)
 	char actualpath [MAX_PATH];
 	DIR *dir;
 	
-	if (dir = opendir(current))
-	{ 
+	if (dir = opendir(current)) { 
 	  dirList = current;
 	  ptr = realpath(current, actualpath);
 	  strncpy(workingDir, ptr, MAX_PATH - 1);
 	  closedir(dir);
-	}
-  else
+	} else
     strncpy(workingDir, start_path_data, MAX_PATH - 1);
   txtCurrent->setText(workingDir);
 }

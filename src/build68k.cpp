@@ -107,7 +107,7 @@ int main(int argc, char **argv)
 			 case 'r': currbit = bitr; break;
 			 case 'R': currbit = bitR; break;
 			 case 'z': currbit = bitz; break;
-        case 'E': currbit = bitE; break;
+       case 'E': currbit = bitE; break;
 			 case 'p': currbit = bitp; break;
 			 default: abort();
 			}

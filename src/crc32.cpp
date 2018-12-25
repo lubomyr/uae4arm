@@ -22,14 +22,6 @@ static void make_crc_table (void)
 		crc_table16[n] = w;
 	}
 }
-uae_u32 get_crc32_val (uae_u8 v, uae_u32 crc)
-{
-	if (!crc_table32[1])
-		make_crc_table();
-	crc ^= 0xffffffff;
-	crc = crc_table32[(crc ^ v) & 0xff] ^ (crc >> 8);
-	return crc ^ 0xffffffff;
-}
 uae_u32 get_crc32 (void *vbuf, int len)
 {
 	uae_u8 *buf = (uae_u8*)vbuf;

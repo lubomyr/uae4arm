@@ -107,13 +107,12 @@ typedef uae_s8 sample8_t;
 
 STATIC_INLINE int FINISH_DATA (int data, int bits, int ch)
 {
-	if (bits == 16) {
-		return data;
-	} else if (bits - 16 > 0) {
-		data >>=  bits - 16;
-	} else {
+	if (bits < 16) {
 		int shift = 16 - bits;
 		data <<= shift;
+	} else if (bits > 16) {
+		int shift = bits - 16;
+		data >>= shift;
 	}
 	data = data * sound_paula_volume[ch] / 32768;
 	return data;
@@ -291,7 +290,7 @@ static void anti_prehandler(unsigned long best_evtime)
   }
 }
 
-STATIC_INLINE void samplexx_anti_handler (int *datasp)
+static void samplexx_anti_handler (int *datasp)
 {
   int i;
   for (i = 0; i < AUDIO_CHANNELS_PAULA; i++) {
@@ -327,7 +326,7 @@ static void sinc_prehandler_paula (unsigned long best_evtime)
 
 /* this interpolator performs BLEP mixing (bleps are shaped like integrated sinc
  * functions) with a type of BLEP that matches the filtering configuration. */
-STATIC_INLINE void samplexx_sinc_handler (int *datasp)
+static void samplexx_sinc_handler (int *datasp)
 {
   int n, i;
   int const *winsinc;
@@ -534,8 +533,6 @@ static void sample16i_crux_handler (void)
   check_sound_buffers ();
 }
 
-#ifdef HAVE_STEREO_SUPPORT
-
 /* This interpolator examines sample points when Paula switches the output
  * voltage and computes the average of Paula's output */
 
@@ -703,21 +700,6 @@ static void sample16si_rh_handler (void)
   check_sound_buffers ();
 }
 
-#else
-void sample16s_handler (void)
-{
-	sample16_handler ();
-}
-static void sample16si_crux_handler (void)
-{
-	sample16i_crux_handler ();
-}
-static void sample16si_rh_handler (void)
-{
-	sample16i_rh_handler ();
-}
-#endif
-
 static int audio_work_to_do;
 
 static void zerostate (int nr)
@@ -790,7 +772,7 @@ STATIC_INLINE int is_audio_active(void)
   return audio_work_to_do;
 }
 
-STATIC_INLINE void update_volume(int nr, uae_u16 v)
+static void update_volume(int nr, uae_u16 v)
 {
 	struct audio_channel_data *cdp = audio_channel + nr;
 	// 7 bit register in Paula.
@@ -819,7 +801,7 @@ static int isirq (int nr)
   return INTREQR() & (0x80 << nr);
 }
 
-STATIC_INLINE void setirq (int nr, int which)
+static void setirq (int nr, int which)
 {
   INTREQ_0 (0x8000 | (0x80 << nr));
 }
@@ -1114,6 +1096,8 @@ static float rc_calculate_a0(int sample_rate, int cutoff_freq)
 	return out;
 }
 
+static void set_audio(void); 
+
 void check_prefs_changed_audio (void)
 {
   int ch;
@@ -1130,7 +1114,7 @@ void check_prefs_changed_audio (void)
 	}
 }
 
-void set_audio(void)
+static void set_audio(void)
 {
   int old_mixed_size = mixed_stereo_size;
   int sep, delay;

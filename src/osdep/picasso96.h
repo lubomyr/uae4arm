@@ -43,7 +43,7 @@ typedef struct _RECT
   uae_s32 bottom;
 } RECT;
 
-#define MAX_DISPLAYS 4
+#define MAX_DISPLAYS 1
 struct MultiDisplay {
     int primary, disabled, gdi;
     char *name;
@@ -559,7 +559,7 @@ struct Line {
 /************************************************************************/
 struct picasso96_state_struct
 {
-    uae_u32		RGBFormat;   /* true-colour, CLUT, hi-colour, etc. */
+    RGBFTYPE		RGBFormat;   /* true-colour, CLUT, hi-colour, etc. */
     struct MyCLUTEntry	CLUT[256];   /* Duh! */
     uaecptr		Address;     /* Active screen address (Amiga-side) */
     uaecptr		Extent;	     /* End address of screen (Amiga-side) */
@@ -593,29 +593,32 @@ extern struct picasso96_state_struct picasso96_state;
 
 extern void picasso_enablescreen (int on);
 extern void picasso_refresh (void);
-extern void init_hz_p96 (void);
 extern void picasso_handle_vsync (void);
 extern void picasso_trigger_vblank (void);
 extern void picasso_reset (void);
 extern bool picasso_is_active (void);
 extern int picasso_palette (struct MyCLUTEntry *CLUT);
-extern bool picasso_flushpixels (uae_u8 *src, int offset);
 
 /* This structure describes the UAE-side framebuffer for the Picasso
  * screen.  */
 struct picasso_vidbuf_description {
-    int width, height, depth;
-    int rowbytes, pixbytes;
-    int extra_mem; /* nonzero if there's a second buffer that must be updated */
-    uae_u32 rgbformat;
-    uae_u32 selected_rgbformat;
-    uae_u32 clut[256];
+  int width, height, depth;
+  int rowbytes, pixbytes;
+  int extra_mem; /* nonzero if there's a second buffer that must be updated */
+  uae_u32 rgbformat;
+  uae_u32 selected_rgbformat;
+  uae_u32 clut[256];
+  int picasso_convert, host_mode;
+  int ohost_mode, orgbformat;
+  int set_panning_called;
+  bool picasso_active;
+  bool picasso_changed;
+  uae_atomic picasso_state_change;
 };
 
 extern struct picasso_vidbuf_description picasso_vidinfo;
 
 extern void gfx_set_picasso_modeinfo (uae_u32 w, uae_u32 h, uae_u32 d, RGBFTYPE rgbfmt);
-extern void gfx_set_picasso_baseaddr (uaecptr);
 extern void gfx_set_picasso_state (int on);
 extern uae_u8 *gfx_lock_picasso (void);
 extern void gfx_unlock_picasso (bool);

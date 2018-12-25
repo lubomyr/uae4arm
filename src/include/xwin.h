@@ -21,29 +21,11 @@ extern xcolnr xcolors[4096];
 extern int graphics_setup (void);
 extern int graphics_init (bool);
 extern void graphics_leave (void);
-STATIC_INLINE void handle_events (void)
-{
-}
 extern int handle_msgpump (void);
 
-extern bool vsync_switchmode (int);
-STATIC_INLINE int isvsync_chipset (void)
-{
-	if (picasso_on)
-		return 0;
-	return 1;
-}
-
-STATIC_INLINE int isvsync_rtg (void)
-{
-	if (!picasso_on)
-		return 0;
-	return 1;
-}
-
+extern bool vsync_switchmode (int hz);
 extern bool render_screen (bool);
-extern void show_screen (int);
-extern bool show_screen_maybe (bool);
+extern void show_screen (int mode);
 
 extern int lockscr (void);
 extern void unlockscr (void);
@@ -53,9 +35,8 @@ extern void screenshot (int);
 
 extern int bits_in_mask (unsigned long mask);
 extern int mask_shift (unsigned long mask);
-extern unsigned int doMask (int p, int bits, int shift);
 extern unsigned int doMask256 (int p, int bits, int shift);
-extern void alloc_colors64k (int, int, int, int, int, int, int);
+extern void alloc_colors64k (int, int, int, int, int, int);
 extern void alloc_colors_picasso (int rw, int gw, int bw, int rs, int gs, int bs, int rgbfmt);
 
 struct vidbuffer
@@ -75,6 +56,25 @@ struct vidbuf_description
   struct vidbuffer drawbuffer;
 };
 
-extern struct vidbuf_description gfxvidinfo;
+struct amigadisplay
+{
+	volatile bool picasso_requested_on;
+	bool picasso_requested_forced_on;
+	bool picasso_on;
+	int framecnt;
+	int inhibit_frame;
+
+	struct vidbuf_description gfxvidinfo;
+};
+
+extern struct amigadisplay adisplays;
+
+STATIC_INLINE int isvsync_chipset (void)
+{
+	struct amigadisplay *ad = &adisplays;
+	if (ad->picasso_on)
+		return 0;
+	return 1;
+}
 
 #endif /* UAE_XWIN_H */

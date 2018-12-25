@@ -1,6 +1,8 @@
 #ifndef _GUI_HANDLING_H
 #define _GUI_HANDLING_H
 
+extern struct uae_prefs workprefs;
+
 #define GUI_WIDTH  800
 #define GUI_HEIGHT 480
 #define DISTANCE_BORDER 15
@@ -25,8 +27,7 @@ typedef struct _ConfigCategory {
   gcn::SelectorEntry *selector;
   gcn::Container *panel;
   void (*InitFunc) (const struct _ConfigCategory& category);
-  void (*ExitFunc) (void);
-  void (*RefreshFunc) (void);
+  void (*ExitFunc) (const struct _ConfigCategory& category);
   bool (*HelpFunc) (std::vector<std::string>&);
 } ConfigCategory;
 
@@ -44,6 +45,7 @@ extern char last_loaded_config[MAX_DPATH];
 extern int quickstart_start;
 extern int quickstart_model;
 extern int quickstart_conf;
+extern char last_active_config[MAX_PATH];
 
 typedef struct {
   char Name[MAX_DPATH];
@@ -53,83 +55,71 @@ typedef struct {
 extern std::vector<ConfigFileInfo*> ConfigFilesList;
 
 void InitPanelPaths(const struct _ConfigCategory& category);
-void ExitPanelPaths(void);
-void RefreshPanelPaths(void);
+void ExitPanelPaths(const struct _ConfigCategory& category);
 bool HelpPanelPaths(std::vector<std::string> &helptext);
   
 void InitPanelQuickstart(const struct _ConfigCategory& category);
-void ExitPanelQuickstart(void);
-void RefreshPanelQuickstart(void);
+void ExitPanelQuickstart(const struct _ConfigCategory& category);
 bool HelpPanelQuickstart(std::vector<std::string> &helptext);
   
 void InitPanelConfig(const struct _ConfigCategory& category);
-void ExitPanelConfig(void);
-void RefreshPanelConfig(void);
+void ExitPanelConfig(const struct _ConfigCategory& category);
 bool HelpPanelConfig(std::vector<std::string> &helptext);
   
 void InitPanelCPU(const struct _ConfigCategory& category);
-void ExitPanelCPU(void);
-void RefreshPanelCPU(void);
+void ExitPanelCPU(const struct _ConfigCategory& category);
 bool HelpPanelCPU(std::vector<std::string> &helptext);
   
 void InitPanelChipset(const struct _ConfigCategory& category);
-void ExitPanelChipset(void);
-void RefreshPanelChipset(void);
+void ExitPanelChipset(const struct _ConfigCategory& category);
 bool HelpPanelChipset(std::vector<std::string> &helptext);
   
 void InitPanelROM(const struct _ConfigCategory& category);
-void ExitPanelROM(void);
-void RefreshPanelROM(void);
+void ExitPanelROM(const struct _ConfigCategory& category);
 bool HelpPanelROM(std::vector<std::string> &helptext);
   
 void InitPanelRAM(const struct _ConfigCategory& category);
-void ExitPanelRAM(void);
-void RefreshPanelRAM(void);
+void ExitPanelRAM(const struct _ConfigCategory& category);
 bool HelpPanelRAM(std::vector<std::string> &helptext);
   
 void InitPanelFloppy(const struct _ConfigCategory& category);
-void ExitPanelFloppy(void);
-void RefreshPanelFloppy(void);
+void ExitPanelFloppy(const struct _ConfigCategory& category);
 bool HelpPanelFloppy(std::vector<std::string> &helptext);
   
 void InitPanelHD(const struct _ConfigCategory& category);
-void ExitPanelHD(void);
-void RefreshPanelHD(void);
+void ExitPanelHD(const struct _ConfigCategory& category);
 bool HelpPanelHD(std::vector<std::string> &helptext);
   
 void InitPanelDisplay(const struct _ConfigCategory& category);
-void ExitPanelDisplay(void);
-void RefreshPanelDisplay(void);
+void ExitPanelDisplay(const struct _ConfigCategory& category);
 bool HelpPanelDisplay(std::vector<std::string> &helptext);
   
 void InitPanelSound(const struct _ConfigCategory& category);
-void ExitPanelSound(void);
-void RefreshPanelSound(void);
+void ExitPanelSound(const struct _ConfigCategory& category);
 bool HelpPanelSound(std::vector<std::string> &helptext);
 
+void InitPanelGamePort(const struct _ConfigCategory& category);
+void ExitPanelGamePort(const struct _ConfigCategory& category);
+bool HelpPanelGamePort(std::vector<std::string> &helptext);
+
 void InitPanelInput(const struct _ConfigCategory& category);
-void ExitPanelInput(void);
-void RefreshPanelInput(void);
+void ExitPanelInput(const struct _ConfigCategory& category);
 bool HelpPanelInput(std::vector<std::string> &helptext);
   
 void InitPanelMisc(const struct _ConfigCategory& category);
-void ExitPanelMisc(void);
-void RefreshPanelMisc(void);
+void ExitPanelMisc(const struct _ConfigCategory& category);
 bool HelpPanelMisc(std::vector<std::string> &helptext);
   
 void InitPanelSavestate(const struct _ConfigCategory& category);
-void ExitPanelSavestate(void);
-void RefreshPanelSavestate(void);
+void ExitPanelSavestate(const struct _ConfigCategory& category);
 bool HelpPanelSavestate(std::vector<std::string> &helptext);
   
 #ifdef ANDROIDSDL
 void InitPanelOnScreen(const struct _ConfigCategory& category);
-void ExitPanelOnScreen(void);
-void RefreshPanelOnScreen(void);
+void ExitPanelOnScreen(const struct _ConfigCategory& category);
 bool HelpPanelOnScreen(std::vector<std::string> &helptext);
 #endif
 
-void RefreshAllPanels(void);
 void RegisterRefreshFunc(void (*func)(void));
 
 void FocusBugWorkaround(gcn::Window *wnd);
@@ -144,7 +134,6 @@ bool EditFilesysHardfile(int unit_no);
 bool CreateFilesysHardfile(void);
 void ShowHelp(const char *title, const std::vector<std::string>& text);
   
-bool LoadConfigByName(const char *name);
 ConfigFileInfo* SearchConfigInList(const char *name);
 
 extern void ReadDirectory(const char *path, std::vector<std::string> *dirs, std::vector<std::string> *files);

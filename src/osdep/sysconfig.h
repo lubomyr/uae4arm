@@ -2,7 +2,7 @@
 #define PANDORAUAE_SYSCONFIG_H
 
 #define SUPPORT_THREADS
-#define MAX_DPATH 256
+#define MAX_DPATH 512
 
 /* #define DRIVESOUND */
 /* #define GFXFILTER */

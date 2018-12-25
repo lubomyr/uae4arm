@@ -10,7 +10,6 @@
 #include "sdltruetypefont.hpp"
 #endif
 #include "SelectorEntry.hpp"
-#include "UaeRadioButton.hpp"
 #include "UaeDropDown.hpp"
 #include "UaeCheckBox.hpp"
 
@@ -26,6 +25,7 @@
 #include "blkdev.h"
 #include "gui.h"
 #include "gui_handling.h"
+#include "GenericListModel.h"
 
 
 static gcn::Label *lblModel;
@@ -50,12 +50,11 @@ static gcn::UaeCheckBox* chkQuickstartMode;
 
 
 struct amigamodels {
-	int compalevels;
 	char name[32];
 	char configs[8][128];
 };
 static struct amigamodels amodels[] = {
-	{ 4, "Amiga 500", { 
+	{ "Amiga 500", { 
 	     "1.3 ROM, OCS, 512 KB Chip + 512 KB Slow RAM (most common)", 
 	     "1.3 ROM, ECS Agnus, 512 KB Chip RAM + 512 KB Slow RAM",
 	     "1.3 ROM, ECS Agnus, 1 MB Chip RAM",
@@ -63,7 +62,7 @@ static struct amigamodels amodels[] = {
 	     "1.2 ROM, OCS Agnus, 512 KB Chip RAM",
 	     "1.2 ROM, OCS Agnus, 512 KB Chip RAM + 512 KB Slow RAM",
 	     "\0" } },
-	{ 4, "Amiga 500+", { 
+	{ "Amiga 500+", { 
 	     "Basic non-expanded configuration",
 	     "2 MB Chip RAM expanded configuration",
 	     "4 MB Fast RAM expanded configuration",
@@ -71,7 +70,7 @@ static struct amigamodels amodels[] = {
          " ", " ", " ",
 #endif
 	     "\0" } },
-	{ 4, "Amiga 600", { 
+	{ "Amiga 600", { 
 	     "Basic non-expanded configuration",
 	     "2 MB Chip RAM expanded configuration",
 	     "4 MB Fast RAM expanded configuration",
@@ -79,33 +78,28 @@ static struct amigamodels amodels[] = {
          " ", " ", " ",
 #endif
 	     "\0" } },
-	{ 4, "Amiga 1200", {
+	{ "Amiga 1200", {
 	      "Basic non-expanded configuration",
 	      "4 MB Fast RAM expanded configuration",
 #ifdef ANDROID
          " ", " ", " ", " ",
 #endif
 	      "\0" } },
-//	{ 2, "Amiga 3000", { 
-//       "1.4 ROM, 2MB Chip + 8MB Fast",
-//       "2.04 ROM, 2MB Chip + 8MB Fast",
-//       "3.1 ROM, 2MB Chip + 8MB Fast",
-//       "\0" } },
-	{ 1, "Amiga 4000", {
+	{ "Amiga 4000", {
        "68030, 3.1 ROM, 2MB Chip + 8MB Fast",
        "68040, 3.1 ROM, 2MB Chip + 8MB Fast",
 #ifdef ANDROID
          " ", " ", " ", " ",
 #endif
        "\0" } },
-	{ 3, "CD32", { 
+	{ "CD32", { 
 	     "CD32", 
 	     "CD32 with Full Motion Video cartridge",
 #ifdef ANDROID
          " ", " ", " ", " ",
 #endif
 	     "\0" } },
-	{ -1 }
+	{ "\0" }
 };
 
 static const int numModels = 6;
@@ -116,15 +110,24 @@ static bool bIgnoreListChange = true;
 static const char *diskfile_filter[] = { ".adf", ".adz", ".fdi", ".zip", ".dms", ".gz", ".xz", "\0" };
 static const char *cdfile_filter[] = { ".cue", ".ccd", ".iso", "\0" };
 
+
+static gcn::GenericListModel amigaModelList;
+static gcn::GenericListModel amigaConfigList;
+static gcn::GenericListModel diskfileList;
+static gcn::GenericListModel cdfileList;
+
+
 static void AdjustDropDownControls(void);
 
 static void CountModelConfigs(void)
 {
+	amigaConfigList.clear();
   numModelConfigs = 0;
   if(quickstart_model >= 0 && quickstart_model < numModels) {
-    for(int i=0; i<8; ++i) {
+    for(int i = 0; i < 8; ++i) {
       if(amodels[quickstart_model].configs[i][0] == '\0')
         break;
+    	amigaConfigList.add(amodels[quickstart_model].configs[i]);
       ++numModelConfigs;
     }
   }
@@ -153,7 +156,7 @@ static void SetControlState(int model)
       break;
   }
 
-  chkDFxWriteProtect[0]->setEnabled(df0Editable && !changed_prefs.floppy_read_only);
+  chkDFxWriteProtect[0]->setEnabled(df0Editable && !workprefs.floppy_read_only);
   cmdDFxInfo[0]->setEnabled(df0Editable);
   cmdDFxEject[0]->setEnabled(df0Editable);
   cmdDFxSelect[0]->setEnabled(df0Editable);
@@ -175,9 +178,9 @@ static void SetControlState(int model)
 
 static void AdjustPrefs(void)
 {
-  int old_cs = changed_prefs.cs_compatible;
+  int old_cs = workprefs.cs_compatible;
   
-	built_in_prefs (&changed_prefs, quickstart_model, quickstart_conf, 0, 0);
+	built_in_prefs (&workprefs, quickstart_model, quickstart_conf, 0, 0);
   switch(quickstart_model) {
     case 0: // A500
     case 1: // A500+
@@ -185,35 +188,35 @@ static void AdjustPrefs(void)
     case 3: // A1200
     case 4: // A4000
       // df0 always active
-      changed_prefs.floppyslots[0].dfxtype = DRV_35_DD;
+      workprefs.floppyslots[0].dfxtype = DRV_35_DD;
       
       // No CD available
-      changed_prefs.cdslots[0].inuse = false;
-      changed_prefs.cdslots[0].type = SCSI_UNIT_DISABLED;
+      workprefs.cdslots[0].inuse = false;
+      workprefs.cdslots[0].type = SCSI_UNIT_DISABLED;
       break;
     
     case 5: // CD32
       // No floppy drive available, CD available
-      changed_prefs.floppyslots[0].dfxtype = DRV_NONE;
-      changed_prefs.floppyslots[1].dfxtype = DRV_NONE;
-      changed_prefs.cdslots[0].inuse = true;
-      changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+      workprefs.floppyslots[0].dfxtype = DRV_NONE;
+      workprefs.floppyslots[1].dfxtype = DRV_NONE;
+      workprefs.cdslots[0].inuse = true;
+      workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
       break;
   }
   
-  if(emulating && old_cs != changed_prefs.cs_compatible)
+  if(emulating && old_cs != workprefs.cs_compatible)
     uae_restart(-1, NULL);
 }
 
 
 static void SetModelFromConfig(void)
 {
-  switch(changed_prefs.cs_compatible) {
+  switch(workprefs.cs_compatible) {
     case CP_A500:
       quickstart_model = 0;
-      if(changed_prefs.chipset_mask == 0)
+      if(workprefs.chipset_mask == 0)
         quickstart_conf = 0;
-      else if(changed_prefs.chipmem_size == 0x100000)
+      else if(workprefs.chipmem_size == 0x100000)
         quickstart_conf = 2;
       else
         quickstart_conf = 1;
@@ -221,9 +224,9 @@ static void SetModelFromConfig(void)
     
     case CP_A500P:
       quickstart_model = 1;
-      if(changed_prefs.chipmem_size == 0x200000)
+      if(workprefs.chipmem_size == 0x200000)
         quickstart_conf = 1;
-      else if(changed_prefs.fastmem[0].size == 0x400000)
+      else if(workprefs.fastmem[0].size == 0x400000)
         quickstart_conf = 2;
       else
         quickstart_conf = 1;
@@ -231,9 +234,9 @@ static void SetModelFromConfig(void)
       
     case CP_A600:
       quickstart_model = 2;
-      if(changed_prefs.chipmem_size == 0x200000)
+      if(workprefs.chipmem_size == 0x200000)
         quickstart_conf = 1;
-      else if(changed_prefs.fastmem[0].size == 0x400000)
+      else if(workprefs.fastmem[0].size == 0x400000)
         quickstart_conf = 2;
       else
         quickstart_conf = 1;
@@ -241,7 +244,7 @@ static void SetModelFromConfig(void)
       
     case CP_A1200:
       quickstart_model = 3;
-      if(changed_prefs.fastmem[0].size == 0x400000)
+      if(workprefs.fastmem[0].size == 0x400000)
         quickstart_conf = 1;
       else
         quickstart_conf = 0;
@@ -249,7 +252,7 @@ static void SetModelFromConfig(void)
       
     case CP_A4000:
       quickstart_model = 4;
-      if(changed_prefs.cpu_model == 68040)
+      if(workprefs.cpu_model == 68040)
         quickstart_conf = 1;
       else
         quickstart_conf = 0;
@@ -257,16 +260,16 @@ static void SetModelFromConfig(void)
       
     case CP_CD32:
       quickstart_model = 5;
-      if(changed_prefs.cs_cd32fmv)
+      if(workprefs.cs_cd32fmv)
         quickstart_conf = 1;
       else
         quickstart_conf = 0;
       break;
       
     default:
-      if(changed_prefs.cpu_model == 68000)
+      if(workprefs.cpu_model == 68000)
         quickstart_model = 0;
-      else if(changed_prefs.cpu_model == 68020)
+      else if(workprefs.cpu_model == 68020)
         quickstart_model = 3;
       else
         quickstart_model = 4;
@@ -276,95 +279,88 @@ static void SetModelFromConfig(void)
 }
 
 
-class AmigaModelListModel : public gcn::ListModel
+static void AdjustDropDownControls(void)
 {
-  public:
-    AmigaModelListModel()
-    {
-    }
-    
-    int getNumberOfElements()
-    {
-      return numModels;
-    }
+  int i, j;
+  
+  bIgnoreListChange = true;
+  
+  for(i=0; i<2; ++i)
+  {
+    cboDFxFile[i]->clearSelected();
 
-    std::string getElementAt(int i)
+    if((workprefs.floppyslots[i].dfxtype != DRV_NONE) && strlen(workprefs.floppyslots[i].df) > 0)
     {
-      if(i < 0 || i >= numModels)
-        return "---";
-      return amodels[i].name;
+      for(j=0; j<lstMRUDiskList.size(); ++j)
+      {
+        if(!lstMRUDiskList[j].compare(workprefs.floppyslots[i].df))
+        {
+          cboDFxFile[i]->setSelected(j);
+          break;
+        }
+      }
     }
-};
-static AmigaModelListModel amigaModelList;
+  }
+
+  cboCDFile->clearSelected();
+  if((workprefs.cdslots[0].inuse) && strlen(workprefs.cdslots[0].name) > 0)
+  {
+    for(i = 0; i < lstMRUCDList.size(); ++i)
+    {
+      if(!lstMRUCDList[i].compare(workprefs.cdslots[0].name))
+      {
+        cboCDFile->setSelected(i);
+        break;
+      }
+    }
+  }
+       
+  bIgnoreListChange = false;
+}
 
 
-class AmigaConfigListModel : public gcn::ListModel
+static void RefreshPanelQuickstart(void)
 {
-  public:
-    AmigaConfigListModel()
-    {
-    }
-    
-    int getNumberOfElements()
-    {
-      return numModelConfigs;
-    }
+  int i;
+  bool prevAvailable = true;
+  
+  chkNTSC->setSelected(workprefs.ntscmode);
 
-    std::string getElementAt(int i)
-    {
-      if(quickstart_model < 0 || i < 0 || i >= numModelConfigs)
-        return "---";
-      return amodels[quickstart_model].configs[i];
-    }
-};
-static AmigaConfigListModel amigaConfigList;
+  AdjustDropDownControls();
 
+  workprefs.nr_floppies = 0;
+  for(i=0; i<4; ++i)
+  {
+    bool driveEnabled = workprefs.floppyslots[i].dfxtype != DRV_NONE;
+    if(i < 2) {
+      chkDFx[i]->setSelected(driveEnabled);
+      chkDFxWriteProtect[i]->setSelected(disk_getwriteprotect(&workprefs, workprefs.floppyslots[i].df));
+      if(i == 0)
+        chkDFx[i]->setEnabled(false);
+      else
+        chkDFx[i]->setEnabled(prevAvailable);
+      
+      cmdDFxInfo[i]->setEnabled(driveEnabled);
+      chkDFxWriteProtect[i]->setEnabled(driveEnabled && !workprefs.floppy_read_only);
+      cmdDFxEject[i]->setEnabled(driveEnabled);
+      cmdDFxSelect[i]->setEnabled(driveEnabled);
+      cboDFxFile[i]->setEnabled(driveEnabled);
+    }    
+    prevAvailable = driveEnabled;
+    if(driveEnabled)
+      workprefs.nr_floppies = i + 1;
+  }
 
-class QSDiskfileListModel : public gcn::ListModel
-{
-  public:
-    QSDiskfileListModel()
-    {
-    }
-    
-    int getNumberOfElements()
-    {
-      return lstMRUDiskList.size();
-    }
+  chkCD->setSelected(workprefs.cdslots[0].inuse);
+  cmdCDEject->setEnabled(workprefs.cdslots[0].inuse);
+  cmdCDSelect->setEnabled(workprefs.cdslots[0].inuse);
+  cboCDFile->setEnabled(workprefs.cdslots[0].inuse);
 
-    std::string getElementAt(int i)
-    {
-      if(i < 0 || i >= lstMRUDiskList.size())
-        return "---";
-      return lstMRUDiskList[i];
-    }
-};
-static QSDiskfileListModel diskfileList;
+  chkQuickstartMode->setSelected(quickstart_start);
+}
 
 
-class QSCDfileListModel : public gcn::ListModel
-{
-  public:
-    QSCDfileListModel()
-    {
-    }
-    
-    int getNumberOfElements()
-    {
-      return lstMRUCDList.size();
-    }
-
-    std::string getElementAt(int i)
-    {
-      if(i < 0 || i >= lstMRUCDList.size())
-        return "---";
-      return lstMRUCDList[i];
-    }
-};
-static QSCDfileListModel cdfileList;
-
-
-class QSCDButtonActionListener : public gcn::ActionListener
+class QSActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
@@ -373,23 +369,22 @@ class QSCDButtonActionListener : public gcn::ActionListener
   	    //---------------------------------------
         // Eject CD from drive
   	    //---------------------------------------
-        strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH - 1);
+        strncpy(workprefs.cdslots[0].name, "", MAX_DPATH - 1);
         AdjustDropDownControls();
+
       } else if(actionEvent.getSource() == cmdCDSelect) {
   	    char tmp[MAX_DPATH];
 
-  	    if(strlen(changed_prefs.cdslots[0].name) > 0)
-  	      strncpy(tmp, changed_prefs.cdslots[0].name, MAX_DPATH - 1);
+  	    if(strlen(workprefs.cdslots[0].name) > 0)
+  	      strncpy(tmp, workprefs.cdslots[0].name, MAX_DPATH - 1);
   	    else
   	      strncpy(tmp, currentDir, MAX_DPATH - 1);
 
-  	    if(SelectFile("Select CD image file", tmp, cdfile_filter))
-	      {
-    	    if(strncmp(changed_prefs.cdslots[0].name, tmp, MAX_DPATH))
-    	    {
-      	    strncpy(changed_prefs.cdslots[0].name, tmp, sizeof(changed_prefs.cdslots[0].name) - 1);
-      	    changed_prefs.cdslots[0].inuse = true;
-      	    changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+  	    if(SelectFile("Select CD image file", tmp, cdfile_filter)) {
+    	    if(strncmp(workprefs.cdslots[0].name, tmp, MAX_DPATH)) {
+      	    strncpy(workprefs.cdslots[0].name, tmp, sizeof(workprefs.cdslots[0].name) - 1);
+      	    workprefs.cdslots[0].inuse = true;
+      	    workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
       	    AddFileToCDList(tmp, 1);
       	    extractPath(tmp, currentDir);
 
@@ -397,56 +392,34 @@ class QSCDButtonActionListener : public gcn::ActionListener
     	    }
 	      }
 	      cmdCDSelect->requestFocus();
-      }
-      RefreshPanelHD();
-      RefreshPanelQuickstart();
-    }
-};
-static QSCDButtonActionListener* cdButtonActionListener;
 
+      } else if(actionEvent.getSource() == cboCDFile) {
+  	    //---------------------------------------
+        // CD image from list selected
+  	    //---------------------------------------
+  	    if(!bIgnoreListChange) {
+    	    int idx = cboCDFile->getSelected();
+  
+    	    if(idx < 0) {
+            strncpy(workprefs.cdslots[0].name, "", MAX_DPATH - 1);
+            AdjustDropDownControls();
+  	      } else {
+      	    if(cdfileList.getElementAt(idx).compare(workprefs.cdslots[0].name))
+  	        {
+        	    strncpy(workprefs.cdslots[0].name, cdfileList.getElementAt(idx).c_str(), sizeof(workprefs.cdslots[0].name) - 1);
+        	    workprefs.cdslots[0].inuse = true;
+        	    workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+        	    lstMRUCDList.erase(lstMRUCDList.begin() + idx);
+        	    lstMRUCDList.insert(lstMRUCDList.begin(), workprefs.cdslots[0].name);
+              bIgnoreListChange = true;
+              cboCDFile->setSelected(0);
+              bIgnoreListChange = false;
+            }
+    	    }
+        }
 
-class QSCDFileActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    //---------------------------------------
-      // CD image from list selected
-	    //---------------------------------------
-	    if(!bIgnoreListChange) {
-  	    int idx = cboCDFile->getSelected();
-
-  	    if(idx < 0) {
-          strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH - 1);
-          AdjustDropDownControls();
-	      } else {
-    	    if(cdfileList.getElementAt(idx).compare(changed_prefs.cdslots[0].name))
-	        {
-      	    strncpy(changed_prefs.cdslots[0].name, cdfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.cdslots[0].name) - 1);
-      	    changed_prefs.cdslots[0].inuse = true;
-      	    changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
-      	    lstMRUCDList.erase(lstMRUCDList.begin() + idx);
-      	    lstMRUCDList.insert(lstMRUCDList.begin(), changed_prefs.cdslots[0].name);
-            bIgnoreListChange = true;
-            cboCDFile->setSelected(0);
-            bIgnoreListChange = false;
-          }
-  	    }
-      }
-      RefreshPanelHD();
-      RefreshPanelQuickstart();
-    }
-};
-static QSCDFileActionListener* cdFileActionListener;
-
-
-class AmigaModelActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if (!bIgnoreListChange) {
-        if (actionEvent.getSource() == cboModel) {
+      } else if (actionEvent.getSource() == cboModel) {
+        if (!bIgnoreListChange) {
     	    //---------------------------------------
           // Amiga model selected
     	    //---------------------------------------
@@ -458,7 +431,10 @@ class AmigaModelActionListener : public gcn::ActionListener
       	    AdjustPrefs();
       	    DisableResume();
       	  }
-        } else if (actionEvent.getSource() == cboConfig) {
+        }
+
+      } else if (actionEvent.getSource() == cboConfig) {
+        if (!bIgnoreListChange) {
     	    //---------------------------------------
           // Model configuration selected
     	    //---------------------------------------
@@ -467,164 +443,112 @@ class AmigaModelActionListener : public gcn::ActionListener
       	    AdjustPrefs();
       	  }
         }
-        RefreshAllPanels();
-      }
-    }
-};
-static AmigaModelActionListener* amigaModelActionListener;
 
+      } else if (actionEvent.getSource() == chkNTSC) {
+  	    if (chkNTSC->isSelected()) {
+  	      workprefs.ntscmode = true;
+  	      workprefs.chipset_refreshrate = 60;
+        } else {
+  	      workprefs.ntscmode = false;
+  	      workprefs.chipset_refreshrate = 50;
+        }
 
-class QSNTSCButtonActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    if (chkNTSC->isSelected()) {
-	      changed_prefs.ntscmode = true;
-	      changed_prefs.chipset_refreshrate = 60;
+      } else if(actionEvent.getSource() == chkQuickstartMode) {
+  	    quickstart_start = chkQuickstartMode->isSelected();
+        
       } else {
-	      changed_prefs.ntscmode = false;
-	      changed_prefs.chipset_refreshrate = 50;
-      }
-      RefreshPanelChipset();
-    }
-};
-static QSNTSCButtonActionListener* ntscButtonActionListener;
+  	    for(int i = 0; i < 2; ++i) {
+  	      if (actionEvent.getSource() == chkDFx[i]) {
+      	    //---------------------------------------
+            // Drive enabled/disabled
+      	    //---------------------------------------
+            if(chkDFx[i]->isSelected())
+              workprefs.floppyslots[i].dfxtype = DRV_35_DD;
+            else
+              workprefs.floppyslots[i].dfxtype = DRV_NONE;
 
+          } else if(actionEvent.getSource() == chkDFxWriteProtect[i]) {
+      	    //---------------------------------------
+            // Write-protect changed
+      	    //---------------------------------------
+            disk_setwriteprotect (&workprefs, i, workprefs.floppyslots[i].df, chkDFxWriteProtect[i]->isSelected());
+            if(disk_getwriteprotect(&workprefs, workprefs.floppyslots[i].df) != chkDFxWriteProtect[i]->isSelected()) {
+              // Failed to change write protection -> maybe filesystem doesn't support this
+              ShowMessage("Set/Clear write protect", "Failed to change write permission.", "Maybe underlying filesystem doesn't support this.", "Ok", "");
+            }
+            DISK_reinsert(i);
 
-class QSDFxCheckActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    for(int i=0; i<2; ++i) {
-	      if (actionEvent.getSource() == chkDFx[i]) {
-    	    //---------------------------------------
-          // Drive enabled/disabled
-    	    //---------------------------------------
-          if(chkDFx[i]->isSelected())
-            changed_prefs.floppyslots[i].dfxtype = DRV_35_DD;
-          else
-            changed_prefs.floppyslots[i].dfxtype = DRV_NONE;
-        } else if(actionEvent.getSource() == chkDFxWriteProtect[i]) {
-    	    //---------------------------------------
-          // Write-protect changed
-    	    //---------------------------------------
-          disk_setwriteprotect (&changed_prefs, i, changed_prefs.floppyslots[i].df, chkDFxWriteProtect[i]->isSelected());
-          if(disk_getwriteprotect(&changed_prefs, changed_prefs.floppyslots[i].df) != chkDFxWriteProtect[i]->isSelected()) {
-            // Failed to change write protection -> maybe filesystem doesn't support this
-            ShowMessage("Set/Clear write protect", "Failed to change write permission.", "Maybe underlying filesystem doesn't support this.", "Ok", "");
+          } else if (actionEvent.getSource() == cmdDFxInfo[i]) {
+      	    //---------------------------------------
+            // Show info about current disk-image
+      	    //---------------------------------------
+            if(workprefs.floppyslots[i].dfxtype != DRV_NONE && strlen(workprefs.floppyslots[i].df) > 0)
+              ; // ToDo: Show info dialog
+
+          } else if (actionEvent.getSource() == cmdDFxEject[i]) {
+      	    //---------------------------------------
+            // Eject disk from drive
+      	    //---------------------------------------
+            disk_eject(i);
+            strncpy(workprefs.floppyslots[i].df, "", MAX_DPATH - 1);
+            AdjustDropDownControls();
+
+          } else if (actionEvent.getSource() == cmdDFxSelect[i]) {
+      	    //---------------------------------------
+            // Select disk for drive
+      	    //---------------------------------------
+      	    char tmp[MAX_PATH];
+  
+      	    if(strlen(workprefs.floppyslots[i].df) > 0)
+      	      strncpy(tmp, workprefs.floppyslots[i].df, MAX_PATH - 1);
+      	    else
+      	      strncpy(tmp, currentDir, MAX_PATH - 1);
+      	    if(SelectFile("Select disk image file", tmp, diskfile_filter))
+    	      {
+        	    if(strncmp(workprefs.floppyslots[i].df, tmp, MAX_PATH))
+        	    {
+          	    strncpy(workprefs.floppyslots[i].df, tmp, sizeof(workprefs.floppyslots[i].df) - 1);
+          	    disk_insert(i, tmp);
+          	    AddFileToDiskList(tmp, 1);
+          	    extractPath(tmp, currentDir);
+  
+                AdjustDropDownControls();
+        	    }
+    	      }
+    	      cmdDFxSelect[i]->requestFocus();
+
+          } else if (actionEvent.getSource() == cboDFxFile[i]) {
+      	    //---------------------------------------
+            // Diskimage from list selected
+      	    //---------------------------------------
+      	    if(!bIgnoreListChange) {
+        	    int idx = cboDFxFile[i]->getSelected();
+  
+        	    if(idx < 0) {
+                disk_eject(i);
+                strncpy(workprefs.floppyslots[i].df, "", MAX_DPATH - 1);
+                AdjustDropDownControls();
+      	      } else {
+          	    if(diskfileList.getElementAt(idx).compare(workprefs.floppyslots[i].df)) {
+            	    strncpy(workprefs.floppyslots[i].df, diskfileList.getElementAt(idx).c_str(), sizeof(workprefs.floppyslots[i].df) - 1);
+            	    disk_insert(i, workprefs.floppyslots[i].df);
+            	    lstMRUDiskList.erase(lstMRUDiskList.begin() + idx);
+            	    lstMRUDiskList.insert(lstMRUDiskList.begin(), workprefs.floppyslots[i].df);
+                  bIgnoreListChange = true;
+                  cboDFxFile[i]->setSelected(0);
+                  bIgnoreListChange = false;
+                }
+        	    }
+              RefreshPanelQuickstart();
+        	  }
           }
-          DISK_reinsert(i);
         }
-      }
 
-      RefreshPanelFloppy();
+      }
       RefreshPanelQuickstart();
     }
 };
-static QSDFxCheckActionListener* dfxCheckActionListener;
-
-
-class QSDFxButtonActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    for(int i=0; i<2; ++i) {
-	      if (actionEvent.getSource() == cmdDFxInfo[i]) {
-    	    //---------------------------------------
-          // Show info about current disk-image
-    	    //---------------------------------------
-          if(changed_prefs.floppyslots[i].dfxtype != DRV_NONE && strlen(changed_prefs.floppyslots[i].df) > 0)
-            ; // ToDo: Show info dialog
-        } else if (actionEvent.getSource() == cmdDFxEject[i]) {
-    	    //---------------------------------------
-          // Eject disk from drive
-    	    //---------------------------------------
-          disk_eject(i);
-          strncpy(changed_prefs.floppyslots[i].df, "", MAX_DPATH - 1);
-          AdjustDropDownControls();
-        } else if (actionEvent.getSource() == cmdDFxSelect[i]) {
-    	    //---------------------------------------
-          // Select disk for drive
-    	    //---------------------------------------
-    	    char tmp[MAX_PATH];
-
-    	    if(strlen(changed_prefs.floppyslots[i].df) > 0)
-    	      strncpy(tmp, changed_prefs.floppyslots[i].df, MAX_PATH - 1);
-    	    else
-    	      strncpy(tmp, currentDir, MAX_PATH - 1);
-    	    if(SelectFile("Select disk image file", tmp, diskfile_filter))
-  	      {
-      	    if(strncmp(changed_prefs.floppyslots[i].df, tmp, MAX_PATH))
-      	    {
-        	    strncpy(changed_prefs.floppyslots[i].df, tmp, sizeof(changed_prefs.floppyslots[i].df) - 1);
-        	    disk_insert(i, tmp);
-        	    AddFileToDiskList(tmp, 1);
-        	    extractPath(tmp, currentDir);
-
-              AdjustDropDownControls();
-      	    }
-  	      }
-  	      cmdDFxSelect[i]->requestFocus();
-        }
-      }
-
-      RefreshPanelFloppy();
-      RefreshPanelQuickstart();
-    }
-};
-static QSDFxButtonActionListener* dfxButtonActionListener;
-
-
-class QSDiskFileActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    for(int i=0; i<2; ++i) {
-	      if (actionEvent.getSource() == cboDFxFile[i]) {
-    	    //---------------------------------------
-          // Diskimage from list selected
-    	    //---------------------------------------
-    	    if(!bIgnoreListChange) {
-      	    int idx = cboDFxFile[i]->getSelected();
-
-      	    if(idx < 0) {
-              disk_eject(i);
-              strncpy(changed_prefs.floppyslots[i].df, "", MAX_DPATH - 1);
-              AdjustDropDownControls();
-    	      } else {
-        	    if(diskfileList.getElementAt(idx).compare(changed_prefs.floppyslots[i].df)) {
-          	    strncpy(changed_prefs.floppyslots[i].df, diskfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.floppyslots[i].df) - 1);
-          	    disk_insert(i, changed_prefs.floppyslots[i].df);
-          	    lstMRUDiskList.erase(lstMRUDiskList.begin() + idx);
-          	    lstMRUDiskList.insert(lstMRUDiskList.begin(), changed_prefs.floppyslots[i].df);
-                bIgnoreListChange = true;
-                cboDFxFile[i]->setSelected(0);
-                bIgnoreListChange = false;
-              }
-      	    }
-            RefreshPanelFloppy();
-            RefreshPanelQuickstart();
-      	  }
-        }
-      }
-    }
-};
-static QSDiskFileActionListener* diskFileActionListener;
-
-
-class QuickstartModeActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    quickstart_start = chkQuickstartMode->isSelected();
-    }
-};
-static QuickstartModeActionListener* quickstartModeActionListener;
+static QSActionListener* qsActionListener;
 
 
 void InitPanelQuickstart(const struct _ConfigCategory& category)
@@ -633,14 +557,20 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
 	int posY = DISTANCE_BORDER;
 	int i;
 	
-	amigaModelActionListener = new AmigaModelActionListener();
-  ntscButtonActionListener = new QSNTSCButtonActionListener();
-	dfxCheckActionListener = new QSDFxCheckActionListener();
-	dfxButtonActionListener = new QSDFxButtonActionListener();
-	diskFileActionListener = new QSDiskFileActionListener();
-  cdButtonActionListener = new QSCDButtonActionListener();
-  cdFileActionListener = new QSCDFileActionListener();
-	quickstartModeActionListener = new QuickstartModeActionListener();
+	amigaModelList.clear();
+	for(i = 0; i < numModels; ++i)
+	  amigaModelList.add(amodels[i].name);
+	amigaConfigList.clear();
+	
+	diskfileList.clear();
+	for(i = 0; i < lstMRUDiskList.size(); ++i)
+	  diskfileList.add(lstMRUDiskList[i]);
+
+	cdfileList.clear();
+	for(i = 0; i < lstMRUCDList.size(); ++i)
+	  cdfileList.add(lstMRUCDList[i]);
+
+  qsActionListener = new QSActionListener();
 	
   lblModel = new gcn::Label("Amiga model:");
   lblModel->setSize(100, LABEL_HEIGHT);
@@ -649,7 +579,7 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
   cboModel->setSize(160, DROPDOWN_HEIGHT);
   cboModel->setBaseColor(gui_baseCol);
   cboModel->setId("AModel");
-  cboModel->addActionListener(amigaModelActionListener);
+  cboModel->addActionListener(qsActionListener);
 
   lblConfig = new gcn::Label("Configuration:");
   lblConfig->setSize(100, LABEL_HEIGHT);
@@ -658,30 +588,29 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
   cboConfig->setSize(category.panel->getWidth() - lblConfig->getWidth() - 8 - 2 * DISTANCE_BORDER, DROPDOWN_HEIGHT);
   cboConfig->setBaseColor(gui_baseCol);
   cboConfig->setId("AConfig");
-  cboConfig->addActionListener(amigaModelActionListener);
+  cboConfig->addActionListener(qsActionListener);
 
 	chkNTSC = new gcn::UaeCheckBox("NTSC");
   chkNTSC->setId("qsNTSC");
-  chkNTSC->addActionListener(ntscButtonActionListener);
+  chkNTSC->addActionListener(qsActionListener);
 
-	for(i=0; i<2; ++i)
-	{
+	for(i = 0; i < 2; ++i) {
 	  char tmp[21];
 	  snprintf(tmp, 20, "DF%d:", i); 
 	  chkDFx[i] = new gcn::UaeCheckBox(tmp);
-	  chkDFx[i]->addActionListener(dfxCheckActionListener);
+	  chkDFx[i]->addActionListener(qsActionListener);
 	  snprintf(tmp, 20, "qsDF%d", i);
 	  chkDFx[i]->setId(tmp);
 
 	  chkDFxWriteProtect[i] = new gcn::UaeCheckBox("Write-protected");
-	  chkDFxWriteProtect[i]->addActionListener(dfxCheckActionListener);
+	  chkDFxWriteProtect[i]->addActionListener(qsActionListener);
 	  snprintf(tmp, 20, "qsWP%d", i);
 	  chkDFxWriteProtect[i]->setId(tmp);
 	  
     cmdDFxInfo[i] = new gcn::Button("?");
     cmdDFxInfo[i]->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
     cmdDFxInfo[i]->setBaseColor(gui_baseCol);
-    cmdDFxInfo[i]->addActionListener(dfxButtonActionListener);
+    cmdDFxInfo[i]->addActionListener(qsActionListener);
 	  snprintf(tmp, 20, "qsInfo%d", i);
 	  cmdDFxInfo[i]->setId(tmp);
 
@@ -690,21 +619,21 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
     cmdDFxEject[i]->setBaseColor(gui_baseCol);
 	  snprintf(tmp, 20, "qscmdEject%d", i);
 	  cmdDFxEject[i]->setId(tmp);
-    cmdDFxEject[i]->addActionListener(dfxButtonActionListener);
+    cmdDFxEject[i]->addActionListener(qsActionListener);
 
     cmdDFxSelect[i] = new gcn::Button("Select file");
     cmdDFxSelect[i]->setSize(BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
     cmdDFxSelect[i]->setBaseColor(gui_baseCol);
 	  snprintf(tmp, 20, "qscmdSel%d", i);
 	  cmdDFxSelect[i]->setId(tmp);
-    cmdDFxSelect[i]->addActionListener(dfxButtonActionListener);
+    cmdDFxSelect[i]->addActionListener(qsActionListener);
 
 	  cboDFxFile[i] = new gcn::UaeDropDown(&diskfileList);
     cboDFxFile[i]->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER, DROPDOWN_HEIGHT);
     cboDFxFile[i]->setBaseColor(gui_baseCol);
 	  snprintf(tmp, 20, "qscboDisk%d", i);
 	  cboDFxFile[i]->setId(tmp);
-    cboDFxFile[i]->addActionListener(diskFileActionListener);
+    cboDFxFile[i]->addActionListener(qsActionListener);
 	}
 
   chkCD = new gcn::UaeCheckBox("CD drive");
@@ -715,23 +644,23 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
   cmdCDEject->setSize(SMALL_BUTTON_WIDTH * 2, SMALL_BUTTON_HEIGHT);
   cmdCDEject->setBaseColor(gui_baseCol);
   cmdCDEject->setId("qscdEject");
-  cmdCDEject->addActionListener(cdButtonActionListener);
+  cmdCDEject->addActionListener(qsActionListener);
 
   cmdCDSelect = new gcn::Button("Select image");
   cmdCDSelect->setSize(BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
   cmdCDSelect->setBaseColor(gui_baseCol);
   cmdCDSelect->setId("qsCDSelect");
-  cmdCDSelect->addActionListener(cdButtonActionListener);
+  cmdCDSelect->addActionListener(qsActionListener);
 
   cboCDFile = new gcn::UaeDropDown(&cdfileList);
   cboCDFile->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER, DROPDOWN_HEIGHT);
   cboCDFile->setBaseColor(gui_baseCol);
   cboCDFile->setId("qscboCD");
-  cboCDFile->addActionListener(cdFileActionListener);
+  cboCDFile->addActionListener(qsActionListener);
 
 	chkQuickstartMode = new gcn::UaeCheckBox("Start in Quickstart mode");
   chkQuickstartMode->setId("qsMode");
-  chkQuickstartMode->addActionListener(quickstartModeActionListener);
+  chkQuickstartMode->addActionListener(qsActionListener);
 
   category.panel->add(lblModel, DISTANCE_BORDER, posY);
   category.panel->add(cboModel, DISTANCE_BORDER + lblModel->getWidth() + 8, posY);
@@ -741,8 +670,7 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
   category.panel->add(cboConfig, DISTANCE_BORDER + lblConfig->getWidth() + 8, posY);
   posY += cboConfig->getHeight() + DISTANCE_NEXT_Y;
 
-	for(i=0; i<2; ++i)
-	{
+	for(i = 0; i < 2; ++i) {
 	  posX = DISTANCE_BORDER;
 	  category.panel->add(chkDFx[i], posX, posY);
 #ifdef ANDROID
@@ -789,15 +717,16 @@ void InitPanelQuickstart(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelQuickstart(void)
+void ExitPanelQuickstart(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
 	delete lblModel;
 	delete cboModel;
 	delete lblConfig;
 	delete cboConfig;
 	delete chkNTSC;
-	for(int i=0; i<2; ++i)
-	{
+	for(int i = 0; i < 2; ++i) {
 	  delete chkDFx[i];
 	  delete chkDFxWriteProtect[i];
 	  delete cmdDFxInfo[i];
@@ -811,95 +740,7 @@ void ExitPanelQuickstart(void)
   delete cboCDFile;
   delete chkQuickstartMode;
   
-  delete amigaModelActionListener;
-  delete ntscButtonActionListener;
-  delete dfxCheckActionListener;
-  delete dfxButtonActionListener;
-  delete diskFileActionListener;
-  delete cdButtonActionListener;
-  delete cdFileActionListener;
-  delete quickstartModeActionListener;
-}
-
-
-static void AdjustDropDownControls(void)
-{
-  int i, j;
-  
-  bIgnoreListChange = true;
-  
-  for(i=0; i<2; ++i)
-  {
-    cboDFxFile[i]->clearSelected();
-
-    if((changed_prefs.floppyslots[i].dfxtype != DRV_NONE) && strlen(changed_prefs.floppyslots[i].df) > 0)
-    {
-      for(j=0; j<lstMRUDiskList.size(); ++j)
-      {
-        if(!lstMRUDiskList[j].compare(changed_prefs.floppyslots[i].df))
-        {
-          cboDFxFile[i]->setSelected(j);
-          break;
-        }
-      }
-    }
-  }
-
-  cboCDFile->clearSelected();
-  if((changed_prefs.cdslots[0].inuse) && strlen(changed_prefs.cdslots[0].name) > 0)
-  {
-    for(i = 0; i < lstMRUCDList.size(); ++i)
-    {
-      if(!lstMRUCDList[i].compare(changed_prefs.cdslots[0].name))
-      {
-        cboCDFile->setSelected(i);
-        break;
-      }
-    }
-  }
-       
-  bIgnoreListChange = false;
-}
-
-
-void RefreshPanelQuickstart(void)
-{
-  int i;
-  bool prevAvailable = true;
-  
-  chkNTSC->setSelected(changed_prefs.ntscmode);
-
-  AdjustDropDownControls();
-
-  changed_prefs.nr_floppies = 0;
-  for(i=0; i<4; ++i)
-  {
-    bool driveEnabled = changed_prefs.floppyslots[i].dfxtype != DRV_NONE;
-    if(i < 2) {
-      chkDFx[i]->setSelected(driveEnabled);
-      chkDFxWriteProtect[i]->setSelected(disk_getwriteprotect(&changed_prefs, changed_prefs.floppyslots[i].df));
-      if(i == 0)
-        chkDFx[i]->setEnabled(false);
-      else
-        chkDFx[i]->setEnabled(prevAvailable);
-      
-      cmdDFxInfo[i]->setEnabled(driveEnabled);
-      chkDFxWriteProtect[i]->setEnabled(driveEnabled && !changed_prefs.floppy_read_only);
-      cmdDFxEject[i]->setEnabled(driveEnabled);
-      cmdDFxSelect[i]->setEnabled(driveEnabled);
-      cboDFxFile[i]->setEnabled(driveEnabled);
-    }    
-    prevAvailable = driveEnabled;
-    if(driveEnabled)
-      changed_prefs.nr_floppies = i + 1;
-  }
-
-  chkCD->setSelected(changed_prefs.cdslots[0].inuse);
-  cmdCDEject->setEnabled(changed_prefs.cdslots[0].inuse);
-  cmdCDSelect->setEnabled(changed_prefs.cdslots[0].inuse);
-  cboCDFile->setEnabled(changed_prefs.cdslots[0].inuse);
-
-  chkQuickstartMode->setSelected(quickstart_start);
+  delete qsActionListener;
 }
 
 

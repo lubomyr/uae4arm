@@ -45,7 +45,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "crc32.h"
 
 #undef DEBUG
-#define VERBOSE
+//#define VERBOSE
 
 #include <assert.h>
 

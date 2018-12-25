@@ -13,7 +13,6 @@
 #endif
 #include "SelectorEntry.hpp"
 #include "UaeRadioButton.hpp"
-#include "UaeCheckBox.hpp"
 
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -46,6 +45,71 @@ static gcn::Button* cmdSaveState;
 static gcn::Label *lblWarningHDDon;
   
 
+static void RefreshPanelSavestate(void)
+{
+	if(icoSavestate != 0) {
+		wndScreenshot->remove(icoSavestate);
+	  delete icoSavestate;
+	  icoSavestate = 0;
+	}
+	if(imgSavestate != 0) {
+	  delete imgSavestate;
+	  imgSavestate = 0;
+	}
+	
+	switch(currentStateNum)
+	{
+	  case 0:
+	    optState0->setSelected(true);
+	    break;
+	  case 1:
+	    optState1->setSelected(true);
+	    break;
+	  case 2:
+	    optState2->setSelected(true);
+	    break;
+	  case 3:
+	    optState3->setSelected(true);
+	    break;
+	}
+	
+  gui_update();
+	if(strlen(screenshot_filename) > 0) {
+		FILE *f=fopen(screenshot_filename,"rb");
+		if (f) {
+			fclose(f);
+			gcn::Rectangle rect = wndScreenshot->getChildrenArea();
+			SDL_Surface *loadedImage = IMG_Load(screenshot_filename);
+			if(loadedImage != NULL) {
+		    SDL_Rect source = {0, 0, 0, 0 };
+		    SDL_Rect target = {0, 0, 0, 0 };
+        SDL_Surface *scaled = SDL_CreateRGBSurface(loadedImage->flags, rect.width, rect.height, loadedImage->format->BitsPerPixel, loadedImage->format->Rmask, loadedImage->format->Gmask, loadedImage->format->Bmask, loadedImage->format->Amask);
+        source.w = loadedImage->w;
+        source.h = loadedImage->h;
+        target.w = rect.width;
+        target.h = rect.height;
+  			SDL_SoftStretch(loadedImage, &source, scaled, &target);
+  			SDL_FreeSurface(loadedImage);
+  			loadedImage = NULL;
+  			imgSavestate = new gcn::SDLImage(scaled, true);
+  			icoSavestate = new gcn::Icon(imgSavestate);
+  			wndScreenshot->add(icoSavestate);
+  		}
+		}
+  }
+  
+  bool enabled = 1; // nr_units () == 0;
+  optState0->setEnabled(enabled);
+  optState1->setEnabled(enabled);
+  optState2->setEnabled(enabled);
+  optState3->setEnabled(enabled);
+  wndScreenshot->setVisible(enabled);
+  cmdLoadState->setEnabled(enabled);
+  cmdSaveState->setEnabled(enabled);
+  lblWarningHDDon->setVisible(!enabled);
+}
+
+
 class SavestateActionListener : public gcn::ActionListener
 {
   public:
@@ -53,24 +117,24 @@ class SavestateActionListener : public gcn::ActionListener
     {
 	    if (actionEvent.getSource() == optState0)
 	      currentStateNum = 0;
+
 	    else if (actionEvent.getSource() == optState1)
 	      currentStateNum = 1;
+
 	    else if (actionEvent.getSource() == optState2)
 	      currentStateNum = 2;
+
 	    else if (actionEvent.getSource() == optState3)
 	      currentStateNum = 3;
-	    else if (actionEvent.getSource() == cmdLoadState)
-	    {
+
+	    else if (actionEvent.getSource() == cmdLoadState) {
        	//------------------------------------------
        	// Load state
        	//------------------------------------------
-       	if(emulating)
-    	  {
-    			if(strlen(savestate_fname) > 0)
-  			  {
+       	if(emulating) {
+    			if(strlen(savestate_fname) > 0) {
       			FILE *f = fopen(savestate_fname,"rb");
-      			if (f)
-      			{
+      			if (f) {
       				fclose(f);
               savestate_initsave(savestate_fname, 2, 0, false);
       				savestate_state = STATE_DORESTORE;
@@ -79,24 +143,20 @@ class SavestateActionListener : public gcn::ActionListener
       		}
     			if(savestate_state != STATE_DORESTORE)
     				ShowMessage("Loading savestate", "Statefile doesn't exist.", "", "Ok", "");
-    		}
-    		else
+    		}	else
   	      ShowMessage("Loading savestate", "Emulation hasn't started yet.", "", "Ok", "");
-      }
-	    else if (actionEvent.getSource() == cmdSaveState)
-	    {
+      
+      } else if (actionEvent.getSource() == cmdSaveState) {
         //------------------------------------------
         // Save current state
         //------------------------------------------
-      	if(emulating)
-    	  {
+      	if(emulating) {
           savestate_initsave(savestate_fname, 2, 0, false);
     			save_state (savestate_fname, "...");
           savestate_state = STATE_DOSAVE; // Just to create the screenshot
           delay_savestate_frame = 2;          
       		gui_running = false;
-        }	      
-    		else
+        }	else
   	      ShowMessage("Saving state", "Emulation hasn't started yet.", "", "Ok", "");
       }
 
@@ -166,8 +226,10 @@ void InitPanelSavestate(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelSavestate(void)
+void ExitPanelSavestate(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete optState0;
   delete optState1;
   delete optState2;
@@ -187,76 +249,6 @@ void ExitPanelSavestate(void)
   delete lblWarningHDDon;
   
   delete savestateActionListener;
-}
-
-
-void RefreshPanelSavestate(void)
-{
-	if(icoSavestate != 0)
-  {
-		wndScreenshot->remove(icoSavestate);
-	  delete icoSavestate;
-	  icoSavestate = 0;
-	}
-	if(imgSavestate != 0)
-	{
-	  delete imgSavestate;
-	  imgSavestate = 0;
-	}
-	
-	switch(currentStateNum)
-	{
-	  case 0:
-	    optState0->setSelected(true);
-	    break;
-	  case 1:
-	    optState1->setSelected(true);
-	    break;
-	  case 2:
-	    optState2->setSelected(true);
-	    break;
-	  case 3:
-	    optState3->setSelected(true);
-	    break;
-	}
-	
-  gui_update();
-	if(strlen(screenshot_filename) > 0)
-  {
-		FILE *f=fopen(screenshot_filename,"rb");
-		if (f)
-		{
-			fclose(f);
-			gcn::Rectangle rect = wndScreenshot->getChildrenArea();
-			SDL_Surface *loadedImage = IMG_Load(screenshot_filename);
-			if(loadedImage != NULL)
-		  {
-		    SDL_Rect source = {0, 0, 0, 0 };
-		    SDL_Rect target = {0, 0, 0, 0 };
-        SDL_Surface *scaled = SDL_CreateRGBSurface(loadedImage->flags, rect.width, rect.height, loadedImage->format->BitsPerPixel, loadedImage->format->Rmask, loadedImage->format->Gmask, loadedImage->format->Bmask, loadedImage->format->Amask);
-        source.w = loadedImage->w;
-        source.h = loadedImage->h;
-        target.w = rect.width;
-        target.h = rect.height;
-  			SDL_SoftStretch(loadedImage, &source, scaled, &target);
-  			SDL_FreeSurface(loadedImage);
-  			loadedImage = NULL;
-  			imgSavestate = new gcn::SDLImage(scaled, true);
-  			icoSavestate = new gcn::Icon(imgSavestate);
-  			wndScreenshot->add(icoSavestate);
-  		}
-		}
-  }
-  
-  bool enabled = 1; // nr_units () == 0;
-  optState0->setEnabled(enabled);
-  optState1->setEnabled(enabled);
-  optState2->setEnabled(enabled);
-  optState3->setEnabled(enabled);
-  wndScreenshot->setVisible(enabled);
-  cmdLoadState->setEnabled(enabled);
-  cmdSaveState->setEnabled(enabled);
-  lblWarningHDDon->setVisible(!enabled);
 }
 
 

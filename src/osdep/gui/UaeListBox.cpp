@@ -31,6 +31,12 @@ namespace gcn
     {
     }
     
+    void UaeListBox::AddColumn(int position, ListModel* listModel)
+    {
+      subColumnPos.push_back(position);
+      subColumnList.push_back(listModel);
+    }
+      
     void UaeListBox::draw(Graphics* graphics)
     {
         graphics->setColor(getBackgroundColor());
@@ -85,28 +91,44 @@ namespace gcn
     		int y = rowHeight * startRow;
         for (i = startRow; i < startRow + numberOfRows; ++i)
         {
+          for (int col = 0; col < 1 + subColumnPos.size(); ++col)
+          {
+            int x = 0;
+            if(col > 0)
+              x = subColumnPos[col - 1];
+              
             if (i == mSelected)
             {
                 if(isFocused())
                   graphics->setColor(getSelectionColor());
                 else
                   graphics->setColor(0xd0d0d0);
-                graphics->fillRectangle(Rectangle(0, y, getWidth(), rowHeight));
-                graphics->setColor(getForegroundColor());
-            }
+                graphics->fillRectangle(Rectangle(x, y, getWidth(), rowHeight));
+           } else if(col > 0) {
+                graphics->setColor(getBackgroundColor());
+                graphics->fillRectangle(Rectangle(x - 4, y, getWidth(), rowHeight));
+            }            
+            graphics->setColor(getForegroundColor());
 			
       			// If the row height is greater than the font height we
       			// draw the text with a center vertical alignment.
+      			std::string text;
+      			if(col == 0)
+      			  text = mListModel->getElementAt(i);
+      			else
+      			  text = subColumnList[col - 1]->getElementAt(i);
+      			  
       			if (rowHeight > getFont()->getHeight())
       			{
-      				graphics->drawText(mListModel->getElementAt(i), 1, y + rowHeight / 2 - getFont()->getHeight() / 2);
+      				graphics->drawText(text, 1 + x, y + rowHeight / 2 - getFont()->getHeight() / 2);
       			}
       			else
       			{
-      				graphics->drawText(mListModel->getElementAt(i), 1, y);
+      				graphics->drawText(text, 1 + x, y);
       			}
+          }
 
-            y += rowHeight;
+          y += rowHeight;
         }
     }
 

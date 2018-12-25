@@ -17,7 +17,7 @@
 #define	GRN	1
 #define	BLU	2
 
-unsigned int doMask (int p, int bits, int shift)
+static unsigned int doMask (int p, int bits, int shift)
 {
   /* scale to 0..255, shift to align msb with mask, and apply mask */
   uae_u32 val;
@@ -31,6 +31,27 @@ unsigned int doMask (int p, int bits, int shift)
   return val;
 }
 
+int bits_in_mask (unsigned long mask)
+{
+	int n = 0;
+	while (mask)	{
+		n += mask & 1;
+		mask >>= 1;
+	}
+	return n;
+}
+
+int mask_shift (unsigned long mask)
+{
+	int n = 0;
+	if (!mask)
+		return 0;
+	while (!(mask & 1))	{
+		n++;
+		mask >>= 1;
+	}
+	return n;
+}
 
 unsigned int doMask256 (int p, int bits, int shift)
 {
@@ -65,7 +86,7 @@ static uae_u32 lowbits (int v, int shift, int lsize)
 }
 
 #ifndef ARMV6T2
-void alloc_colors_rgb (int rw, int gw, int bw, int rs, int gs, int bs, int byte_swap,
+static void alloc_colors_rgb (int rw, int gw, int bw, int rs, int gs, int bs,
 	uae_u32 *rc, uae_u32 *gc, uae_u32 *bc)
 {
 	int bpp = rw + gw + bw;
@@ -74,17 +95,6 @@ void alloc_colors_rgb (int rw, int gw, int bw, int rs, int gs, int bs, int byte_
 		rc[i] = doColor (i, rw, rs);
 		gc[i] = doColor (i, gw, gs);
 		bc[i] = doColor (i, bw, bs);
-		if (byte_swap) {
-			if (bpp <= 16) {
-				rc[i] = bswap_16 (rc[i]);
-				gc[i] = bswap_16 (gc[i]);
-				bc[i] = bswap_16 (bc[i]);
-			} else {
-				rc[i] = bswap_32 (rc[i]);
-				gc[i] = bswap_32 (gc[i]);
-				bc[i] = bswap_32 (bc[i]);
-			}
-		}
 		if (bpp <= 16) {
 			/* Fill upper 16 bits of each colour value with
 			* a copy of the colour. */
@@ -96,7 +106,7 @@ void alloc_colors_rgb (int rw, int gw, int bw, int rs, int gs, int bs, int byte_
 }
 #endif
 
-void alloc_colors64k (int rw, int gw, int bw, int rs, int gs, int bs, int byte_swap)
+void alloc_colors64k (int rw, int gw, int bw, int rs, int gs, int bs)
 {
 	int i;
 	for (i = 0; i < 4096; i++) {
@@ -109,6 +119,6 @@ void alloc_colors64k (int rw, int gw, int bw, int rs, int gs, int bs, int byte_s
 		xcolors[i] = xcolors[i] * 0x00010001;
 	}
 #ifndef ARMV6T2
-	alloc_colors_rgb (rw, gw, bw, rs, gs, bs, byte_swap, xredcolors, xgreencolors, xbluecolors);
+	alloc_colors_rgb (rw, gw, bw, rs, gs, bs, xredcolors, xgreencolors, xbluecolors);
 #endif
 }

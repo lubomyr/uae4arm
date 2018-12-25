@@ -10,7 +10,6 @@
 #include "sdltruetypefont.hpp"
 #endif
 #include "SelectorEntry.hpp"
-#include "UaeRadioButton.hpp"
 #include "UaeDropDown.hpp"
 #include "UaeCheckBox.hpp"
 
@@ -25,6 +24,7 @@
 #include "blkdev.h"
 #include "gui.h"
 #include "gui_handling.h"
+#include "GenericListModel.h"
 
 
 enum { COL_DEVICE, COL_VOLUME, COL_PATH, COL_READWRITE, COL_SIZE, COL_BOOTPRI, COL_COUNT };
@@ -75,35 +75,108 @@ static int GetHDType(int index)
   struct uaedev_config_data *uci;
   struct mountedinfo mi;
 
-  type = get_filesys_unitconfig(&changed_prefs, index, &mi);
+  type = get_filesys_unitconfig(&workprefs, index, &mi);
   if (type < 0) {
-    uci = &changed_prefs.mountconfig[index];
+    uci = &workprefs.mountconfig[index];
 		type = (uci->ci.type == UAEDEV_DIR) ? FILESYS_VIRTUAL : FILESYS_HARDFILE;
   }
   return type;
 }
 
 
-class CDfileListModel : public gcn::ListModel
-{
-  public:
-    CDfileListModel()
-    {
-    }
-    
-    int getNumberOfElements()
-    {
-      return lstMRUCDList.size();
-    }
+static gcn::GenericListModel cdfileList;
 
-    std::string getElementAt(int i)
-    {
-      if(i < 0 || i >= lstMRUCDList.size())
-        return "---";
-      return lstMRUCDList[i];
+
+static void AdjustDropDownControls(void)
+{
+  int i;
+
+  cboCDFile->clearSelected();
+  if((workprefs.cdslots[0].inuse) && strlen(workprefs.cdslots[0].name) > 0) {
+    for(i = 0; i < lstMRUCDList.size(); ++i) {
+      if(!lstMRUCDList[i].compare(workprefs.cdslots[0].name)) {
+        cboCDFile->setSelected(i);
+        break;
+      }
     }
-};
-static CDfileListModel cdfileList;
+  }
+}
+
+static void RefreshPanelHD(void)
+{
+  int row, col;
+  char tmp[32];
+  struct mountedinfo mi;
+  struct uaedev_config_data *uci;
+  struct uaedev_config_info *ci;
+  int nosize = 0, type;
+  
+  AdjustDropDownControls();
+
+  for(row = 0; row < MAX_HD_DEVICES; ++row) {
+    if(row < workprefs.mountitems) {
+      uci = &workprefs.mountconfig[row];
+      ci = &uci->ci;
+      type = get_filesys_unitconfig(&workprefs, row, &mi);
+	    if (type < 0) {
+    		type = (uci->ci.type == UAEDEV_DIR) ? FILESYS_VIRTUAL : FILESYS_HARDFILE;
+    		nosize = 1;
+	    }
+			if (mi.size < 0)
+				nosize = 1;
+      
+      if(type == FILESYS_VIRTUAL) {
+        listCells[row][COL_DEVICE]->setText(ci->devname);
+        listCells[row][COL_VOLUME]->setText(ci->volname);
+        listCells[row][COL_PATH]->setText(ci->rootdir);
+        if(ci->readonly)
+          listCells[row][COL_READWRITE]->setText("no");
+        else
+          listCells[row][COL_READWRITE]->setText("yes");
+        listCells[row][COL_SIZE]->setText("n/a");
+				snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri);
+        listCells[row][COL_BOOTPRI]->setText(tmp);
+      } else {
+        listCells[row][COL_DEVICE]->setText(ci->devname);
+        listCells[row][COL_VOLUME]->setText("n/a");
+        listCells[row][COL_PATH]->setText(ci->rootdir);
+        if(ci->readonly)
+          listCells[row][COL_READWRITE]->setText("no");
+        else
+          listCells[row][COL_READWRITE]->setText("yes");
+  	    if (nosize)
+  	      snprintf (tmp, sizeof (tmp) - 1, "n/a");
+  	    else if (mi.size >= 1024 * 1024 * 1024)
+	        snprintf (tmp, sizeof (tmp) - 1, "%.1fG", ((double)(uae_u32)(mi.size / (1024 * 1024))) / 1024.0);
+  	    else
+	        snprintf (tmp, sizeof (tmp) - 1, "%.1fM", ((double)(uae_u32)(mi.size / (1024))) / 1024.0);
+        listCells[row][COL_SIZE]->setText(tmp);
+        snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri);
+        listCells[row][COL_BOOTPRI]->setText(tmp);
+      }
+      listCmdProps[row]->setEnabled(true);
+      listCmdDelete[row]->setEnabled(true);
+    } else {
+      // Empty slot
+      for(col=0; col<COL_COUNT; ++col)
+        listCells[row][col]->setText("");
+      listCmdProps[row]->setEnabled(false);
+      listCmdDelete[row]->setEnabled(false);
+    }
+  }
+  
+  chkHDReadOnly->setSelected(workprefs.harddrive_read_only);
+  
+  chkCD->setSelected(workprefs.cdslots[0].inuse);
+  cmdCDEject->setEnabled(workprefs.cdslots[0].inuse);
+  cmdCDSelect->setEnabled(workprefs.cdslots[0].inuse);
+  cboCDFile->setEnabled(workprefs.cdslots[0].inuse);
+  sldCDVol->setEnabled(workprefs.cdslots[0].inuse);
+  
+  sldCDVol->setValue(100 - workprefs.sound_volume_cd);
+  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - workprefs.sound_volume_cd);
+  lblCDVolInfo->setCaption(tmp);
+}
 
 
 class HDRemoveActionListener : public gcn::ActionListener
@@ -111,11 +184,10 @@ class HDRemoveActionListener : public gcn::ActionListener
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      for(int i=0; i<MAX_HD_DEVICES; ++i)
+      for(int i = 0; i < MAX_HD_DEVICES; ++i)
       {
-        if (actionEvent.getSource() == listCmdDelete[i])
-        {
-          kill_filesys_unitconfig(&changed_prefs, i);
+        if (actionEvent.getSource() == listCmdDelete[i]) {
+          kill_filesys_unitconfig(&workprefs, i);
           gui_force_rtarea_hdchange();
           break;
         }
@@ -134,15 +206,11 @@ class HDEditActionListener : public gcn::ActionListener
     {
       for(int i=0; i<MAX_HD_DEVICES; ++i)
       {
-        if (actionEvent.getSource() == listCmdProps[i])
-        {
-          if (GetHDType(i) == FILESYS_VIRTUAL)
-          {
+        if (actionEvent.getSource() == listCmdProps[i]) {
+          if (GetHDType(i) == FILESYS_VIRTUAL) {
             if(EditFilesysVirtual(i))
               gui_force_rtarea_hdchange();
-          }
-          else
-          {
+          } else {
             if(EditFilesysHardfile(i))
               gui_force_rtarea_hdchange();
           }
@@ -156,96 +224,55 @@ class HDEditActionListener : public gcn::ActionListener
 static HDEditActionListener* hdEditActionListener;
 
 
-class AddVirtualHDActionListener : public gcn::ActionListener
+class AddHDActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      if(EditFilesysVirtual(-1))
-        gui_force_rtarea_hdchange();
-      cmdAddDirectory->requestFocus();
-      RefreshPanelHD();
-    }
-};
-static AddVirtualHDActionListener* addVirtualHDActionListener;
+      if(actionEvent.getSource() == cmdAddDirectory) {
+        if(EditFilesysVirtual(-1))
+          gui_force_rtarea_hdchange();
+        cmdAddDirectory->requestFocus();
 
+      } else if(actionEvent.getSource() == cmdAddHardfile) {
+        if(EditFilesysHardfile(-1))
+          gui_force_rtarea_hdchange();
+        cmdAddHardfile->requestFocus();
+      
+      } else if(actionEvent.getSource() == cmdCreateHardfile) {
+        if(CreateFilesysHardfile())
+          gui_force_rtarea_hdchange();
+        cmdCreateHardfile->requestFocus();
 
-class AddHardfileActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if(EditFilesysHardfile(-1))
-        gui_force_rtarea_hdchange();
-      cmdAddHardfile->requestFocus();
-      RefreshPanelHD();
-    }
-};
-static AddHardfileActionListener* addHardfileActionListener;
+      } else if(actionEvent.getSource() == chkCD) {
+        if(workprefs.cdslots[0].inuse) {
+          workprefs.cdslots[0].inuse = false;
+          workprefs.cdslots[0].type = SCSI_UNIT_DISABLED;
+        } else {
+          workprefs.cdslots[0].inuse = true;
+          workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+        }
 
-
-class CreateHardfileActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if(CreateFilesysHardfile())
-        gui_force_rtarea_hdchange();
-      cmdCreateHardfile->requestFocus();
-      RefreshPanelHD();
-    }
-};
-static CreateHardfileActionListener* createHardfileActionListener;
-
-
-class CDCheckActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if(changed_prefs.cdslots[0].inuse) {
-        changed_prefs.cdslots[0].inuse = false;
-        changed_prefs.cdslots[0].type = SCSI_UNIT_DISABLED;
-      } else {
-        changed_prefs.cdslots[0].inuse = true;
-        changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
-      }
-      RefreshPanelHD();
-      RefreshPanelQuickstart();
-    }
-};
-static CDCheckActionListener* cdCheckActionListener;
-
-
-class CDButtonActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if (actionEvent.getSource() == cmdCDEject)
-      {
+      } else if (actionEvent.getSource() == cmdCDEject) {
   	    //---------------------------------------
         // Eject CD from drive
   	    //---------------------------------------
-        strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH - 1);
+        strncpy(workprefs.cdslots[0].name, "", MAX_DPATH - 1);
         AdjustDropDownControls();
-      } 
-      else if(actionEvent.getSource() == cmdCDSelect)
-      {
+
+      } else if(actionEvent.getSource() == cmdCDSelect) {
   	    char tmp[MAX_DPATH];
 
-  	    if(strlen(changed_prefs.cdslots[0].name) > 0)
-  	      strncpy(tmp, changed_prefs.cdslots[0].name, MAX_DPATH - 1);
+  	    if(strlen(workprefs.cdslots[0].name) > 0)
+  	      strncpy(tmp, workprefs.cdslots[0].name, MAX_DPATH - 1);
   	    else
   	      strncpy(tmp, currentDir, MAX_DPATH - 1);
 
-  	    if(SelectFile("Select CD image file", tmp, cdfile_filter))
-	      {
-    	    if(strncmp(changed_prefs.cdslots[0].name, tmp, MAX_DPATH))
-    	    {
-      	    strncpy(changed_prefs.cdslots[0].name, tmp, sizeof(changed_prefs.cdslots[0].name) - 1);
-      	    changed_prefs.cdslots[0].inuse = true;
-      	    changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+  	    if(SelectFile("Select CD image file", tmp, cdfile_filter)) {
+    	    if(strncmp(workprefs.cdslots[0].name, tmp, MAX_DPATH)) {
+      	    strncpy(workprefs.cdslots[0].name, tmp, sizeof(workprefs.cdslots[0].name) - 1);
+      	    workprefs.cdslots[0].inuse = true;
+      	    workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
       	    AddFileToCDList(tmp, 1);
       	    extractPath(tmp, currentDir);
 
@@ -253,33 +280,23 @@ class CDButtonActionListener : public gcn::ActionListener
     	    }
 	      }
 	      cmdCDSelect->requestFocus();
-      }
-      RefreshPanelHD();
-      RefreshPanelQuickstart();
-    }
-};
-static CDButtonActionListener* cdButtonActionListener;
 
-
-class GenericActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if (actionEvent.getSource() == sldCDVol)
-      {
+      } else if (actionEvent.getSource() == sldCDVol) {
         int newvol = 100 - (int) sldCDVol->getValue();
-        if(changed_prefs.sound_volume_cd != newvol)
+        if(workprefs.sound_volume_cd != newvol)
         {
-          changed_prefs.sound_volume_cd = newvol;
+          workprefs.sound_volume_cd = newvol;
           RefreshPanelHD();
         }
+
       } else if(actionEvent.getSource() == chkHDReadOnly) {
-        changed_prefs.harddrive_read_only = chkHDReadOnly->isSelected();
-      }    
+        workprefs.harddrive_read_only = chkHDReadOnly->isSelected();
+      }   
+
+      RefreshPanelHD();
     }
 };
-static GenericActionListener* genericActionListener;
+static AddHDActionListener* addHDActionListener;
 
 
 static bool bIgnoreListChange = false;
@@ -291,24 +308,19 @@ class CDFileActionListener : public gcn::ActionListener
 	    //---------------------------------------
       // CD image from list selected
 	    //---------------------------------------
-	    if(!bIgnoreListChange)
-      {
+	    if(!bIgnoreListChange) {
   	    int idx = cboCDFile->getSelected();
 
-  	    if(idx < 0)
-	      {
-          strncpy(changed_prefs.cdslots[0].name, "", MAX_DPATH - 1);
+  	    if(idx < 0) {
+          strncpy(workprefs.cdslots[0].name, "", MAX_DPATH - 1);
           AdjustDropDownControls();
-	      }
-	      else
-  	    {
-    	    if(cdfileList.getElementAt(idx).compare(changed_prefs.cdslots[0].name))
-	        {
-      	    strncpy(changed_prefs.cdslots[0].name, cdfileList.getElementAt(idx).c_str(), sizeof(changed_prefs.cdslots[0].name) - 1);
-      	    changed_prefs.cdslots[0].inuse = true;
-      	    changed_prefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+	      } else {
+    	    if(cdfileList.getElementAt(idx).compare(workprefs.cdslots[0].name)) {
+      	    strncpy(workprefs.cdslots[0].name, cdfileList.getElementAt(idx).c_str(), sizeof(workprefs.cdslots[0].name) - 1);
+      	    workprefs.cdslots[0].inuse = true;
+      	    workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
       	    lstMRUCDList.erase(lstMRUCDList.begin() + idx);
-      	    lstMRUCDList.insert(lstMRUCDList.begin(), changed_prefs.cdslots[0].name);
+      	    lstMRUCDList.insert(lstMRUCDList.begin(), workprefs.cdslots[0].name);
             bIgnoreListChange = true;
             cboCDFile->setSelected(0);
             bIgnoreListChange = false;
@@ -328,17 +340,20 @@ void InitPanelHD(const struct _ConfigCategory& category)
   int posY = DISTANCE_BORDER;
   char tmp[20];
   
+  expansion_generate_autoconfig_info(&workprefs);
+
+  cdfileList.clear();
+  for(int i = 0; i < lstMRUCDList.size(); ++i)
+    cdfileList.add(lstMRUCDList[i]);
+    
   hdRemoveActionListener = new HDRemoveActionListener();
   hdEditActionListener = new HDEditActionListener();
-  addVirtualHDActionListener = new AddVirtualHDActionListener();
-  addHardfileActionListener = new AddHardfileActionListener();
-  createHardfileActionListener = new CreateHardfileActionListener();
+  addHDActionListener = new AddHDActionListener();
   
-  for(col=0; col<COL_COUNT; ++col)
+  for(col = 0; col < COL_COUNT; ++col)
     lblList[col] = new gcn::Label(column_caption[col]);
 
-  for(row=0; row<MAX_HD_DEVICES; ++row)
-  {
+  for(row = 0; row < MAX_HD_DEVICES; ++row) {
     listEntry[row] = new gcn::Container();
     listEntry[row]->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER, TEXTFIELD_HEIGHT + 4);
     listEntry[row]->setBaseColor(gui_baseCol);
@@ -362,8 +377,7 @@ void InitPanelHD(const struct _ConfigCategory& category)
     listCmdDelete[row]->setId(tmp);
     listCmdDelete[row]->addActionListener(hdRemoveActionListener);
     
-    for(col=0; col<COL_COUNT; ++col)
-    {
+    for(col = 0; col < COL_COUNT; ++col) {
       listCells[row][col] = new gcn::TextField();
       listCells[row][col]->setSize(COLUMN_SIZE[col] - 8, TEXTFIELD_HEIGHT);
       listCells[row][col]->setEnabled(false);
@@ -375,43 +389,40 @@ void InitPanelHD(const struct _ConfigCategory& category)
   cmdAddDirectory->setBaseColor(gui_baseCol);
   cmdAddDirectory->setSize(BUTTON_WIDTH + 20, BUTTON_HEIGHT);
   cmdAddDirectory->setId("cmdAddDir");
-  cmdAddDirectory->addActionListener(addVirtualHDActionListener);
+  cmdAddDirectory->addActionListener(addHDActionListener);
   
   cmdAddHardfile = new gcn::Button("Add Hardfile");
   cmdAddHardfile->setBaseColor(gui_baseCol);
   cmdAddHardfile->setSize(BUTTON_WIDTH + 20, BUTTON_HEIGHT);
   cmdAddHardfile->setId("cmdAddHDF");
-  cmdAddHardfile->addActionListener(addHardfileActionListener);
+  cmdAddHardfile->addActionListener(addHDActionListener);
 
   cmdCreateHardfile = new gcn::Button("Create Hardfile");
   cmdCreateHardfile->setBaseColor(gui_baseCol);
   cmdCreateHardfile->setSize(BUTTON_WIDTH + 20, BUTTON_HEIGHT);
   cmdCreateHardfile->setId("cmdCreateHDF");
-  cmdCreateHardfile->addActionListener(createHardfileActionListener);
+  cmdCreateHardfile->addActionListener(addHDActionListener);
   
-  cdCheckActionListener = new CDCheckActionListener();
-  cdButtonActionListener = new CDButtonActionListener();
   cdFileActionListener = new CDFileActionListener();
-  genericActionListener = new GenericActionListener();
   
   chkHDReadOnly = new gcn::UaeCheckBox("Master harddrive write protection");
   chkHDReadOnly->setId("chkHDRO");
-  chkHDReadOnly->addActionListener(genericActionListener);
+  chkHDReadOnly->addActionListener(addHDActionListener);
   
   chkCD = new gcn::UaeCheckBox("CD drive");
-  chkCD->addActionListener(cdCheckActionListener);
+  chkCD->addActionListener(addHDActionListener);
 
   cmdCDEject = new gcn::Button("Eject");
   cmdCDEject->setSize(SMALL_BUTTON_WIDTH * 2, SMALL_BUTTON_HEIGHT);
   cmdCDEject->setBaseColor(gui_baseCol);
   cmdCDEject->setId("cdEject");
-  cmdCDEject->addActionListener(cdButtonActionListener);
+  cmdCDEject->addActionListener(addHDActionListener);
 
   cmdCDSelect = new gcn::Button("...");
   cmdCDSelect->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
   cmdCDSelect->setBaseColor(gui_baseCol);
   cmdCDSelect->setId("CDSelect");
-  cmdCDSelect->addActionListener(cdButtonActionListener);
+  cmdCDSelect->addActionListener(addHDActionListener);
 
   cboCDFile = new gcn::UaeDropDown(&cdfileList);
   cboCDFile->setSize(category.panel->getWidth() - 2 * DISTANCE_BORDER, DROPDOWN_HEIGHT);
@@ -432,27 +443,24 @@ void InitPanelHD(const struct _ConfigCategory& category)
 	sldCDVol->setMarkerLength(20);
 	sldCDVol->setStepLength(10);
 	sldCDVol->setId("CDVol");
-  sldCDVol->addActionListener(genericActionListener);
+  sldCDVol->addActionListener(addHDActionListener);
   lblCDVolInfo = new gcn::Label("80 %");
   lblCDVolInfo->setSize(100, LABEL_HEIGHT);
 
   posX = DISTANCE_BORDER + 2 + SMALL_BUTTON_WIDTH + 34;
-  for(col=0; col<COL_COUNT; ++col)
-  {
+  for(col = 0; col < COL_COUNT; ++col) {
     category.panel->add(lblList[col], posX, posY);
     posX += COLUMN_SIZE[col];
   }
   posY += lblList[0]->getHeight() + 2;
   
-  for(row=0; row<MAX_HD_DEVICES; ++row)
-  {
+  for(row = 0; row < MAX_HD_DEVICES; ++row) {
     posX = 0;
     listEntry[row]->add(listCmdProps[row], posX, 2);
     posX += listCmdProps[row]->getWidth() + 4;
     listEntry[row]->add(listCmdDelete[row], posX, 2);
     posX += listCmdDelete[row]->getWidth() + 8;
-    for(col=0; col<COL_COUNT; ++col)
-    {
+    for(col=0; col<COL_COUNT; ++col) {
       listEntry[row]->add(listCells[row][col], posX, 2);
       posX += COLUMN_SIZE[col];
     }
@@ -485,18 +493,19 @@ void InitPanelHD(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelHD(void)
+void ExitPanelHD(const struct _ConfigCategory& category)
 {
   int row, col;
 
-  for(col=0; col<COL_COUNT; ++col)
+  category.panel->clear();
+  
+  for(col = 0; col < COL_COUNT; ++col)
     delete lblList[col];
 
-  for(row=0; row<MAX_HD_DEVICES; ++row)
-  {
+  for(row = 0; row < MAX_HD_DEVICES; ++row) {
     delete listCmdProps[row];
     delete listCmdDelete[row];
-    for(col=0; col<COL_COUNT; ++col)
+    for(col = 0; col < COL_COUNT; ++col)
       delete listCells[row][col];
     delete listEntry[row];
   }
@@ -514,124 +523,11 @@ void ExitPanelHD(void)
   delete lblCDVolInfo;
   delete sldCDVol;
   
-  delete cdCheckActionListener;
-  delete cdButtonActionListener;
   delete cdFileActionListener;
-  delete genericActionListener;
   
   delete hdRemoveActionListener;
   delete hdEditActionListener;
-  delete addVirtualHDActionListener;
-  delete addHardfileActionListener;
-  delete createHardfileActionListener;
-}
-
-
-static void AdjustDropDownControls(void)
-{
-  int i;
-
-  cboCDFile->clearSelected();
-  if((changed_prefs.cdslots[0].inuse) && strlen(changed_prefs.cdslots[0].name) > 0)
-  {
-    for(i = 0; i < lstMRUCDList.size(); ++i)
-    {
-      if(!lstMRUCDList[i].compare(changed_prefs.cdslots[0].name))
-      {
-        cboCDFile->setSelected(i);
-        break;
-      }
-    }
-  }
-}
-
-void RefreshPanelHD(void)
-{
-  int row, col;
-  char tmp[32];
-  struct mountedinfo mi;
-  struct uaedev_config_data *uci;
-  struct uaedev_config_info *ci;
-  int nosize = 0, type;
-  
-  AdjustDropDownControls();
-
-  for(row=0; row<MAX_HD_DEVICES; ++row)
-  {
-    if(row < changed_prefs.mountitems)
-    {
-      uci = &changed_prefs.mountconfig[row];
-      ci = &uci->ci;
-      type = get_filesys_unitconfig(&changed_prefs, row, &mi);
-	    if (type < 0) {
-    		type = (uci->ci.type == UAEDEV_DIR) ? FILESYS_VIRTUAL : FILESYS_HARDFILE;
-    		nosize = 1;
-	    }
-			if (mi.size < 0)
-				nosize = 1;
-      
-      if(type == FILESYS_VIRTUAL)
-      {
-        listCells[row][COL_DEVICE]->setText(ci->devname);
-        listCells[row][COL_VOLUME]->setText(ci->volname);
-        listCells[row][COL_PATH]->setText(ci->rootdir);
-        if(ci->readonly)
-          listCells[row][COL_READWRITE]->setText("no");
-        else
-          listCells[row][COL_READWRITE]->setText("yes");
-        listCells[row][COL_SIZE]->setText("n/a");
-				snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri);
-        listCells[row][COL_BOOTPRI]->setText(tmp);
-      }
-      else
-      {
-        listCells[row][COL_DEVICE]->setText(ci->devname);
-        listCells[row][COL_VOLUME]->setText("n/a");
-        listCells[row][COL_PATH]->setText(ci->rootdir);
-        if(ci->readonly)
-          listCells[row][COL_READWRITE]->setText("no");
-        else
-          listCells[row][COL_READWRITE]->setText("yes");
-  	    if (nosize)
-  	      snprintf (tmp, sizeof (tmp) - 1, "n/a");
-  	    else if (mi.size >= 1024 * 1024 * 1024)
-	        snprintf (tmp, sizeof (tmp) - 1, "%.1fG", ((double)(uae_u32)(mi.size / (1024 * 1024))) / 1024.0);
-  	    else
-	        snprintf (tmp, sizeof (tmp) - 1, "%.1fM", ((double)(uae_u32)(mi.size / (1024))) / 1024.0);
-        listCells[row][COL_SIZE]->setText(tmp);
-        snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri);
-        listCells[row][COL_BOOTPRI]->setText(tmp);
-      }
-      listCmdProps[row]->setEnabled(true);
-      listCmdDelete[row]->setEnabled(true);
-    }
-    else
-    {
-      // Empty slot
-      for(col=0; col<COL_COUNT; ++col)
-        listCells[row][col]->setText("");
-      listCmdProps[row]->setEnabled(false);
-      listCmdDelete[row]->setEnabled(false);
-    }
-  }
-  
-  chkHDReadOnly->setSelected(changed_prefs.harddrive_read_only);
-  
-  chkCD->setSelected(changed_prefs.cdslots[0].inuse);
-  cmdCDEject->setEnabled(changed_prefs.cdslots[0].inuse);
-  cmdCDSelect->setEnabled(changed_prefs.cdslots[0].inuse);
-  cboCDFile->setEnabled(changed_prefs.cdslots[0].inuse);
-  sldCDVol->setEnabled(changed_prefs.cdslots[0].inuse);
-  
-  sldCDVol->setValue(100 - changed_prefs.sound_volume_cd);
-  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - changed_prefs.sound_volume_cd);
-  lblCDVolInfo->setCaption(tmp);
-}
-
-
-int count_HDs(struct uae_prefs *p)
-{
-  return p->mountitems;
+  delete addHDActionListener;
 }
 
 

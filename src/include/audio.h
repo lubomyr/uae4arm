@@ -32,7 +32,6 @@ void audio_hsync (void);
 void audio_update_adkmasks (void);
 void update_sound (double clk);
 void led_filter_audio (void);
-void set_audio(void);
 int audio_activate(void);
 void audio_deactivate (void);
 

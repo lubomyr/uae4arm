@@ -61,12 +61,11 @@
 #include "disk.h"
 #include "threaddep/thread.h"
 #include "devices.h"
+#include "fsdb.h"
 
 int savestate_state = 0;
 
-static bool new_blitter = false;
-
-struct zfile *savestate_file;
+static struct zfile *savestate_file;
 static int savestate_docompress, savestate_nodialogs;
 
 TCHAR savestate_fname[MAX_DPATH];
@@ -137,6 +136,15 @@ void save_path_func (uae_u8 **dstp, const TCHAR *from, int type)
 {
 	save_string_func (dstp, from);
 }
+void save_path_full_func(uae_u8 **dstp, const TCHAR *spath, int type)
+{
+	TCHAR path[MAX_DPATH];
+	save_u32_func(dstp, type);
+	_tcscpy(path, spath ? spath : _T(""));
+	save_string_func(dstp, path);
+	_tcscpy(path, spath ? spath : _T(""));
+	save_string_func(dstp, path);
+}
 
 uae_u32 restore_u32_func (uae_u8 **dstp)
 {
@@ -190,49 +198,100 @@ TCHAR *restore_string_func (uae_u8 **dstp)
 	xfree (to);
 	return s;
 }
-TCHAR *restore_path_func (uae_u8 **dstp, int type)
+
+static bool state_path_exists(const TCHAR *path, int type)
+{
+	if (type == SAVESTATE_PATH_VDIR)
+		return my_existsdir(path);
+	return my_existsfile(path);
+}
+
+static TCHAR *state_resolve_path(TCHAR *s, int type, bool newmode)
 {
 	TCHAR *newpath;
-	TCHAR *s;
   TCHAR tmp[MAX_DPATH], tmp2[MAX_DPATH];
 
-	s = restore_string_func(dstp);
 	if (s[0] == 0)
 		return s;
-	if (zfile_exists (s))
+	if (!newmode && state_path_exists(s, type))
 		return s;
 	if (type == SAVESTATE_PATH_HD)
 		return s;
+	if (newmode) {
+		_tcscpy(tmp, s);
+		if (state_path_exists(tmp, type)) {
+			xfree(s);
+			return my_strdup(tmp);
+		}
+		getfilepart(tmp, sizeof tmp / sizeof(TCHAR), s);
+	} else {
 	getfilepart (tmp, sizeof tmp / sizeof (TCHAR), s);
-	if (zfile_exists (tmp)) {
-		xfree (s);
-		return my_strdup (tmp);
-	}
-
-	newpath = NULL;
-	if (type == SAVESTATE_PATH_FLOPPY)
-		newpath = currprefs.path_floppy;
-	else if (type == SAVESTATE_PATH_VDIR || type == SAVESTATE_PATH_HDF)
-		newpath = currprefs.path_hardfile;
-	else if (type == SAVESTATE_PATH_CD)
-		newpath = currprefs.path_cd;
-	if (newpath != NULL && newpath[0] != 0) {
+	  if (state_path_exists(tmp, type)) {
+		  xfree (s);
+		  return my_strdup (tmp);
+	  }
+  }
+	for (int i = 0; i < MAX_PATHS; i++) {
+	  newpath = NULL;
+	  if (type == SAVESTATE_PATH_FLOPPY)
+		  newpath = currprefs.path_floppy.path[i];
+	  else if (type == SAVESTATE_PATH_VDIR || type == SAVESTATE_PATH_HDF)
+		  newpath = currprefs.path_hardfile.path[i];
+	  else if (type == SAVESTATE_PATH_CD)
+		  newpath = currprefs.path_cd.path[i];
+		if (newpath == NULL || newpath[0] == 0)
+			break;
 		_tcscpy (tmp2, newpath);
 		fixtrailing (tmp2);
 		_tcscat (tmp2, tmp);
-		if (zfile_exists (tmp2)) {
+		if (state_path_exists(tmp2, type)) {
 			xfree (s);
 			return my_strdup (tmp2);
 		}
   }
 	getpathpart (tmp2, sizeof tmp2 / sizeof (TCHAR), savestate_fname);
 	_tcscat (tmp2, tmp);
-	if (zfile_exists (tmp2)) {
+	if (state_path_exists(tmp2, type)) {
 		xfree (s);
 		return my_strdup (tmp2);
 	}
 	return s;
 }
+
+TCHAR *restore_path_func (uae_u8 **dstp, int type)
+{
+	TCHAR *s = restore_string_func(dstp);
+	return state_resolve_path(s, type, false);
+}
+
+TCHAR *restore_path_full_func(uae_u8 **dstp)
+{
+	int type = restore_u32_func(dstp);
+	TCHAR *a = restore_string_func(dstp);
+	TCHAR *r = restore_string_func(dstp);
+	if (target_isrelativemode()) {
+		xfree(a);
+		return state_resolve_path(r, type, true);
+	} else {
+		TCHAR tmp[MAX_DPATH];
+		_tcscpy(tmp, a);
+		if (state_path_exists(tmp, type)) {
+			xfree(r);
+			xfree(a);
+			return my_strdup(tmp);
+		}
+		_tcscpy(tmp, r);
+		if (state_path_exists(tmp, type)) {
+			xfree(r);
+			xfree(a);
+			return my_strdup(tmp);
+		}
+		xfree(r);
+		return state_resolve_path(a, type, true);
+	}
+	return NULL;
+}
+
 
 /* read and write IFF-style hunks */
 
@@ -573,6 +632,8 @@ void restore_state (const TCHAR *filename)
 			end = restore_hrtmon (chunk);
 #endif
 #ifdef FILESYS
+		else if (!_tcscmp(name, _T("FSYP")))
+			end = restore_filesys_paths(chunk);
 		else if (!_tcscmp (name, _T("FSYS")))
 	    end = restore_filesys (chunk);
 		else if (!_tcscmp (name, _T("FSYC")))
@@ -632,6 +693,9 @@ void savestate_restore_finish (void)
 	restore_p96_finish ();
 #endif
 	restore_cia_finish ();
+#ifdef ACTION_REPLAY
+	restore_ar_finish();
+#endif
 	savestate_state = 0;
 	init_hz_normal();
 	audio_activate ();
@@ -649,7 +713,6 @@ void savestate_initsave (const TCHAR *filename, int mode, int nodialogs, bool sa
   _tcscpy (savestate_fname, filename);
   savestate_docompress = (mode == 1) ? 1 : 0;
   savestate_nodialogs = nodialogs;
-	new_blitter = false;
 }
 
 static void save_rams (struct zfile *f, int comp)
@@ -751,11 +814,9 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
   dst = save_blitter_new (&len, 0);
 	save_chunk (f, dst, len, _T("BLTX"), 0);
   xfree (dst);
-  if (new_blitter == false) {
-	  dst = save_blitter (&len, 0);
-		save_chunk (f, dst, len, _T("BLIT"), 0);
-	  xfree (dst);
-  }
+  dst = save_blitter (&len, 0);
+	save_chunk (f, dst, len, _T("BLIT"), 0);
+  xfree (dst);
 
 	dst = save_input (&len, 0);
 	save_chunk (f, dst, len, _T("CINP"), 0);
@@ -796,6 +857,7 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
 #ifdef AUTOCONFIG
 	dst = save_expansion_info(&len, 0);
 	save_chunk(f, dst, len, _T("EXPI"), 0);
+  xfree (dst);
   dst = save_expansion (&len, 0);
   save_chunk (f, dst, len, _T("EXPA"), 0);
   xfree (dst);
@@ -830,6 +892,11 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
   if (dst) {
 		save_chunk (f, dst, len, _T("FSYC"), 0);
     for (i = 0; i < nr_units (); i++) {
+			dst = save_filesys_paths(i, &len);
+			if (dst) {
+				save_chunk(f, dst, len, _T("FSYP"), 0);
+				xfree(dst);
+			}
     	dst = save_filesys (i, &len);
     	if (dst) {
 				save_chunk (f, dst, len, _T("FSYS"), 0);
@@ -876,7 +943,6 @@ int save_state (const TCHAR *filename, const TCHAR *description)
 	    return -1;
   	}
   }
-	new_blitter = false;
   savestate_nodialogs = 0;
   custom_prepare_savestate ();
 	f = zfile_fopen (filename, _T("w+b"), 0);

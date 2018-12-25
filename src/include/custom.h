@@ -40,8 +40,6 @@ extern void init_row_map (void);
 extern void init_hz_normal (void);
 extern void init_custom (void);
 
-extern bool picasso_requested_on, picasso_requested_forced_on, picasso_on;
-
 extern unsigned long int hsync_counter;
 
 extern uae_u16 dmacon;
@@ -85,6 +83,14 @@ STATIC_INLINE uae_u16 INTREQR (void)
   return intreq;
 }
 
+STATIC_INLINE void safe_interrupt_set(bool i6)
+{
+  uae_u16 v = i6 ? 0x2000 : 0x0008;
+  if (!(intreq & v)) {
+    INTREQ_0(0x8000 | v);
+  }
+}
+
 /* maximums for statically allocated tables */
 #define MAXHPOS 227
 #define MAXVPOS 314
@@ -112,8 +118,8 @@ STATIC_INLINE uae_u16 INTREQR (void)
 const int maxhpos = MAXHPOS_PAL; // MAXHPOS_NTSC has same value and programmed mode not supported.
 extern int maxvpos, maxvpos_nom, maxvpos_display;
 extern int minfirstline;
-extern double vblank_hz, fake_vblank_hz;
-extern double hblank_hz;
+extern float vblank_hz;
+extern float hblank_hz;
 
 #define DMA_AUD0      0x0001
 #define DMA_AUD1      0x0002
@@ -176,6 +182,7 @@ extern void fpscounter_reset (void);
 extern unsigned long idletime;
 
 extern int current_maxvpos (void);
-extern struct chipset_refresh *get_chipset_refresh (void);
+extern struct chipset_refresh *get_chipset_refresh (struct uae_prefs*);
+void custom_cpuchange(void);
 
 #endif /* UAE_CUSTOM_H */

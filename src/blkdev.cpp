@@ -42,7 +42,7 @@ struct blkdevstate
 	int wasopen;
 };
 
-struct blkdevstate state[MAX_TOTAL_SCSI_DEVICES];
+static struct blkdevstate state[MAX_TOTAL_SCSI_DEVICES];
 
 static bool dev_init;
 
@@ -107,20 +107,14 @@ int isaudiotrack (struct cd_toc_head *th, int block)
 		return 0;
 	return (t->control & 0x0c) != 4;
 }
-int isdatatrack (struct cd_toc_head *th, int block)
-{
-	return !isaudiotrack (th, block);
-}
 
 static int cdscsidevicetype[MAX_TOTAL_SCSI_DEVICES];
 
 static struct device_functions *devicetable[] = {
 	NULL,
-	&devicefunc_cdimage,
-  NULL,
-  NULL
+	&devicefunc_cdimage
 };
-#define NUM_DEVICE_TABLE_ENTRIES 4
+#define NUM_DEVICE_TABLE_ENTRIES 2
 static int driver_installed[NUM_DEVICE_TABLE_ENTRIES];
 
 static void install_driver (int flags)
@@ -208,7 +202,6 @@ void blkdev_fix_prefs (struct uae_prefs *p)
 			cdscsidevicetype[i] = SCSI_UNIT_IMAGE;
 		}
 	}
-
 }
 
 static bool getsem (int unitnum, bool dowait)
@@ -278,46 +271,6 @@ static int sys_command_open_internal (int unitnum, const TCHAR *ident, cd_standa
 	return ret;
 }
 
-static int getunitinfo (int unitnum, int drive, cd_standard_unit csu, int *isaudio)
-{
-	struct device_info di;
-	if (sys_command_info (unitnum, &di, 0)) {
-		write_log (_T("Scanning drive %s: "), di.label);
-		if (di.media_inserted) {
-			if (isaudiotrack (&di.toc, 0)) {
-				if (*isaudio == 0)
-					*isaudio = drive;
-				write_log (_T("CDA"));
-			}
-			uae_u8 buffer[2048];
-			if (sys_command_cd_read (unitnum, buffer, 16, 1)) {
-				if (!memcmp (buffer + 8, "CDTV", 4) || !memcmp (buffer + 8, "CD32", 4) || !memcmp (buffer + 8, "COMM", 4)) {
-					uae_u32 crc;
-					write_log (_T("CD32 or CDTV"));
-					if (sys_command_cd_read (unitnum, buffer, 21, 1)) {
-						crc = get_crc32 (buffer, sizeof buffer);
-						if (crc == 0xe56c340f) {
-							write_log (_T(" [CD32.TM]"));
-							if (csu == CD_STANDARD_UNIT_CD32) {
-								write_log (_T("\n"));
-								return 1;
-							}
-						}
-					}
-					if (csu == CD_STANDARD_UNIT_CDTV || csu == CD_STANDARD_UNIT_CD32) {
-						write_log (_T("\n"));
-						return 1;
-					}
-				}
-			}
-		} else {
-			write_log (_T("no media"));
-		}
-	}
-	write_log (_T("\n"));
-	return 0;
-}
-
 static int get_standard_cd_unit2 (struct uae_prefs *p, cd_standard_unit csu)
 {
 	int unitnum = 0;
@@ -360,25 +313,6 @@ int get_standard_cd_unit (cd_standard_unit csu)
 	return unitnum;
 }
 
-int sys_command_open (int unitnum)
-{
-	struct blkdevstate *st = &state[unitnum];
-	blkdev_fix_prefs (&currprefs);
-	if (!dev_init) {
-		device_func_init (0);
-	}
-
-	if (st->isopen) {
-		st->isopen++;
-		return -1;
-	}
-	st->waspaused = 0;
-	int v = sys_command_open_internal (unitnum, currprefs.cdslots[unitnum].name[0] ? currprefs.cdslots[unitnum].name : NULL, CD_STANDARD_UNIT_DEFAULT);
-	if (!v)
-		return 0;
-	return v;
-}
-
 void sys_command_close (int unitnum)
 {
 	struct blkdevstate *st = &state[unitnum];
@@ -396,6 +330,21 @@ void blkdev_cd_change (int unitnum, const TCHAR *name)
 }
 
 void device_func_reset (void)
+{
+	// if reset during delayed CD change, re-insert the CD immediately
+	for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
+		struct blkdevstate *st = &state[i];
+		if (st->imagechangetime > 0 && st->newimagefile[0] && !currprefs.cdslots[i].name[0]) {
+			_tcscpy(changed_prefs.cdslots[i].name, st->newimagefile);
+			_tcscpy(currprefs.cdslots[i].name, st->newimagefile);
+		}
+		st->imagechangetime = 0;
+		st->newimagefile[0] = 0;
+		st->waspaused = false;
+	}
+}
+
+void device_func_free(void)
 {
 	for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
 		struct blkdevstate *st = &state[i];
@@ -470,7 +419,6 @@ static void check_changes (int unitnum)
 		_tcscpy (st->newimagefile, changed_prefs.cdslots[unitnum].name);
 		changed_prefs.cdslots[unitnum].name[0] = currprefs.cdslots[unitnum].name[0] = 0;
 		currprefs.cdslots[unitnum].inuse = changed_prefs.cdslots[unitnum].inuse;
-		int pollmode = 0;
 		st->imagechangetime = 3 * 50;
 		struct device_info di;
 		st->device_func->info (unitnum, &di, 0, -1);
@@ -480,7 +428,7 @@ static void check_changes (int unitnum)
 			st->device_func->closedev (unitnum);
 			st->wasopen = -1;
 		}
-		write_log (_T("CD: eject (%s) open=%d\n"), pollmode ? _T("slow") : _T("fast"), st->wasopen ? 1 : 0);
+		write_log (_T("CD: eject (slow) open=%d\n"), st->wasopen ? 1 : 0);
 
 		if (gotsem) {
 			freesem (unitnum);
@@ -556,20 +504,6 @@ void sys_command_cd_stop (int unitnum)
 	freesem (unitnum);
 }
 
-/* play CD audio */
-int sys_command_cd_play (int unitnum, int startlsn, int endlsn, int scan)
-{
-	int v;
-	if (failunit (unitnum))
-		return 0;
-	if (!getsem (unitnum))
-		return 0;
-	state[unitnum].play_end_pos = endlsn;
-	v = state[unitnum].device_func->play (unitnum, startlsn, endlsn, scan, NULL, NULL);
-	freesem (unitnum);
-	return v;
-}
-
 /* play CD audio with subchannels */
 int sys_command_cd_play (int unitnum, int startlsn, int endlsn, int scan, play_status_callback statusfunc, play_subchannel_callback subfunc)
 {
@@ -624,7 +558,7 @@ int sys_command_cd_toc (int unitnum, struct cd_toc_head *toc)
 }
 
 /* read one cd sector */
-int sys_command_cd_read (int unitnum, uae_u8 *data, int block, int size)
+static int sys_command_cd_read (int unitnum, uae_u8 *data, int block, int size)
 {
 	int v;
 	if (failunit (unitnum))
@@ -646,17 +580,6 @@ int sys_command_cd_rawread (int unitnum, uae_u8 *data, int block, int size, int 
 	freesem (unitnum);
 	return v;
 }
-int sys_command_cd_rawread (int unitnum, uae_u8 *data, int block, int size, int sectorsize, uae_u8 sectortype, uae_u8 scsicmd9, uae_u8 subs)
-{
-	int v;
-	if (failunit (unitnum))
-		return -1;
-	if (!getsem (unitnum))
-		return 0;
-	v = state[unitnum].device_func->rawread (unitnum, data, block, size, sectorsize, (sectortype << 16) | (scsicmd9 << 8) | subs);
-	freesem (unitnum);
-	return v;
-}
 
 int sys_command_ismedia (int unitnum, int quick)
 {
@@ -673,7 +596,7 @@ int sys_command_ismedia (int unitnum, int quick)
 	return v;
 }
 
-struct device_info *sys_command_info_session (int unitnum, struct device_info *di, int quick, int session)
+static struct device_info *sys_command_info_session (int unitnum, struct device_info *di, int quick, int session)
 {
 	struct blkdevstate *st = &state[unitnum];
 	if (failunit (unitnum))
@@ -738,8 +661,8 @@ uae_u8 *save_cd (int num, int *len)
 		return NULL;
 	if (!currprefs.cs_cd32cd)
 		return NULL;
-	dstbak = dst = xmalloc (uae_u8, 4 + 256 + 4 + 4);
-	save_u32 (4 | 8);
+	dstbak = dst = xmalloc (uae_u8, 4 + MAX_DPATH + 4 + 4 + 4 + 2 * MAX_DPATH);
+	save_u32 (4 | 8 | 16);
 	save_path (currprefs.cdslots[num].name, SAVESTATE_PATH_CD);
 	save_u32 (currprefs.cdslots[num].type);
 	save_u32 (0);
@@ -748,6 +671,7 @@ uae_u8 *save_cd (int num, int *len)
 	for (int i = 0; i < SUBQ_SIZE; i++)
 		save_u8 (st->play_qcode[i]);
 	save_u32 (st->play_end_pos);
+	save_path_full(currprefs.cdslots[num].name, SAVESTATE_PATH_CD);
 	*len = dst - dstbak;
 	return dstbak;
 }
@@ -764,6 +688,16 @@ uae_u8 *restore_cd (int num, uae_u8 *src)
 	s = restore_path (SAVESTATE_PATH_CD);
 	int type = restore_u32 ();
 	restore_u32 ();
+	if (flags & 8) {
+		restore_u32 ();
+		for (int i = 0; i < SUBQ_SIZE; i++)
+			st->play_qcode[i] = restore_u8 ();
+		st->play_end_pos = restore_u32 ();
+	}
+	if (flags & 16) {
+		xfree(s);
+		s = restore_path_full();
+	}
 	if (flags & 4) {
 		if (currprefs.cdslots[num].name[0] == 0 || zfile_exists (s)) {
 		  _tcscpy (changed_prefs.cdslots[num].name, s);
@@ -772,12 +706,7 @@ uae_u8 *restore_cd (int num, uae_u8 *src)
 		changed_prefs.cdslots[num].type = currprefs.cdslots[num].type = type;
 		changed_prefs.cdslots[num].temporary = currprefs.cdslots[num].temporary = true;
 	}
-	if (flags & 8) {
-		restore_u32 ();
-		for (int i = 0; i < SUBQ_SIZE; i++)
-			st->play_qcode[i] = restore_u8 ();
-		st->play_end_pos = restore_u32 ();
-	}
+	xfree(s);
 	return src;
 }
 

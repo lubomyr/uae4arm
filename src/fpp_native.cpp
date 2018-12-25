@@ -52,14 +52,14 @@ static void fpp_set_mode(uae_u32 mode_control)
 		return;
   switch(mode_control & FPCR_ROUNDING_PRECISION) {
     case FPCR_PRECISION_EXTENDED: // X
-			fpu_prec = 80;
+			fpu_prec = PREC_EXTENDED;
       break;
     case FPCR_PRECISION_SINGLE:   // S
-			fpu_prec = 32;
+			fpu_prec = PREC_FLOAT;
       break;
     case FPCR_PRECISION_DOUBLE:   // D
     default:                      // undefined
-			fpu_prec = 64;
+			fpu_prec = PREC_DOUBLE;
       break;
   }
 #if USE_HOST_ROUNDING
@@ -137,23 +137,13 @@ static uae_u32 fpp_from_single(fpdata *fpd)
 
 static void fpp_to_double(fpdata *fpd, uae_u32 wrd1, uae_u32 wrd2)
 {
-#ifdef WORDS_BIGENDIAN
-	((uae_u32*)&(fpd->fp))[0] = wrd1;
-	((uae_u32*)&(fpd->fp))[1] = wrd2;
-#else
 	((uae_u32*)&(fpd->fp))[1] = wrd1;
 	((uae_u32*)&(fpd->fp))[0] = wrd2;
-#endif
 }
 static void fpp_from_double(fpdata *fpd, uae_u32 *wrd1, uae_u32 *wrd2)
 {
-#ifdef WORDS_BIGENDIAN
-  *wrd1 = ((uae_u32*)&(fpd->fp))[0];
-  *wrd2 = ((uae_u32*)&(fpd->fp))[1];
-#else
   *wrd1 = ((uae_u32*)&(fpd->fp))[1];
   *wrd2 = ((uae_u32*)&(fpd->fp))[0];
-#endif
 }
 void fpp_to_exten(fpdata *fpd, uae_u32 wrd1, uae_u32 wrd2, uae_u32 wrd3)
 {
@@ -173,9 +163,8 @@ static void fpp_from_exten(fpdata *fpd, uae_u32 *wrd1, uae_u32 *wrd2, uae_u32 *w
   double frac;
   fptype v;
   
-  v = fpd->fp;
-  if (v == 0.0) {
-    *wrd1 = signbit(v) ? 0x80000000 : 0;
+  if (fpp_is_zero(fpd)) {
+    *wrd1 = signbit(fpd->fp) ? 0x80000000 : 0;
     *wrd2 = 0;
     *wrd3 = 0;
     return;
@@ -184,7 +173,8 @@ static void fpp_from_exten(fpdata *fpd, uae_u32 *wrd1, uae_u32 *wrd2, uae_u32 *w
 	 *wrd2 = 0xffffffff;
 	 *wrd3 = 0xffffffff;
 	 return;
-  }
+	}  
+	v = fpd->fp;
   if (v < 0) {
     *wrd1 = 0x80000000;
     v = -v;
@@ -302,13 +292,15 @@ static void fpp_round_single(fpdata *fpd)
 
 static void fpp_round_prec(fpdata *fpd, int prec)
 {
-	if (prec == 32) {
+	if (prec == PREC_FLOAT) {
 		fpp_round_single(fpd);
 	}
 }
 
 static void fp_round(fpdata *fpd)
 {
+	if (!currprefs.fpu_strict)
+		return;
 	fpp_round_prec(fpd, fpu_prec);
 }
 
@@ -317,7 +309,7 @@ static void fp_round(fpdata *fpd)
 static void fpp_move(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 
@@ -363,7 +355,7 @@ static void fpp_getman(fpdata *a, fpdata *b)
 static void fpp_div(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = a->fp / b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_mod(fpdata *a, fpdata *b, uae_u64 *q, uae_u8 *s)
@@ -427,7 +419,7 @@ static void fpp_intrz(fpdata *a, fpdata *b)
 static void fpp_sqrt(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = sqrtl(b->fp);
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_lognp1(fpdata *a, fpdata *b)
@@ -503,7 +495,7 @@ static void fpp_log2(fpdata *a, fpdata *b)
 static void fpp_abs(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = b->fp < 0.0 ? -b->fp : b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_cosh(fpdata *a, fpdata *b)
@@ -514,7 +506,7 @@ static void fpp_cosh(fpdata *a, fpdata *b)
 static void fpp_neg(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = -b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_acos(fpdata *a, fpdata *b)
@@ -530,19 +522,19 @@ static void fpp_cos(fpdata *a, fpdata *b)
 static void fpp_sub(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = a->fp - b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_add(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = a->fp + b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_mul(fpdata *a, fpdata *b, int prec)
 {
 	a->fp = a->fp * b->fp;
-	if (prec == 32)
+	if (prec == PREC_FLOAT)
 		fpp_round_single(a);
 }
 static void fpp_sglmul(fpdata *a, fpdata *b)
@@ -572,12 +564,12 @@ static void fpp_cmp(fpdata *a, fpdata *b)
 	fptype v = 1.0;
 	if (currprefs.fpu_strict) {
 		bool a_neg = fpp_is_neg(a);
-		bool b_neg = fpp_is_neg(b);
 		bool a_inf = fpp_is_infinity(a);
-		bool b_inf = fpp_is_infinity(b);
 		bool a_zero = fpp_is_zero(a);
-		bool b_zero = fpp_is_zero(b);
 		bool a_nan = fpp_is_nan(a);
+		bool b_neg = fpp_is_neg(b);
+		bool b_inf = fpp_is_infinity(b);
+		bool b_zero = fpp_is_zero(b);
 		bool b_nan = fpp_is_nan(b);
 
 		if (a_nan || b_nan) {

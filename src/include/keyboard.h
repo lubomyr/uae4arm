@@ -14,7 +14,6 @@
 #define KEYCODE_FBCON  2
 
 extern char keyboard_type;
-extern void  init_keyboard(void);
 
 /* First, two dummies */
 #define AK_mousestuff 0x100

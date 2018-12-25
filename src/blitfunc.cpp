@@ -2,7 +2,6 @@
 #include "sysdeps.h"
 #include "options.h"
 #include "include/memory-uae.h"
-#include "newcpu.h"
 #include "custom.h"
 #include "savestate.h"
 #include "blitter.h"

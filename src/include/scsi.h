@@ -24,7 +24,6 @@ struct scsi_data
 	uae_u8 message[1];
 	int blocksize;
 
-	int offset;
 	uae_u8 *buffer;
 	int buffer_size;
 	struct hd_hardfiledata *hdhfd;
@@ -32,14 +31,14 @@ struct scsi_data
 	int device_type;
 	bool atapi;
 	uae_u32 unit_attention;
+	int uae_unitnum;
 };
 
-extern struct scsi_data *scsi_alloc_generic(struct hardfiledata *hfd, int type);
+extern struct scsi_data *scsi_alloc_generic(struct hardfiledata *hfd, int type, int);
 extern void scsi_free(struct scsi_data*);
 
-extern void scsi_start_transfer(struct scsi_data*);
 extern void scsi_emulate_cmd(struct scsi_data *sd);
-extern void scsi_clear_sense(struct scsi_data *sd);
+extern bool scsi_cmd_is_safe(uae_u8 cmd);
 
 extern int scsi_hd_emulate(struct hardfiledata *hfd, struct hd_hardfiledata *hdhfd, uae_u8 *cmdbuf, int scsi_cmd_len,
 		uae_u8 *scsi_data, int *data_len, uae_u8 *r, int *reply_len, uae_u8 *s, int *sense_len);

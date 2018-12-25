@@ -44,6 +44,7 @@
 #endif
 
 int emulating = 0;
+struct uae_prefs workprefs;
 
 struct gui_msg {
   int num;
@@ -282,16 +283,15 @@ void RescanROMs(void)
   }
   
 	int id = 1;
-	for (;;) {
+	for (int id = 1; id < 300; ++id) {
 		struct romdata *rd = getromdatabyid (id);
 		if (!rd)
-			break;
+			continue;
 		if (rd->crc32 == 0xffffffff && strncmp(rd->model, "AROS", 4) == 0)
 			addrom (rd, ":AROS");
     if (rd->crc32 == 0xffffffff && rd->id == 63) {
       addrom (rd, ":HRTMon");
     }
-		id++;
 	}
 }
 
@@ -341,7 +341,11 @@ void ReadConfigFileList(void)
     strncat(tmp->FullPath, files[i].c_str(), MAX_DPATH - 1);
     strncpy(tmp->Name, files[i].c_str(), MAX_DPATH - 1);
     removeFileExtension(tmp->Name);
-    cfgfile_get_description(tmp->FullPath, tmp->Description);
+		struct uae_prefs *p = cfgfile_open(tmp->FullPath, NULL);
+		if (p) {
+			cfgfile_get_description(p, NULL, tmp->Description, NULL);
+			cfgfile_close(p);
+		}
     ConfigFilesList.push_back(tmp);
   }
 }
@@ -357,16 +361,38 @@ ConfigFileInfo* SearchConfigInList(const char *name)
 }
 
 
-static void prefs_to_gui()
+static void clearallkeys (void)
 {
+	inputdevice_updateconfig (&changed_prefs, &currprefs);
+}
+
+
+static void setmouseactive(int active)
+{
+	if (active) {
+		inputdevice_acquire(TRUE);
+	} else {
+		inputdevice_acquire (FALSE);
+		inputdevice_releasebuttons();
+	}
+}
+
+
+static void prefs_to_gui(struct uae_prefs *p)
+{
+	default_prefs(&workprefs, false, 0);
+	copy_prefs(p, &workprefs);
   /* filesys hack */
   changed_prefs.mountitems = currprefs.mountitems;
   memcpy(&changed_prefs.mountconfig, &currprefs.mountconfig, MOUNT_CONFIG_SIZE * sizeof (struct uaedev_config_info));
+	set_config_changed ();
 }
 
 
 static void gui_to_prefs (void)
 {
+	/* Always copy our prefs to changed_prefs, ... */
+	copy_prefs(&workprefs, &changed_prefs);
   /* filesys hack */
   currprefs.mountitems = changed_prefs.mountitems;
   memcpy(&currprefs.mountconfig, &changed_prefs.mountconfig, MOUNT_CONFIG_SIZE * sizeof (struct uaedev_config_info));
@@ -374,24 +400,18 @@ static void gui_to_prefs (void)
 }
 
 
-static void after_leave_gui(void)
+static void get_settings(void)
 {
-  // Check if we have to set or clear autofire
-  int new_af = (changed_prefs.input_autofire_linecnt == 0) ? 0 : 1;
-  int update = 0;
-  int num;
-  
-  for(num = 0; num < 2; ++num) {
-    if(changed_prefs.jports[num].id == JSEM_JOYS && changed_prefs.jports[num].autofire != new_af) {
-      changed_prefs.jports[num].autofire = new_af;
-      update = 1;
-    }
-  }
-  if(update)
-    inputdevice_updateconfig(NULL, &changed_prefs);
+	memset (&workprefs, 0, sizeof (struct uae_prefs));
+  prefs_to_gui(&changed_prefs);
 
-  inputdevice_copyconfig (&changed_prefs, &currprefs);
-  inputdevice_config_change_test();
+  run_gui();
+  gui_to_prefs();
+
+	if(quit_program)
+		screen_is_picasso = 0;
+
+  update_display(&changed_prefs);
 }
 
 
@@ -405,18 +425,20 @@ int gui_init (void)
     RescanROMs();
 
   graphics_subshutdown();
-  prefs_to_gui();
-  run_gui();
-  gui_to_prefs();
+
+	prefs_to_gui(&changed_prefs);
+	inputdevice_updateconfig(NULL, &workprefs);
+
+  get_settings();
+  
   if(quit_program < 0)
     quit_program = -quit_program;
   if(quit_program == UAE_QUIT)
     ret = -2; // Quit without start of emulator
 
-  update_display(&changed_prefs);
+	getcapslock();
+	inputdevice_acquire (TRUE);
 
-  after_leave_gui();
-    
 	emulating=1;
   return ret;
 }
@@ -443,7 +465,6 @@ void gui_purge_events(void)
 		counter++;
 		SDL_Delay(10);
 	}
-	keybuf_init();
 }
 
 
@@ -492,31 +513,37 @@ void gui_display (int shortcut)
 	if (quit_program != 0)
 		return;
 	emulating=1;
-	pause_sound();
+
   blkdev_entergui();
+	pause_sound();
 
-  if(lstAvailableROMs.size() == 0)
-    RescanROMs();
+	inputdevice_unacquire ();
+	//wait_keyrelease(); ToDo: implement in host spezific xy_input.cpp
+	clearallkeys ();
+	setmouseactive(0);
+
   graphics_subshutdown();
-  prefs_to_gui();
-  run_gui();
-  gui_to_prefs();
-	if(quit_program)
-		screen_is_picasso = 0;
 
-  update_display(&changed_prefs);
+  get_settings();
 
 	/* Clear menu garbage at the bottom of the screen */
 	black_screen_now();
-	reset_sound();
-	resume_sound();
-  blkdev_exitgui();
-
-  after_leave_gui();
-
   gui_update ();
-
   gui_purge_events();
+
+	reset_sound();
+  inputdevice_copyconfig (&changed_prefs, &currprefs);
+  inputdevice_config_change_test();
+	clearallkeys ();
+
+  blkdev_exitgui();
+	resume_sound();
+
+  getcapslock();
+	inputdevice_acquire (TRUE);
+	setmouseactive(1);
+	
+//	reset_sync();
   fpscounter_reset();
 }
 
@@ -539,14 +566,14 @@ void gui_led(int led, int on, int brightness)
 	// Handle floppy led status
 	if (led == LED_DF0 || led == LED_DF1 || led == LED_DF2 || led == LED_DF3)
 	{ 
-		if (currprefs.kbd_led_num == led || currprefs.kbd_led_num == LED_DFs)
+		if (currprefs.kbd_led_num == led)
 		{  
 			if (on) 
 			  kbd_led_status |= LED_NUM;
 			else 
 			  kbd_led_status &= ~LED_NUM;
 		}
-		if (currprefs.kbd_led_scr == led || currprefs.kbd_led_scr == LED_DFs)
+		if (currprefs.kbd_led_scr == led)
 		{  
 			if (on) 
 			  kbd_led_status |= LED_SCR;
@@ -578,32 +605,59 @@ void gui_led(int led, int on, int brightness)
 #endif
 }
 
+
+static void gui_flicker_led2 (int led, int unitnum, int status)
+{
+	static int resetcounter[LED_MAX];
+	uae_s8 old;
+	uae_s8 *p;
+
+	if (led == LED_HD)
+		p = &gui_data.hd;
+	else if (led == LED_CD)
+		p = &gui_data.cd;
+	else
+		return;
+	old = *p;
+	if (status < 0) {
+#ifdef RASPBERRY
+		if (old < 0) {
+			gui_led (led, -1, -1);
+		} else {
+			gui_led (led, 0, -1);
+		}
+#endif
+		return;
+	}
+	if (status == 0 && old < 0) {
+		*p = 0;
+		resetcounter[led] = 0;
+#ifdef RASPBERRY
+		gui_led (led, 0, -1);
+#endif
+		return;
+	}
+	if (status == 0) {
+		resetcounter[led]--;
+		if (resetcounter[led] > 0)
+			return;
+	}
+	*p = status;
+	resetcounter[led] = 4;
+#ifdef RASPBERRY
+	if (old != *p)
+		gui_led (led, *p, -1);
+#endif
+}
+
 void gui_flicker_led (int led, int unitnum, int status)
 {
-  static int hd_resetcounter;
-
-  switch(led)
-  {
-    case -1: // Reset HD and CD
-      gui_data.hd = 0;
-      break;
-      
-    case LED_POWER:
-      break;
-
-    case LED_HD:
-      if (status == 0) {
-  	    hd_resetcounter--;
-  	    if (hd_resetcounter > 0)
-  	      return;
-      }
-      gui_data.hd = status;
-      hd_resetcounter = 2;
-      break;
-  }
-#ifdef RASPBERRY
-	gui_led(led, status, 0);
-#endif
+	if (led < 0) {
+		gui_flicker_led2(LED_HD, 0, 0);
+		gui_flicker_led2(LED_CD, 0, 0);
+	} else {
+		gui_flicker_led2(led, unitnum, status);
+	}
 }
 
 

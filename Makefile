@@ -87,7 +87,6 @@ OBJS =	\
 	src/cia.o \
 	src/crc32.o \
 	src/custom.o \
-	src/def_icons.o \
 	src/devices.o \
 	src/disk.o \
 	src/diskutil.o \
@@ -182,6 +181,7 @@ OBJS =	\
 	src/osdep/generic_rp9.o \
 	src/osdep/generic_mem.o \
 	src/osdep/sigsegv_handler.o \
+	src/osdep/gui/GenericListModel.o \
 	src/osdep/gui/UaeRadioButton.o \
 	src/osdep/gui/UaeDropDown.o \
 	src/osdep/gui/UaeCheckBox.o \
@@ -203,6 +203,7 @@ OBJS =	\
 	src/osdep/gui/PanelRAM.o \
 	src/osdep/gui/PanelFloppy.o \
 	src/osdep/gui/PanelHD.o \
+	src/osdep/gui/PanelInput.o \
 	src/osdep/gui/PanelDisplay.o \
 	src/osdep/gui/PanelSound.o \
 	src/osdep/gui/PanelMisc.o \
@@ -224,7 +225,7 @@ OBJS += src/osdep/pandora.o
 OBJS += src/osdep/pandora_gfx.o
 OBJS += src/osdep/pandora_input.o
 OBJS += src/sounddep/sound_sdl.o
-OBJS += src/osdep/gui/PanelInputPandora.o
+OBJS += src/osdep/gui/PanelGamePortPandora.o
 endif
 
 ifeq ($(PLATFORM),android)

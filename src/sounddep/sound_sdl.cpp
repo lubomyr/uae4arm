@@ -46,13 +46,22 @@ static int cdrdcnt = 0;
 
 
 static int have_sound = 0;
+static float scaled_sample_evtime_orig;
+static float snd_adjust = 1.0f;
 
 void update_sound(double clk)
 {
 	double evtime;
   
 	evtime = clk * CYCLE_UNIT / (double)currprefs.sound_freq;
-	scaled_sample_evtime = evtime;
+	scaled_sample_evtime_orig = evtime;
+	scaled_sample_evtime = scaled_sample_evtime_orig * snd_adjust;
+}
+
+void sound_adjust(float factor)
+{
+  snd_adjust = factor;
+  scaled_sample_evtime = scaled_sample_evtime_orig * snd_adjust;
 }
 
 
@@ -285,7 +294,6 @@ void reset_sound(void)
 	clear_sound_buffers();
 	clear_cdaudio_buffers();
 }
-
 
 void sound_volume(int dir)
 {

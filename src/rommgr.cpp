@@ -19,8 +19,6 @@
 #include "autoconf.h"
 #include "filesys.h"
 
-#define SAVE_ROM 0
-
 static struct romlist *rl;
 static int romlist_cnt;
 
@@ -95,7 +93,7 @@ struct romdata *getromdatabypath (const TCHAR *path)
   return NULL;
 }
 
-#define NEXT_ROM_ID 224
+#define NEXT_ROM_ID 240
 
 #define ALTROM(id,grp,num,size,flags,crc32,a,b,c,d,e) \
 { _T("X"), 0, 0, 0, 0, 0, size, id, 0, 0, flags, (grp << 16) | num, 0, NULL, crc32, a, b, c, d, e },
@@ -121,12 +119,6 @@ static struct romdata roms[] = {
 	0xa6ce1636, 0x11F9E62C,0xF299F721,0x84835B7B,0x2A70A163,0x33FC0D88 },
 	{ _T("KS ROM v1.3 (A500,A1000,A2000)"), 1, 3, 34, 5, _T("A500\0A1000\0A2000\0"), 262144, 6, 0, 0, ROMTYPE_KICK, 0, 0, _T("315093-02"),
 	0xc4f0f55f, 0x891E9A54,0x7772FE0C,0x6C19B610,0xBAF8BC4E,0xA7FCB785 },
-	{ _T("KS ROM v1.3 (A3000)(SK)"), 1, 3, 34, 5, _T("A3000\0"), 262144, 32, 0, 0, ROMTYPE_KICK, 0, 0, NULL,
-	0xe0f37258, 0xC39BD909,0x4D4E5F4E,0x28C1411F,0x30869504,0x06062E87 },
-	{ _T("KS ROM v1.4 (A3000)"), 1, 4, 36, 16, _T("A3000\0"), 524288, 59, 3, 0, ROMTYPE_KICK, 0, 0, NULL,
-	0xbc0ec13f, 0xF76316BF,0x36DFF14B,0x20FA349E,0xD02E4B11,0xDD932B07 },
-	ALTROMPN(59, 1, 1, 262144, ROMTYPE_EVEN, _T("390629-02"), 0x58327536,0xd1713d7f,0x31474a59,0x48e6d488,0xe3368606,0x1cf3d1e2)
-	ALTROMPN(59, 1, 2, 262144, ROMTYPE_ODD , _T("390630-02"), 0xfe2f7fb9,0xc05c9c52,0xd014c66f,0x9019152b,0x3f2a2adc,0x2c678794)
 	{ _T("KS ROM v2.04 (A500+)"), 2, 4, 37, 175, _T("A500+\0"), 524288, 7, 0, 0, ROMTYPE_KICK, 0, 0, _T("390979-01"),
 	0xc3bdb240, 0xC5839F5C,0xB98A7A89,0x47065C3E,0xD2F14F5F,0x42E334A1 },
 	{ _T("KS ROM v2.05 (A600)"), 2, 5, 37, 299, _T("A600\0"), 524288, 8, 0, 0, ROMTYPE_KICK, 0, 0, _T("391388-01"),
@@ -135,10 +127,6 @@ static struct romdata roms[] = {
 	0x64466c2a, 0xF72D8914,0x8DAC39C6,0x96E30B10,0x859EBC85,0x9226637B },
 	{ _T("KS ROM v2.05 (A600HD)"), 2, 5, 37, 350, _T("A600HD\0A600\0"), 524288, 10, 0, 0, ROMTYPE_KICK, 0, 0, _T("391304-02"),
 	0x43b0df7b, 0x02843C42,0x53BBD29A,0xBA535B0A,0xA3BD9A85,0x034ECDE4 },
-	{ _T("KS ROM v2.04 (A3000)"), 2, 4, 37, 175, _T("A3000\0"), 524288, 71, 8, 0, ROMTYPE_KICK, 0, 0, NULL,
-	0x234a7233, 0xd82ebb59,0xafc53540,0xddf2d718,0x7ecf239b,0x7ea91590 },
-	ALTROMPN(71, 1, 1, 262144, ROMTYPE_EVEN, _T("390629-03"), 0xa245dbdf,0x83bab8e9,0x5d378b55,0xb0c6ae65,0x61385a96,0xf638598f)
-	ALTROMPN(71, 1, 2, 262144, ROMTYPE_ODD , _T("390630-03"), 0x7db1332b,0x48f14b31,0x279da675,0x7848df6f,0xeb531881,0x8f8f576c)
 
 	{ _T("KS ROM v3.0 (A1200)"), 3, 0, 39, 106, _T("A1200\0"), 524288, 11, 0, 0, ROMTYPE_KICK, 0, 0, NULL,
 	0x6c9b07d2, 0x70033828,0x182FFFC7,0xED106E53,0x73A8B89D,0xDA76FAA5 },
@@ -158,20 +146,12 @@ static struct romdata roms[] = {
 	0x1483a091, 0xE2154572,0x3FE8374E,0x91342617,0x604F1B3D,0x703094F1 },
 	ALTROMPN(15, 1, 1, 262144, ROMTYPE_EVEN, _T("391773-01"), 0x08dbf275,0xb8800f5f,0x90929810,0x9ea69690,0xb1b8523f,0xa22ddb37)
 	ALTROMPN(15, 1, 2, 262144, ROMTYPE_ODD , _T("391774-01"), 0x16c07bf8,0x90e331be,0x1970b0e5,0x3f53a9b0,0x390b51b5,0x9b3869c2)
-	{ _T("KS ROM v3.1 (A3000)"), 3, 1, 40, 68, _T("A3000\0"), 524288, 61, 2, 0, ROMTYPE_KICK, 0, 0, NULL,
-	0xefb239cc, 0xF8E210D7,0x2B4C4853,0xE0C9B85D,0x223BA20E,0x3D1B36EE },
-  ALTROM(61, 1, 1, 262144, ROMTYPE_EVEN, 0x286b9a0d,0x6763a225,0x8ec493f7,0x408cf663,0x110dae9a,0x17803ad1)
-  ALTROM(61, 1, 2, 262144, ROMTYPE_ODD , 0x0b8cde6a,0x5f02e97b,0x48ebbba8,0x7d516a56,0xb0400c6f,0xc3434d8d)
 	{ _T("KS ROM v3.1 (A4000)(Cloanto)"), 3, 1, 40, 68, _T("A4000\0"), 524288, 31, 2 | 4, 1, ROMTYPE_KICK, 0, 0, NULL,
 	0x43b6dd22, 0xC3C48116,0x0866E60D,0x085E436A,0x24DB3617,0xFF60B5F9 },
 	{ _T("KS ROM v3.1 (A4000)"), 3, 1, 40, 68, _T("A4000\0"), 524288, 16, 2 | 4, 0, ROMTYPE_KICK, 0, 0, NULL,
 	0xd6bae334, 0x5FE04842,0xD04A4897,0x20F0F4BB,0x0E469481,0x99406F49 },
   ALTROM(16, 1, 1, 262144, ROMTYPE_EVEN, 0xb2af34f8,0x24e52b5e,0xfc020495,0x17387ab7,0xb1a1475f,0xc540350e)
   ALTROM(16, 1, 2, 262144, ROMTYPE_ODD , 0xe65636a3,0x313c7cbd,0xa5779e56,0xf19a41d3,0x4e760f51,0x7626d882)
-	{ _T("KS ROM v3.1 (A4000T)"), 3, 1, 40, 70, _T("A4000T\0"), 524288, 17, 2 | 4, 0, ROMTYPE_KICK, 0, 0, NULL,
-	0x75932c3a, 0xB0EC8B84,0xD6768321,0xE01209F1,0x1E6248F2,0xF5281A21 },
-	ALTROMPN(17, 1, 1, 262144, ROMTYPE_EVEN, _T("391657-01"), 0x0ca94f70,0xb3806eda,0xcb3362fc,0x16a154ce,0x1eeec5bf,0x5bc24789)
-	ALTROMPN(17, 1, 2, 262144, ROMTYPE_ODD , _T("391658-01"), 0xdfe03120,0xcd7a706c,0x431b04d8,0x7814d3a2,0xd8b39710,0x0cf44c0c)
 	{ _T("KS ROM v3.X (A4000)(Cloanto)"), 3, 10, 45, 57, _T("A4000\0"), 524288, 46, 2 | 4, 1, ROMTYPE_KICK, 0, 0, NULL,
 	0x3ac99edc, 0x3cbfc9e1,0xfe396360,0x157bd161,0xde74fc90,0x1abee7ec },
 
@@ -252,9 +232,6 @@ static struct romdata roms[] = {
 
 	{ _T("Freezer: HRTMon v2.37 (built-in)"), 0, 0, 0, 0, _T("HRTMON\0"), 0, 63, 0, 0, ROMTYPE_HRTMON, 0, 1, NULL,
 	0xffffffff, 0, 0, 0, 0, 0, _T("HRTMon") },
-
-	{ _T("Picasso IV"), 7, 4, 7, 4, _T("PIV\0"), 131072, 91, 0, 0, ROMTYPE_PICASSOIV, 0, 0, NULL,
-	0xa8133e7e, 0xcafafb91,0x6f16b9f3,0xec9b49aa,0x4b40eb4e,0xeceb5b5b },
 
   { NULL }
 
@@ -359,7 +336,7 @@ struct romlist **getromlistbyident (int ver, int rev, int subver, int subrev, co
 			continue;
 		if (model && !_tcsicmp (model, rd->name))
 			ok = 2;
-		if ((ver < 0 || rd->ver == ver) && (rev < 0 || rd->rev == rev)) {
+		if ((ver < 0 || rd->ver == ver) && (rev < 0 || rd->rev == rev) && (rd->rev != 0 || rd->ver != 0)) {
 			if (subver >= 0) {
 				if (rd->subver == subver && (subrev < 0 || rd->subrev == subrev) && rd->subver > 0)
 					ok = 1;
@@ -567,7 +544,7 @@ int load_keyring (struct uae_prefs *p, const TCHAR *path)
 			break;
 		case 1:
 	    if (p) {
-    		_tcscpy (tmp, p->path_rom);
+    		_tcscpy (tmp, p->path_rom.path[0]);
     		_tcscat (tmp, _T("rom.key"));
 	    }
     	break;
@@ -953,7 +930,7 @@ static void romwarning (const int *ids)
 		  _tcscat (tmp2, _T("- "));
 		  _tcscat (tmp2, tmp1);
 		  _tcscat (tmp2, _T("\n"));
-			if (rd->type & (ROMTYPE_SCSI | ROMTYPE_CD32CART))
+			if (rd->type & (ROMTYPE_CD32CART))
 			  exp++;
 		}
 		i++;
@@ -1031,17 +1008,7 @@ static int read_rom_file (uae_u8 *buf, const struct romdata *rd)
   return 1;
 }
 
-#if SAVE_ROM
-static void save_rom(uae_u8 *rom, int size)
-{
-	struct zfile *f;
-	f = zfile_fopen (_T("c:\\temp\\1.rom"), _T("wb"));
-	zfile_fwrite (rom, 1, size, f);
-	zfile_fclose(f);
-}
-#endif
-
-struct zfile *read_rom (struct romdata *prd)
+static struct zfile *read_rom (struct romdata *prd)
 {
 	struct romdata *rd2 = prd;
 	struct romdata *rd = prd;
@@ -1086,24 +1053,6 @@ struct zfile *read_rom (struct romdata *prd)
     		}
     		add = 1;
     		i++;
-			} else if (flags & ROMTYPE_QUAD) {
-				if (i == 0) {
-					for (int k = 0; k < 4; k++) {
-						read_rom_file (buf2, rd2 + k + 1);
-						for (j = 0; j < size; j += 4)
-							buf[j + k] = buf2[j / 4];
-					}
-				} else {
-					for (int kk = 0; kk < 2; kk++) {
-						for (int k = 0; k < 2; k++) {
-							read_rom_file (buf2, rd2 + k + kk * 2 + 1);
-							for (j = 0; j < size / 2; j += 2) {
-								buf[j + k + kk * (rd2->size / 2)] = buf2[j / 2];
-							}
-						}
-					}
-				}
-				add = 4;
       } else {
     		int romsize = size / 2;
     		if (i)
@@ -1116,23 +1065,17 @@ struct zfile *read_rom (struct romdata *prd)
 					rdpair = rd;
     		if (flags & ROMTYPE_8BIT) {
 		      read_rom_file (buf2, rd);
-		      if (flags & ROMTYPE_BYTESWAP)
-	          byteswap (buf2, romsize);
 		      if (flags & ROMTYPE_SCRAMBLED)
 	          descramble (rd, buf2, romsize, odd);
 		      for (j = 0; j < size; j += 2)
       			buf[j + odd] = buf2[j / 2];
 					read_rom_file (buf2, rdpair);
-    	    if (flags & ROMTYPE_BYTESWAP)
-	          byteswap (buf2, romsize);
 		      if (flags & ROMTYPE_SCRAMBLED)
 	          descramble (rd + 1, buf2, romsize, !odd);
 		      for (j = 0; j < size; j += 2)
       			buf[j + (1 - odd)] = buf2[j / 2];
     		} else {
 		      read_rom_file (buf2, rd);
-		      if (flags & ROMTYPE_BYTESWAP)
-      			byteswap (buf2, romsize);
 		      if (flags & ROMTYPE_SCRAMBLED)
       			descramble (rd, buf2, romsize, odd);
 		      for (j = 0; j < size; j += 4) {
@@ -1140,8 +1083,6 @@ struct zfile *read_rom (struct romdata *prd)
       			buf[j + 2 * odd + 1] = buf2[j / 2 + 1];
 		      }
 					read_rom_file (buf2, rdpair);
-		      if (flags & ROMTYPE_BYTESWAP)
-      			byteswap (buf2, romsize);
 		      if (flags & ROMTYPE_SCRAMBLED)
       			descramble (rd + 1, buf2, romsize, !odd);
 		      for (j = 0; j < size; j += 4) {
@@ -1151,10 +1092,6 @@ struct zfile *read_rom (struct romdata *prd)
     		}
         add = 2;
       }
-
-#if SAVE_ROM
-			save_rom(buf, size);
-#endif
 
 			if (notcrc32(crc32) || get_crc32(buf, size) == crc32) {
     		ok = 1;
@@ -1306,7 +1243,7 @@ struct zfile *read_rom_name (const TCHAR *filename)
   return f;
 }
 
-struct zfile *read_rom_name_guess (const TCHAR *filename)
+struct zfile *read_rom_name_guess (const TCHAR *filename, TCHAR *out)
 {
 	int i, j;
 	struct zfile *f;
@@ -1333,6 +1270,7 @@ struct zfile *read_rom_name_guess (const TCHAR *filename)
 			f = read_rom (rd);
 			if (f) {
 				write_log (_T("ROM %s not found, using %s\n"), filename, rl[i].path);
+				_tcscpy(out, rl[i].path);
 				return f;
 			}
 		}
@@ -1399,7 +1337,7 @@ int configure_rom (struct uae_prefs *p, const int *rom, int msg)
 	}
 	if (rd->type & (ROMTYPE_KICK | ROMTYPE_KICKCD32))
 		_tcscpy (p->romfile, path);
-	if ((rd->type & (ROMTYPE_EXTCD32)) && !(rd->type & ROMTYPE_KICKCD32))
+	if ((rd->type & ROMTYPE_EXTCD32) && !(rd->type & ROMTYPE_KICKCD32))
 		_tcscpy (p->romextfile, path);
 	if (rd->type & ROMTYPE_CD32CART) {
 		_tcscpy(p->cartfile, path);
@@ -1428,7 +1366,6 @@ static void device_rom_defaults(struct uae_prefs *p, struct boardromconfig *brc,
 	brc->device_type = romtype;
 	brc->device_num = devnum;
 	for (int i = 0; i < MAX_BOARD_ROMS; i++) {
-		brc->roms[i].device_id = 7;	
 		brc->roms[i].back = brc;
 	}
 	int order = 0;
@@ -1573,7 +1510,7 @@ static bool isspecialrom(const TCHAR *name)
 	return false;
 }
 
-struct zfile *read_device_from_romconfig(struct romconfig *rc, uae_u32 romtype)
+static struct zfile *read_device_from_romconfig(struct romconfig *rc, uae_u32 romtype)
 {
 	struct zfile *z = NULL;
 	if (isspecialrom(rc->romfile))
@@ -1589,21 +1526,6 @@ struct zfile *read_device_from_romconfig(struct romconfig *rc, uae_u32 romtype)
 		}
 	}
 	return z;
-}
-
-int is_device_rom(struct uae_prefs *p, int romtype, int devnum)
-{
-	int idx;
-	struct boardromconfig *brc = get_device_rom(p, romtype, devnum, &idx);
-	if (brc) {
-		const TCHAR *romname = brc->roms[idx].romfile;
-		if (_tcslen(romname) == 0)
-			return -1;
-		if (isspecialrom(romname))
-			return 0;
-		return 1;
-	}
-	return -1;
 }
 
 struct boardromconfig *get_boardromconfig(struct uae_prefs *p, int romtype, int *index)
@@ -1627,10 +1549,6 @@ struct boardromconfig *get_boardromconfig(struct uae_prefs *p, int romtype, int 
 
 bool load_rom_rc(struct romconfig *rc, uae_u32 romtype, int maxfilesize, int fileoffset, uae_u8 *rom, int maxromsize, int flags)
 {
-	if (flags & LOADROM_ONEFILL)
-		memset(rom, 0xff, maxromsize);
-	if (flags & LOADROM_ZEROFILL)
-		memset(rom, 0x00, maxromsize);
 	struct zfile *f = read_device_from_romconfig(rc, romtype);
 	if (!f)
 		return false;
@@ -1658,27 +1576,11 @@ bool load_rom_rc(struct romconfig *rc, uae_u32 romtype, int maxfilesize, int fil
 		}
 
 		rom[pos] = b;
-		if (flags & LOADROM_EVENONLY) {
-			rom[pos + 1] = (flags >> 16) & 0xff;
-			pos += 2;
-		} else {
-			pos += 1;
-		}
+		pos += 1;
 		cnt++;
 	}
 	if (f)
 		write_log(_T("ROM '%s' loaded, %d bytes.\n"), zfile_getname(f), bytes);
 	zfile_fclose(f);
-	int posend = pos;
-	if (!(flags & LOADROM_FILL))
-		return true;
-	int oldpos = 0;
-	while (pos < maxromsize) {
-		rom[pos] = rom[oldpos];
-		oldpos++;
-		pos++;
-		if (oldpos >= posend)
-			oldpos = 0;
-	}
 	return true;
 }

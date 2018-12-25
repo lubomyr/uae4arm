@@ -35,8 +35,6 @@
 #define FLAC__NO_DLL
 #include "FLAC/stream_decoder.h"
 
-#define scsi_log write_log
-
 #define CDDA_BUFFERS 12
 
 enum audenc { AUDENC_NONE, AUDENC_PCM, AUDENC_MP3, AUDENC_FLAC };
@@ -87,9 +85,12 @@ struct cdunit {
 	int cdda_delay, cdda_delay_frames;
 	bool thread_active;
 
-	TCHAR imgname[MAX_DPATH];
+	TCHAR imgname_in[MAX_DPATH];
+	TCHAR imgname_out[MAX_DPATH];
 	uae_sem_t sub_sem;
 	struct device_info di;
+	volatile int cda_bufon[2];
+	cda_audio *cda;
 };
 
 static struct cdunit cdunits[MAX_TOTAL_SCSI_DEVICES];
@@ -243,7 +244,7 @@ void sub_to_interleaved (const uae_u8 *s, uae_u8 *d)
 		d++;
 	}
 }
-void sub_to_deinterleaved (const uae_u8 *s, uae_u8 *d)
+static void sub_to_deinterleaved (const uae_u8 *s, uae_u8 *d)
 {
 	for (int i = 0; i < 8 * SUB_ENTRY_SIZE; i ++) {
 		int dmask = 0x80;
@@ -382,12 +383,9 @@ static void audio_unpack (struct cdunit *cdu, struct cdtoc *t)
 		sleep_millis(10);
 }
 
-static volatile int cda_bufon[2];
-static cda_audio *cda;
-
 static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 {
-	int cdda_pos;
+	int cdda_pos = cdu->cdda_start;
 	int bufnum;
 	int oldplay;
 	int idleframes = 0;
@@ -402,10 +400,10 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 		sleep_millis(10);
 	oldplay = -1;
 
-	cda_bufon[0] = cda_bufon[1] = 0;
+	cdu->cda_bufon[0] = cdu->cda_bufon[1] = 0;
 	bufnum = 0;
 
-	cda = new cda_audio (CDDA_BUFFERS, 2352, 44100);
+	cdu->cda = new cda_audio (CDDA_BUFFERS, 2352, 44100);
 
 	while (cdu->cdda_play > 0) {
 
@@ -509,9 +507,9 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 			}
 		}
 
-	  cda->wait(bufnum);
+	  cdu->cda->wait(bufnum);
 
-		cda_bufon[bufnum] = 0;
+		cdu->cda_bufon[bufnum] = 0;
 		if (cdu->cdda_play <= 0)
 			goto end;
 
@@ -530,10 +528,10 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 
 			setstate(cdu, AUDIO_STATUS_IN_PROGRESS, cdda_pos);
 
-			memset (cda->buffers[bufnum], 0, CDDA_BUFFERS * 2352);
+			memset (cdu->cda->buffers[bufnum], 0, CDDA_BUFFERS * 2352);
 
 			for (cnt = 0; cnt < CDDA_BUFFERS && cdu->cdda_play > 0; cnt++) {
-				uae_u8 *dst = cda->buffers[bufnum] + cnt * 2352;
+				uae_u8 *dst = cdu->cda->buffers[bufnum] + cnt * 2352;
 				uae_u8 subbuf[SUB_CHANNEL_SIZE];
 				sector = cdda_pos;
 
@@ -598,9 +596,9 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 			if (idleframes <= 0)
 				cdu->cd_last_pos = cdda_pos;
 
-		  cda_bufon[bufnum] = 1;
-		  cda->setvolume (cdu->cdda_volume[0], cdu->cdda_volume[1]);
-		  if (!cda->play (bufnum)) {
+		  cdu->cda_bufon[bufnum] = 1;
+		  cdu->cda->setvolume (cdu->cdda_volume[0], cdu->cdda_volume[1]);
+		  if (!cdu->cda->play (bufnum)) {
 			  if (cdu->cdda_play > 0)
 					setstate (cdu, AUDIO_STATUS_PLAY_ERROR, -1);
 			  goto end;
@@ -615,7 +613,7 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 
 		}
 
-		if (cda_bufon[0] == 0 && cda_bufon[1] == 0) {
+		if (cdu->cda_bufon[0] == 0 && cdu->cda_bufon[1] == 0) {
 			while (cdu->cdda_paused && cdu->cdda_play == oldplay)
 				sleep_millis(10);
 		}
@@ -630,13 +628,13 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 
 end:
 	*outpos = cdda_pos;
-  cda->wait (0);
-  cda->wait (1);
+  cdu->cda->wait (0);
+  cdu->cda->wait (1);
 
 	while (cdimage_unpack_active == 1)
 		sleep_millis(10);
 
-	delete cda;
+	delete cdu->cda;
 
 	write_log (_T("IMAGE CDDA: thread killed (%s)\n"), restart ? _T("restart") : _T("play end"));
 	cd_audio_mode_changed = false;
@@ -917,11 +915,6 @@ static int command_rawread (int unitnum, uae_u8 *data, int sector, int size, int
 	} else {
 
 		uae_u8 sectortype = extra >> 16;
-		uae_u8 cmd9 = extra >> 8;
-		int sync = (cmd9 >> 7) & 1;
-		int headercodes = (cmd9 >> 5) & 3;
-		int edcecc = (cmd9 >> 3) & 1;
-		int errorfield = (cmd9 >> 1) & 3;
 		uae_u8 subs = extra & 7;
 		if (subs != 0 && subs != 1 && subs != 2 && subs != 4) {
 			ret = -1;
@@ -1208,7 +1201,7 @@ static int parsemds (struct cdunit *cdu, struct zfile *zmds, const TCHAR *img)
 		goto end;
 
 	head = (MDS_Header*)mds;
-	if (!memcmp (head, MEDIA_DESCRIPTOR, strlen (MEDIA_DESCRIPTOR)))
+	if (!memcmp (head->signature, MEDIA_DESCRIPTOR, strlen (MEDIA_DESCRIPTOR)))
 		goto end;
 	if (head->version[0] != 1) {
 		write_log (_T("unsupported MDS version %d, only v.1 supported\n"), head->version[0]);
@@ -1982,7 +1975,7 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	di->sectorspertrack = (int)(cdu->cdsize / di->bytespersector);
 	if (ismedia (unitnum, 1)) {
 		di->media_inserted = 1;
-		_tcscpy (di->mediapath, cdu->imgname);
+		_tcscpy (di->mediapath, cdu->imgname_out);
 		di->audio_playing = cdu->cdda_play > 0;
 	}
 	memset (&di->toc, 0, sizeof (struct cd_toc_head));
@@ -2030,10 +2023,13 @@ static int open_device (int unitnum, const TCHAR *ident, int flags)
 
 	if (!cdu->open) {
 		uae_sem_init (&cdu->sub_sem, 0, 1);
-		cdu->imgname[0] = 0;
-		if (ident)
-			_tcscpy (cdu->imgname, ident);
-		parse_image (cdu, ident);
+		cdu->imgname_out[0] = 0;
+		cdu->imgname_in[0] = 0;
+		if (ident) {
+			_tcscpy(cdu->imgname_in, ident);
+			cfgfile_resolve_path_out_load(cdu->imgname_in, cdu->imgname_out, MAX_DPATH, PATH_CD);
+			parse_image(cdu, cdu->imgname_out);
+    }
 		cdu->open = true;
 		cdu->enabled = true;
 		cdu->cdda_volume[0] = 0x7fff;
@@ -2046,7 +2042,7 @@ static int open_device (int unitnum, const TCHAR *ident, int flags)
 		}
 		ret = 1;
 	}
-	blkdev_cd_change (unitnum, cdu->imgname);
+	blkdev_cd_change (unitnum, cdu->imgname_out);
 	return ret;
 }
 
@@ -2068,7 +2064,7 @@ static void close_device (int unitnum)
 		unload_image (cdu);
 		uae_sem_destroy (&cdu->sub_sem);
 	}
-	blkdev_cd_change (unitnum, cdu->imgname);
+	blkdev_cd_change (unitnum, cdu->imgname_out);
 }
 
 static void close_bus (void)
@@ -2102,6 +2098,6 @@ struct device_functions devicefunc_cdimage = {
 	_T("IMAGE"),
 	open_bus, close_bus, open_device, close_device, info_device,
 	command_pause, command_stop, command_play, command_volume, command_qcode,
-	command_toc, command_read, command_rawread, 0,
-	0, ismedia
+	command_toc, command_read, command_rawread,
+	ismedia
 };

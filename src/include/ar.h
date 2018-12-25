@@ -33,10 +33,8 @@ extern int action_replay_freeze (void);
 
 extern uaecptr wait_for_pc;
 extern int action_replay_flag;
-extern int armodel;
 
 extern int is_ar_pc_in_rom(void);
-extern int is_ar_pc_in_ram(void);
 extern void action_replay_enter (void);
 extern void action_replay_cia_access (bool write);
 extern void action_replay_hide (void);
@@ -47,21 +45,13 @@ extern int action_replay_unload (int in_memory_reset);
 extern void action_replay_memory_reset (void);
 extern void action_replay_init (int);
 extern void action_replay_cleanup (void);
-extern void REGPARAM3 chipmem_lput_actionreplay23 (uaecptr addr, uae_u32 l) REGPARAM;
-extern void REGPARAM3 chipmem_wput_actionreplay23 (uaecptr addr, uae_u32 w) REGPARAM;
-extern void REGPARAM3 chipmem_bput_actionreplay1 (uaecptr addr, uae_u32 b) REGPARAM;
-extern void REGPARAM3 chipmem_wput_actionreplay1 (uaecptr addr, uae_u32 w) REGPARAM;
-extern void REGPARAM3 chipmem_lput_actionreplay1 (uaecptr addr, uae_u32 l) REGPARAM;
 
 extern void action_replay_version (void);
 
 extern int hrtmon_flag;
 
 extern void hrtmon_enter (void);
-extern void hrtmon_breakenter (void);
-extern void hrtmon_ciaread (void);
 extern void hrtmon_hide (void);
-extern void hrtmon_reset (void);
 extern int hrtmon_load (void);
 extern void hrtmon_map_banks (void);
 

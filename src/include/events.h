@@ -16,7 +16,7 @@
 
 #include "machdep/rpt.h"
 
-extern frame_time_t vsyncmintime, vsyncmaxtime, vsyncwaittime;
+extern frame_time_t vsyncmintime;
 extern int vsynctimebase, syncbase;
 extern void reset_frame_rate_hack (void);
 extern int speedup_timelimit;
@@ -24,6 +24,7 @@ extern int speedup_timelimit;
 extern void compute_vsynctime (void);
 extern void init_eventtab (void);
 extern void events_schedule (void);
+extern void events_reset_syncline(void);
 
 extern unsigned long currcycle, nextevent;
 extern int is_syncline;
@@ -113,7 +114,6 @@ STATIC_INLINE bool cycles_in_range (unsigned long endcycles)
 
 extern void MISC_handler(void);
 extern void event2_newevent_xx (int no, evt t, uae_u32 data, evfunc2 func);
-extern void event2_newevent_x_replace(evt t, uae_u32 data, evfunc2 func);
 
 STATIC_INLINE void event2_newevent_x (int no, evt t, uae_u32 data, evfunc2 func)
 {

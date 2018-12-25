@@ -14,5 +14,7 @@ extern int get_next_key (void);
 extern int keys_available (void);
 extern int record_key (int);
 extern void keybuf_init (void);
+extern int getcapslockstate (void);
+extern void setcapslockstate (int);
 
 #endif /* UAE_KEYBUF_H */

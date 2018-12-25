@@ -66,7 +66,6 @@ void cd32_fmv_state(int state)
 
 // slow software method but who cares.
 
-
 static void genlock_32(struct vidbuffer *vbin, struct vidbuffer *vbout, int w, int h, int d, int hoffset, int voffset, int mult)
 {
 	for (int hh = 0, sh = -voffset; hh < h; sh++, hh += mult) {

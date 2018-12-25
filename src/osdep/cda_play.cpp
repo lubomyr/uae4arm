@@ -11,8 +11,10 @@
 cda_audio::~cda_audio() 
 {
   cdaudio_active = false;
-  wait(0);
-  wait(1);
+	if (active) {
+    wait(0);
+    wait(1);
+  }
   for (int i = 0; i < 2; i++) {
     xfree (buffers[i]);
     buffers[i] = NULL;
@@ -67,9 +69,8 @@ bool cda_audio::play(int bufnum)
 
 void cda_audio::wait(int bufnum) 
 {
-  if (!active || !playing) {
+  if (!active || !playing)
     return;
-  }
 }
 
 bool cda_audio::isplaying(int bufnum)

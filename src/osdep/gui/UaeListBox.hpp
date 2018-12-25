@@ -2,6 +2,7 @@
 #define GCN_UAELISTBOX_HPP
 
 #include <list>
+#include <vector>
 
 #ifdef USE_SDL2
 #include <guisan/listmodel.hpp>
@@ -28,6 +29,13 @@ namespace gcn
       virtual ~UaeListBox();
 
       virtual void draw(Graphics* graphics);
+      
+      void AddColumn(int position, ListModel* listModel);
+      
+    protected:
+      std::vector<ListModel *> subColumnList;
+      std::vector<int> subColumnPos;
+
   };
 }
 

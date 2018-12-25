@@ -35,11 +35,6 @@ void native2amiga_install (void);
 
 void native2amiga_reset (void);
 
-/*
- * to be called when the Amiga boots, i.e. by filesys_diagentry()
- */
-void native2amiga_startup (void);
-
 /**** internal stuff ****/
 #ifdef SUPPORT_THREADS
 /* This pipe is filled by Signal() with pairs of

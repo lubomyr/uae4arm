@@ -72,12 +72,7 @@ struct hd_hardfiledata {
 #define HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST (HD_CONTROLLER_TYPE_IDE_FIRST + 1)
 #define HD_CONTROLLER_TYPE_IDE_LAST (HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST + HD_CONTROLLER_EXPANSION_MAX - 1)
 
-#define HD_CONTROLLER_TYPE_SCSI_AUTO (HD_CONTROLLER_TYPE_IDE_LAST + 1)
-#define HD_CONTROLLER_TYPE_SCSI_FIRST (HD_CONTROLLER_TYPE_SCSI_AUTO)
-#define HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST (HD_CONTROLLER_TYPE_SCSI_FIRST + 1)
-#define HD_CONTROLLER_TYPE_SCSI_LAST (HD_CONTROLLER_TYPE_SCSI_EXPANSION_FIRST + HD_CONTROLLER_EXPANSION_MAX - 1)
-
-#define HD_CONTROLLER_TYPE_PCMCIA (HD_CONTROLLER_TYPE_SCSI_LAST + 1)
+#define HD_CONTROLLER_TYPE_PCMCIA (HD_CONTROLLER_TYPE_IDE_LAST + 1)
 
 #define FILESYS_VIRTUAL 0
 #define FILESYS_HARDFILE 1
@@ -110,8 +105,6 @@ extern int hdf_open_target (struct hardfiledata *hfd, const TCHAR *name);
 extern void hdf_close_target (struct hardfiledata *hfd);
 extern int hdf_read_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
 extern int hdf_write_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
-extern void getchsgeometry (uae_u64 size, int *pcyl, int *phead, int *psectorspertrack);
-extern void getchsgeometry_hdf (struct hardfiledata *hfd, uae_u64 size, int *pcyl, int *phead, int *psectorspertrack);
 extern void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry);
 
 #endif /* UAE_FILESYS_H */

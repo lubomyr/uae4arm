@@ -38,7 +38,6 @@ int keys_available (void)
 int get_next_key (void)
 {
   int key;
-  assert (kpb_first != kpb_last);
 
   key = keybuf[kpb_last];
 	if (++kpb_last == KEYBUF_SIZE)

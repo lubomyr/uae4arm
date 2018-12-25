@@ -5,7 +5,8 @@ void devices_reset(int hardreset);
 void devices_vsync_pre(void);
 void devices_hsync(void);
 void devices_rethink(void);
-STATIC_INLINE void devices_update_sound(double clk, double syncadjust)
+void update_sound (double clk);
+STATIC_INLINE void devices_update_sound(double clk)
 {
   update_sound (clk);
 }

@@ -16,6 +16,14 @@
 #undef USE_JIT_FPU
 #endif
 
+#define MAKEBD(x,y,z) ((((x) - 2000) * 10000 + (y)) * 100 + (z))
+#define GETBDY(x) ((x) / 1000000 + 2000)
+#define GETBDM(x) (((x) - ((x / 10000) * 10000)) / 100)
+#define GETBDD(x) ((x) % 100)
+
+
+#define UAE4ARMDATE MAKEBD(2018, 10, 20)
+
 
 STATIC_INLINE FILE *uae_tfopen(const TCHAR *path, const TCHAR *mode)
 {
@@ -38,6 +46,7 @@ extern unsigned long time_per_frame;
 void run_gui(void);
 void init_max_signals(void);
 void wait_for_vsync(void);
+void reset_sync(void);
 unsigned long target_lastsynctime(void);
 extern int screen_is_picasso;
 
@@ -46,6 +55,7 @@ void update_display(struct uae_prefs *);
 void black_screen_now(void);
 void graphics_subshutdown (void);
 
+extern void getcapslock (void);
 void keyboard_settrans (void);
 
 #define REMAP_MOUSEBUTTON_LEFT    -1
@@ -61,6 +71,14 @@ void keyboard_settrans (void);
 #define REMAP_CD32_PLAY           -11
 #define REMAP_CD32_FFW            -12
 #define REMAP_CD32_RWD            -13
+
+extern void input_closeall(void);
+extern int get_sdlkbd (void);
+extern int get_sdlmouse (void);
+
+#if defined(RASPBERRY) && !defined(USE_SDL2)
+extern void graphics_thread_leave(void);
+#endif
 
 extern void free_AmigaMem(void);
 extern void alloc_AmigaMem(void);
@@ -105,7 +123,6 @@ extern void AddFileToCDList(const char *file, int moveToTop);
 extern const int amigawidth_values[AMIGAWIDTH_COUNT];
 extern const int amigaheight_values[AMIGAHEIGHT_COUNT];
 
-int count_HDs(struct uae_prefs *p);
 extern void gui_force_rtarea_hdchange(void);
 extern void gui_restart(void);
 extern bool hardfile_testrdb (const TCHAR *filename);

@@ -24,5 +24,10 @@ bool check_prefs_changed_comp (bool checkonly)
 	  changed = 1;
   }
 
+	if (changed)
+		write_log (_T("JIT: cache=%d. fpu=%d\n"),
+		currprefs.cachesize,
+		currprefs.compfpu);
+
   return changed;
 }

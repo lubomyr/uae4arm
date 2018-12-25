@@ -186,7 +186,7 @@ static void parse_clip(struct uae_prefs *p, xmlNode *node)
       if(attr != NULL)
       {
         top = atoi((const char *)attr) / 2;
-        p->pandora_vertical_offset = top - 41 + OFFSET_Y_ADJUST;
+        p->gfx_monitor.gfx_size.y = top - 41 + OFFSET_Y_ADJUST;
         xmlFree(attr);
       }
       attr = xmlGetProp(curr_node, (const xmlChar *) _T("width"));
@@ -198,17 +198,17 @@ static void parse_clip(struct uae_prefs *p, xmlNode *node)
         else
           width = width / 4; // Use Lores in OCS/ECS
         if(width <= 320)
-          p->gfx_size.width = 320;
+          p->gfx_monitor.gfx_size.width = 320;
         else if(width <= 352)
-          p->gfx_size.width = 352;
+          p->gfx_monitor.gfx_size.width = 352;
         else if(width <= 384)
-          p->gfx_size.width = 384;
+          p->gfx_monitor.gfx_size.width = 384;
         else if(width <= 640)
-          p->gfx_size.width = 640;
+          p->gfx_monitor.gfx_size.width = 640;
         else if(width <= 704)
-          p->gfx_size.width = 704;
+          p->gfx_monitor.gfx_size.width = 704;
         else
-          p->gfx_size.width = 768;
+          p->gfx_monitor.gfx_size.width = 768;
         xmlFree(attr);
       }
       attr = xmlGetProp(curr_node, (const xmlChar *) _T("height"));
@@ -216,17 +216,17 @@ static void parse_clip(struct uae_prefs *p, xmlNode *node)
       {
         height = atoi((const char *)attr) / 2;
         if(height <= 200)
-          p->gfx_size.height = 200;
+          p->gfx_monitor.gfx_size.height = 200;
         else if(height <= 216)
-          p->gfx_size.height = 216;
+          p->gfx_monitor.gfx_size.height = 216;
         else if(height <= 240)
-          p->gfx_size.height = 240;
+          p->gfx_monitor.gfx_size.height = 240;
         else if(height <= 256)
-          p->gfx_size.height = 256;
+          p->gfx_monitor.gfx_size.height = 256;
         else if(height <= 262)
-          p->gfx_size.height = 262;
+          p->gfx_monitor.gfx_size.height = 262;
         else
-          p->gfx_size.height = 270;
+          p->gfx_monitor.gfx_size.height = 270;
         xmlFree(attr);
       }
       break;
@@ -358,10 +358,8 @@ static void parse_boot(struct uae_prefs *p, xmlNode *node)
               fclose(f);
 
               if(hardfile_testrdb (target_file)) {
-                ci.physical_geometry = true;                   
                 uci_set_defaults(&ci, true);
               } else {
-                ci.physical_geometry = false;
                 uci_set_defaults(&ci, false);
               }
                             
@@ -475,10 +473,8 @@ static void extract_media(struct uae_prefs *p, unzFile uz, xmlNode *node)
                       	struct uaedev_config_info ci;
           
                         if(hardfile_testrdb (target_file)) {
-                          ci.physical_geometry = true;                   
                           uci_set_defaults(&ci, true);
                         } else {
-                          ci.physical_geometry = false;
                           uci_set_defaults(&ci, false);
                         }
                         

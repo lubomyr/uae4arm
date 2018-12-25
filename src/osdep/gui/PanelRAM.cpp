@@ -10,9 +10,6 @@
 #include "sdltruetypefont.hpp"
 #endif
 #include "SelectorEntry.hpp"
-#include "UaeRadioButton.hpp"
-#include "UaeDropDown.hpp"
-#include "UaeCheckBox.hpp"
 
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -20,6 +17,7 @@
 #include "options.h"
 #include "include/memory-uae.h"
 #include "uae.h"
+#include "autoconf.h"
 #include "gfxboard.h"
 #include "gui.h"
 #include "gui_handling.h"
@@ -31,10 +29,10 @@ static const char *SlowMem_list[] = { "None", "512 K", "1 MB", "1.5 MB", "1.8 MB
 static const int SlowMem_values[] = { 0x000000, 0x080000, 0x100000, 0x180000, 0x1c0000 };
 static const char *FastMem_list[] = { "None", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB", "32 MB", "64 MB", "128 MB" };
 static const int FastMem_values[] = { 0x000000, 0x100000, 0x200000, 0x400000, 0x800000, 0x1000000, 0x2000000, 0x4000000, 0x8000000 };
-static const char *A3000LowMem_list[] = { "None", "8 MB", "16 MB" };
-static const int A3000LowMem_values[] = { 0x080000, 0x800000, 0x1000000 };
-static const char *A3000HighMem_list[] = { "None", "8 MB", "16 MB", "32 MB" };
-static const int A3000HighMem_values[] = { 0x080000, 0x800000, 0x1000000, 0x2000000 };
+static const char *A3000LowMem_list[] = { "None", "8 MB", "16 MB", "32 MB", "64 MB" };
+static const int A3000LowMem_values[] = { 0x080000, 0x800000, 0x1000000, 0x2000000, 0x4000000 };
+static const char *A3000HighMem_list[] = { "None", "8 MB", "16 MB", "32 MB", "64 MB", "128 MB" };
+static const int A3000HighMem_values[] = { 0x080000, 0x800000, 0x1000000, 0x2000000, 0x4000000, 0x8000000 };
 
 static gcn::Window *grpRAM;
 static gcn::Label* lblChipmem;
@@ -60,47 +58,113 @@ static gcn::Label* lblA3000Highsize;
 static gcn::Slider* sldA3000Highmem;  
 
 
+static void RefreshPanelRAM(void)
+{
+  int i;
+  
+  for(i = 0; i < 5; ++i) {
+    if(workprefs.chipmem_size == ChipMem_values[i]) {
+      sldChipmem->setValue(i);
+      lblChipsize->setCaption(ChipMem_list[i]);
+      break;
+    }
+  }
+
+  for(i = 0; i < 5; ++i) {
+    if(workprefs.bogomem_size == SlowMem_values[i]) {
+      sldSlowmem->setValue(i);
+      lblSlowsize->setCaption(SlowMem_list[i]);
+      break;
+    }
+  }
+
+  for(i = 0; i < 5; ++i) {
+    if(workprefs.fastmem[0].size == FastMem_values[i]) {
+      sldFastmem->setValue(i);
+      lblFastsize->setCaption(FastMem_list[i]);
+      break;
+    }
+  }
+
+  for(i = 0; i < 9; ++i) {
+    if(workprefs.z3fastmem[0].size == FastMem_values[i]) {
+      sldZ3mem->setValue(i);
+      lblZ3size->setCaption(FastMem_list[i]);
+      break;
+    }
+  }
+  sldZ3mem->setEnabled(!workprefs.address_space_24);
+
+  for(i = 0; i < 6; ++i) {
+    if(workprefs.rtgboards[0].rtgmem_size == FastMem_values[i]) {
+      sldGfxmem->setValue(i);
+      lblGfxsize->setCaption(FastMem_list[i]);
+      break;
+    }
+  }
+  sldGfxmem->setEnabled(!workprefs.address_space_24);
+
+  for(i = 0; i < 5; ++i) {
+    if(workprefs.mbresmem_low_size == A3000LowMem_values[i]) {
+      sldA3000Lowmem->setValue(i);
+      lblA3000Lowsize->setCaption(A3000LowMem_list[i]);
+      break;
+    }
+  }
+
+  for(i = 0; i < 6; ++i) {
+    if(workprefs.mbresmem_high_size == A3000HighMem_values[i]) {
+      sldA3000Highmem->setValue(i);
+      lblA3000Highsize->setCaption(A3000HighMem_list[i]);
+      break;
+    }
+  }
+
+  expansion_generate_autoconfig_info(&workprefs);
+}
+
+
 class MemorySliderActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
  	    if (actionEvent.getSource() == sldChipmem) {
-    		changed_prefs.chipmem_size = ChipMem_values[(int)(sldChipmem->getValue())];
-      	if ((changed_prefs.chipmem_size > 0x200000) && (changed_prefs.fastmem[0].size > 0))
-      		changed_prefs.fastmem[0].size = 0;
+    		workprefs.chipmem_size = ChipMem_values[(int)(sldChipmem->getValue())];
+      	if ((workprefs.chipmem_size > 0x200000) && (workprefs.fastmem[0].size > 0))
+      		workprefs.fastmem[0].size = 0;
 			}
 			
  	    if (actionEvent.getSource() == sldSlowmem) {
-      	changed_prefs.bogomem_size = SlowMem_values[(int)(sldSlowmem->getValue())];
+      	workprefs.bogomem_size = SlowMem_values[(int)(sldSlowmem->getValue())];
       }
       
 	    if (actionEvent.getSource() == sldFastmem) {
-     		changed_prefs.fastmem[0].size = FastMem_values[(int)(sldFastmem->getValue())];
-	      if (changed_prefs.fastmem[0].size > 0 && changed_prefs.chipmem_size > 0x200000)
-	        changed_prefs.chipmem_size = 0x200000;
+     		workprefs.fastmem[0].size = FastMem_values[(int)(sldFastmem->getValue())];
+	      if (workprefs.fastmem[0].size > 0 && workprefs.chipmem_size > 0x200000)
+	        workprefs.chipmem_size = 0x200000;
   		}	
 
 	    if (actionEvent.getSource() == sldZ3mem) {
-     		changed_prefs.z3fastmem[0].size = FastMem_values[(int)(sldZ3mem->getValue())];
-	      if (changed_prefs.z3fastmem[0].size > max_z3fastmem)
-	        changed_prefs.z3fastmem[0].size = max_z3fastmem;
+     		workprefs.z3fastmem[0].size = FastMem_values[(int)(sldZ3mem->getValue())];
+	      if (workprefs.z3fastmem[0].size > max_z3fastmem)
+	        workprefs.z3fastmem[0].size = max_z3fastmem;
   		}	
 
 	    if (actionEvent.getSource() == sldGfxmem) {
-     		changed_prefs.rtgboards[0].rtgmem_size = FastMem_values[(int)(sldGfxmem->getValue())];
-     		changed_prefs.rtgboards[0].rtgmem_type = GFXBOARD_UAE_Z3;
+     		workprefs.rtgboards[0].rtgmem_size = FastMem_values[(int)(sldGfxmem->getValue())];
+     		workprefs.rtgboards[0].rtgmem_type = GFXBOARD_UAE_Z3;
   		}	
 
  	    if (actionEvent.getSource() == sldA3000Lowmem) {
-      	changed_prefs.mbresmem_low_size = A3000LowMem_values[(int)(sldA3000Lowmem->getValue())];
-      	if(currprefs.mbresmem_low_size != changed_prefs.mbresmem_low_size)
+      	workprefs.mbresmem_low_size = A3000LowMem_values[(int)(sldA3000Lowmem->getValue())];
+      	if(currprefs.mbresmem_low_size != workprefs.mbresmem_low_size)
       	  DisableResume();
       }
 
  	    if (actionEvent.getSource() == sldA3000Highmem) {
-      	changed_prefs.mbresmem_high_size = A3000HighMem_values[(int)(sldA3000Highmem->getValue())];
-      	if(currprefs.mbresmem_high_size != changed_prefs.mbresmem_high_size)
+      	workprefs.mbresmem_high_size = A3000HighMem_values[(int)(sldA3000Highmem->getValue())];
+      	if(currprefs.mbresmem_high_size != workprefs.mbresmem_high_size)
       	  DisableResume();
       }
 
@@ -174,7 +238,7 @@ void InitPanelRAM(const struct _ConfigCategory& category)
   lblGfxsize = new gcn::Label("None   ");
 
 	lblA3000Lowmem = new gcn::Label("A4000 Motherb. slot:");
-  sldA3000Lowmem = new gcn::Slider(0, 2);
+  sldA3000Lowmem = new gcn::Slider(0, 4);
   sldA3000Lowmem->setSize(sldWidth, SLIDER_HEIGHT);
   sldA3000Lowmem->setBaseColor(gui_baseCol);
 	sldA3000Lowmem->setMarkerLength(markerLength);
@@ -184,7 +248,7 @@ void InitPanelRAM(const struct _ConfigCategory& category)
   lblA3000Lowsize = new gcn::Label("None   ");
 
 	lblA3000Highmem = new gcn::Label("A4000 Proc. board:");
-  sldA3000Highmem = new gcn::Slider(0, 3);
+  sldA3000Highmem = new gcn::Slider(0, 5);
   sldA3000Highmem->setSize(sldWidth, SLIDER_HEIGHT);
   sldA3000Highmem->setBaseColor(gui_baseCol);
 	sldA3000Highmem->setMarkerLength(markerLength);
@@ -248,8 +312,10 @@ void InitPanelRAM(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelRAM(void)
+void ExitPanelRAM(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete lblChipmem;
   delete sldChipmem;
   delete lblChipsize;
@@ -273,84 +339,6 @@ void ExitPanelRAM(void)
   delete lblA3000Highsize;
   delete grpRAM;
   delete memorySliderActionListener;
-}
-
-
-void RefreshPanelRAM(void)
-{
-  int i;
-  
-  for(i=0; i<5; ++i)
-  {
-    if(changed_prefs.chipmem_size == ChipMem_values[i])
-    {
-      sldChipmem->setValue(i);
-      lblChipsize->setCaption(ChipMem_list[i]);
-      break;
-    }
-  }
-
-  for(i=0; i<5; ++i)
-  {
-    if(changed_prefs.bogomem_size == SlowMem_values[i])
-    {
-      sldSlowmem->setValue(i);
-      lblSlowsize->setCaption(SlowMem_list[i]);
-      break;
-    }
-  }
-
-  for(i=0; i<5; ++i)
-  {
-    if(changed_prefs.fastmem[0].size == FastMem_values[i])
-    {
-      sldFastmem->setValue(i);
-      lblFastsize->setCaption(FastMem_list[i]);
-      break;
-    }
-  }
-
-  for(i=0; i<9; ++i)
-  {
-    if(changed_prefs.z3fastmem[0].size == FastMem_values[i])
-    {
-      sldZ3mem->setValue(i);
-      lblZ3size->setCaption(FastMem_list[i]);
-      break;
-    }
-  }
-  sldZ3mem->setEnabled(!changed_prefs.address_space_24);
-
-  for(i=0; i<6; ++i)
-  {
-    if(changed_prefs.rtgboards[0].rtgmem_size == FastMem_values[i])
-    {
-      sldGfxmem->setValue(i);
-      lblGfxsize->setCaption(FastMem_list[i]);
-      break;
-    }
-  }
-  sldGfxmem->setEnabled(!changed_prefs.address_space_24);
-
-  for(i=0; i<3; ++i)
-  {
-    if(changed_prefs.mbresmem_low_size == A3000LowMem_values[i])
-    {
-      sldA3000Lowmem->setValue(i);
-      lblA3000Lowsize->setCaption(A3000LowMem_list[i]);
-      break;
-    }
-  }
-
-  for(i=0; i<4; ++i)
-  {
-    if(changed_prefs.mbresmem_high_size == A3000HighMem_values[i])
-    {
-      sldA3000Highmem->setValue(i);
-      lblA3000Highsize->setCaption(A3000HighMem_list[i]);
-      break;
-    }
-  }
 }
 
 

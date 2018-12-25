@@ -33,9 +33,6 @@
 #include "gfxboard.h"
 #include "devices.h"
 #include "jit/compemu.h"
-#ifdef USE_SDL
-#include "SDL.h"
-#endif
 
 long int version = 256*65536L*UAEMAJOR + 65536L*UAEMINOR + UAESUBREV;
 
@@ -48,7 +45,7 @@ bool kickstart_rom = 1;
 
 struct gui_info gui_data;
 
-TCHAR optionsfile[256];
+static TCHAR optionsfile[256];
 
 void my_trim (TCHAR *s)
 {
@@ -117,7 +114,7 @@ static void fixup_prefs_dim2 (struct wh *wh)
 
 void fixup_prefs_dimensions (struct uae_prefs *prefs)
 {
-  fixup_prefs_dim2(&prefs->gfx_size);
+  fixup_prefs_dim2(&prefs->gfx_monitor.gfx_size);
 }
 
 void fixup_cpu(struct uae_prefs *p)
@@ -151,13 +148,20 @@ void fixup_cpu(struct uae_prefs *p)
     	break;
   }
 
-	if (p->cpu_model >= 68020 && p->cachesize && p->cpu_compatible)
-		p->cpu_compatible = false;
+  if (p->cpu_model >= 68020 && p->cpu_compatible) {
+    error_log(_T("More compatible requires 68000 or 68010 CPU."));
+    p->cpu_compatible = false;
+  }
 
-	if (p->cachesize && (p->fpu_no_unimplemented)) {
+	if (p->cachesize && p->fpu_no_unimplemented) {
 		error_log (_T("JIT is not compatible with unimplemented FPU instruction emulation."));
 		p->fpu_no_unimplemented = false;
 	}
+
+  if (p->cachesize < 0 || p->cachesize > MAX_JIT_CACHE || (p->cachesize > 0 && p->cachesize < MIN_JIT_CACHE)) {
+		error_log(_T("JIT Bad value for cachesize parameter: value must zero or within %d..%d."), MIN_JIT_CACHE, MAX_JIT_CACHE);
+	  p->cachesize = 0;
+  }
 
 	if (p->immediate_blits && p->waiting_blits) {
 		error_log (_T("Immediate blitter and waiting blits can't be enabled simultaneously.\n"));
@@ -197,12 +201,11 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 
 	for (int i = 0; i < MAX_RTG_BOARDS; i++) {
 		struct rtgboardconfig *rbc = &p->rtgboards[i];
-	  if (rbc->rtgmem_size > 0x1000000 && rbc->rtgmem_type == GFXBOARD_UAE_Z3) {
-		  error_log (_T("Graphics card memory size %d (0x%x) larger than maximum reserved %d (0x%x)."), rbc->rtgmem_size, rbc->rtgmem_size, 0x1000000, 0x1000000);
-		  rbc->rtgmem_size = 0x1000000;
+	  if (rbc->rtgmem_size > max_z3fastmem && rbc->rtgmem_type == GFXBOARD_UAE_Z3) {
+		  error_log (_T("Graphics card memory size %d (0x%x) larger than maximum reserved %d (0x%x)."), rbc->rtgmem_size, rbc->rtgmem_size, max_z3fastmem, max_z3fastmem);
+		  rbc->rtgmem_size = max_z3fastmem;
 	    err = 1;
     }
-
     if ((rbc->rtgmem_size & (rbc->rtgmem_size - 1)) != 0 || (rbc->rtgmem_size != 0 && (rbc->rtgmem_size < 0x100000))) {
 	    error_log (_T("Unsupported graphics card memory size %d (0x%x)."), rbc->rtgmem_size, rbc->rtgmem_size);
 		  if (rbc->rtgmem_size > 0x1000000)
@@ -246,11 +249,11 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 		p->chipmem_size = 0x200000;
 	  err = 1;
   }
-	if (p->mbresmem_low_size > 0x01000000 || (p->mbresmem_low_size & 0xfffff)) {
+	if (p->mbresmem_low_size > 0x04000000 || (p->mbresmem_low_size & 0xfffff)) {
 		p->mbresmem_low_size = 0;
 		error_log (_T("Unsupported Mainboard RAM size"));
 	}
-	if (p->mbresmem_high_size > 0x02000000 || (p->mbresmem_high_size & 0xfffff)) {
+	if (p->mbresmem_high_size > 0x08000000 || (p->mbresmem_high_size & 0xfffff)) {
 		p->mbresmem_high_size = 0;
 		error_log (_T("Unsupported CPU Board RAM size."));
 	}
@@ -279,11 +282,7 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 	  p->produce_sound = 0;
 	  err = 1;
   }
-  if (p->cachesize < 0 || p->cachesize > 16384) {
-		error_log (_T("Bad value for cachesize parameter: value must be within 0..16384."));
-	  p->cachesize = 0;
-	  err = 1;
-  }
+
   if ((p->z3fastmem[0].size) && p->address_space_24) {
 		error_log (_T("Z3 fast memory can't be used if address space is 24-bit."));
 	  p->z3fastmem[0].size = 0;
@@ -349,9 +348,6 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 	p->cpu_model = 68000;
 	p->fpu_model = 0;
 #endif
-#ifndef AGA
-	p->chipset_mask &= ~CSMASK_AGA;
-#endif
 #ifndef AUTOCONFIG
 	p->z3fastmem[0].size = 0;
 	p->fastmem[0].size = 0;
@@ -365,6 +361,7 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 	blkdev_fix_prefs (p);
 	inputdevice_fix_prefs(p, userconfig);
   target_fixup_options (p);
+	cfgfile_createconfigstore(p);
 }
 
 int quit_program = 0;
@@ -401,8 +398,6 @@ void uae_restart (int opengui, const TCHAR *cfgfile)
   	_tcscpy (restart_config, cfgfile);
 	target_restart ();
 }
-
-#ifndef DONT_PARSE_CMDLINE
 
 static void parse_cmdline_2 (int argc, TCHAR **argv)
 {
@@ -504,7 +499,7 @@ static void parse_cmdline (int argc, TCHAR **argv)
 	    xfree (txt);
 			loaded = true;
 		} else if (_tcscmp (argv[i], _T("-f")) == 0) {
-	  /* Check for new-style "-f xxx" argument, where xxx is config-file */
+	    /* Check for new-style "-f xxx" argument, where xxx is config-file */
 	    if (i + 1 == argc) {
 				write_log (_T("Missing argument for '-f' option.\n"));
 	    } else {
@@ -568,7 +563,6 @@ static void parse_cmdline (int argc, TCHAR **argv)
 	  }
   }
 }
-#endif
 
 static void parse_cmdline_and_init_file (int argc, TCHAR **argv)
 {
@@ -595,7 +589,7 @@ static void parse_cmdline_and_init_file (int argc, TCHAR **argv)
  * of start_program() and leave_program() if you need to do anything special.
  * Add #ifdefs around these as appropriate.
  */
-void do_start_program (void)
+static void do_start_program (void)
 {
 	if (quit_program == -UAE_QUIT)
   	return;
@@ -606,38 +600,18 @@ void do_start_program (void)
 	m68k_go (1);
 }
 
-void start_program (void)
+static void start_program (void)
 {
   do_start_program ();
 }
 
-void leave_program (void)
+static void leave_program (void)
 {
     do_leave_program ();
 }
 
 static int real_main2 (int argc, TCHAR **argv)
 {
-#ifdef USE_SDL
-  int ret;
-#ifdef USE_SDL2
-  ret = SDL_Init(SDL_INIT_EVERYTHING);
-#else
-#ifdef PANDORA
-  ret = SDL_Init(SDL_INIT_NOPARACHUTE | SDL_INIT_VIDEO);
-#else 
-	ret = SDL_Init(SDL_INIT_NOPARACHUTE | SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK);
-#endif
-#endif
-  if (ret < 0)
-	{
-		printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
-		abort();
-	};
-#endif
-
-	keyboard_settrans();
-
   set_config_changed ();
   if (restart_config[0]) {
 	  default_prefs (&currprefs, true, 0);
@@ -651,7 +625,7 @@ static int real_main2 (int argc, TCHAR **argv)
   if (restart_config[0])
 	  parse_cmdline_and_init_file (argc, argv);
   else
-  	currprefs = changed_prefs;
+		copy_prefs(&changed_prefs, &currprefs);
 
   if (!machdep_init ()) {
 	  restart_program = 0;
@@ -664,7 +638,8 @@ static int real_main2 (int argc, TCHAR **argv)
   }
   inputdevice_init();
 
-  changed_prefs = currprefs;
+	copy_prefs(&currprefs, &changed_prefs);
+
   no_gui = ! currprefs.start_gui;
   if (restart_program == 2)
   	no_gui = 1;
@@ -673,7 +648,7 @@ static int real_main2 (int argc, TCHAR **argv)
   restart_program = 0;
   if (! no_gui) {
 	  int err = gui_init ();
-	  currprefs = changed_prefs;
+		copy_prefs(&changed_prefs, &currprefs);
 		set_config_changed ();
 	  if (err == -1) {
 			write_log (_T("Failed to initialize the GUI\n"));
@@ -701,7 +676,7 @@ static int real_main2 (int argc, TCHAR **argv)
 #endif
 
   fixup_prefs (&currprefs, true);
-  changed_prefs = currprefs;
+	copy_prefs(&currprefs, &changed_prefs);
 	target_run ();
   /* force sound settings change */
   currprefs.produce_sound = 0;
@@ -745,7 +720,7 @@ void real_main (int argc, TCHAR **argv)
 	default_config = 1;
 
   while (restart_program) {
-	  changed_prefs = currprefs;
+		copy_prefs(&currprefs, &changed_prefs);
 	  real_main2 (argc, argv);
     leave_program ();
 	  quit_program = 0;

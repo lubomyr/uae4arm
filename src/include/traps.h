@@ -75,7 +75,6 @@ uaecptr find_trap (const TCHAR *name);
  * Call a 68k Library function from an extended trap
  */
 extern uae_u32 CallLib (TrapContext *context, uaecptr library_base, uae_s16 func_offset);
-extern uae_u32 CallFunc (TrapContext *context, uaecptr func);
 
 /*
  * Initialization
@@ -90,9 +89,6 @@ void init_extended_traps(void);
 /* New trap system */
 
 bool trap_valid_address(TrapContext *ctx, uaecptr addr, uae_u32 size);
-
-void trap_memcpyha_safe(TrapContext *ctx, uaecptr dst, const uae_u8 *src, int size);
-void trap_memcpyah_safe(TrapContext *ctx, uae_u8 *dst, uaecptr src, int size);
 
 uae_u32 trap_get_dreg(TrapContext *ctx, int reg);
 uae_u32 trap_get_areg(TrapContext *ctx, int reg);
@@ -111,17 +107,12 @@ uae_u8 trap_get_byte(TrapContext *ctx, uaecptr addr);
 
 void trap_put_bytes(TrapContext *ctx, const void *haddrp, uaecptr addr, int cnt);
 void trap_get_bytes(TrapContext *ctx, void *haddrp, uaecptr addr, int cnt);
-void trap_put_longs(TrapContext *ctx, uae_u32 *haddr, uaecptr addr, int cnt);
 void trap_get_longs(TrapContext *ctx, uae_u32 *haddr, uaecptr addr, int cnt);
-void trap_put_words(TrapContext *ctx, uae_u16 *haddr, uaecptr addr, int cnt);
-void trap_get_words(TrapContext *ctx, uae_u16 *haddr, uaecptr addr, int cnt);
 
 int trap_put_string(TrapContext *ctx, const void *haddrp, uaecptr addr, int maxlen);
 int trap_get_string(TrapContext *ctx, void *haddrp, uaecptr addr, int maxlen);
 uae_char *trap_get_alloc_string(TrapContext *ctx, uaecptr addr, int maxlen);
 
-void trap_set_longs(TrapContext *ctx, uaecptr addr, uae_u32 v, int cnt);
-void trap_set_words(TrapContext *ctx, uaecptr addr, uae_u16 v, int cnt);
 void trap_set_bytes(TrapContext *ctx, uaecptr addr, uae_u8 v, int cnt);
 
 void trap_multi(TrapContext *ctx, struct trapmd *data, int items);

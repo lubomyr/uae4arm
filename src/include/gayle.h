@@ -19,7 +19,6 @@ extern void gayle_add_pcmcia_unit(int ch, struct uaedev_config_info *ci, struct 
 extern bool gayle_pcmcia_init(struct autoconfig_info*);
 
 extern int gary_toenb; // non-existing memory access = bus error.
-extern int gary_timeout; // non-existing memory access = delay
 
 #define PCMCIA_COMMON_START 0x600000
 #define PCMCIA_COMMON_SIZE 0x400000

@@ -143,6 +143,28 @@ There is at least one demo that does this..
 
 */
 
+/* Copper pointer to Blitter register copy bug
+
+	1: -d = D (-D)
+	2: -c = C (-C)
+	3: - (-CD)
+	4: - (-B-)
+	5: - (-BD)
+	6: - (-BC)
+	7: -BcD = C, -BCd = D
+	8: - (A-)
+	9: - (AD)
+	A: - (AC)
+	B: A (ACD)
+	C: - (AB-)
+	D: - (ABD-)
+	E: - (ABC)
+	F: AxBxCxD = -, aBxCxD = A, 
+
+	1FE,8C,RGA,8C
+
+ */
+
 // 5 = internal "processing cycle"
 static const int blit_cycle_diagram_line[] =
 {
@@ -559,7 +581,8 @@ static void actually_do_blit(void)
 				bltstate = BLT_done;
 		} while (bltstate != BLT_done);
 	  bltdpt = bltcpt;
-		last_custom_value1 = blt_info.bltcdat;
+  	if (bltcon0 & 0x200)
+		  last_custom_value1 = blt_info.bltcdat;
 	} else {
 		if (blitdesc)
 			blitter_dofast_desc ();
@@ -634,6 +657,7 @@ static void blitter_force_finish (void)
      */
 	  odmacon = dmacon;
 	  dmacon |= DMA_MASTER | DMA_BLITTER;
+		write_log (_T("forcing blitter finish\n"));
 	  actually_do_blit ();
 		blitter_done (current_hpos ());
 	  dmacon = odmacon;
@@ -727,6 +751,11 @@ void reset_blit (int bltcon)
 
 static bool waitingblits (void)
 {
+  // crazy large blit size? don't wait.. (Vital / Mystic)
+	if (blt_info.vblitsize * blt_info.hblitsize * 2 > 2 * 1024 * 1024) {
+    return false;
+  }
+
 	while (bltstate != BLT_done && dmaen (DMA_BLITTER)) {
 		x_do_cycles (8 * CYCLE_UNIT);
 	}

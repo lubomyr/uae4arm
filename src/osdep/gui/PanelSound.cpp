@@ -11,7 +11,6 @@
 #endif
 #include "SelectorEntry.hpp"
 #include "UaeRadioButton.hpp"
-#include "UaeCheckBox.hpp"
 #include "UaeDropDown.hpp"
 
 #include "sysconfig.h"
@@ -25,6 +24,7 @@
 #include "custom.h"
 #include "gui_handling.h"
 #include "sounddep/sound.h"
+#include "GenericListModel.h"
 
 
 static gcn::Window *grpSound;
@@ -55,93 +55,103 @@ static int curr_separation_idx;
 static int curr_stereodelay_idx;
 
 
-class FrequencyListModel : public gcn::ListModel
+static const TCHAR* freqList[] = { _T("11025"), _T("22050"), _T("32000"), _T("44100") };
+static gcn::GenericListModel frequencyTypeList(freqList, 4);
+
+
+static const TCHAR* interpolList[] = { _T("Disabled"), _T("Anti"), _T("Sinc"), _T("RH"), _T("Crux") };
+static gcn::GenericListModel interpolationTypeList(interpolList, 5);
+
+
+static const TCHAR* filterList[] = { _T("Always off"), _T("Emulated (A500)"), _T("Emulated (A1200)"), _T("Always on (A500)"), _T("Always on (A1200)") };
+static gcn::GenericListModel filterTypeList(filterList, 5);
+
+
+static void RefreshPanelSound(void)
 {
-  private:
-    std::vector<std::string> freq;
-      
-  public:
-    FrequencyListModel()
-    {
-      freq.push_back("11025");
-      freq.push_back("22050");
-      freq.push_back("32000");
-      freq.push_back("44100");
-    }
+  char tmp[10];
+  int i;
 
-    int getNumberOfElements()
-    {
-      return freq.size();
-    }
+  switch(workprefs.produce_sound)
+  {
+    case 0:
+      optSoundDisabled->setSelected(true);
+      break;
+    case 1:
+      optSoundDisabledEmu->setSelected(true);
+      break;
+    case 2:
+      optSoundEmulated->setSelected(true);
+      break;
+    case 3:
+      optSoundEmulatedBest->setSelected(true);
+      break;
+  }
 
-    std::string getElementAt(int i)
-    {
-      if(i < 0 || i >= freq.size())
-        return "---";
-      return freq[i];
-    }
-};
-static FrequencyListModel frequencyTypeList;
+	if (workprefs.sound_stereo == 0)
+    optMono->setSelected(true);
+  else if (workprefs.sound_stereo == 1)
+    optStereo->setSelected(true);
 
+  switch(workprefs.sound_freq)
+  {
+    case 11025:
+      cboFrequency->setSelected(0);
+      break;
+    case 22050:
+      cboFrequency->setSelected(1);
+      break;
+    case 32000:
+      cboFrequency->setSelected(2);
+      break;
+    default:
+      cboFrequency->setSelected(3);
+      break;
+  }
 
-class InterpolationListModel : public gcn::ListModel
-{
-  private:
-    std::vector<std::string> entry;
-      
-  public:
-    InterpolationListModel()
-    {
-      entry.push_back("Disabled");
-      entry.push_back("Anti");
-      entry.push_back("Sinc");
-      entry.push_back("RH");
-      entry.push_back("Crux");
-    }
+  cboInterpolation->setSelected(workprefs.sound_interpol);
 
-    int getNumberOfElements()
-    {
-      return entry.size();
-    }
+  i = 0;
+  switch (workprefs.sound_filter)
+  {
+    case 0:
+      i = 0;
+      break;
+    case 1:
+      i = workprefs.sound_filter_type ? 2 : 1;
+      break;
+    case 2:
+      i = workprefs.sound_filter_type ? 4 : 3;
+      break;
+  }
+  cboFilter->setSelected(i);  
+  
+  if(workprefs.sound_stereo == 0) {
+    curr_separation_idx = 0;
+    curr_stereodelay_idx = 0;
+  } else {
+    curr_separation_idx = 10 - workprefs.sound_stereo_separation;
+    curr_stereodelay_idx = workprefs.sound_mixed_stereo_delay > 0 ? workprefs.sound_mixed_stereo_delay : 0;
+  }
 
-    std::string getElementAt(int i)
-    {
-      if(i < 0 || i >= entry.size())
-        return "---";
-      return entry[i];
-    }
-};
-static InterpolationListModel interpolationTypeList;
+  sldSeparation->setValue(curr_separation_idx);
+  sldSeparation->setEnabled(workprefs.sound_stereo >= 1);
+  snprintf(tmp, sizeof (tmp) - 1, "%d%%", 100 - 10 * curr_separation_idx);
+  lblSeparationInfo->setCaption(tmp);
 
+  sldStereoDelay->setValue(curr_stereodelay_idx);
+  sldStereoDelay->setEnabled(workprefs.sound_stereo >= 1);
+  if(curr_stereodelay_idx <= 0)
+    lblStereoDelayInfo->setCaption("-");
+  else {
+    snprintf(tmp, sizeof (tmp) - 1, "%d", curr_stereodelay_idx);
+    lblStereoDelayInfo->setCaption(tmp);
+  }
 
-class FilterListModel : public gcn::ListModel
-{
-  private:
-    std::vector<std::string> entry;
-      
-  public:
-    FilterListModel()
-    {
-      entry.push_back("Always off");
-      entry.push_back("Emulated (A500)");
-      entry.push_back("Emulated (A1200)");
-      entry.push_back("Always on (A500)");
-      entry.push_back("Always on (A1200)");
-    }
-
-    int getNumberOfElements()
-    {
-      return entry.size();
-    }
-
-    std::string getElementAt(int i)
-    {
-      if(i < 0 || i >= entry.size())
-        return "---";
-      return entry[i];
-    }
-};
-static FilterListModel filterTypeList;
+  sldPaulaVol->setValue(100 - workprefs.sound_volume_paula);
+  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - workprefs.sound_volume_paula);
+  lblPaulaVolInfo->setCaption(tmp);
+}
 
 
 class SoundActionListener : public gcn::ActionListener
@@ -150,95 +160,91 @@ class SoundActionListener : public gcn::ActionListener
     void action(const gcn::ActionEvent& actionEvent)
     {
 	    if (actionEvent.getSource() == optSoundDisabled)
-    		changed_prefs.produce_sound = 0;
+    		workprefs.produce_sound = 0;
+
 	    else if (actionEvent.getSource() == optSoundDisabledEmu)
-    		changed_prefs.produce_sound = 1;
+    		workprefs.produce_sound = 1;
+
 	    else if (actionEvent.getSource() == optSoundEmulated)
-    		changed_prefs.produce_sound = 2;
+    		workprefs.produce_sound = 2;
+
 	    else if (actionEvent.getSource() == optSoundEmulatedBest)
-    		changed_prefs.produce_sound = 3;
+    		workprefs.produce_sound = 3;
 
 	    else if (actionEvent.getSource() == optMono)
-    		changed_prefs.sound_stereo = 0;
-	    else if (actionEvent.getSource() == optStereo)
-    		changed_prefs.sound_stereo = 1;
+    		workprefs.sound_stereo = 0;
 
-	    else if (actionEvent.getSource() == cboFrequency)
-      {
+	    else if (actionEvent.getSource() == optStereo)
+    		workprefs.sound_stereo = 1;
+
+	    else if (actionEvent.getSource() == cboFrequency) {
         switch(cboFrequency->getSelected())
         {
           case 0:
-    		    changed_prefs.sound_freq = 11025;
+    		    workprefs.sound_freq = 11025;
             break;
           case 1:
-    		    changed_prefs.sound_freq = 22050;
+    		    workprefs.sound_freq = 22050;
             break;
           case 2:
-    		    changed_prefs.sound_freq = 32000;
+    		    workprefs.sound_freq = 32000;
             break;
           case 3:
-    		    changed_prefs.sound_freq = 44100;
+    		    workprefs.sound_freq = 44100;
             break;
         }
       }
 
 	    else if (actionEvent.getSource() == cboInterpolation)
-        changed_prefs.sound_interpol = cboInterpolation->getSelected();
+        workprefs.sound_interpol = cboInterpolation->getSelected();
 
-	    else if (actionEvent.getSource() == cboFilter)
-      {
+	    else if (actionEvent.getSource() == cboFilter) {
         switch (cboFilter->getSelected())
         {
         	case 0:
-          	changed_prefs.sound_filter = FILTER_SOUND_OFF;
+          	workprefs.sound_filter = FILTER_SOUND_OFF;
           	break;
         	case 1:
-          	changed_prefs.sound_filter = FILTER_SOUND_EMUL;
-          	changed_prefs.sound_filter_type = 0;
+          	workprefs.sound_filter = FILTER_SOUND_EMUL;
+          	workprefs.sound_filter_type = 0;
           	break;
         	case 2:
-          	changed_prefs.sound_filter = FILTER_SOUND_EMUL;
-          	changed_prefs.sound_filter_type = 1;
+          	workprefs.sound_filter = FILTER_SOUND_EMUL;
+          	workprefs.sound_filter_type = 1;
           	break;
         	case 3:
-          	changed_prefs.sound_filter = FILTER_SOUND_ON;
-          	changed_prefs.sound_filter_type = 0;
+          	workprefs.sound_filter = FILTER_SOUND_ON;
+          	workprefs.sound_filter_type = 0;
           	break;
         	case 4:
-          	changed_prefs.sound_filter = FILTER_SOUND_ON;
-          	changed_prefs.sound_filter_type = 1;
+          	workprefs.sound_filter = FILTER_SOUND_ON;
+          	workprefs.sound_filter_type = 1;
           	break;
         }
-      }
 
-      else if (actionEvent.getSource() == sldSeparation) 
-      {
+      } else if (actionEvent.getSource() == sldSeparation) {
         if(curr_separation_idx != (int)(sldSeparation->getValue())
-        && changed_prefs.sound_stereo > 0)
+        && workprefs.sound_stereo > 0)
         {
       		curr_separation_idx = (int)(sldSeparation->getValue());
-      		changed_prefs.sound_stereo_separation = 10 - curr_separation_idx;
+      		workprefs.sound_stereo_separation = 10 - curr_separation_idx;
     	  }
-      }
 
-      else if (actionEvent.getSource() == sldStereoDelay) 
-      {
+      } else if (actionEvent.getSource() == sldStereoDelay) {
         if(curr_stereodelay_idx != (int)(sldStereoDelay->getValue())
-        && changed_prefs.sound_stereo > 0)
+        && workprefs.sound_stereo > 0)
         {
       		curr_stereodelay_idx = (int)(sldStereoDelay->getValue());
       		if(curr_stereodelay_idx > 0)
-      		  changed_prefs.sound_mixed_stereo_delay = curr_stereodelay_idx;
+      		  workprefs.sound_mixed_stereo_delay = curr_stereodelay_idx;
       		else
-      		  changed_prefs.sound_mixed_stereo_delay = -1;
+      		  workprefs.sound_mixed_stereo_delay = -1;
     	  }
-      }
 
-      else if (actionEvent.getSource() == sldPaulaVol)
-      {
+      } else if (actionEvent.getSource() == sldPaulaVol) {
         int newvol = 100 - (int) sldPaulaVol->getValue();
-        if(changed_prefs.sound_volume_paula != newvol)
-          changed_prefs.sound_volume_paula = newvol;
+        if(workprefs.sound_volume_paula != newvol)
+          workprefs.sound_volume_paula = newvol;
 			}
 
       RefreshPanelSound();
@@ -398,8 +404,10 @@ void InitPanelSound(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelSound(void)
+void ExitPanelSound(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete optSoundDisabled;
   delete optSoundDisabledEmu;
   delete optSoundEmulated;
@@ -424,97 +432,6 @@ void ExitPanelSound(void)
   delete lblPaulaVolInfo;
   delete sldPaulaVol;
   delete soundActionListener;
-}
-
-
-void RefreshPanelSound(void)
-{
-  char tmp[10];
-  int i;
-
-  switch(changed_prefs.produce_sound)
-  {
-    case 0:
-      optSoundDisabled->setSelected(true);
-      break;
-    case 1:
-      optSoundDisabledEmu->setSelected(true);
-      break;
-    case 2:
-      optSoundEmulated->setSelected(true);
-      break;
-    case 3:
-      optSoundEmulatedBest->setSelected(true);
-      break;
-  }
-
-	if (changed_prefs.sound_stereo == 0)
-    optMono->setSelected(true);
-  else if (changed_prefs.sound_stereo == 1)
-    optStereo->setSelected(true);
-
-  switch(changed_prefs.sound_freq)
-  {
-    case 11025:
-      cboFrequency->setSelected(0);
-      break;
-    case 22050:
-      cboFrequency->setSelected(1);
-      break;
-    case 32000:
-      cboFrequency->setSelected(2);
-      break;
-    default:
-      cboFrequency->setSelected(3);
-      break;
-  }
-
-  cboInterpolation->setSelected(changed_prefs.sound_interpol);
-
-  i = 0;
-  switch (changed_prefs.sound_filter)
-  {
-    case 0:
-      i = 0;
-      break;
-    case 1:
-      i = changed_prefs.sound_filter_type ? 2 : 1;
-      break;
-    case 2:
-      i = changed_prefs.sound_filter_type ? 4 : 3;
-      break;
-  }
-  cboFilter->setSelected(i);  
-  
-  if(changed_prefs.sound_stereo == 0)
-  {
-    curr_separation_idx = 0;
-    curr_stereodelay_idx = 0;
-  }
-  else
-  {
-    curr_separation_idx = 10 - changed_prefs.sound_stereo_separation;
-    curr_stereodelay_idx = changed_prefs.sound_mixed_stereo_delay > 0 ? changed_prefs.sound_mixed_stereo_delay : 0;
-  }
-
-  sldSeparation->setValue(curr_separation_idx);
-  sldSeparation->setEnabled(changed_prefs.sound_stereo >= 1);
-  snprintf(tmp, sizeof (tmp) - 1, "%d%%", 100 - 10 * curr_separation_idx);
-  lblSeparationInfo->setCaption(tmp);
-
-  sldStereoDelay->setValue(curr_stereodelay_idx);
-  sldStereoDelay->setEnabled(changed_prefs.sound_stereo >= 1);
-  if(curr_stereodelay_idx <= 0)
-    lblStereoDelayInfo->setCaption("-");
-  else
-  {
-    snprintf(tmp, sizeof (tmp) - 1, "%d", curr_stereodelay_idx);
-    lblStereoDelayInfo->setCaption(tmp);
-  }
-
-  sldPaulaVol->setValue(100 - changed_prefs.sound_volume_paula);
-  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - changed_prefs.sound_volume_paula);
-  lblPaulaVolInfo->setCaption(tmp);
 }
 
 

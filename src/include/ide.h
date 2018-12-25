@@ -27,33 +27,9 @@ struct ide_registers
 struct ide_thread_state;
 struct ide_hdf;
 
-#define MAX_IDE_PORTS_BOARD 3
-struct ide_board
-{
-	uae_u8 *rom;
-	uae_u8 acmemory[128];
-	int rom_size;
-	int rom_start;
-	int rom_mask;
-	uaecptr baseaddress;
-	int configured;
-	bool keepautoconfig;
-	int mask;
-	addrbank *bank;
-	struct ide_hdf *ide[MAX_IDE_PORTS_BOARD];
-	bool irq;
-	bool intena;
-	bool enabled;
-	int state;
-	int type;
-	uae_u16 data_latch;
-	struct ide_board **self_ptr;
-};
-
 struct ide_hdf
 {
 	struct hd_hardfiledata hdhfd;
-	struct ide_board *board;
 	struct ide_registers regs;
 	struct ide_registers *regs0;
 	struct ide_registers *regs1;
@@ -69,6 +45,7 @@ struct ide_hdf
 	int data_multi;
 	int direction; // 0 = read, 1 = write
 	bool intdrq;
+	bool lba;
 	bool lba48;
 	bool lba48cmd;
 	uae_u64 start_lba;
@@ -86,6 +63,7 @@ struct ide_hdf
 	int ide_drv;
 	int media_type;
 	bool mode_8bit;
+	int uae_unitnum;
 
 	bool atapi;
 	bool atapi_drdy;
@@ -109,52 +87,18 @@ uae_u32 ide_read_reg (struct ide_hdf *ide, int ide_reg);
 void ide_write_reg (struct ide_hdf *ide, int ide_reg, uae_u32 val);
 void ide_put_data(struct ide_hdf *ide, uae_u16 v);
 uae_u16 ide_get_data(struct ide_hdf *ide);
-void ide_put_data_8bit(struct ide_hdf *ide, uae_u8 v);
-uae_u8 ide_get_data_8bit(struct ide_hdf *ide);
 
 bool ide_interrupt_hsync(struct ide_hdf *ide);
-bool ide_irq_check(struct ide_hdf *ide, bool edge_triggered);
-bool ide_drq_check(struct ide_hdf *ide);
 bool ide_isdrive(struct ide_hdf *ide);
 void ide_initialize(struct ide_hdf **idetable, int chpair);
 struct ide_hdf *add_ide_unit (struct ide_hdf **idetable, int max, int ch, struct uaedev_config_info *ci, struct romconfig *rc);
 void remove_ide_unit(struct ide_hdf **idetable, int ch);
 void alloc_ide_mem (struct ide_hdf **ide, int max, struct ide_thread_state *its);
-void ide_reset_device(struct ide_hdf *ide);
 
 void start_ide_thread(struct ide_thread_state *its);
 void stop_ide_thread(struct ide_thread_state *its);
 
 uae_u8 *ide_save_state(uae_u8 *dst, struct ide_hdf *ide);
 uae_u8 *ide_restore_state(uae_u8 *src, struct ide_hdf *ide);
-
-#define IDE_MEMORY_FUNCTIONS(x, y, z) \
-static void REGPARAM2 x ## _bput(uaecptr addr, uae_u32 b) \
-{ \
-	y ## _write_byte(z, addr, b); \
-} \
-static void REGPARAM2 x ## _wput(uaecptr addr, uae_u32 b) \
-{ \
-	y ## _write_word(z, addr, b); \
-} \
-static void REGPARAM2 x ## _lput(uaecptr addr, uae_u32 b) \
-{ \
-	y ## _write_word(z, addr, b >> 16); \
-	y ## _write_word(z, addr + 2, b); \
-} \
-static uae_u32 REGPARAM2 x ## _bget(uaecptr addr) \
-{ \
-return y ## _read_byte(z, addr); \
-} \
-static uae_u32 REGPARAM2 x ## _wget(uaecptr addr) \
-{ \
-return y ## _read_word(z, addr); \
-} \
-static uae_u32 REGPARAM2 x ## _lget(uaecptr addr) \
-{ \
-	uae_u32 v = y ## _read_word(z, addr) << 16; \
-	v |= y ## _read_word(z, addr + 2); \
-	return v; \
-}
 
 #endif /* UAE_IDE_H */

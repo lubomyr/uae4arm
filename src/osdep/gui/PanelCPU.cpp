@@ -24,6 +24,9 @@
 #include "gui_handling.h"
 
 
+static const char *CacheSize_list[] = { "-", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB" };
+static const int CacheSize_values[] = { 0, 1024, 2048, 4096, 8192, 16384 };
+
 static gcn::Window *grpCPU;
 static gcn::UaeRadioButton* optCPU68000;
 static gcn::UaeRadioButton* optCPU68010;
@@ -45,205 +48,213 @@ static gcn::UaeRadioButton* opt7Mhz;
 static gcn::UaeRadioButton* opt14Mhz;
 static gcn::UaeRadioButton* opt28Mhz;
 static gcn::UaeRadioButton* optFastest;
+static gcn::Label* lblCachemem;
+static gcn::Label* lblCachesize;
+static gcn::Slider* sldCachemem;
 
 
-class CPUButtonActionListener : public gcn::ActionListener
+static void RefreshPanelCPU(void)
 {
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    if (actionEvent.getSource() == optCPU68000)
-	    {
-  		  changed_prefs.cpu_model = 68000;
-  		  changed_prefs.fpu_model = 0;
-  		  changed_prefs.address_space_24 = true;
-  		  changed_prefs.z3fastmem[0].size = 0;
-  		  changed_prefs.rtgboards[0].rtgmem_size = 0;
-      }
-      else if (actionEvent.getSource() == optCPU68010)
-      {
-  		  changed_prefs.cpu_model = 68010;
-  		  changed_prefs.fpu_model = 0;
-  		  changed_prefs.address_space_24 = true;
-  		  changed_prefs.z3fastmem[0].size = 0;
-  		  changed_prefs.rtgboards[0].rtgmem_size = 0;
-      }
-      else if (actionEvent.getSource() == optCPU68020)
-      {
-  		  changed_prefs.cpu_model = 68020;
-  		  if(changed_prefs.fpu_model == 68040)
-  		    changed_prefs.fpu_model = 68881;
-  		  changed_prefs.cpu_compatible = 0;
-      }
-      else if (actionEvent.getSource() == optCPU68030)
-      {
-  		  changed_prefs.cpu_model = 68030;
-  		  if(changed_prefs.fpu_model == 68040)
-  		    changed_prefs.fpu_model = 68881;
-  		  changed_prefs.address_space_24 = false;
-  		  changed_prefs.cpu_compatible = 0;
-      }
-      else if (actionEvent.getSource() == optCPU68040)
-      {
-  		  changed_prefs.cpu_model = 68040;
-  		  changed_prefs.fpu_model = 68040;
-  		  changed_prefs.address_space_24 = false;
-  		  changed_prefs.cpu_compatible = 0;
-      }
-	    RefreshPanelCPU();
-	    RefreshPanelRAM();
+  if(workprefs.cpu_model == 68000)
+    optCPU68000->setSelected(true);
+  else if(workprefs.cpu_model == 68010)
+    optCPU68010->setSelected(true);
+  else if(workprefs.cpu_model == 68020)
+    optCPU68020->setSelected(true);
+  else if(workprefs.cpu_model == 68030)
+    optCPU68030->setSelected(true);
+  else if(workprefs.cpu_model == 68040)
+    optCPU68040->setSelected(true);
+
+  chk24Bit->setSelected(workprefs.address_space_24);
+  chk24Bit->setEnabled(workprefs.cpu_model == 68020);
+  chkCPUCompatible->setSelected(workprefs.cpu_compatible > 0);
+  chkCPUCompatible->setEnabled(workprefs.cpu_model <= 68010);
+  chkJIT->setSelected(workprefs.cachesize > 0);
+
+  switch(workprefs.fpu_model)
+  {
+    case 68881:
+      optFPU68881->setSelected(true);
+      break;
+    case 68882:
+      optFPU68882->setSelected(true);
+      break;
+    case 68040:
+      optFPUinternal->setSelected(true);
+      break;
+    default:
+      optFPUnone->setSelected(true);
+      break;
+  }
+  optFPU68881->setEnabled(workprefs.cpu_model >= 68020 && workprefs.cpu_model < 68040);
+  optFPU68882->setEnabled(workprefs.cpu_model >= 68020 && workprefs.cpu_model < 68040);
+  optFPUinternal->setEnabled(workprefs.cpu_model == 68040);
+  
+  chkFPUstrict->setSelected(workprefs.fpu_strict);
+#ifdef USE_JIT_FPU
+  chkFPUJIT->setSelected(workprefs.compfpu);
+  chkFPUJIT->setEnabled(workprefs.cachesize > 0);
+#else
+  chkFPUJIT->setSelected(false);
+  chkFPUJIT->setEnabled(false);
+#endif
+   
+	if (workprefs.m68k_speed == M68K_SPEED_7MHZ_CYCLES)
+    opt7Mhz->setSelected(true);
+  else if (workprefs.m68k_speed == M68K_SPEED_14MHZ_CYCLES)
+    opt14Mhz->setSelected(true);
+  else if (workprefs.m68k_speed == M68K_SPEED_25MHZ_CYCLES)
+    opt28Mhz->setSelected(true);
+  else if (workprefs.m68k_speed == -1)
+    optFastest->setSelected(true);
+    
+  for(int i = 0; i < 6; ++i) {
+    if(workprefs.cachesize == CacheSize_values[i]) {
+      sldCachemem->setValue(i);
+      lblCachesize->setCaption(CacheSize_list[i]);
+      break;
     }
-};
-static CPUButtonActionListener* cpuButtonActionListener;
+  }
+  sldCachemem->setEnabled(workprefs.cachesize > 0);
+}
 
 
-class FPUButtonActionListener : public gcn::ActionListener
+class CPUActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-	    if (actionEvent.getSource() == optFPUnone)
-  		{
-  		  changed_prefs.fpu_model = 0;
-  		}
-      else if(actionEvent.getSource() == optFPU68881)
-  		{
-  		  changed_prefs.fpu_model = 68881;
-  		}
-      else if(actionEvent.getSource() == optFPU68882)
-  		{
-  		  changed_prefs.fpu_model = 68882;
-  		}
-      else if(actionEvent.getSource() == optFPUinternal)
-  		{
-  		  changed_prefs.fpu_model = 68040;
-  		}
-	    RefreshPanelCPU();
-	    RefreshPanelRAM();
-    }
-};
-static FPUButtonActionListener* fpuButtonActionListener;
+	    if (actionEvent.getSource() == optCPU68000) {
+  		  workprefs.cpu_model = 68000;
+  		  workprefs.fpu_model = 0;
+  		  workprefs.address_space_24 = true;
+  		  workprefs.z3fastmem[0].size = 0;
+  		  workprefs.rtgboards[0].rtgmem_size = 0;
 
+      } else if (actionEvent.getSource() == optCPU68010) {
+  		  workprefs.cpu_model = 68010;
+  		  workprefs.fpu_model = 0;
+  		  workprefs.address_space_24 = true;
+  		  workprefs.z3fastmem[0].size = 0;
+  		  workprefs.rtgboards[0].rtgmem_size = 0;
 
-class CPUSpeedButtonActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    if (actionEvent.getSource() == opt7Mhz)
-      	changed_prefs.m68k_speed = M68K_SPEED_7MHZ_CYCLES;
-      else if (actionEvent.getSource() == opt14Mhz)
-	      changed_prefs.m68k_speed = M68K_SPEED_14MHZ_CYCLES;
-      else if (actionEvent.getSource() == opt28Mhz)
-	      changed_prefs.m68k_speed = M68K_SPEED_25MHZ_CYCLES;
-      else if (actionEvent.getSource() == optFastest)
-	      changed_prefs.m68k_speed = -1;
-    }
-};
-static CPUSpeedButtonActionListener* cpuSpeedButtonActionListener;
+      } else if (actionEvent.getSource() == optCPU68020) {
+  		  workprefs.cpu_model = 68020;
+  		  if(workprefs.fpu_model == 68040)
+  		    workprefs.fpu_model = 68881;
+  		  workprefs.cpu_compatible = 0;
 
+      } else if (actionEvent.getSource() == optCPU68030) {
+  		  workprefs.cpu_model = 68030;
+  		  if(workprefs.fpu_model == 68040)
+  		    workprefs.fpu_model = 68881;
+  		  workprefs.address_space_24 = false;
+  		  workprefs.cpu_compatible = 0;
 
-class CPU24BitActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-		  changed_prefs.address_space_24 = chk24Bit->isSelected();
-      RefreshPanelCPU();
-    }
-};
-static CPU24BitActionListener* cpu24BitActionListener;
+      } else if (actionEvent.getSource() == optCPU68040) {
+  		  workprefs.cpu_model = 68040;
+  		  workprefs.fpu_model = 68040;
+  		  workprefs.address_space_24 = false;
+  		  workprefs.cpu_compatible = 0;
 
-class CPUCompActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    if (chkCPUCompatible->isSelected())
-      {
-	      changed_prefs.cpu_compatible = 1;
-	      changed_prefs.cachesize = 0;
-      }
-      else
-      {
-	      changed_prefs.cpu_compatible = 0;
-      }
-      RefreshPanelCPU();
-    }
-};
-static CPUCompActionListener* cpuCompActionListener;
+      } else if (actionEvent.getSource() == optFPUnone) {
+  		  workprefs.fpu_model = 0;
 
+  		} else if(actionEvent.getSource() == optFPU68881) {
+  		  workprefs.fpu_model = 68881;
 
-class JITActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-	    if (actionEvent.getSource() == chkJIT) {
-		    if (chkJIT->isSelected())
-	      {
-		      changed_prefs.cpu_compatible = 0;
-		      changed_prefs.cachesize = MAX_JIT_CACHE;
-		      changed_prefs.compfpu = true;
-	      }
-	      else
-	      {
-		      changed_prefs.cachesize = 0;
-		      changed_prefs.compfpu = false;
+  		} else if(actionEvent.getSource() == optFPU68882)	{
+  		  workprefs.fpu_model = 68882;
+
+  		} else if(actionEvent.getSource() == optFPUinternal) {
+  		  workprefs.fpu_model = 68040;
+
+  		} else if (actionEvent.getSource() == opt7Mhz) {
+      	workprefs.m68k_speed = M68K_SPEED_7MHZ_CYCLES;
+
+      } else if (actionEvent.getSource() == opt14Mhz) {
+	      workprefs.m68k_speed = M68K_SPEED_14MHZ_CYCLES;
+
+      } else if (actionEvent.getSource() == opt28Mhz) {
+	      workprefs.m68k_speed = M68K_SPEED_25MHZ_CYCLES;
+
+      } else if (actionEvent.getSource() == optFastest) {
+	      workprefs.m68k_speed = -1;
+
+      } else if (actionEvent.getSource() == chk24Bit) {
+  		  workprefs.address_space_24 = chk24Bit->isSelected();
+
+      } else if (actionEvent.getSource() == chkCPUCompatible) {
+  	    if (chkCPUCompatible->isSelected()) {
+  	      workprefs.cpu_compatible = 1;
+  	      workprefs.cachesize = 0;
+        } else {
+  	      workprefs.cpu_compatible = 0;
+        }
+
+      } else if (actionEvent.getSource() == chkJIT) {
+		    if (chkJIT->isSelected()) {
+		      workprefs.cpu_compatible = 0;
+		      workprefs.cachesize = MAX_JIT_CACHE;
+		      workprefs.compfpu = true;
+	      } else {
+		      workprefs.cachesize = 0;
+		      workprefs.compfpu = false;
 	      }
 	    } else if (actionEvent.getSource() == chkFPUJIT) {
-	      changed_prefs.compfpu = chkFPUJIT->isSelected();
-	    }
-      RefreshPanelCPU();
-    }
-};
-static JITActionListener* jitActionListener;
+	      workprefs.compfpu = chkFPUJIT->isSelected();
 
+	    } else if (actionEvent.getSource() == chkFPUstrict) {
+        workprefs.fpu_strict = chkFPUstrict->isSelected();
 
-class FPUActionListener : public gcn::ActionListener
-{
-  public:
-    void action(const gcn::ActionEvent& actionEvent)
-    {
-      if (actionEvent.getSource() == chkFPUstrict) {
-        changed_prefs.fpu_strict = chkFPUstrict->isSelected();
+	    } else if (actionEvent.getSource() == sldCachemem) {
+    		workprefs.cachesize = CacheSize_values[(int)(sldCachemem->getValue())];
+
       }
-      RefreshPanelCPU();
+      
+	    RefreshPanelCPU();
     }
 };
-static FPUActionListener* fpuActionListener;
+static CPUActionListener* cpuActionListener;
 
 
 void InitPanelCPU(const struct _ConfigCategory& category)
 {
-  cpuButtonActionListener = new CPUButtonActionListener();
-  cpu24BitActionListener = new CPU24BitActionListener();
-  cpuCompActionListener = new CPUCompActionListener();
-  jitActionListener = new JITActionListener();
-  fpuActionListener = new FPUActionListener();
+  cpuActionListener = new CPUActionListener();
   
 	optCPU68000 = new gcn::UaeRadioButton("68000", "radiocpugroup");
-	optCPU68000->addActionListener(cpuButtonActionListener);
+	optCPU68000->addActionListener(cpuActionListener);
 	optCPU68010 = new gcn::UaeRadioButton("68010", "radiocpugroup");
-	optCPU68010->addActionListener(cpuButtonActionListener);
+	optCPU68010->addActionListener(cpuActionListener);
 	optCPU68020 = new gcn::UaeRadioButton("68020", "radiocpugroup");
-	optCPU68020->addActionListener(cpuButtonActionListener);
+	optCPU68020->addActionListener(cpuActionListener);
 	optCPU68030 = new gcn::UaeRadioButton("68030", "radiocpugroup");
-	optCPU68030->addActionListener(cpuButtonActionListener);
+	optCPU68030->addActionListener(cpuActionListener);
 	optCPU68040 = new gcn::UaeRadioButton("68040", "radiocpugroup");
-	optCPU68040->addActionListener(cpuButtonActionListener);
+	optCPU68040->addActionListener(cpuActionListener);
 	
 	chk24Bit = new gcn::UaeCheckBox("24-bit addressing", true);
 	chk24Bit->setId("CPU24Bit");
-  chk24Bit->addActionListener(cpu24BitActionListener);
+  chk24Bit->addActionListener(cpuActionListener);
 
 	chkCPUCompatible = new gcn::UaeCheckBox("More compatible", true);
 	chkCPUCompatible->setId("CPUComp");
-  chkCPUCompatible->addActionListener(cpuCompActionListener);
+  chkCPUCompatible->addActionListener(cpuActionListener);
 
 	chkJIT = new gcn::UaeCheckBox("JIT", true);
 	chkJIT->setId("JIT");
-  chkJIT->addActionListener(jitActionListener);
+  chkJIT->addActionListener(cpuActionListener);
+
+	lblCachemem = new gcn::Label("Cache:");
+  sldCachemem = new gcn::Slider(0, 5);
+  sldCachemem->setSize(100, SLIDER_HEIGHT);
+  sldCachemem->setBaseColor(gui_baseCol);
+	sldCachemem->setMarkerLength(20);
+	sldCachemem->setStepLength(1);
+	sldCachemem->setId("Cachemem");
+  sldCachemem->addActionListener(cpuActionListener);
+  lblCachesize = new gcn::Label("None  ");
 	
 	grpCPU = new gcn::Window("CPU");
 	grpCPU->setPosition(DISTANCE_BORDER, DISTANCE_BORDER);
@@ -255,38 +266,39 @@ void InitPanelCPU(const struct _ConfigCategory& category)
 	grpCPU->add(chk24Bit, 5, 170);
 	grpCPU->add(chkCPUCompatible, 5, 200);
 	grpCPU->add(chkJIT, 5, 230);
+	grpCPU->add(lblCachemem, 5, 260);
+	grpCPU->add(sldCachemem, 6, 290);
+	grpCPU->add(lblCachesize, 110, 290);
 	grpCPU->setMovable(false);
 #ifdef ANDROID
-	grpCPU->setSize(165, 275);
+	grpCPU->setSize(165, 335);
 #else
-	grpCPU->setSize(160, 275);
+	grpCPU->setSize(160, 335);
 #endif
   grpCPU->setBaseColor(gui_baseCol);
   
   category.panel->add(grpCPU);
 
-  fpuButtonActionListener = new FPUButtonActionListener();
-
 	optFPUnone = new gcn::UaeRadioButton("None", "radiofpugroup");
 	optFPUnone->setId("FPUnone");
-	optFPUnone->addActionListener(fpuButtonActionListener);
+	optFPUnone->addActionListener(cpuActionListener);
 
 	optFPU68881 = new gcn::UaeRadioButton("68881", "radiofpugroup");
-	optFPU68881->addActionListener(fpuButtonActionListener);
+	optFPU68881->addActionListener(cpuActionListener);
   
 	optFPU68882 = new gcn::UaeRadioButton("68882", "radiofpugroup");
-	optFPU68882->addActionListener(fpuButtonActionListener);
+	optFPU68882->addActionListener(cpuActionListener);
 
 	optFPUinternal = new gcn::UaeRadioButton("CPU internal", "radiofpugroup");
-	optFPUinternal->addActionListener(fpuButtonActionListener);
+	optFPUinternal->addActionListener(cpuActionListener);
 
 	chkFPUstrict = new gcn::UaeCheckBox("More compatible", true);
 	chkFPUstrict->setId("FPUstrict");
-  chkFPUstrict->addActionListener(fpuActionListener);
+  chkFPUstrict->addActionListener(cpuActionListener);
 
 	chkFPUJIT = new gcn::UaeCheckBox("FPU JIT", true);
 	chkFPUJIT->setId("FPUJIT");
-  chkFPUJIT->addActionListener(jitActionListener);
+  chkFPUJIT->addActionListener(cpuActionListener);
 
 	grpFPU = new gcn::Window("FPU");
 	grpFPU->setPosition(DISTANCE_BORDER + grpCPU->getWidth() + DISTANCE_NEXT_X, DISTANCE_BORDER);
@@ -302,19 +314,17 @@ void InitPanelCPU(const struct _ConfigCategory& category)
   
   category.panel->add(grpFPU);
 
-  cpuSpeedButtonActionListener = new CPUSpeedButtonActionListener();
-
 	opt7Mhz = new gcn::UaeRadioButton("7 Mhz", "radiocpuspeedgroup");
-	opt7Mhz->addActionListener(cpuSpeedButtonActionListener);
+	opt7Mhz->addActionListener(cpuActionListener);
 
 	opt14Mhz = new gcn::UaeRadioButton("14 Mhz", "radiocpuspeedgroup");
-	opt14Mhz->addActionListener(cpuSpeedButtonActionListener);
+	opt14Mhz->addActionListener(cpuActionListener);
 
 	opt28Mhz = new gcn::UaeRadioButton("25 Mhz", "radiocpuspeedgroup");
-	opt28Mhz->addActionListener(cpuSpeedButtonActionListener);
+	opt28Mhz->addActionListener(cpuActionListener);
 
 	optFastest = new gcn::UaeRadioButton("Fastest", "radiocpuspeedgroup");
-	optFastest->addActionListener(cpuSpeedButtonActionListener);
+	optFastest->addActionListener(cpuActionListener);
 
 	grpCPUSpeed = new gcn::Window("CPU Speed");
 	grpCPUSpeed->setPosition(grpFPU->getX() + grpFPU->getWidth() + DISTANCE_NEXT_X, DISTANCE_BORDER);
@@ -336,8 +346,10 @@ void InitPanelCPU(const struct _ConfigCategory& category)
 }
 
 
-void ExitPanelCPU(void)
+void ExitPanelCPU(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete optCPU68000;
   delete optCPU68010;
   delete optCPU68020;
@@ -346,11 +358,10 @@ void ExitPanelCPU(void)
   delete chk24Bit;
   delete chkCPUCompatible;
   delete chkJIT;
+  delete lblCachemem;
+  delete sldCachemem;
+  delete lblCachesize;
   delete grpCPU;
-  delete cpuButtonActionListener;
-  delete cpu24BitActionListener;
-  delete cpuCompActionListener;
-  delete jitActionListener;
   
   delete optFPUnone;
   delete optFPU68881;
@@ -359,73 +370,14 @@ void ExitPanelCPU(void)
   delete chkFPUstrict;
   delete chkFPUJIT;
   delete grpFPU;
-  delete fpuButtonActionListener;
-  delete fpuActionListener;
   
   delete opt7Mhz;
   delete opt14Mhz;
   delete opt28Mhz;
   delete optFastest;
   delete grpCPUSpeed;
-  delete cpuSpeedButtonActionListener;
-}
 
-
-void RefreshPanelCPU(void)
-{
-  if(changed_prefs.cpu_model == 68000)
-    optCPU68000->setSelected(true);
-  else if(changed_prefs.cpu_model == 68010)
-    optCPU68010->setSelected(true);
-  else if(changed_prefs.cpu_model == 68020)
-    optCPU68020->setSelected(true);
-  else if(changed_prefs.cpu_model == 68030)
-    optCPU68030->setSelected(true);
-  else if(changed_prefs.cpu_model == 68040)
-    optCPU68040->setSelected(true);
-
-  chk24Bit->setSelected(changed_prefs.address_space_24);
-  chk24Bit->setEnabled(changed_prefs.cpu_model == 68020);
-  chkCPUCompatible->setSelected(changed_prefs.cpu_compatible > 0);
-  chkCPUCompatible->setEnabled(changed_prefs.cpu_model <= 68010);
-  chkJIT->setSelected(changed_prefs.cachesize > 0);
-
-  switch(changed_prefs.fpu_model)
-  {
-    case 68881:
-      optFPU68881->setSelected(true);
-      break;
-    case 68882:
-      optFPU68882->setSelected(true);
-      break;
-    case 68040:
-      optFPUinternal->setSelected(true);
-      break;
-    default:
-      optFPUnone->setSelected(true);
-      break;
-  }
-  optFPU68881->setEnabled(changed_prefs.cpu_model >= 68020 && changed_prefs.cpu_model < 68040);
-  optFPU68882->setEnabled(changed_prefs.cpu_model >= 68020 && changed_prefs.cpu_model < 68040);
-  optFPUinternal->setEnabled(changed_prefs.cpu_model == 68040);
-  
-  chkFPUstrict->setSelected(changed_prefs.fpu_strict);
-#ifdef USE_JIT_FPU
-  chkFPUJIT->setSelected(changed_prefs.compfpu);
-  chkFPUJIT->setEnabled(changed_prefs.cachesize > 0);
-#else
-  chkFPUJIT->setSelected(false);
-  chkFPUJIT->setEnabled(false);
-#endif
-  
-	if (changed_prefs.m68k_speed == M68K_SPEED_7MHZ_CYCLES)
-    opt7Mhz->setSelected(true);
-  else if (changed_prefs.m68k_speed == M68K_SPEED_14MHZ_CYCLES)
-    opt14Mhz->setSelected(true);
-  else if (changed_prefs.m68k_speed == M68K_SPEED_25MHZ_CYCLES)
-    opt28Mhz->setSelected(true);
-  else if (changed_prefs.m68k_speed == -1)
-    optFastest->setSelected(true);
+  delete cpuActionListener;
 }
 
 

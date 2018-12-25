@@ -19,6 +19,7 @@ extern int special_mem;
 #define S_WRITE 2
 
 bool init_shm (void);
+void free_shm (void);
 
 #define Z3BASE_UAE 0x10000000
 #define Z3BASE_REAL 0x40000000
@@ -40,7 +41,6 @@ typedef int (REGPARAM3 *check_func)(uaecptr, uae_u32) REGPARAM;
 
 extern uae_u32 max_z3fastmem;
 
-#undef DIRECT_MEMFUNCS_SUCCESSFUL
 #include "machdep/maccess.h"
 
 #define chipmem_start_addr 0x00000000
@@ -56,15 +56,15 @@ extern uae_u16 kickstart_version;
 extern int uae_boot_rom_type;
 extern int uae_boot_rom_size;
 extern uaecptr rtarea_base;
-extern uaecptr uaeboard_base;
 
 enum
 {
 	ABFLAG_UNK = 0, ABFLAG_RAM = 1, ABFLAG_ROM = 2, ABFLAG_ROMIN = 4, ABFLAG_IO = 8,
 	ABFLAG_NONE = 16, ABFLAG_SAFE = 32, ABFLAG_INDIRECT = 64, ABFLAG_NOALLOC = 128,
 	ABFLAG_RTG = 256, ABFLAG_THREADSAFE = 512, ABFLAG_DIRECTMAP = 1024, ABFLAG_ALLOCINDIRECT = 2048,
-	ABFLAG_CHIPRAM = 4096, ABFLAG_CIA = 8192, ABFLAG_PPCIOSPACE = 16384,
+	ABFLAG_CHIPRAM = 4096, ABFLAG_CIA = 8192,
 };
+
 typedef struct {
   /* These ones should be self-explanatory... */
   mem_get_func lget, wget, bget;
@@ -87,7 +87,7 @@ typedef struct {
 	const TCHAR *label;
   const TCHAR *name;
   /* for instruction opcode/operand fetches */
-  mem_get_func lgeti, wgeti;
+  mem_get_func wgeti;
   int flags;
 	int jit_read_flag, jit_write_flag;
 	struct addrbank_sub *sub_banks;
@@ -118,19 +118,15 @@ struct autoconfig_info
 	uae_u8 autoconfig_bytes[16];
 	TCHAR name[128];
 	const uae_u8 *autoconfigp;
-	bool autoconfig_automatic;
 	uae_u32 start;
 	uae_u32 size;
 	int zorro;
 	const TCHAR *label;
 	addrbank *addrbankp;
 	struct romconfig *rc;
-	uae_u32 last_high_ram;
 	const struct expansionromtype *ert;
 	bool direct_vram;
-	bool can_sort;
 	bool (*get_params)(struct uae_prefs*, struct expansion_params*);
-	bool (*set_params)(struct uae_prefs*, struct expansion_params*);
 };
 
 #define MEMORY_LGET(name) \
@@ -208,7 +204,6 @@ static uae_u8 *REGPARAM2 name ## _xlate (uaecptr addr) \
 
 #define DECLARE_MEMORY_FUNCTIONS(name) \
 static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## _lget) (uaecptr) REGPARAM; \
-static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## _lgeti) (uaecptr) REGPARAM; \
 static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## _wget) (uaecptr) REGPARAM; \
 static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## _wgeti) (uaecptr) REGPARAM; \
 static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## _bget) (uaecptr) REGPARAM; \
@@ -338,12 +333,9 @@ extern addrbank custmem2_bank;
 
 extern void rtarea_init (void);
 extern void rtarea_free(void);
-extern void rtarea_init_mem (void);
 extern void rtarea_setup (void);
 extern void expamem_reset (void);
 extern void expamem_next (addrbank *mapped, addrbank *next);
-extern void expamem_shutup (addrbank *mapped);
-extern bool expamem_z3hack(struct uae_prefs*);
 extern void set_expamem_z3_hack_mode(int);
 extern uaecptr expamem_board_pointer, expamem_highmem_pointer;
 extern uaecptr expamem_z3_pointer_real, expamem_z3_pointer_uae;
@@ -360,7 +352,6 @@ extern uae_u32 dummy_get_safe(uaecptr addr, int size, bool inst, uae_u32 defvalu
 extern int REGPARAM3 default_check(uaecptr addr, uae_u32 size) REGPARAM;
 extern uae_u8 *REGPARAM3 default_xlate(uaecptr addr) REGPARAM;
 /* 680x0 opcode fetches */
-extern uae_u32 REGPARAM3 dummy_lgeti (uaecptr addr) REGPARAM;
 extern uae_u32 REGPARAM3 dummy_wgeti (uaecptr addr) REGPARAM;
 
 /* sub bank support */
@@ -370,7 +361,6 @@ extern uae_u32 REGPARAM3 sub_bank_bget(uaecptr) REGPARAM;
 extern void REGPARAM3 sub_bank_lput(uaecptr, uae_u32) REGPARAM;
 extern void REGPARAM3 sub_bank_wput(uaecptr, uae_u32) REGPARAM;
 extern void REGPARAM3 sub_bank_bput(uaecptr, uae_u32) REGPARAM;
-extern uae_u32 REGPARAM3 sub_bank_lgeti(uaecptr) REGPARAM;
 extern uae_u32 REGPARAM3 sub_bank_wgeti(uaecptr) REGPARAM;
 extern int REGPARAM3 sub_bank_check(uaecptr addr, uae_u32 size) REGPARAM;
 extern uae_u8 *REGPARAM3 sub_bank_xlate(uaecptr addr) REGPARAM;
@@ -388,8 +378,6 @@ extern void map_banks (addrbank *bank, int first, int count, int realsize);
 extern void map_banks_z2 (addrbank *bank, int first, int count);
 extern void map_banks_z3(addrbank *bank, int first, int count);
 extern bool validate_banks_z2(addrbank *bank, int start, int size);
-extern bool validate_banks_z3(addrbank *bank, int start, int size);
-extern void map_banks_quick (addrbank *bank, int first, int count, int realsize);
 extern void map_banks_cond (addrbank *bank, int first, int count, int realsize);
 extern void map_overlay (int chip);
 extern void memory_hardreset (int);
@@ -456,21 +444,17 @@ STATIC_INLINE uae_u32 get_byte_jit(uaecptr addr)
 # if SIZEOF_VOID_P == 8
 STATIC_INLINE void *get_pointer (uaecptr addr)
 {
-    const unsigned int n = SIZEOF_VOID_P / 4;
-    union {
-	void    *ptr;
-	uae_u32  longs[SIZEOF_VOID_P / 4];
-    } p;
-    unsigned int i;
+  const unsigned int n = SIZEOF_VOID_P / 4;
+  union {
+	  void    *ptr;
+	  uae_u32  longs[SIZEOF_VOID_P / 4];
+  } p;
+  unsigned int i;
 
-    for (i = 0; i < n; i++) {
-#ifdef WORDS_BIGENDIAN
-	p.longs[i]     = get_long (addr + i * 4);
-#else
-	p.longs[n - 1 - i] = get_long (addr + i * 4);
-#endif
-    }
-    return p.ptr;
+  for (i = 0; i < n; i++) {
+  	p.longs[n - 1 - i] = get_long (addr + i * 4);
+  }
+  return p.ptr;
 }
 # else
 #  error "Unknown or unsupported pointer size."
@@ -524,22 +508,18 @@ STATIC_INLINE void put_byte_jit(uaecptr addr, uae_u32 l)
 # if SIZEOF_VOID_P == 8
 STATIC_INLINE void put_pointer (uaecptr addr, void *v)
 {
-    const unsigned int n = SIZEOF_VOID_P / 4;
-    union {
-	void    *ptr;
-	uae_u32  longs[SIZEOF_VOID_P / 4];
-    } p;
-    unsigned int i;
+  const unsigned int n = SIZEOF_VOID_P / 4;
+  union {
+	  void    *ptr;
+	  uae_u32  longs[SIZEOF_VOID_P / 4];
+  } p;
+  unsigned int i;
 
-    p.ptr = v;
+  p.ptr = v;
 
-    for (i = 0; i < n; i++) {
-#ifdef WORDS_BIGENDIAN
-	put_long (addr + i * 4, p.longs[i]);
-#else
-	put_long (addr + i * 4, p.longs[n - 1 - i]);
-#endif
-    }
+  for (i = 0; i < n; i++) {
+  	put_long (addr + i * 4, p.longs[n - 1 - i]);
+  }
 }
 # endif
 #endif
@@ -554,11 +534,6 @@ STATIC_INLINE int valid_address(uaecptr addr, uae_u32 size)
   return get_mem_bank(addr).check(addr, size);
 }
 
-STATIC_INLINE void put_quad_host(void *addr, uae_u64 v)
-{
-	do_put_mem_long((uae_u32*)addr, v >> 32);
-	do_put_mem_long(((uae_u32*)addr) + 1, (uae_u32)v);
-}
 STATIC_INLINE void put_long_host(void *addr, uae_u32 v)
 {
 	do_put_mem_long((uae_u32*)addr, v);

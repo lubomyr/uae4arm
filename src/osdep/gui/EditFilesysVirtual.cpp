@@ -10,8 +10,6 @@
 #include "sdltruetypefont.hpp"
 #endif
 #include "SelectorEntry.hpp"
-#include "UaeRadioButton.hpp"
-#include "UaeDropDown.hpp"
 #include "UaeCheckBox.hpp"
 
 #include "sysconfig.h"
@@ -58,8 +56,7 @@ class FilesysVirtualActionListener : public gcn::ActionListener
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      if(actionEvent.getSource() == cmdPath)
-      {
+      if(actionEvent.getSource() == cmdPath) {
         char tmp[MAX_PATH];
         strncpy(tmp, txtPath->getText().c_str(), MAX_PATH - 1);
         wndEditFilesysVirtual->releaseModalFocus();
@@ -69,18 +66,14 @@ class FilesysVirtualActionListener : public gcn::ActionListener
 	    }
         wndEditFilesysVirtual->requestModalFocus();
         cmdPath->requestFocus();
-      }
-      else
-      {
-        if (actionEvent.getSource() == cmdOK)
-        {
-          if(txtDevice->getText().length() <= 0)
-          {
+
+      } else {
+        if (actionEvent.getSource() == cmdOK) {
+          if(txtDevice->getText().length() <= 0) {
             wndEditFilesysVirtual->setCaption("Please enter a device name.");
             return;
           }
-          if(txtVolume->getText().length() <= 0)
-          {
+          if(txtVolume->getText().length() <= 0) {
             wndEditFilesysVirtual->setCaption("Please enter a volume name.");
             return;
           }
@@ -310,9 +303,9 @@ bool EditFilesysVirtual(int unit_no)
   {
     struct uaedev_config_info *ci;
 
-    uci = &changed_prefs.mountconfig[unit_no];
+    uci = &workprefs.mountconfig[unit_no];
     ci = &uci->ci;
-    get_filesys_unitconfig(&changed_prefs, unit_no, &mi);
+    get_filesys_unitconfig(&workprefs, unit_no, &mi);
 
     strdevname.assign(ci->devname);
     txtDevice->setText(strdevname);
@@ -352,10 +345,9 @@ bool EditFilesysVirtual(int unit_no)
     ci.readonly = !chkReadWrite->isSelected();
     ci.bootpri = bp;
     
-    uci = add_filesys_config(&changed_prefs, unit_no, &ci);
+    uci = add_filesys_config(&workprefs, unit_no, &ci);
     if (uci) {
-  		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
-      hardfile_media_change (hfd, &ci, true, false);
+      filesys_media_change (ci.rootdir, 1, uci);
     }
   }
 

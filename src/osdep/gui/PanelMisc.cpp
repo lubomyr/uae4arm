@@ -10,8 +10,6 @@
 #include "sdltruetypefont.hpp"
 #endif
 #include "SelectorEntry.hpp"
-#include "UaeRadioButton.hpp"
-#include "UaeDropDown.hpp"
 #include "UaeCheckBox.hpp"
 
 #include "sysconfig.h"
@@ -22,6 +20,7 @@
 #include "uae.h"
 #include "autoconf.h"
 #include "filesys.h"
+#include "statusline.h"
 #include "gui.h"
 #include "gui_handling.h"
 
@@ -31,7 +30,13 @@
 
 
 static gcn::UaeCheckBox* chkStatusLine;
-static gcn::UaeCheckBox* chkHideIdleLed;
+static gcn::UaeCheckBox* chkStatusLineRTG;
+static gcn::UaeCheckBox* chkShowIdleLed;
+static gcn::UaeCheckBox* chkShowFPSLed;
+static gcn::UaeCheckBox* chkShowHDLed;
+static gcn::UaeCheckBox* chkShowCDLed;
+static gcn::UaeCheckBox* chkShowDFxLed;
+
 static gcn::UaeCheckBox* chkShowGUI;
 #ifdef PANDORA
 static gcn::Label* lblPandoraSpeed;
@@ -42,27 +47,81 @@ static gcn::UaeCheckBox* chkBSDSocket;
 static gcn::UaeCheckBox* chkMasterWP;
 
 
+static void RefreshPanelMisc(void)
+{
+  chkStatusLine->setSelected(workprefs.leds_on_screen & STATUSLINE_CHIPSET);
+  chkStatusLineRTG->setSelected(workprefs.leds_on_screen & STATUSLINE_RTG);
+  chkShowIdleLed->setSelected(workprefs.leds_on_screen_mask[0] & (1 << LED_CPU));
+  chkShowFPSLed->setSelected(workprefs.leds_on_screen_mask[0] & (1 << LED_FPS));
+  chkShowHDLed->setSelected(workprefs.leds_on_screen_mask[0] & (1 << LED_HD));
+  chkShowCDLed->setSelected(workprefs.leds_on_screen_mask[0] & (1 << LED_CD));
+  chkShowDFxLed->setSelected(workprefs.leds_on_screen_mask[0] & (1 << LED_DF0));
+
+  chkShowGUI->setSelected(workprefs.start_gui);
+  chkBSDSocket->setSelected(workprefs.socket_emu);
+  chkMasterWP->setSelected(workprefs.floppy_read_only);
+
+#ifdef PANDORA
+  TCHAR tmp[20];
+  sldPandoraSpeed->setValue(workprefs.pandora_cpu_speed);
+  snprintf(tmp, 20, "%d MHz", workprefs.pandora_cpu_speed);
+  lblPandoraSpeedInfo->setCaption(tmp);
+#endif
+}
+
+
+static void SetClearLED(int mask, bool state)
+{
+  if(state) {
+    workprefs.leds_on_screen_mask[0] = workprefs.leds_on_screen_mask[0] | mask;
+    workprefs.leds_on_screen_mask[1] = workprefs.leds_on_screen_mask[1] | mask;
+  } else {
+    workprefs.leds_on_screen_mask[0] = workprefs.leds_on_screen_mask[0] & ~mask;
+    workprefs.leds_on_screen_mask[1] = workprefs.leds_on_screen_mask[1] & ~mask;
+  }
+}
+
+
 class MiscActionListener : public gcn::ActionListener
 {
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
-      if (actionEvent.getSource() == chkStatusLine)
-        changed_prefs.leds_on_screen = chkStatusLine->isSelected();
-      
-      else if (actionEvent.getSource() == chkHideIdleLed)
-        changed_prefs.pandora_hide_idle_led = chkHideIdleLed->isSelected();
+      if (actionEvent.getSource() == chkStatusLine) {
+        if(chkStatusLine->isSelected())
+          workprefs.leds_on_screen = workprefs.leds_on_screen | STATUSLINE_CHIPSET;
+        else
+          workprefs.leds_on_screen = workprefs.leds_on_screen & ~STATUSLINE_CHIPSET;
 
+      } else if (actionEvent.getSource() == chkStatusLineRTG) {
+        if(chkStatusLineRTG->isSelected())
+          workprefs.leds_on_screen = workprefs.leds_on_screen | STATUSLINE_RTG;
+        else
+          workprefs.leds_on_screen = workprefs.leds_on_screen & ~STATUSLINE_RTG;
+      
+      } else if (actionEvent.getSource() == chkShowIdleLed)
+        SetClearLED(1 << LED_CPU, chkShowIdleLed->isSelected());
+
+      else if (actionEvent.getSource() == chkShowFPSLed)
+        SetClearLED(1 << LED_FPS, chkShowFPSLed->isSelected());
+
+      else if (actionEvent.getSource() == chkShowHDLed)
+        SetClearLED(1 << LED_HD, chkShowHDLed->isSelected());
+
+      else if (actionEvent.getSource() == chkShowCDLed)
+        SetClearLED(1 << LED_CD, chkShowCDLed->isSelected());
+
+      else if (actionEvent.getSource() == chkShowDFxLed)
+        SetClearLED((1 << LED_DF0) | (1 << LED_DF1) | (1 << LED_DF2) | (1 << LED_DF3), chkShowDFxLed->isSelected());
+  
       else if (actionEvent.getSource() == chkShowGUI)
-        changed_prefs.start_gui = chkShowGUI->isSelected();
+        workprefs.start_gui = chkShowGUI->isSelected();
 
       else if (actionEvent.getSource() == chkBSDSocket)
-        changed_prefs.socket_emu = chkBSDSocket->isSelected();
+        workprefs.socket_emu = chkBSDSocket->isSelected();
         
       else if (actionEvent.getSource() == chkMasterWP) {
-        changed_prefs.floppy_read_only = chkMasterWP->isSelected();
-        RefreshPanelQuickstart();
-        RefreshPanelFloppy();
+        workprefs.floppy_read_only = chkMasterWP->isSelected();
       }
 
 #ifdef PANDORA
@@ -70,9 +129,9 @@ class MiscActionListener : public gcn::ActionListener
       {
         int newspeed = (int) sldPandoraSpeed->getValue();
         newspeed = newspeed - (newspeed % 20);
-        if(changed_prefs.pandora_cpu_speed != newspeed)
+        if(workprefs.pandora_cpu_speed != newspeed)
         {
-          changed_prefs.pandora_cpu_speed = newspeed;
+          workprefs.pandora_cpu_speed = newspeed;
           RefreshPanelMisc();
         }
       }
@@ -86,13 +145,33 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 {
   miscActionListener = new MiscActionListener();
 
-	chkStatusLine = new gcn::UaeCheckBox("Status Line");
+	chkStatusLine = new gcn::UaeCheckBox("Status line native");
 	chkStatusLine->setId("StatusLine");
   chkStatusLine->addActionListener(miscActionListener);
 
-	chkHideIdleLed = new gcn::UaeCheckBox("Hide idle led");
-	chkHideIdleLed->setId("HideIdle");
-  chkHideIdleLed->addActionListener(miscActionListener);
+	chkStatusLineRTG = new gcn::UaeCheckBox("Status line RTG");
+	chkStatusLineRTG->setId("StatusLineRTG");
+  chkStatusLineRTG->addActionListener(miscActionListener);
+
+	chkShowIdleLed = new gcn::UaeCheckBox("Idle led");
+	chkShowIdleLed->setId("ShowIdle");
+  chkShowIdleLed->addActionListener(miscActionListener);
+
+	chkShowFPSLed = new gcn::UaeCheckBox("FPS led");
+	chkShowFPSLed->setId("ShowFPS");
+  chkShowFPSLed->addActionListener(miscActionListener);
+
+	chkShowHDLed = new gcn::UaeCheckBox("HD led");
+	chkShowHDLed->setId("ShowHD");
+  chkShowHDLed->addActionListener(miscActionListener);
+
+	chkShowCDLed = new gcn::UaeCheckBox("CD leds");
+	chkShowCDLed->setId("ShowCD");
+  chkShowCDLed->addActionListener(miscActionListener);
+
+	chkShowDFxLed = new gcn::UaeCheckBox("Disk led");
+	chkShowDFxLed->setId("ShowDisk");
+  chkShowDFxLed->addActionListener(miscActionListener);
 
 	chkShowGUI = new gcn::UaeCheckBox("Show GUI on startup");
 	chkShowGUI->setId("ShowGUI");
@@ -120,32 +199,53 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   chkMasterWP->setId("MasterWP");
   chkMasterWP->addActionListener(miscActionListener);
   
-	int posY = DISTANCE_BORDER;
-  category.panel->add(chkStatusLine, DISTANCE_BORDER, posY);
-  posY += chkStatusLine->getHeight() + DISTANCE_NEXT_Y;
-  category.panel->add(chkHideIdleLed, DISTANCE_BORDER, posY);
-  posY += chkHideIdleLed->getHeight() + DISTANCE_NEXT_Y;
+  int posY = DISTANCE_BORDER;
   category.panel->add(chkShowGUI, DISTANCE_BORDER, posY);
   posY += chkShowGUI->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkBSDSocket, DISTANCE_BORDER, posY);
+  posY += chkBSDSocket->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkMasterWP, DISTANCE_BORDER, posY);
+  posY += chkMasterWP->getHeight() + DISTANCE_NEXT_Y;
+
+	posY = DISTANCE_BORDER;
+  category.panel->add(chkStatusLine, DISTANCE_BORDER + 260, posY);
+  posY += chkStatusLine->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkStatusLineRTG, DISTANCE_BORDER + 260, posY);
+  posY += chkStatusLineRTG->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkShowIdleLed, DISTANCE_BORDER + 260, posY);
+  posY += chkShowIdleLed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkShowFPSLed, DISTANCE_BORDER + 260, posY);
+  posY += chkShowFPSLed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkShowHDLed, DISTANCE_BORDER + 260, posY);
+  posY += chkShowHDLed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkShowCDLed, DISTANCE_BORDER + 260, posY);
+  posY += chkShowCDLed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkShowDFxLed, DISTANCE_BORDER + 260, posY);
+  posY += chkShowDFxLed->getHeight() + DISTANCE_NEXT_Y;
+
 #ifdef PANDORA
   category.panel->add(lblPandoraSpeed, DISTANCE_BORDER, posY);
   category.panel->add(sldPandoraSpeed, DISTANCE_BORDER + lblPandoraSpeed->getWidth() + 8, posY);
   category.panel->add(lblPandoraSpeedInfo, sldPandoraSpeed->getX() + sldPandoraSpeed->getWidth() + 12, posY);
   posY += sldPandoraSpeed->getHeight() + DISTANCE_NEXT_Y;
 #endif
-  category.panel->add(chkBSDSocket, DISTANCE_BORDER, posY);
-  posY += chkBSDSocket->getHeight() + DISTANCE_NEXT_Y;
-  category.panel->add(chkMasterWP, DISTANCE_BORDER, posY);
-  posY += chkMasterWP->getHeight() + DISTANCE_NEXT_Y;
   
   RefreshPanelMisc();
 }
 
 
-void ExitPanelMisc(void)
+void ExitPanelMisc(const struct _ConfigCategory& category)
 {
+  category.panel->clear();
+  
   delete chkStatusLine;
-  delete chkHideIdleLed;
+  delete chkStatusLineRTG;
+  delete chkShowIdleLed;
+  delete chkShowFPSLed;
+  delete chkShowHDLed;
+  delete chkShowCDLed;
+  delete chkShowDFxLed;
+
   delete chkShowGUI;
 #ifdef PANDORA
   delete lblPandoraSpeed;
@@ -156,23 +256,6 @@ void ExitPanelMisc(void)
   delete chkMasterWP;
 
   delete miscActionListener;
-}
-
-
-void RefreshPanelMisc(void)
-{
-  chkStatusLine->setSelected(changed_prefs.leds_on_screen);
-  chkHideIdleLed->setSelected(changed_prefs.pandora_hide_idle_led);
-  chkShowGUI->setSelected(changed_prefs.start_gui);
-
-#ifdef PANDORA
-  sldPandoraSpeed->setValue(changed_prefs.pandora_cpu_speed);
-  snprintf(tmp, 20, "%d MHz", changed_prefs.pandora_cpu_speed);
-  lblPandoraSpeedInfo->setCaption(tmp);
-#endif
-  
-  chkBSDSocket->setSelected(changed_prefs.socket_emu);
-  chkMasterWP->setSelected(changed_prefs.floppy_read_only);
 }
 
 

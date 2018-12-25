@@ -12,11 +12,6 @@
 
 #include "uae/types.h"
 
-#define BSD_TRACING_ENABLED 0
-
-#define ISBSDTRACE (BSD_TRACING_ENABLED) 
-#define BSDTRACE(x) do { if (ISBSDTRACE) { write_log x; } } while(0)
-
 extern int init_socket_layer (void);
 extern void deinit_socket_layer (void);
 
@@ -147,7 +142,6 @@ extern void sockabort (SB);
 
 extern void addtosigqueue (SB, int);
 extern void removefromsigqueue (SB);
-extern void sigsockettasks (void);
 extern void locksigqueue (void);
 extern void unlocksigqueue (void);
 
@@ -181,25 +175,12 @@ extern uae_u32 host_IoctlSocket (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern int host_CloseSocket (TrapContext *, SB, int);
 extern void host_connect (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern void host_WaitSelect (TrapContext *, SB, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32);
-extern uae_u32 host_SetSocketSignals (void);
-extern uae_u32 host_getdtablesize (void);
-extern uae_u32 host_ObtainSocket (void);
-extern uae_u32 host_ReleaseSocket (void);
-extern uae_u32 host_ReleaseCopyOfSocket (void);
 extern uae_u32 host_Inet_NtoA(TrapContext *ctx, SB, uae_u32);
 extern uae_u32 host_inet_addr(TrapContext *ctx, uae_u32);
-extern uae_u32 host_Inet_LnaOf (void);
-extern uae_u32 host_Inet_NetOf (void);
-extern uae_u32 host_Inet_MakeAddr (void);
-extern uae_u32 host_inet_network (void);
 extern void host_gethostbynameaddr (TrapContext *, SB, uae_u32, uae_u32, long);
-extern uae_u32 host_getnetbyname (void);
-extern uae_u32 host_getnetbyaddr (void);
 extern void host_getservbynameport (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern void host_getprotobyname (TrapContext *, SB, uae_u32);
 extern void host_getprotobynumber (TrapContext *, SB, uae_u32);
-extern uae_u32 host_vsyslog (void);
-extern uae_u32 host_Dup2Socket (void);
 extern uae_u32 host_gethostname(TrapContext *ctx, uae_u32, uae_u32);
 extern uae_u32 callfdcallback(TrapContext *context, SB, uae_u32 fd, uae_u32 action);
 

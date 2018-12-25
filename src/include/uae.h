@@ -11,12 +11,9 @@
 
 #include "uae/types.h"
 
-extern void do_start_program (void);
-extern void start_program (void);
-extern void leave_program (void);
 extern void real_main (int, TCHAR **);
 extern void sleep_millis (int ms);
-extern int sleep_millis_main(int ms);
+extern void sleep_millis_main(int ms);
 
 #define UAE_QUIT 1
 #define UAE_RESET 2
@@ -31,11 +28,13 @@ extern void target_addtorecent (const TCHAR*, int);
 extern void target_run (void);
 extern void target_quit (void);
 extern void target_restart (void);
+extern void target_getdate(int *y, int *m, int *d);
 extern void target_startup_msg(const TCHAR *title, const TCHAR *msg);
 extern void stripslashes (TCHAR *p);
 extern void fixtrailing (TCHAR *p);
 extern void getpathpart (TCHAR *outpath, int size, const TCHAR *inpath);
 extern void getfilepart (TCHAR *out, int size, const TCHAR *path);
+extern bool target_isrelativemode(void);
 extern uae_u32 getlocaltime (void);
 
 extern int quit_program;
@@ -59,6 +58,6 @@ struct bstring {
 extern void fetch_saveimagepath (TCHAR*, int, int);
 extern void fetch_datapath (TCHAR *out, int size);
 extern void fetch_rompath (TCHAR *out, int size);
-#define uaerand() rand()
+#define uaerand() ((uae_u32)rand())
 
 #endif /* UAE_UAE_H */

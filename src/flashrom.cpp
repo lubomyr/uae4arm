@@ -19,9 +19,6 @@
 #include "gui.h"
 #include "uae.h"
 
-#define FLASH_LOG 0
-#define EEPROM_LOG 0
-
 /* I2C EEPROM */
 
 #define NVRAM_PAGE_SIZE 16
@@ -86,9 +83,6 @@ static void nvram_write (struct bitbang_i2c_interface *i2c, int offset, int len)
 
 static void bitbang_i2c_enter_stop(bitbang_i2c_interface *i2c)
 {
-#if EEPROM_LOG
-  write_log(_T("I2C STOP\n"));
-#endif
 	if (i2c->write_offset >= 0)
 		nvram_write(i2c, i2c->write_offset, 16);
 	i2c->write_offset = -1;
@@ -101,7 +95,6 @@ static void bitbang_i2c_enter_stop(bitbang_i2c_interface *i2c)
 static int bitbang_i2c_ret(bitbang_i2c_interface *i2c, int level)
 {
   i2c->device_out = level;
-  //DPRINTF("%d %d %d\n", i2c->last_clock, i2c->last_data, i2c->device_out);
   return level & i2c->last_data;
 }
 
@@ -128,9 +121,6 @@ int eeprom_i2c_set(void *fdv, int line, int level)
       return bitbang_i2c_nop(i2c);
     }
     if (level == 0) {
-#if EEPROM_LOG
-      write_log(_T("I2C START\n"));
-#endif
 			/* START condition.  */
       i2c->state = SENDING_BIT7;
       i2c->current_addr = -1;
@@ -176,9 +166,6 @@ int eeprom_i2c_set(void *fdv, int line, int level)
     case WAITING_FOR_ACK:
   		if (i2c->estate == I2C_DEVICEADDR) {
         i2c->current_addr = i2c->buffer;
-#if EEPROM_LOG
-  			write_log(_T("I2C device address 0x%02x\n"), i2c->current_addr);
-#endif
 		    if ((i2c->current_addr & i2c->device_address_mask) != i2c->device_address) {
 			    write_log (_T("I2C WARNING: device address != %02x\n"), i2c->device_address);
 			    i2c->state = STOPPED;
@@ -194,13 +181,7 @@ int eeprom_i2c_set(void *fdv, int line, int level)
 		    i2c->estate = I2C_DATA;
 		    i2c->eeprom_addr &= i2c->addressbitmask << 8;
 		    i2c->eeprom_addr |= i2c->buffer;
-#if EEPROM_LOG
-  			write_log(_T("I2C device address 0x%02x (Address %04x)\n"), i2c->buffer, i2c->eeprom_addr);
-#endif
   		} else if (!(i2c->current_addr & 1)) {
-#if EEPROM_LOG
-        write_log(_T("I2C sent %04x 0x%02x\n"), i2c->eeprom_addr, i2c->buffer);
-#endif
   			if (i2c->write_offset < 0)
   				i2c->write_offset = i2c->eeprom_addr;
 		    if (i2c->write_func) {
@@ -226,9 +207,6 @@ int eeprom_i2c_set(void *fdv, int line, int level)
         i2c->buffer = i2c->memory[i2c->eeprom_addr];
   		}
   		//i2c->buffer = i2c_recv(i2c->bus);
-#if EEPROM_LOG
-      write_log(_T("I2C RX byte %04X 0x%02x\n"), i2c->eeprom_addr, i2c->buffer);
-#endif
 	    i2c->eeprom_addr++;
 	    i2c->eeprom_addr &= i2c->size - 1;
 	    gui_flicker_led (LED_MD, 0, 1);
@@ -249,21 +227,13 @@ int eeprom_i2c_set(void *fdv, int line, int level)
     case SENDING_ACK:
       i2c->state = RECEIVING_BIT7;
       if (data != 0) {
-#if EEPROM_LOG > 1
-  			write_log(_T("I2C NACKED\n"));
-#endif
   			i2c->state = SENT_NACK;
         //i2c_nack(i2c->bus);
-      } else {
-  			;
-#if EEPROM_LOG > 1
-        write_log(_T("I2C ACKED\n"));
-#endif
   		}
       return bitbang_i2c_ret(i2c, 1);
   }
-    target_startup_msg(_T("Internal error"), _T("eeprom_i2c_set: Unhandled case."));
-    uae_restart(1, NULL);
+  target_startup_msg(_T("Internal error"), _T("eeprom_i2c_set: Unhandled case."));
+  uae_restart(1, NULL);
   return 0;
 }
 

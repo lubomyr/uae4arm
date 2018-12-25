@@ -19,6 +19,7 @@
 #include "config.h"
 #include "gui.h"
 #include "gui_handling.h"
+#include "GenericListModel.h"
 
 #ifdef ANDROIDSDL
 #include "androidsdl_event.h"
@@ -35,29 +36,7 @@ static gcn::ListBox* lstHelp;
 static gcn::ScrollArea* scrAreaHelp;
 
 
-class HelpListModel : public gcn::ListModel
-{
-  std::vector<std::string> lines;
-
-  public:
-    HelpListModel(std::vector<std::string> helptext)
-    {
-      lines = helptext;
-    }
-      
-    int getNumberOfElements()
-    {
-      return lines.size();
-    }
-      
-    std::string getElementAt(int i)
-    {
-      if(i >= 0 && i < lines.size())
-        return lines[i];
-      return "";
-    }
-};
-static HelpListModel *helpList;
+static gcn::GenericListModel *helpList;
 
 
 class ShowHelpActionListener : public gcn::ActionListener
@@ -81,7 +60,7 @@ static void InitShowHelp(const std::vector<std::string>& helptext)
 
   showHelpActionListener = new ShowHelpActionListener();
 
-  helpList = new HelpListModel(helptext);
+  helpList = new gcn::GenericListModel(helptext);
 
   lstHelp = new gcn::ListBox(helpList);
   lstHelp->setSize(DIALOG_WIDTH - 2 * DISTANCE_BORDER - 4, DIALOG_HEIGHT - 3 * DISTANCE_BORDER - BUTTON_HEIGHT - DISTANCE_NEXT_Y - 10);

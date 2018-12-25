@@ -237,10 +237,6 @@ extern void to_upper (TCHAR *s, int len);
 #undef DONT_HAVE_STDIO
 #undef DONT_HAVE_MALLOC
 
-#if defined(WARPUP)
-#define DONT_HAVE_POSIX
-#endif
-
 #if !defined(FSUAE) && defined _WIN32_
 
 //#ifdef FSUAE
@@ -422,7 +418,6 @@ extern void mallocemu_free (void *ptr);
 #ifndef WITH_LOGGING
 #undef write_log
 #define write_log(FORMATO, RESTO...)
-#define write_log_standard(FORMATO, RESTO...)
 #else
 extern void write_log (const TCHAR *,...);
 #endif

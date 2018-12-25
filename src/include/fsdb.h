@@ -59,15 +59,6 @@
 #define A_FIBF_EXECUTE (1<<1)
 #define A_FIBF_DELETE  (1<<0)
 
-struct virtualfilesysobject
-{
-	int dir;
-	TCHAR *comment;
-	uae_u32 amigaos_mode;
-	uae_u8 *data;
-	int size;
-};
-
 /* AmigaOS "keys" */
 typedef struct a_inode_struct {
   /* Circular list of recycleable a_inodes.  */
@@ -110,13 +101,11 @@ typedef struct a_inode_struct {
   /* not equaling unit.mountcount -> not in this volume */
   unsigned int mountcount;
 	uae_u64 uniq_external;
-	struct virtualfilesysobject *vfso;
 } a_inode;
 
 extern TCHAR *nname_begin (TCHAR *);
 
 extern TCHAR *build_nname (const TCHAR *d, const TCHAR *n);
-extern TCHAR *build_aname (const TCHAR *d, const TCHAR *n);
 
 /* Filesystem-independent functions.  */
 extern void fsdb_clean_dir (a_inode *);
@@ -173,7 +162,6 @@ extern const TCHAR *my_getfilepart(const TCHAR *filename);
 extern bool my_issamepath(const TCHAR *path1, const TCHAR *path2);
 
 #define MYVOLUMEINFO_READONLY 1
-#define MYVOLUMEINFO_STREAMS 2
 #define MYVOLUMEINFO_ARCHIVE 4
 #define MYVOLUMEINFO_REUSABLE 8
 
