@@ -185,7 +185,11 @@ static void InitSelectFolder(const char *title)
 #endif
   scrAreaFolders->setPosition(DISTANCE_BORDER, 10 + TEXTFIELD_HEIGHT + 10);
   scrAreaFolders->setSize(DIALOG_WIDTH - 2 * DISTANCE_BORDER - 4, 272);
+#ifdef ANDROID
+  scrAreaFolders->setScrollbarWidth(30);
+#else
   scrAreaFolders->setScrollbarWidth(20);
+#endif
   scrAreaFolders->setBaseColor(gui_baseCol + 0x202020);
   
   wndSelectFolder->add(cmdOK);

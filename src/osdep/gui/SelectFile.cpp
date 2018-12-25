@@ -250,7 +250,11 @@ static void InitSelectFile(const char *title)
 #endif
   scrAreaFiles->setPosition(DISTANCE_BORDER, 10 + TEXTFIELD_HEIGHT + 10);
   scrAreaFiles->setSize(DIALOG_WIDTH - 2 * DISTANCE_BORDER - 4, 272);
+#ifdef ANDROID
+  scrAreaFiles->setScrollbarWidth(30);
+#else
   scrAreaFiles->setScrollbarWidth(20);
+#endif
   scrAreaFiles->setBaseColor(gui_baseCol + 0x202020);
 
   if(createNew)

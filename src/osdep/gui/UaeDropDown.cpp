@@ -60,8 +60,11 @@ namespace gcn
     mPreferUp = false;
     mFoldedUpY = -1;
     adjustHeight();
-
+#ifdef ANDROID
+    mScrollArea->setScrollbarWidth(30);
+#else
     mScrollArea->setScrollbarWidth(20);
+#endif
   }
 
   UaeDropDown::~UaeDropDown()
