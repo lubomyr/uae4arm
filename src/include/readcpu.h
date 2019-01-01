@@ -40,9 +40,9 @@ ENUMDECL {
 } ENUMNAME (instrmnem);
 
 struct mnemolookup {
-    instrmnem mnemo;
-    const TCHAR *name;
-    const TCHAR *friendlyname;
+  instrmnem mnemo;
+  const TCHAR *name;
+  const TCHAR *friendlyname;
 };
 
 extern struct mnemolookup lookuptab[];
@@ -77,20 +77,20 @@ ENUMDECL {
 } ENUMNAME (bitvals);
 
 struct instr_def {
-    unsigned int bits;
-    int n_variable;
-    uae_u8 bitpos[16];
-    unsigned int mask;
-    int cpulevel;
+  unsigned int bits;
+  int n_variable;
+  uae_u8 bitpos[16];
+  unsigned int mask;
+  int cpulevel;
 	int unimpcpulevel;
-    int plevel;
-    struct {
-	unsigned int flaguse:3;
-	unsigned int flagset:3;
-    } flaginfo[5];
-    unsigned char cflow;
-    uae_u8 sduse;
-    const TCHAR *opcstr;
+  int plevel;
+  struct {
+	  unsigned int flaguse:3;
+	  unsigned int flagset:3;
+  } flaginfo[5];
+  unsigned char cflow;
+  uae_u8 sduse;
+  const TCHAR *opcstr;
 	// 68020/030 timing
 	int head, tail, clocks, fetchmode;
 };

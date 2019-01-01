@@ -5007,7 +5007,7 @@ void inputdevice_acquire (int allmode)
 	idev[IDTYPE_JOYSTICK].acquire (-1, 0);
 	idev[IDTYPE_MOUSE].acquire (-1, 0);
 	idev[IDTYPE_KEYBOARD].acquire (-1, 0);
-	//    if (!input_acquired)
+	//if (!input_acquired)
 	//	write_log (_T("input devices acquired (%s)\n"), allmode ? "all" : "selected only");
 	input_acquired = 1;
 }

@@ -430,15 +430,9 @@ void wait_for_vsync(void)
 
 void reset_sync(void)
 {
-  // Wait for sync without bogus frame
-  int loop = 0;
-  while(loop < 4) { // sync makes no sense if 4 bogus frames in a row...
-    wait_for_vsync();
-//    if(!sync_was_bogus)
-//      break;
-    ++loop;
-  }
+  wait_for_vsync();
 }
+
 
 bool render_screen (bool immediate)
 {

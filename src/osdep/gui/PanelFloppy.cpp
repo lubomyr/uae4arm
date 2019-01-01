@@ -132,6 +132,14 @@ static void RefreshPanelFloppy(void)
 }
 
 
+static void RefreshDiskListModel(void)
+{
+  diskfileList.clear();
+  for(int i = 0; i < lstMRUDiskList.size(); ++i)
+    diskfileList.add(lstMRUDiskList[i]);
+}
+
+
 class DFxActionListener : public gcn::ActionListener
 {
   public:
@@ -175,6 +183,7 @@ class DFxActionListener : public gcn::ActionListener
           diskname[31] = '\0';
           disk_creatediskfile(&workprefs, tmp, 0, DRV_35_DD, -1, diskname, false, false, NULL);
     	    AddFileToDiskList(tmp, 1);
+          RefreshDiskListModel();
     	    extractPath(tmp, currentDir);
         }
         cmdCreateDDDisk->requestFocus();
@@ -191,6 +200,7 @@ class DFxActionListener : public gcn::ActionListener
           diskname[31] = '\0';
           disk_creatediskfile(&workprefs, tmp, 0, DRV_35_HD, -1, diskname, false, false, NULL);
     	    AddFileToDiskList(tmp, 1);
+          RefreshDiskListModel();
     	    extractPath(tmp, currentDir);
         }
         cmdCreateHDDisk->requestFocus();
@@ -253,6 +263,7 @@ class DFxActionListener : public gcn::ActionListener
           	    strncpy(workprefs.floppyslots[i].df, tmp, sizeof(workprefs.floppyslots[i].df) - 1);
           	    disk_insert(i, tmp);
           	    AddFileToDiskList(tmp, 1);
+                RefreshDiskListModel();
           	    extractPath(tmp, currentDir);
   
           	    if(i == 0 && chkLoadConfig->isSelected()) {
@@ -283,6 +294,7 @@ class DFxActionListener : public gcn::ActionListener
             	    disk_insert(i, workprefs.floppyslots[i].df);
             	    lstMRUDiskList.erase(lstMRUDiskList.begin() + idx);
             	    lstMRUDiskList.insert(lstMRUDiskList.begin(), workprefs.floppyslots[i].df);
+                  RefreshDiskListModel();
                   bIgnoreListChange = true;
                   cboDFxFile[i]->setSelected(0);
                   bIgnoreListChange = false;
@@ -320,9 +332,7 @@ void InitPanelFloppy(const struct _ConfigCategory& category)
   driveTypeList.add(_T("5.25'' SD"));
   driveTypeList.add(_T("3.5'' ESCOM"));
   
-  diskfileList.clear();
-  for(i = 0; i < lstMRUDiskList.size(); ++i)
-    diskfileList.add(lstMRUDiskList[i]);
+  RefreshDiskListModel();
 
 	dfxActionListener = new DFxActionListener();
 	

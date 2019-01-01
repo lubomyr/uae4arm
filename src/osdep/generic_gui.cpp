@@ -543,7 +543,7 @@ void gui_display (int shortcut)
 	inputdevice_acquire (TRUE);
 	setmouseactive(1);
 	
-//	reset_sync();
+	reset_sync();
   fpscounter_reset();
 }
 

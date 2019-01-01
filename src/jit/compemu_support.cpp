@@ -562,10 +562,10 @@ STATIC_INLINE void alloc_blockinfos(void)
   int i;
   blockinfo* bi;
 
-  for (i=0;i<MAX_HOLD_BI;i++) {
+  for (i = 0; i < MAX_HOLD_BI; i++) {
   	if (hold_bi[i])
 	    return;
-  	bi=hold_bi[i]=alloc_blockinfo();
+  	bi = hold_bi[i] = alloc_blockinfo();
   	prepare_block(bi);
   }
 }
@@ -871,13 +871,13 @@ static  int alloc_reg_hinted(int r, int willclobber, int hint)
 	    badness = 0;
   	if (i == hint)
 	    badness -= 200000000;
-  	if (!live.nat[i].locked && badness<when) {
-    		bestreg = i;
-    		when = badness;
-    		if (live.nat[i].nholds == 0 && hint < 0)
-  		    break;
-    		if (i == hint)
-  		    break;
+  	if (!live.nat[i].locked && badness < when) {
+  		bestreg = i;
+  		when = badness;
+  		if (live.nat[i].nholds == 0 && hint < 0)
+		    break;
+  		if (i == hint)
+		    break;
 	  }
   }
 
@@ -1007,7 +1007,7 @@ STATIC_INLINE void make_exclusive(int r, int size)
   if (size < live.state[r].validsize) {
   	if (live.state[r].val) {
       /* Might as well compensate for the offset now */
-      compemu_raw_lea_l_brr(nr,rr,oldstate.val);
+      compemu_raw_lea_l_brr(nr, rr, oldstate.val);
       live.state[r].val = 0;
       set_status(r, DIRTY);
   	}
@@ -1239,7 +1239,7 @@ STATIC_INLINE int f_writereg(int r)
 		answer = live.fate[r].realreg;
 	}
 	if (answer < 0) {
-		answer = f_alloc_reg(r,1);
+		answer = f_alloc_reg(r, 1);
 	}
 	live.fate[r].status = DIRTY;
 	return answer;
@@ -1253,7 +1253,7 @@ STATIC_INLINE int f_rmw(int r)
 		n = live.fate[r].realreg;
 	}
 	else
-		n = f_alloc_reg(r,0);
+		n = f_alloc_reg(r, 0);
 	live.fate[r].status = DIRTY;
 	return n;
 }
@@ -1418,7 +1418,7 @@ void init_comp(void)
 			live.fate[i].mem = (uae_u32*)(&scratch.fregs[i]);
 	}
 
-  for (i=0; i<N_REGS; i++) {
+  for (i = 0;  i < N_REGS; i++) {
 	  live.nat[i].touched = 0;
 	  live.nat[i].nholds = 0;
 	  live.nat[i].locked = 0;
@@ -1457,7 +1457,7 @@ void flush(int save_regs)
 			}
 		}
 #endif
-  	for (i=0; i<=FLAGTMP; i++) {
+  	for (i = 0; i <= FLAGTMP; i++) {
   		switch(live.state[i].status) {
   		  case INMEM:
   	      if (live.state[i].val) {
@@ -1480,9 +1480,9 @@ void flush(int save_regs)
 #ifdef USE_JIT_FPU
 		for (i = 0; i <= FP_RESULT; i++) {
 			if (live.fate[i].status == DIRTY) {
-				f_evict(i);
-			}
-		}
+			  f_evict(i);
+		  }
+    }
 #endif
   }
 }
@@ -1490,7 +1490,7 @@ void flush(int save_regs)
 void freescratch(void)
 {
   int i;
-  for (i=0; i<N_REGS; i++)
+  for (i = 0; i < N_REGS; i++)
 #if defined(CPU_arm)
   	if (live.nat[i].locked && i != 2 && i != 3 && i != 10 && i != 11 && i != 12) {
 #else
@@ -1732,7 +1732,7 @@ void get_n_addr(int address, int dest)
   if (special_mem)
   	get_n_addr_old(address, dest);
   else
-  	get_n_addr_real(address,dest);
+  	get_n_addr_real(address, dest);
 }
 
 void get_n_addr_jmp(int address, int dest)
@@ -1742,7 +1742,7 @@ void get_n_addr_jmp(int address, int dest)
   if (special_mem)
   	get_n_addr_old(address, dest);
   else
-  	get_n_addr_real(address,dest);
+  	get_n_addr_real(address, dest);
 }
 
 /* base is a register, but dp is an actual value. 
@@ -1854,12 +1854,12 @@ static void calc_checksum(blockinfo* bi, uae_u32* c1, uae_u32* c2)
 #endif
     uae_u32* pos;
 
-    len += (tmp&3);
+    len += (tmp & 3);
 		tmp &= ~((uintptr)3);
     pos = (uae_u32*)tmp;
 
 		if (len >= 0 && len <= MAX_CHECKSUM_LEN) {
-    	while (len>0) {
+    	while (len > 0) {
 	      k1 += *pos;
 	      k2 ^= *pos;
 	      pos++;
@@ -1884,7 +1884,7 @@ int check_for_cache_miss(void)
   	int cl = cacheline(regs.pc_p);
   	if (bi != cache_tags[cl+1].bi) {
 	    raise_in_cl_list(bi);
-     return 1;
+      return 1;
 	  }
   }
   return 0;
@@ -2245,14 +2245,14 @@ void flush_icache(int n)
 	    if (bi == cache_tags[cl+1].bi)
     		cache_tags[cl].handler = (cpuop_func *)popall_execute_normal;
 	    bi->handler_to_use = (cpuop_func *)popall_execute_normal;
-	    set_dhtu(bi,bi->direct_pen);
+	    set_dhtu(bi, bi->direct_pen);
 	    bi->status = BI_INVALID;
 		}
 		else {
 	    if (bi == cache_tags[cl+1].bi)
 		    cache_tags[cl].handler = (cpuop_func *)popall_check_checksum;
 	    bi->handler_to_use = (cpuop_func *)popall_check_checksum;
-	    set_dhtu(bi,bi->direct_pcc);
+	    set_dhtu(bi, bi->direct_pcc);
 		  bi->status = BI_NEED_CHECK;
 	  }
 	  bi2 = bi;
@@ -2288,7 +2288,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	  int i;
 	  int r;
 	  int was_comp = 0;
-	  uae_u8 liveflags[MAXRUN+1];
+	  uae_u8 liveflags[MAXRUN + 1];
 #if USE_CHECKSUM_INFO
 	  bool trace_in_rom = isinrom((uintptr)pc_hist[0].location) != 0;
 	  uintptr max_pcp = (uintptr)pc_hist[blocklen - 1].location;
@@ -2344,13 +2344,13 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   		min_pcp = (uintptr)currpcp;
 #else
       if ((uintptr)currpcp < min_pcp)
-  		  min_pcp=(uintptr)currpcp;
+  		  min_pcp = (uintptr)currpcp;
   	  if ((uintptr)currpcp > max_pcp)
-  		  max_pcp=(uintptr)currpcp;
+  		  max_pcp = (uintptr)currpcp;
 #endif
 
 		  liveflags[i] = ((liveflags[i + 1] & (~prop[op].set_flags)) | prop[op].use_flags);
-		  if (prop[op].is_addx && (liveflags[i+1] & FLAG_Z) == 0)
+		  if (prop[op].is_addx && (liveflags[i + 1] & FLAG_Z) == 0)
 		    liveflags[i] &= ~FLAG_Z;
 	  }
 
@@ -2397,11 +2397,11 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   		  cpuop_func **cputbl;
   		  compop_func **comptbl;
   		  uae_u32 opcode = DO_GET_OPCODE(pc_hist[i].location);
-  		  needed_flags = (liveflags[i+1] & prop[opcode].set_flags);
+  		  needed_flags = (liveflags[i + 1] & prop[opcode].set_flags);
   		  special_mem = pc_hist[i].specmem;
     		if (!needed_flags) {
-		      cputbl=cpufunctbl;
-		      comptbl=nfcompfunctbl;
+		      cputbl = cpufunctbl;
+		      comptbl = nfcompfunctbl;
 		    }
 		    else {
 		      cputbl = cpufunctbl;
@@ -2416,10 +2416,10 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   			    init_comp();
   		    }
   		    was_comp = 1;
-  
+  		    
   		    comptbl[opcode](opcode);
   		    freescratch();
-  		    if (!(liveflags[i+1] & FLAG_CZNV)) {
+  		    if (!(liveflags[i + 1] & FLAG_CZNV)) {
   			    /* We can forget about flags */
   			    dont_care_flags();
   		    }
@@ -2598,7 +2598,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   	compemu_raw_maybe_cachemiss((uintptr)cache_miss);
   	comp_pc_p = (uae_u8*)pc_hist[0].location;
 
-  	bi->status=BI_FINALIZING;
+  	bi->status = BI_FINALIZING;
   	init_comp();
   	match_states(bi);
   	flush(1);

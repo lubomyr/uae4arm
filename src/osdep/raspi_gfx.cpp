@@ -236,7 +236,7 @@ static void *display_thread (void *unused)
 				vc_dispmanx_rect_set(&src_rect, 0, 0, width << 16, height << 16);
 			
 				// 16/9 to 4/3 ratio adaptation.
-				if (currprefs.gfx_correct_aspect == 0) {
+				if (currprefs.gfx_correct_aspect == 0 || screen_is_picasso) {
 				  // Fullscreen.
 					int scaled_width = dispmanxdinfo.width * currprefs.gfx_fullscreen_ratio / 100;
 					int scaled_height = dispmanxdinfo.height * currprefs.gfx_fullscreen_ratio / 100;
