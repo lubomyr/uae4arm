@@ -3,7 +3,6 @@ libapplication*.so
 src/config.h
 src/sysconfig.h
 src/target.h
-src/osdep
 src/threaddep
 src/machdep
 src/sounddep
