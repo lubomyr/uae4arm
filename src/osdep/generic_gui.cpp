@@ -66,6 +66,8 @@ struct gui_msg gui_msglist[] = {
   { NUMSG_ROMNEED,        "One of the following system ROMs is required:\n\n%s\n\nCheck the System ROM path in the Paths panel and click Rescan ROMs." },
   { NUMSG_EXPROMNEED,     "One of the following expansion boot ROMs is required:\n\n%s\n\nCheck the System ROM path in the Paths panel and click Rescan ROMs." },
   { NUMSG_NOMEMORY,       "Out of memory or too much Z3 autoconfig space configured." },
+  { NUMSG_NOCAPS,         "capsimg.so not found. CAPS/IPF support not available." },
+  { NUMSG_OLDCAPS,        "Old version of capsimg.so found." },
 
   { -1, "" }
 };

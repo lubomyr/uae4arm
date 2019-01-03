@@ -90,6 +90,7 @@ OBJS =	\
 	src/devices.o \
 	src/disk.o \
 	src/diskutil.o \
+	src/dlopen.o \
 	src/drawing.o \
 	src/events.o \
 	src/expansion.o \
@@ -167,6 +168,7 @@ OBJS =	\
 	src/archivers/zip/unzip.o \
 	src/machdep/support.o \
 	src/osdep/bsdsocket_host.o \
+	src/osdep/caps/generic_caps.o \
 	src/osdep/cda_play.o \
 	src/osdep/charset.o \
 	src/osdep/fsdb_host.o \

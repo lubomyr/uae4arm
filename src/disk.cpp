@@ -28,6 +28,9 @@
 #ifdef FDI2RAW
 #include "fdi2raw.h"
 #endif
+#ifdef CAPS
+#include "caps/generic_caps.h"
+#endif
 #include "crc32.h"
 #include "fsdb.h"
 #include "rommgr.h"
@@ -125,7 +128,7 @@ typedef struct {
 #define DRIVE_ID_35HD  0xAAAAAAAA
 #define DRIVE_ID_525SD 0x55555555 /* 40 track 5.25 drive , kickstart does not recognize this */
 
-typedef enum { ADF_NONE = -1, ADF_NORMAL, ADF_EXT1, ADF_EXT2, ADF_FDI, ADF_PCDOS, ADF_KICK, ADF_SKICK } drive_filetype;
+typedef enum { ADF_NONE = -1, ADF_NORMAL, ADF_EXT1, ADF_EXT2, ADF_FDI, ADF_IPF, ADF_PCDOS, ADF_KICK, ADF_SKICK } drive_filetype;
 typedef struct {
   struct zfile *diskfile;
   struct zfile *writediskfile;
@@ -175,6 +178,9 @@ typedef struct {
 #endif
   int useturbo;
   int floppybitcounter; /* number of bits left */
+	int lastdataacesstrack;
+	int lastrev;
+	bool track_access_done;
 } drive;
 
 #define MIN_STEPLIMIT_CYCLE (CYCLE_UNIT * 140)
@@ -574,6 +580,11 @@ static void drive_image_free (drive *drv)
 {
 	switch (drv->filetype)
 	{
+	case ADF_IPF:
+#ifdef CAPS
+		caps_unloadimage (drv - floppy);
+#endif
+		break;
   	case ADF_FDI:
 #ifdef FDI2RAW
 		  fdi2raw_header_free (drv->fdi);
@@ -614,6 +625,7 @@ static void reset_drive(int num)
   drv->idbit = 0;
   drv->drive_id = 0;
   drv->drive_id_scnt = 0;
+	drv->lastdataacesstrack = -1;
   disabled &= ~(1 << num);
 	if (currprefs.floppyslots[num].dfxtype < 0 || ispcbridgedrive(num))
     disabled |= 1 << num;
@@ -951,6 +963,10 @@ static bool diskfile_iswriteprotect (struct uae_prefs *p, const TCHAR *fname_in,
   zfile_fclose (zf2);
   zfile_fread (buffer, sizeof (char), 25, zf1);
   zfile_fclose (zf1);
+	if (strncmp ((uae_char*) buffer, "CAPS", 4) == 0) {
+		*needwritefile = 1;
+		return wrprot2;
+	}
   if (strncmp ((uae_char *) buffer, "Formatted Disk Image file", 25) == 0) {
 	  *needwritefile = 1;
 	  return wrprot2;
@@ -986,7 +1002,7 @@ static int drive_insert (drive * drv, struct uae_prefs *p, int dnum, const TCHAR
 {
   uae_u8 buffer[2 + 2 + 4 + 4];
   trackid *tid;
-  int size;
+	int num_tracks, size;
 	int canauto;
 	TCHAR outname[MAX_DPATH];
 
@@ -1052,6 +1068,19 @@ static int drive_insert (drive * drv, struct uae_prefs *p, int dnum, const TCHAR
 
 	if (0) {
 
+
+#ifdef CAPS
+	} else if (strncmp ((char*)buffer, "CAPS", 4) == 0) {
+
+		drv->wrprot = true;
+		if (!caps_loadimage (drv->diskfile, drv - floppy, &num_tracks)) {
+			zfile_fclose (drv->diskfile);
+			drv->diskfile = 0;
+			return 0;
+		}
+		drv->num_tracks = num_tracks;
+		drv->filetype = ADF_IPF;
+#endif
 #ifdef FDI2RAW
 	} else if ((drv->fdi = fdi2raw_header (drv->diskfile))) {
 
@@ -1718,6 +1747,7 @@ static void drive_fill_bigbuf (drive * drv, int force)
 {
   int tr = drv->cyl * 2 + side;
   trackid *ti = drv->trackdata + tr;
+	bool retrytrack;
 	int rev = -1;
 
 	if ((!drv->diskfile) || tr >= drv->num_tracks) {
@@ -1732,6 +1762,9 @@ static void drive_fill_bigbuf (drive * drv, int force)
   drv->tracktiming[0] = 0;
   drv->skipoffset = -1;
   drv->revolutions = 1;
+	retrytrack = drv->lastdataacesstrack == drv->cyl * 2 + side;
+	if (!dskdmaen && !retrytrack)
+		drv->track_access_done = false;
 
   if (drv->writediskfile && drv->writetrackdata[tr].bitlen > 0) {
 	  int i;
@@ -1744,6 +1777,11 @@ static void drive_fill_bigbuf (drive * drv, int force)
 	    uae_u8 *data = (uae_u8 *) mfm;
 	    *mfm = 256 * *data + *(data + 1);
 	  }
+	} else if (drv->filetype == ADF_IPF) {
+
+#ifdef CAPS
+		caps_loadtrack (drv->bigmfmbuf, drv->tracktiming, drv - floppy, tr, &drv->tracklen, &drv->multi_revolution, &drv->skipoffset, &drv->lastrev, retrytrack);
+#endif
 
 	} else if (drv->filetype == ADF_FDI) {
 
@@ -2200,6 +2238,8 @@ static void drive_write_data (drive * drv)
 			  drv->tracklen);
     }
     return;
+	case ADF_IPF:
+		break;
   case ADF_PCDOS:
 		ret = drive_write_pcdos (drv, drv->diskfile, 0);
 		if (ret < 0)
@@ -2760,6 +2800,11 @@ static void fetchnextrevolution (drive *drv)
   	return;
 	switch (drv->filetype)
 	{
+	  case ADF_IPF:
+#ifdef CAPS
+		  caps_loadrevolution (drv->bigmfmbuf, drv->tracktiming, drv - floppy, drv->cyl * 2 + side, &drv->tracklen, &drv->lastrev, drv->track_access_done);
+#endif
+		  break;
 	  case ADF_FDI:
 #ifdef FDI2RAW
 		  fdi2raw_loadrevolution(drv->fdi, drv->bigmfmbuf, drv->tracktiming, drv->cyl * 2 + side, &drv->tracklen, 1);
@@ -3133,6 +3178,15 @@ uae_u16 DSKBYTR (int hpos)
     v |= 0x4000;
   if (dsklen & 0x4000)
     v |= 0x2000;
+	for (int dr = 0; dr < MAX_FLOPPY_DRIVES; dr++) {
+		drive *drv = &floppy[dr];
+		if (drv->motoroff)
+			continue;
+		if (!((selected | disabled) & (1 << dr))) {
+			drv->lastdataacesstrack = drv->cyl * 2 + side;
+			drv->track_access_done = true;
+		}
+	}
   return v;
 }
 
@@ -3343,6 +3397,18 @@ void DSKLEN (uae_u16 v, int hpos)
 		dskdmaen = DSKDMA_WRITE;
     DISK_start ();
   }
+
+	for (dr = 0; dr < MAX_FLOPPY_DRIVES; dr++) {
+		drive *drv = &floppy[dr];
+		if (drv->motoroff)
+			continue;
+		if (selected & (1 << dr))
+			continue;
+		if (dskdmaen == DSKDMA_READ) {
+			drv->lastdataacesstrack = drv->cyl * 2 + side;
+			drv->track_access_done = true;
+		}
+	}
 
   motormask = 0;
   for (dr = 0; dr < MAX_FLOPPY_DRIVES; dr++) {
