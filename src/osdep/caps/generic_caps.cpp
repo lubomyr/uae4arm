@@ -66,7 +66,7 @@ int caps_init (void)
 	if (init)
 		return 1;
 	TCHAR tmp[MAX_DPATH];
-	_tcscpy (tmp, _T("./capsimg.so"));
+	_tcscpy (tmp, _T("libcapsimage.so"));
 	UAE_DLHANDLE h = uae_dlopen(tmp);
 	if (!h) {
 		if (noticed)
