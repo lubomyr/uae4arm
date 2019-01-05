@@ -1,0 +1,87 @@
+dnl Process this file with autoconf to produce a configure script.
+
+AC_INIT(LICENSE)
+AC_CONFIG_HEADER(config.h)
+AC_CANONICAL_HOST
+
+PACKAGE=capsimage
+MAJOR_VERSION=5
+MINOR_VERSION=1
+VERSION=$MAJOR_VERSION.$MINOR_VERSION
+
+case $host in
+    m68k-*-amigaos*)
+	AC_DEFINE_UNQUOTED(__CONSTLIBBASEDECL__, const, [Define to const if your protos support constant library bases.])
+	AC_DEFINE_UNQUOTED(VERSION, $MAJOR_VERSION, [Amiga system device version.])
+	AC_DEFINE_UNQUOTED(REVISION, $MINOR_VERSION, [Amiga system device revision.])
+	AC_DEFINE_UNQUOTED(VSTRING, "${PACKAGE} ${VERSION} (`date +%d.%m.%Y`)\r\n", [Amiga system device version string.])
+	LIBRARY="${PACKAGE}.device"
+	EXTRA_OBJECTS="devstart.o capsimage.o trackdisk.o aminix.o"
+	CFLAGS="-m68020-60 -msmall-code -Os -fomit-frame-pointer"
+	LDFLAGS="-m68020-60 -noixemul"
+	PICFLAGS="-resident"
+	LIB_CFLAGS="-mregparm=4"
+	LIB_LDFLAGS="-nostdlib"
+	LIB_LIBS="-lgcc"
+	STDHEADERS="FD/${PACKAGE}_lib.fd LVO/${PACKAGE}_lib.asm PRAGMAS/${PACKAGE}_pragmas.h PROTOS/${PACKAGE}_protos.h"
+	GCCHEADERS="inline/${PACKAGE}.h proto/${PACKAGE}.h"
+	AUTODOCS="autodocs/${PACKAGE}.doc"
+	;;
+    *-*-mingw32)
+	LIBRARY="capsimg.dll"
+	CFLAGS="${CFLAGS} -O2 -fomit-frame-pointer"
+	PICFLAGS=""
+	LIB_LDFLAGS="${LDFLAGS} -shared -Wl,-soname,lib${PACKAGE}.so.${MAJOR_VERSION} -Wl,--version-script,lib${PACKAGE}.map -Wl,--out-implib,${LIBRARY=}.a"
+	EXTRA_LIBS="../${LIBRARY}"
+	;;
+    *-apple-darwin*)
+	LIBRARY="lib${PACKAGE}.dylib"
+	CFLAGS="${CFLAGS} -O2 -fomit-frame-pointer"
+	PICFLAGS="-fPIC"
+	LIB_LDFLAGS="${LDFLAGS} -shared"
+	EXTRA_LIBS="../${LIBRARY}"
+	;;
+    *)
+	LIBRARY="lib${PACKAGE}.so.${VERSION}"
+	CFLAGS="${CFLAGS} -O2 -fomit-frame-pointer"
+	PICFLAGS="-fPIC"
+	LIB_LDFLAGS="${LDFLAGS} -shared -Wl,-soname,lib${PACKAGE}.so.${MAJOR_VERSION} -Wl,--version-script,lib${PACKAGE}.map"
+	EXTRA_LIBS="../${LIBRARY}"
+	;;
+esac
+
+CFLAGS="-Wall -Wno-sign-compare -Wno-missing-braces -Wno-parentheses -g ${CFLAGS}"
+#CXXFLAGS="${CFLAGS}  -fno-exceptions -fno-rtti -std=c++11"
+CXXFLAGS="${CFLAGS}  -fno-exceptions -fno-rtti -std=c++0x"
+
+AC_SUBST(PACKAGE)
+AC_SUBST(LIBRARY)
+AC_SUBST(EXTRA_OBJECTS)
+AC_SUBST(PICFLAGS)
+AC_SUBST(LIB_CFLAGS)
+AC_SUBST(LIB_LDFLAGS)
+AC_SUBST(LIB_LIBS)
+AC_SUBST(EXTRA_LIBS)
+AC_SUBST(STDHEADERS)
+AC_SUBST(GCCHEADERS)
+AC_SUBST(AUTODOCS)
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_CXX
+AC_PROG_INSTALL
+
+AC_CHECK_PROG(TAR, tar, tar)
+AC_CHECK_PROG(SFD, sfd, sfd)
+AC_CHECK_PROG(FD2INLINE, fd2inline, fd2inline)
+AC_CHECK_PROG(AUTODOC, autodoc, autodoc)
+
+AC_CHECK_HEADER([dirent.h])
+AC_CHECK_MEMBERS([struct dirent.d_type], [], [], [[#include <dirent.h>]])
+
+dnl Checks for compiler characteristics.
+AC_C_BIGENDIAN
+
+dnl AC_OUTPUT(Makefile include/Makefile examples/Makefile)
+AC_OUTPUT(Makefile)
+

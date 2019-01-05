@@ -1,0 +1,34 @@
+{
+global:
+	CAPSInit;
+	CAPSExit;
+	CAPSAddImage;
+	CAPSRemImage;
+	CAPSLockImage;
+	CAPSLockImageMemory;
+	CAPSUnlockImage;
+	CAPSLoadImage;
+	CAPSGetImageInfo;
+	CAPSLockTrack;
+	CAPSUnlockTrack;
+	CAPSUnlockAllTracks;
+	CAPSGetPlatformName;
+	CAPSGetVersionInfo;
+	CAPSFdcGetInfo;
+	CAPSFdcInit;
+	CAPSFdcReset;
+	CAPSFdcEmulate;
+	CAPSFdcRead;
+	CAPSFdcWrite;
+	CAPSFdcInvalidateTrack;
+	CAPSFormatDataToMFM;
+	CAPSGetInfo;
+
+	CAPSSetRevolution;
+	CAPSGetImageType;
+	CAPSGetImageTypeMemory;
+	CAPSGetDebugRequest;
+
+local:
+	*;
+};

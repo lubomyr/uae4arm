@@ -1,0 +1,52 @@
+distdir		= @host_cpu@-@host_os@-@PACKAGE@
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+libdir = @libdir@
+
+CC		= @CC@
+CXX		= @CXX@
+INSTALL		= @INSTALL@
+TAR		= @TAR@
+
+CFLAGS		= @CFLAGS@ @LIB_CFLAGS@ -I@top_srcdir@/../LibIPF -I@top_srcdir@/../Codec -I@top_srcdir@/../Core -I@top_srcdir@/../Device -I@srcdir@
+CXXFLAGS	= @CXXFLAGS@ @LIB_CFLAGS@ -I@top_srcdir@/../LibIPF -I@top_srcdir@/../Codec -I@top_srcdir@/../Core -I@top_srcdir@/../Device -I@srcdir@
+PICFLAGS	= @PICFLAGS@
+LDFLAGS		= @LDFLAGS@ @LIB_LDFLAGS@
+LIBS		= @LIB_LIBS@
+
+LIBRARY		= @LIBRARY@
+OBJECTS		= @EXTRA_OBJECTS@ ../Codec/CTRawCodec.o ../Codec/CTRawCodecDecompressor.o ../Codec/DiskEncoding.o ../Core/BaseFile.o ../Core/BitBuffer.o ../Core/CRC.o ../Core/DiskFile.o ../Core/MemoryFile.o CapsAPI.o CapsFDCEmulator.o CapsFile.o CapsFormatMFM.o CapsImage.o CapsImageStd.o CapsLoader.o DiskImage.o DiskImageFactory.o stdafx.o StreamCueImage.o StreamImage.o
+
+
+.PHONY: all clean distclean dist
+
+all: $(LIBRARY)
+
+$(LIBRARY): $(OBJECTS)
+	$(CXX) $(LDFLAGS) $(PICFLAGS) $^ $(LIBS) -o $@
+
+capsimage.o: capsimage.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(PICFLAGS) -c $< -o $@
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(PICFLAGS) -c $< -o $@
+
+clean:
+	$(RM) $(LIBRARY) $(OBJECTS)
+
+distclean:
+	$(RM) $(LIBRARY) $(OBJECTS) Makefile config.status config.log config.cache config.h
+
+dist: $(LIBRARY)
+	$(RM) -r $(distdir)
+	$(INSTALL) -d $(distdir)
+	$(INSTALL) -s $(LIBRARY) $(distdir)
+	$(INSTALL) HISTORY LICENSE README $(distdir)
+	$(TAR) czf $(distdir).tar.gz $(distdir)
+
+install:
+	install -d $(DESTDIR)$(libdir)
+	install $(LIBRARY) $(DESTDIR)$(libdir)/$(LIBRARY)
