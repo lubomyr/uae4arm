@@ -9,16 +9,10 @@
   * and needs thread support.
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "threaddep/thread.h"
-#include "options.h"
-#include "include/memory-uae.h"
-#include "custom.h"
-#include "newcpu.h"
 #include "autoconf.h"
-#include "traps.h"
 #include "native2amiga.h"
 
 smp_comm_pipe native2amiga_pending;
@@ -48,11 +42,11 @@ void native2amiga_reset (void)
 
 #ifdef SUPPORT_THREADS
 
-void uae_nativesem_wait(void)
+static void uae_nativesem_wait(void)
 {
 	uae_sem_wait(&n2asem);
 }
-void uae_nativesem_post(void)
+static void uae_nativesem_post(void)
 {
 	uae_sem_post(&n2asem);
 }

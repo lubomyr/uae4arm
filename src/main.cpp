@@ -39,13 +39,13 @@ long int version = 256*65536L*UAEMAJOR + 65536L*UAEMINOR + UAESUBREV;
 struct uae_prefs currprefs, changed_prefs; 
 int config_changed;
 
-bool no_gui = 0;
+static bool no_gui = 0;
 bool cloanto_rom = 0;
 bool kickstart_rom = 1;
 
 struct gui_info gui_data;
 
-static TCHAR optionsfile[256];
+static TCHAR optionsfile[MAX_DPATH];
 
 void my_trim (TCHAR *s)
 {
@@ -55,24 +55,6 @@ void my_trim (TCHAR *s)
 	len = _tcslen (s);
 	while (len > 0 && _tcscspn (s + len - 1, _T("\t \r\n")) == 0)
 		s[--len] = '\0';
-}
-
-TCHAR *my_strdup_trim (const TCHAR *s)
-{
-	TCHAR *out;
-	int len;
-
-	if (s[0] == 0)
-		return my_strdup(s);
-	while (_tcscspn (s, _T("\t \r\n")) == 0)
-		s++;
-	len = _tcslen (s);
-	while (len > 0 && _tcscspn (s + len - 1, _T("\t \r\n")) == 0)
-		len--;
-	out = xmalloc (TCHAR, len + 1);
-	memcpy (out, s, len * sizeof (TCHAR));
-	out[len] = 0;
-	return out;
 }
 
 void discard_prefs (struct uae_prefs *p, int type)
@@ -607,7 +589,7 @@ static void start_program (void)
 
 static void leave_program (void)
 {
-    do_leave_program ();
+  do_leave_program ();
 }
 
 static int real_main2 (int argc, TCHAR **argv)

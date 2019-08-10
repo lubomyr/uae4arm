@@ -335,11 +335,8 @@ extern void rtarea_init (void);
 extern void rtarea_free(void);
 extern void rtarea_setup (void);
 extern void expamem_reset (void);
-extern void expamem_next (addrbank *mapped, addrbank *next);
 extern void set_expamem_z3_hack_mode(int);
-extern uaecptr expamem_board_pointer, expamem_highmem_pointer;
-extern uaecptr expamem_z3_pointer_real, expamem_z3_pointer_uae;
-extern uae_u32 expamem_z3_highram_real, expamem_z3_highram_uae;
+extern uaecptr expamem_board_pointer;
 extern uae_u32 expamem_board_size;
 
 extern uae_u32 last_custom_value1;
@@ -364,7 +361,6 @@ extern void REGPARAM3 sub_bank_bput(uaecptr, uae_u32) REGPARAM;
 extern uae_u32 REGPARAM3 sub_bank_wgeti(uaecptr) REGPARAM;
 extern int REGPARAM3 sub_bank_check(uaecptr addr, uae_u32 size) REGPARAM;
 extern uae_u8 *REGPARAM3 sub_bank_xlate(uaecptr addr) REGPARAM;
-extern addrbank *get_sub_bank(uaecptr *addr);
 
 #define bankindex(addr) (((uaecptr)(addr)) >> 16)
 
@@ -372,7 +368,6 @@ extern addrbank *mem_banks[MEMORY_BANKS];
 
 #define get_mem_bank(addr) (*mem_banks[bankindex(addr)])
 
-extern void memory_init (void);
 extern void memory_cleanup (void);
 extern void map_banks (addrbank *bank, int first, int count, int realsize);
 extern void map_banks_z2 (addrbank *bank, int first, int count);
@@ -385,29 +380,26 @@ extern void memory_clear (void);
 extern void free_fastmemory (int);
 extern bool read_kickstart_version(struct uae_prefs *p);
 
-#define longget(addr) (call_mem_get_func(get_mem_bank(addr).lget, addr))
-#define wordget(addr) (call_mem_get_func(get_mem_bank(addr).wget, addr))
-#define byteget(addr) (call_mem_get_func(get_mem_bank(addr).bget, addr))
-#define wordgeti(addr) (call_mem_get_func(get_mem_bank(addr).wgeti, addr))
-#define longput(addr,l) (call_mem_put_func(get_mem_bank(addr).lput, addr, l))
-#define wordput(addr,w) (call_mem_put_func(get_mem_bank(addr).wput, addr, w))
-#define byteput(addr,b) (call_mem_put_func(get_mem_bank(addr).bput, addr, b))
+#define memory_get_long(addr) (call_mem_get_func(get_mem_bank(addr).lget, addr))
+#define memory_get_word(addr) (call_mem_get_func(get_mem_bank(addr).wget, addr))
+#define memory_get_byte(addr) (call_mem_get_func(get_mem_bank(addr).bget, addr))
+#define memory_get_wordi(addr) (call_mem_get_func(get_mem_bank(addr).wgeti, addr))
 
 STATIC_INLINE uae_u32 get_long(uaecptr addr)
 {
-  return longget(addr);
+  return memory_get_long(addr);
 }
 STATIC_INLINE uae_u32 get_word(uaecptr addr)
 {
-  return wordget(addr);
+  return memory_get_word(addr);
 }
 STATIC_INLINE uae_u32 get_byte(uaecptr addr)
 {
-  return byteget(addr);
+  return memory_get_byte(addr);
 }
 STATIC_INLINE uae_u32 get_wordi(uaecptr addr)
 {
-  return wordgeti(addr);
+  return memory_get_wordi(addr);
 }
 
 STATIC_INLINE uae_u32 get_long_jit(uaecptr addr)
@@ -461,17 +453,21 @@ STATIC_INLINE void *get_pointer (uaecptr addr)
 # endif
 #endif
 
+#define memory_put_long(addr,l) (call_mem_put_func(get_mem_bank(addr).lput, addr, l))
+#define memory_put_word(addr,w) (call_mem_put_func(get_mem_bank(addr).wput, addr, w))
+#define memory_put_byte(addr,b) (call_mem_put_func(get_mem_bank(addr).bput, addr, b))
+
 STATIC_INLINE void put_long(uaecptr addr, uae_u32 l)
 {
-    longput(addr, l);
+  memory_put_long(addr, l);
 }
 STATIC_INLINE void put_word(uaecptr addr, uae_u32 w)
 {
-    wordput(addr, w);
+  memory_put_word(addr, w);
 }
 STATIC_INLINE void put_byte(uaecptr addr, uae_u32 b)
 {
-    byteput(addr, b);
+  memory_put_byte(addr, b);
 }
 
 STATIC_INLINE void put_long_jit(uaecptr addr, uae_u32 l)
@@ -590,10 +586,7 @@ extern bool mapped_malloc (addrbank*);
 extern void mapped_free (addrbank*);
 
 extern uaecptr strcpyha_safe (uaecptr dst, const uae_char *src);
-extern uae_char *strcpyah_safe (uae_char *dst, uaecptr src, int maxsize);
 extern void memcpyha_safe (uaecptr dst, const uae_u8 *src, int size);
 extern void memcpyha (uaecptr dst, const uae_u8 *src, int size);
-extern void memcpyah_safe (uae_u8 *dst, uaecptr src, int size);
-extern void memcpyah (uae_u8 *dst, uaecptr src, int size);
 
 #endif /* UAE_MEMORY_H */

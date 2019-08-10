@@ -62,41 +62,15 @@ struct cd_toc_head
 
 struct device_info {
 	bool open;
-    int type;
-    int media_inserted;
+  int type;
+  int media_inserted;
 	int audio_playing;
-    int removable;
-    int write_protected;
-    int cylinders;
-    int trackspercylinder;
-    int sectorspertrack;
-    int bytespersector;
-    int bus, target, lun;
-    int unitnum;
-    TCHAR label[MAX_DPATH];
+  int unitnum;
+  TCHAR label[MAX_DPATH];
 	TCHAR mediapath[MAX_DPATH];
-	TCHAR vendorid[10];
-	TCHAR productid[18];
-	TCHAR revision[6];
-	const TCHAR *backend;
 	struct cd_toc_head toc;
 	TCHAR system_id[33];
 	TCHAR volume_id[33];
-};
-
-struct amigascsi
-{
-    uae_u8 *data;
-    uae_s32 len;
-    uae_u8 cmd[16];
-    uae_s32 cmd_len;
-    uae_u8 flags;
-    uae_u8 sensedata[256];
-    uae_u16 sense_len;
-    uae_u16 cmdactual;
-    uae_u8 status;
-    uae_u16 actual;
-    uae_u16 sactual;
 };
 
 typedef int (*check_bus_func)(int flags);
@@ -139,7 +113,7 @@ struct device_functions {
 	ismedia_func ismedia;
 };
 
-extern int device_func_init(int flags);
+static int device_func_init(int flags);
 extern void device_func_free(void);
 extern void device_func_reset(void);
 extern void sys_command_close (int unitnum);

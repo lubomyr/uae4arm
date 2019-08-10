@@ -7,24 +7,17 @@
 *
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "memory-uae.h"
 #include "rommgr.h"
 #include "custom.h"
-#include "newcpu.h"
-#include "zfile.h"
 #include "cd32_fmv.h"
-#include "uae.h"
-#include "custom.h"
-#include "audio.h"
-#include "threaddep/thread.h"
 
 #include "cda_play.h"
 #include "archivers/mp2/kjmp2.h"
-#ifndef _WIN32_
+#ifndef _WIN32
 extern "C" {
 #include "mpeg2dec/mpeg2.h"
 #include "mpeg2dec/mpeg2convert.h"
@@ -925,9 +918,6 @@ static void cl450_reset_cmd(void)
 
 static void cl450_newcmd(void)
 {
-//	write_log(_T("* CL450 Command %04x\n"), cl450_hmem[0]);
-//	for (int i = 1; i <= 4; i++)
-//		write_log(_T("%02d: %04x\n"), i, cl450_hmem[i]);
 	switch (cl450_hmem[0])
 	{
 		case CL_Play:
@@ -1398,7 +1388,7 @@ void cd32_fmv_hsync_handler(void)
 }
 
 
-void cd32_fmv_reset(void)
+static void cd32_fmv_reset(void)
 {
 	if (fmv_ram_bank.baseaddr)
 		memset(fmv_ram_bank.baseaddr, 0, fmv_ram_bank.allocated_size);

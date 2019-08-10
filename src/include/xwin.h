@@ -35,9 +35,7 @@ extern void screenshot (int);
 
 extern int bits_in_mask (unsigned long mask);
 extern int mask_shift (unsigned long mask);
-extern unsigned int doMask256 (int p, int bits, int shift);
 extern void alloc_colors64k (int, int, int, int, int, int);
-extern void alloc_colors_picasso (int rw, int gw, int bw, int rs, int gs, int bs, int rgbfmt);
 
 struct vidbuffer
 {

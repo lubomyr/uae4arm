@@ -9,24 +9,17 @@
   *
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
-#include "uae.h"
-#include "traps.h"
 #include "memory-uae.h"
 #include "rommgr.h"
-#include "custom.h"
 #include "newcpu.h"
 #include "savestate.h"
-#include "zfile.h"
-#include "threaddep/thread.h"
 #include "gfxboard.h"
 #include "cd32_fmv.h"
 #include "gayle.h"
 #include "autoconf.h"
-#include "filesys.h"
 
 #define CARD_FLAG_CAN_Z3 1
 
@@ -214,9 +207,8 @@ static addrbank*(*expamem_map)(struct autoconfig_info*);
 
 static uae_u8 expamem_lo;
 static uae_u16 expamem_hi;
-uaecptr expamem_z3_pointer_real, expamem_z3_pointer_uae;
-uaecptr expamem_z3_highram_real, expamem_z3_highram_uae;
-uaecptr expamem_highmem_pointer;
+static uaecptr expamem_z3_pointer_real, expamem_z3_pointer_uae;
+static uaecptr expamem_z3_highram_real, expamem_z3_highram_uae;
 uae_u32 expamem_board_size;
 uaecptr expamem_board_pointer;
 static uae_u8 slots_e8[8] = { 0 };
@@ -374,6 +366,8 @@ static int REGPARAM2 expamem_type (void)
 	return expamem_read(0) & 0xc0;
 }
 
+static void expamem_next (addrbank *mapped, addrbank *next);
+
 static void call_card_init(int index)
 {	
 	addrbank *ab, *abe;
@@ -466,7 +460,7 @@ static void boardmessage(addrbank *mapped, bool success)
 		success ? _T("") : _T(" [SHUT UP]"));
 }
 
-void expamem_next(addrbank *mapped, addrbank *next)
+static void expamem_next(addrbank *mapped, addrbank *next)
 {
 	if (mapped)
 		boardmessage(mapped, mapped->start != 0xffffffff);
@@ -594,6 +588,12 @@ static void REGPARAM2 expamem_wput (uaecptr addr, uae_u32 value)
 				  expamem_next(expamem_map(&cd->aci), NULL);
 				  return;
 			  }
+  			if (expamem_autoconfig_mode) {
+  				map_banks_z2(cd->aci.addrbankp, expamem_board_pointer >> 16, expamem_board_size >> 16);
+  				cd->initrc(&cd->aci);
+  				expamem_next(cd->aci.addrbankp, NULL);
+  				return;
+  			}
 			  if (expamem_bank_current && expamem_bank_current != &expamem_bank) {
 				  expamem_bank_current->sub_banks ? expamem_bank_current->sub_banks[0].bank->bput(addr, value >> 8) : expamem_bank_current->bput(addr, value >> 8);
 				  return;
@@ -1818,12 +1818,6 @@ static void reset_ac_data(struct uae_prefs *p)
 	expamem_z3_highram_real = 0;
 	expamem_z3_highram_uae = 0;
 
-	expamem_highmem_pointer = 0;
-	if (p->mbresmem_low_size)
-		expamem_highmem_pointer = 0x08000000;
-	if (p->mbresmem_high_size)
-		expamem_highmem_pointer = 0x08000000 + p->mbresmem_high_size;
-
 	if (p->mbresmem_high_size >= 128 * 1024 * 1024)
 		expamem_z3_pointer_uae += (p->mbresmem_high_size - 128 * 1024 * 1024) + 16 * 1024 * 1024;
 	expamem_board_pointer = 0;
@@ -1870,41 +1864,12 @@ void expansion_generate_autoconfig_info(struct uae_prefs *p)
 	expansion_scan_autoconfig(p, true);
 }
 
-struct autoconfig_info *expansion_get_autoconfig_data(struct uae_prefs *p, int index)
-{
-	if (index >= cardno)
-		return NULL;
-	struct card_data *cd = cards[index];
-	return &cd->aci;
-}
-
 struct autoconfig_info *expansion_get_autoconfig_by_address(struct uae_prefs *p, uaecptr addr)
 {
 	for (int i = 0; i < cardno; i++) {
 		struct card_data *cd = cards[i];
 		if (addr >= cd->base && addr < cd->base + cd->size)
 			return &cd->aci;
-	}
-	return NULL;
-}
-
-struct autoconfig_info *expansion_get_autoconfig_info(struct uae_prefs *p,int romtype, int devnum)
-{
-	for (int i = 0; i < cardno; i++) {
-		struct card_data *cd = cards[i];
-		if (cd->rc) {
-			if (cd->rc->back->device_type == romtype && cd->rc->back->device_num == devnum) {
-				return &cd->aci;
-			}
-		} else {
-			// z2 and z3 ram boards are "fake"
-			if ((romtype == ROMTYPE_RAMZ2 && !_tcsicmp(cd->name, _T("Z2Fast")))
-				|| (romtype == ROMTYPE_RAMZ3 && !_tcsicmp(cd->name, _T("Z3Fast"))))
-			{
-				if (((cd->flags >> 16) & 255) == devnum)
-					return &cd->aci;
-			}
-		}
 	}
 	return NULL;
 }

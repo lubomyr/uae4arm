@@ -6,11 +6,8 @@
 * (c) 2006 - 2015 Toni Wilen
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
-
 #include "options.h"
-
 #include "memory-uae.h"
 #include "custom.h"
 #include "newcpu.h"
@@ -18,13 +15,9 @@
 #include "gayle.h"
 #include "savestate.h"
 #include "uae.h"
-#include "gui.h"
 #include "threaddep/thread.h"
-#include "blkdev.h"
-#include "scsi.h"
 #include "ide.h"
 #include "autoconf.h"
-#include "rommgr.h"
 
 #define PCMCIA_SRAM 1
 #define PCMCIA_IDE 2
@@ -1433,7 +1426,6 @@ bool gayle_pcmcia_init(struct autoconfig_info *aci)
 static void initide (void)
 {
 	gayle_its.idetable = idedrive;
-	gayle_its.idetotal = TOTAL_IDE * 2;
 	start_ide_thread(&gayle_its);
 	alloc_ide_mem (idedrive, TOTAL_IDE * 2, &gayle_its);
 	ide_initialize(idedrive, GAYLE_IDE_ID);

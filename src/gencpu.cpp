@@ -3371,13 +3371,17 @@ bccl_not68020:
 			printf ("\tif (extra & 0x800)\n");
 			{
 				int old_m68k_pc_offset = m68k_pc_offset;
+				int old_m68k_pc_total = m68k_pc_total;
 				old_brace_level = n_braces;
 				start_brace ();
 				printf ("\tuae_u32 src = regs.regs[(extra >> 12) & 15];\n");
 				genamode (curi, curi->dmode, "dstreg", curi->size, "dst", 2, 0, 0);
+				did_prefetch = 0;
 				genastore_fc ("src", curi->dmode, "dstreg", curi->size, "dst");
+				sync_m68k_pc();
 				pop_braces (old_brace_level);
 				m68k_pc_offset = old_m68k_pc_offset;
+				m68k_pc_total = old_m68k_pc_total;
 			}
 			printf ("else");
 			{
@@ -3393,6 +3397,7 @@ bccl_not68020:
 				printf ("\t} else {\n");
 				genastore ("src", Dreg, "(extra >> 12) & 7", curi->size, "");
 				printf ("\t}\n");
+				sync_m68k_pc();
 				pop_braces (old_brace_level);
 			}
 		}
@@ -3763,11 +3768,9 @@ end:
 
 static void generate_includes (FILE * f, int id)
 {
-	fprintf (f, "#include \"sysconfig.h\"\n");
 	fprintf (f, "#include \"sysdeps.h\"\n");
 	fprintf (f, "#include \"options.h\"\n");
-	fprintf (f, "#include \"memory.h\"\n");
-	fprintf (f, "#include \"custom.h\"\n");
+	fprintf (f, "#include \"memory-uae.h\"\n");
 	fprintf (f, "#include \"newcpu.h\"\n");
 	fprintf (f, "#include \"cpu_prefetch.h\"\n");
 	fprintf (f, "#include \"cputbl.h\"\n");
@@ -4086,24 +4089,27 @@ static void generate_one_opcode (int rp, const char *extra)
 		printf ("}");
 		printf("\n");
 	}
-	printf ("\n");
 	using_simple_cycles = org_using_simple_cycles;
-
-	opcode_next_clev[rp] = next_cpu_level;
-	opcode_last_postfix[rp] = postfix;
 
 	if ((opcode & 0xf000) == 0xf000)
 		m68k_pc_total = -1;
-	cputbltmp[opcode].length = m68k_pc_total;
 
+	cputbltmp[opcode].length = m68k_pc_total;
 	cputbltmp[opcode].disp020[0] = 0;
 	if (genamode8r_offset[0] > 0)
 		cputbltmp[opcode].disp020[0] = m68k_pc_total - genamode8r_offset[0] + 2;
 	cputbltmp[opcode].disp020[1] = 0;
 	if (genamode8r_offset[1] > 0)
 		cputbltmp[opcode].disp020[1] = m68k_pc_total - genamode8r_offset[1] + 2;
-
 	cputbltmp[opcode].branch = branch_inst;
+
+	if (m68k_pc_total > 0)
+		printf("/* %d %d,%d %c */\n",
+			m68k_pc_total, cputbltmp[opcode].disp020[0], cputbltmp[opcode].disp020[1], cputbltmp[opcode].branch ? 'B' : ' ');
+
+	printf ("\n");
+	opcode_next_clev[rp] = next_cpu_level;
+	opcode_last_postfix[rp] = postfix;
 
 	if (generate_stbl) {
 		char *name = ua (lookuptab[idx].name);

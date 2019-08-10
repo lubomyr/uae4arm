@@ -7,17 +7,11 @@
   *           2002 Toni Wilen (scsi emulation, 64-bit support)
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "threaddep/thread.h"
 #include "options.h"
-#include "memory-uae.h"
-#include "custom.h"
-#include "newcpu.h"
-#include "disk.h"
 #include "autoconf.h"
-#include "traps.h"
 #include "filesys.h"
 #include "execlib.h"
 #include "native2amiga.h"
@@ -27,7 +21,6 @@
 #include "gayle.h"
 #include "execio.h"
 #include "zfile.h"
-#include "ide.h"
 
 #define HDF_SUPPORT_NSD 1
 #define HDF_SUPPORT_TD64 1
@@ -53,11 +46,6 @@ struct hardfileprivdata {
 	struct scsi_data *sd;
 	bool directorydrive;
 };
-
-STATIC_INLINE uae_u32 gl (uae_u8 *p)
-{
-	return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | (p[3] << 0);
-}
 
 static uae_sem_t change_sem = 0;
 
@@ -189,7 +177,7 @@ static void getchsgeometry (uae_u64 size, int *pcyl, int *phead, int *psectorspe
 	getchsgeometry2 (size, pcyl, phead, psectorspertrack, 0);
 }
 
-void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry)
+static void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry)
 {
 	uae_u64 blocks = total / 512;
 
@@ -514,7 +502,6 @@ int hdf_open (struct hardfiledata *hfd, const TCHAR *pname)
 	if ((!pname || pname[0] == 0) && hfd->ci.rootdir[0] == 0)
 		return 0;
 	hfd->byteswap = 0;
-	hfd->hfd_type = 0;
 	hfd->virtual_size = 0;
 	hfd->virtual_rdb = NULL;
 	if (!pname)
@@ -523,7 +510,6 @@ int hdf_open (struct hardfiledata *hfd, const TCHAR *pname)
 	ret = hdf_open_target (hfd, filepath);
 	if (ret <= 0)
 		return ret;
-	hfd->hfd_type = 0;
 	return 1;
 }
 int hdf_open (struct hardfiledata *hfd)
@@ -535,7 +521,6 @@ int hdf_open (struct hardfiledata *hfd)
 void hdf_close (struct hardfiledata *hfd)
 {
 	hdf_close_target (hfd);
-	hfd->hfd_type = 0;
 }
 
 static int hdf_read2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len)
@@ -723,7 +708,7 @@ static int checkbounds (struct hardfiledata *hfd, uae_u64 offset, uae_u64 len, i
 
 static bool is_writeprotected(struct hardfiledata *hfd)
 {
-	return hfd->ci.readonly || hfd->dangerous || currprefs.harddrive_read_only;
+	return hfd->ci.readonly || currprefs.harddrive_read_only;
 }
 
 static int nodisk (struct hardfiledata *hfd)

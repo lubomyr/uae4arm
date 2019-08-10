@@ -69,27 +69,20 @@ struct romlist {
 };
 
 extern struct romdata *getromdatabypath (const TCHAR *path);
-extern struct romdata *getromdatabycrc (uae_u32 crc32);
 extern struct romdata *getromdatabycrc (uae_u32 crc32, bool);
 extern struct romdata *getromdatabydata (uae_u8 *rom, int size);
 extern struct romdata *getromdatabyid (int id);
-extern struct romdata *getromdatabyidgroup (int id, int group, int subitem);
 extern struct romdata *getromdatabyzfile (struct zfile *f);
-extern struct romdata *getfrombydefaultname(const TCHAR *name, int size);
 extern struct romlist **getromlistbyident (int ver, int rev, int subver, int subrev, const TCHAR *model, int romflags, bool all);
 extern void getromname (const struct romdata*, TCHAR*);
-extern struct romdata *getromdatabyname (const TCHAR*);
-extern struct romlist *getromlistbyids (const int *ids, const TCHAR *romname);
 extern struct romlist *getromlistbyromdata(const struct romdata *rd);
 extern void romlist_add (const TCHAR *path, struct romdata *rd);
-extern TCHAR *romlist_get (const struct romdata *rd);
 extern void romlist_clear (void);
 extern struct zfile *read_rom_name (const TCHAR *filename);
 
 extern int load_keyring (struct uae_prefs *p, const TCHAR *path);
 extern uae_u8 *target_load_keyfile (struct uae_prefs *p, const TCHAR *path, int *size, TCHAR *name);
 extern void free_keyring (void);
-extern int get_keyring (void);
 extern void kickstart_fix_checksum (uae_u8 *mem, int size);
 extern void descramble_nordicpro (uae_u8*, int, int);
 extern int kickstart_checksum (uae_u8 *mem, int size);
@@ -97,7 +90,6 @@ extern int decode_rom (uae_u8 *mem, int size, int mode, int real_size);
 extern struct zfile *rom_fopen (const TCHAR *name, const TCHAR *mode, int mask);
 extern struct zfile *read_rom_name_guess (const TCHAR *filename, TCHAR *out);
 extern void addkeydir (const TCHAR *path);
-extern void addkeyfile (const TCHAR *path);
 extern int romlist_count (void);
 extern struct romlist *romlist_getit (void);
 extern int configure_rom (struct uae_prefs *p, const int *rom, int msg);
@@ -107,7 +99,6 @@ struct boardromconfig *get_device_rom(struct uae_prefs *p, int romtype, int devn
 const struct expansionromtype *get_device_expansion_rom(int romtype);
 struct boardromconfig *get_device_rom_new(struct uae_prefs *p, int romtype, int devnum, int *index);
 void clear_device_rom(struct uae_prefs *p, int romtype, int devnum, bool deleteDevice);
-struct boardromconfig *get_boardromconfig(struct uae_prefs *p, int romtype, int *index);
 bool is_board_enabled(struct uae_prefs *p, int romtype, int devnum);
 void board_prefs_changed(int romtype, int devnum);
 

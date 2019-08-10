@@ -785,23 +785,22 @@ bool target_graphics_buffer_update (void)
 #ifdef PICASSO96
 
 
-int picasso_palette (struct MyCLUTEntry *CLUT)
+int picasso_palette (struct MyCLUTEntry *CLUT, uae_u32 *clut)
 {
-  int i, changed;
-
-  changed = 0;
-  for (i = 0; i < 256; i++) {
+	int changed = 0;
+	
+	for (int i = 0; i < 256; i++) {
     int r = CLUT[i].Red;
     int g = CLUT[i].Green;
     int b = CLUT[i].Blue;
-    int value = (r << 16 | g << 8 | b);
-  	uae_u32 v = CONVERT_RGB(value);
-	  if (v !=  picasso_vidinfo.clut[i]) {
-	     picasso_vidinfo.clut[i] = v;
-	     changed = 1;
-	  } 
-  }
-  return changed;
+		int value = (r << 16 | g << 8 | b);
+		uae_u32 v = CONVERT_RGB(value);
+		if (v !=  clut[i]) {
+			clut[i] = v;
+			changed = 1;
+		} 
+	}
+	return changed;
 }
 
 static int resolution_compare (const void *a, const void *b)

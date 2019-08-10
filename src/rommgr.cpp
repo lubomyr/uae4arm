@@ -5,7 +5,6 @@
   *
   */ 
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
@@ -32,7 +31,7 @@ int romlist_count (void)
 	return romlist_cnt;
 }
 
-TCHAR *romlist_get (const struct romdata *rd)
+static TCHAR *romlist_get (const struct romdata *rd)
 {
   int i;
 
@@ -77,7 +76,6 @@ void romlist_add (const TCHAR *path, struct romdata *rd)
 		rd->name = rd2->name;
 }
 
-
 struct romdata *getromdatabypath (const TCHAR *path)
 {
   int i;
@@ -93,7 +91,7 @@ struct romdata *getromdatabypath (const TCHAR *path)
   return NULL;
 }
 
-#define NEXT_ROM_ID 240
+#define NEXT_ROM_ID 251
 
 #define ALTROM(id,grp,num,size,flags,crc32,a,b,c,d,e) \
 { _T("X"), 0, 0, 0, 0, 0, size, id, 0, 0, flags, (grp << 16) | num, 0, NULL, crc32, a, b, c, d, e },
@@ -459,7 +457,7 @@ static void addkey (uae_u8 *key, int size, const TCHAR *name)
   keyring[i].size = size;
 }
 
-void addkeyfile (const TCHAR *path)
+static void addkeyfile (const TCHAR *path)
 {
   struct zfile *f;
   int keysize;
@@ -497,7 +495,7 @@ void addkeydir (const TCHAR *path)
   addkeyfile (tmp);
 }
 
-int get_keyring (void)
+static int get_keyring (void)
 {
   int i, num = 0;
   for (i = 0; i < ROM_KEY_NUM; i++) {
@@ -591,38 +589,11 @@ void free_keyring (void)
   memset(keyring, 0, sizeof (struct rom_key) * ROM_KEY_NUM);
 }
 
-struct romdata *getromdatabyname (const TCHAR *name)
-{
-  TCHAR tmp[MAX_DPATH];
-  int i = 0;
-  while (roms[i].name) {
-    if (!roms[i].group) {
-      getromname (&roms[i], tmp);
-      if (!_tcscmp (tmp, name) || !_tcscmp (roms[i].name, name))
-        return &roms[i];
-    }
-    i++;
-  }
-  return 0;
-}
-
 struct romdata *getromdatabyid (int id)
 {
   int i = 0;
   while (roms[i].name) {
   	if (id == roms[i].id && roms[i].group == 0)
-	    return &roms[i];
-  	i++;
-  }
-  return 0;
-}
-
-struct romdata *getromdatabyidgroup (int id, int group, int subitem)
-{
-  int i = 0;
-  group = (group << 16) | subitem;
-  while (roms[i].name) {
-  	if (id == roms[i].id && roms[i].group == group)
 	    return &roms[i];
   	i++;
   }
@@ -654,10 +625,6 @@ struct romdata *getromdatabycrc (uae_u32 crc32, bool allowgroup)
   }
   return 0;
 }
-struct romdata *getromdatabycrc (uae_u32 crc32)
-{
-	return getromdatabycrc (crc32, false);
-}
 
 static int cmpsha1 (const uae_u8 *s1, const struct romdata *rd)
 {
@@ -671,18 +638,6 @@ static int cmpsha1 (const uae_u8 *s1, const struct romdata *rd)
   	s1 += 4;
   }
   return 0;
-}
-
-struct romdata *getfrombydefaultname(const TCHAR *name, int size)
-{
-	int i = 0;
-	while (roms[i].name) {
-		if (notcrc32(roms[i].crc32) && size >= roms[i].size && roms[i].defaultfilename && !_tcsicmp(roms[i].defaultfilename, name)) {
-			return &roms[i];
-		}
-		i++;
-	}
-	return NULL;
 }
 
 static struct romdata *checkromdata (const uae_u8 *sha1, int size, uae_u32 mask)
@@ -847,6 +802,8 @@ void getromname	(const struct romdata *rd, TCHAR *name)
 		_stprintf (name + _tcslen (name), _T(" [%s]"), rd->partnumber);
 }
 
+static struct romlist *getromlistbyids (const int *ids, const TCHAR *romname);
+
 struct romlist *getromlistbyromdata (const struct romdata *rd)
 {
   int ids[2];
@@ -878,7 +835,7 @@ static struct romlist *getromlistbyromtype(uae_u32 romtype, const TCHAR *romname
 	return NULL;
 }
 
-struct romlist *getromlistbyids (const int *ids, const TCHAR *romname)
+static struct romlist *getromlistbyids (const int *ids, const TCHAR *romname)
 {
   struct romdata *rd;
   int i, j;
@@ -1345,7 +1302,7 @@ int configure_rom (struct uae_prefs *p, const int *rom, int msg)
 		if (brc)
 			_tcscpy(brc->roms[0].romfile, p->cartfile);
 	}
-	if (rd->type == ROMTYPE_HRTMON || rd->type == ROMTYPE_XPOWER || rd->type ==  ROMTYPE_NORDIC || rd->type == ROMTYPE_AR || rd->type ==  ROMTYPE_SUPERIV)
+	if (rd->type == ROMTYPE_HRTMON || rd->type == ROMTYPE_XPOWER || rd->type ==  ROMTYPE_NORDIC || rd->type == ROMTYPE_AR || rd->type == ROMTYPE_SUPERIV)
 		_tcscpy (p->cartfile, path);
 	return 1;
 }
@@ -1526,25 +1483,6 @@ static struct zfile *read_device_from_romconfig(struct romconfig *rc, uae_u32 ro
 		}
 	}
 	return z;
-}
-
-struct boardromconfig *get_boardromconfig(struct uae_prefs *p, int romtype, int *index)
-{
-	for (int i = 0; i < MAX_EXPANSION_BOARDS; i++) {
-		struct boardromconfig *brc = &p->expansionboard[i];
-		if (!brc->device_type)
-			continue;
-		if ((brc->device_type & ROMTYPE_MASK) == (romtype & ROMTYPE_MASK)) {
-			for (int j = 0; j < MAX_BOARD_ROMS; j++) {
-				if (brc->roms[j].romfile[0]) {
-					if (index)
-						*index = j;
-					return brc;
-				}
-			}
-		}
-	}
-	return NULL;
 }
 
 bool load_rom_rc(struct romconfig *rc, uae_u32 romtype, int maxfilesize, int fileoffset, uae_u8 *rom, int maxromsize, int flags)

@@ -30,7 +30,7 @@ all: $(PROG)
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV -DUSE_JIT_FPU -DPANDORA
+DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV -DPANDORA
 DEFS += -DUSE_SDL
 
 MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/archivers

@@ -210,20 +210,6 @@ bool my_issamepath(const TCHAR *path1, const TCHAR *path2)
 }
 
 
-const TCHAR *my_getfilepart(const TCHAR *filename)
-{
-	const TCHAR *p;
-
-	p = _tcsrchr(filename, '\\');
-	if (p)
-		return p + 1;
-	p = _tcsrchr(filename, '/');
-	if (p)
-		return p + 1;
-	return filename;
-}
-
-
 /* Returns 1 if an actual volume-name was found, 2 if no volume-name (so uses some defaults) */
 int target_get_volume_name(struct uaedev_mount_info *mtinf, struct uaedev_config_info *ci, bool inserted, bool fullcheck, int cnt)
 {

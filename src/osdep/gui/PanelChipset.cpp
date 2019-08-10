@@ -363,8 +363,8 @@ bool HelpPanelChipset(std::vector<std::string> &helptext)
   helptext.clear();
   helptext.push_back("If you want to emulate an Amiga 1200, select AGA. For most Amiga 500 games, select \"Full ECS\". Some older");
   helptext.push_back("Amiga games requires \"OCS\" or \"ECS Agnus\". You have to play with these options if a game won't work as");
-  helptext.push_back("expected. By selecting an entry in \"Extra\", all internal chipset settings will become the required values for the specified");
-  helptext.push_back("Amiga model.");
+  helptext.push_back("expected. By selecting an entry in \"Extra\", all internal chipset settings will become the required values for the");
+  helptext.push_back("specified Amiga model.");
   helptext.push_back("For some games, you have to activate \"NTSC\" (60 Hz instead of 50 Hz) for correct timing.");
   helptext.push_back(" ");
   helptext.push_back("When you see some graphic issues in a game, try \"Immediate\" or \"Wait for blit.\" for blitter and/or disable");

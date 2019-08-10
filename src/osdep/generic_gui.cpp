@@ -203,22 +203,6 @@ static struct romdata *scan_single_rom_2 (struct zfile *f)
   return rd;
 }
 
-static struct romdata *scan_single_rom (char *path)
-{
-  struct zfile *z;
-  char tmp[MAX_DPATH];
-  struct romdata *rd;
-
-  strncpy (tmp, path, MAX_PATH - 1);
-  rd = getromdatabypath(path);
-  if (rd && rd->crc32 == 0xffffffff)
-  	return rd;
-  z = zfile_fopen (path, "rb", ZFD_NORMAL);
-  if (!z)
-  	return 0;
-  return scan_single_rom_2 (z);
-}
-
 static int isromext(char *path)
 {
   char *ext;
@@ -455,7 +439,7 @@ void gui_exit(void)
 }
 
 
-void gui_purge_events(void)
+static void gui_purge_events(void)
 {
 	int counter = 0;
 
@@ -762,7 +746,7 @@ void FilterFiles(std::vector<std::string> *files, const char *filter[])
 }
 
 
-bool DevicenameExists(const char *name)
+static bool DevicenameExists(const char *name)
 {
   int i;
   struct uaedev_config_data *uci;

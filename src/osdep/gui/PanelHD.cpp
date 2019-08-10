@@ -546,5 +546,6 @@ bool HelpPanelHD(std::vector<std::string> &helptext)
   helptext.push_back("to select the iso/cue file for CD emulation.");
   helptext.push_back(" ");
   helptext.push_back("In current version, WAV, MP3 and FLAC is supported for audio tracks.");
+  helptext.push_back("The audio volume of the CD can be adjusted with \"CD Volume\".");
   return true;
 }

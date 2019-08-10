@@ -22,28 +22,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "include/memory-uae.h"
-#include "newcpu.h"
-#include "custom.h"
 #include "autoconf.h"
-#include "traps.h"
 #include "../threaddep/thread.h"
 #include "bsdsocket.h"
 #include "native2amiga.h"
-
-#ifndef BSDSOCKET
-
-volatile int bsd_int_requested;
-
-void bsdsock_fake_int_handler(void) 
-{
-}
-
-#else
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -68,7 +54,6 @@ void bsdsock_fake_int_handler(void)
 /* Sigqueue is unsafe on SMP machines.
  * Temporary work-around.
  */
-//#define SETSIGNAL	addtosigqueue (sb, 0)
 #define SETSIGNAL \
   do { \
   	uae_Signal (sb->ownertask, sb->sigstosend | ((uae_u32) 1) << sb->signal); \
@@ -88,15 +73,8 @@ void bsdsock_fake_int_handler(void)
 
 #define S_GL_result(res) sb->resultval = (res)
 
-uae_u32 bsdthr_Accept_2 (SB);
-uae_u32 bsdthr_Recv_2 (SB);
-uae_u32 bsdthr_blockingstuff (uae_u32 (*tryfunc)(SB), SB);
-uae_u32 bsdthr_SendRecvAcceptConnect (uae_u32 (*tryfunc)(SB), SB);
-uae_u32 bsdthr_Send_2 (SB);
-uae_u32 bsdthr_Connect_2 (SB);
-uae_u32 bsdthr_WaitSelect (SB);
-uae_u32 bsdthr_Wait (SB);
-void clearsockabort (SB);
+static uae_u32 bsdthr_blockingstuff (uae_u32 (*tryfunc)(SB), SB);
+static void clearsockabort (SB);
 
 static uae_sem_t sem_queue = 0;
 
@@ -609,7 +587,7 @@ static void copyProtoent (TrapContext *ctx, SB, const struct protoent *p)
 
 
 
-uae_u32 bsdthr_WaitSelect (SB)
+static uae_u32 bsdthr_WaitSelect (SB)
 {
   fd_set sets [3];
   int i, s, set, a_s, max;
@@ -685,7 +663,7 @@ uae_u32 bsdthr_WaitSelect (SB)
   return r;
 }
 
-uae_u32 bsdthr_Accept_2 (SB)
+static uae_u32 bsdthr_Accept_2 (SB)
 {
   int foo, s, s2;
   long flags;
@@ -708,7 +686,7 @@ uae_u32 bsdthr_Accept_2 (SB)
   }
 }
 
-uae_u32 bsdthr_Recv_2 (SB)
+static uae_u32 bsdthr_Recv_2 (SB)
 {
   int foo;
   if (sb->from == 0) {
@@ -727,7 +705,7 @@ uae_u32 bsdthr_Recv_2 (SB)
   return foo;
 }
 
-uae_u32 bsdthr_Send_2 (SB)
+static uae_u32 bsdthr_Send_2 (SB)
 {
   if (sb->to == 0) {
     return send (sb->s, sb->buf, sb->len, sb->flags | MSG_NOSIGNAL);
@@ -739,7 +717,7 @@ uae_u32 bsdthr_Send_2 (SB)
   }
 }
 
-uae_u32 bsdthr_Connect_2 (SB)
+static uae_u32 bsdthr_Connect_2 (SB)
 {
   if (sb->action == 1) {
 		struct sockaddr_in addr;
@@ -767,12 +745,12 @@ uae_u32 bsdthr_Connect_2 (SB)
   }
 }
 
-uae_u32 bsdthr_SendRecvAcceptConnect (uae_u32 (*tryfunc)(SB), SB)
+static uae_u32 bsdthr_SendRecvAcceptConnect (uae_u32 (*tryfunc)(SB), SB)
 {
   return bsdthr_blockingstuff (tryfunc, sb);
 }
 
-uae_u32 bsdthr_blockingstuff (uae_u32 (*tryfunc)(SB), SB)
+static uae_u32 bsdthr_blockingstuff (uae_u32 (*tryfunc)(SB), SB)
 {
   int done = 0, foo;
   long flags;
@@ -1193,7 +1171,7 @@ uae_u32 host_bind (TrapContext *ctx, SB, uae_u32 sd, uae_u32 name, uae_u32 namel
   }
 
   copysockaddr_a2n (ctx, &addr, name, namelen);
-  if ((success = bind (s, reinterpret_cast<struct sockaddr *>(&addr), len)) != 0) {
+  if ((success = ::bind (s, reinterpret_cast<struct sockaddr *>(&addr), len)) != 0) {
 		SETERRNO;
   }
   return success;
@@ -1620,7 +1598,7 @@ int init_socket_layer(void)
   return result;
 }
 
-void clearsockabort (SB)
+static void clearsockabort (SB)
 {
   int chr;
   int num;
@@ -1644,5 +1622,3 @@ void unlocksigqueue (void)
 {
   uae_sem_post(&sem_queue);
 }
-
-#endif

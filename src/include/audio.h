@@ -45,11 +45,6 @@ enum {
   SND_NONE
 };
 
-STATIC_INLINE int get_audio_ismono (int stereomode)
-{
-	return stereomode == 0;
-}
-
 #define SOUND_MAX_DELAY_BUFFER 1024
 #define SOUND_MAX_LOG_DELAY 10
 #define MIXED_STEREO_MAX 16

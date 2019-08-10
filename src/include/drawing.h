@@ -129,13 +129,6 @@ STATIC_INLINE xcolnr getxcolor (int c)
 }
 
 /* functions for reading, writing, copying and comparing struct color_entry */
-STATIC_INLINE int color_reg_get (struct color_entry *ce, int c)
-{
-	if (aga_mode)
-		return ce->color_regs_aga[c];
-	else
-		return ce->color_regs_ecs[c];
-}
 STATIC_INLINE void color_reg_set (struct color_entry *ce, int c, int v)
 {
 	if (aga_mode)

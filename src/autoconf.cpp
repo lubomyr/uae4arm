@@ -7,16 +7,12 @@
   * Copyright 1996 Ed Hanway
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "uae.h"
 #include "memory-uae.h"
-#include "custom.h"
-#include "newcpu.h"
 #include "autoconf.h"
-#include "traps.h"
 #include "inputdevice.h"
 
 /* Commonly used autoconfig strings */
@@ -152,7 +148,7 @@ void rtarea_reset(void)
 static int rt_addr;
 static int rt_straddr;
 
-uae_u32 addr (int ptr)
+static uae_u32 addr (int ptr)
 {
   return (uae_u32)ptr + rtarea_base;
 }

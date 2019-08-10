@@ -20,12 +20,6 @@ extern int movem_index1[256];
 extern int movem_index2[256];
 extern int movem_next[256];
 
-#ifdef FPUEMU
-extern int fpp_movem_index1[256];
-extern int fpp_movem_index2[256];
-extern int fpp_movem_next[256];
-#endif
-
 typedef uae_u32 REGPARAM3 cpuop_func (uae_u32) REGPARAM;
 typedef void REGPARAM3 cpuop_func_ce (uae_u32) REGPARAM;
 
@@ -67,8 +61,8 @@ typedef double fptype;
 
 struct mmufixup
 {
-    int reg;
-    uae_u32 value;
+  int reg;
+  uae_u32 value;
 };
 extern struct mmufixup mmufixup[1];
 
@@ -138,7 +132,7 @@ extern struct regstruct regs;
 
 STATIC_INLINE uae_u32 munge24(uae_u32 x)
 {
-    return x & regs.address_space_mask;
+  return x & regs.address_space_mask;
 }
 
 extern int cpu_cycles;
@@ -293,7 +287,6 @@ extern void check_t0_trace(void);
 #define x_do_cycles(c) do_cycles(c)
 
 extern void m68k_setstopped (void);
-extern void m68k_resumestopped (void);
 
 #define get_disp_ea_020(base,idx) _get_disp_ea_020(base)
 extern uae_u32 REGPARAM3 _get_disp_ea_020 (uae_u32 base) REGPARAM;
@@ -301,10 +294,7 @@ extern uae_u32 REGPARAM3 _get_disp_ea_020 (uae_u32 base) REGPARAM;
 extern uae_u32 REGPARAM3 get_bitfield (uae_u32 src, uae_u32 bdata[2], uae_s32 offset, int width) REGPARAM;
 extern void REGPARAM3 put_bitfield (uae_u32 dst, uae_u32 bdata[2], uae_u32 val, uae_s32 offset, int width) REGPARAM;
 
-extern int get_cpu_model(void);
-
 extern void set_cpu_caches (bool flush);
-extern void flush_cpu_caches(bool flush);
 extern void flush_cpu_caches_040(uae_u16 opcode);
 extern void REGPARAM3 MakeSR (void) REGPARAM;
 extern void REGPARAM3 MakeFromSR (void) REGPARAM;
@@ -356,7 +346,6 @@ extern void fpu_reset (void);
 
 extern void exception3_read(uae_u32 opcode, uaecptr addr);
 extern void exception3_write(uae_u32 opcode, uaecptr addr);
-extern void exception3_notinstruction(uae_u32 opcode, uaecptr addr);
 extern void exception3i (uae_u32 opcode, uaecptr addr);
 extern void exception3b (uae_u32 opcode, uaecptr addr, bool w, bool i, uaecptr pc);
 extern void exception2 (uaecptr addr, bool read, int size, uae_u32 fc);
@@ -397,8 +386,6 @@ extern void compemu_reset(void);
 #define flush_icache_hard(int) do {} while (0)
 #endif
 bool check_prefs_changed_comp (bool);
-
-extern int movec_illg (int regno);
 
 #define CPU_HALT_BUS_ERROR_DOUBLE_FAULT 1
 #define CPU_HALT_DOUBLE_FAULT 2

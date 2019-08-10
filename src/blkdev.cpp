@@ -7,25 +7,19 @@
 *
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 #include "options.h"
-#include "memory-uae.h"
 
-#include "traps.h"
 #include "blkdev.h"
 #include "savestate.h"
 #include "crc32.h"
 #include "threaddep/thread.h"
-#include "execio.h"
 #include "zfile.h"
-#include "fsdb.h"
 
 #define PRE_INSERT_DELAY (3 * (currprefs.ntscmode ? 60 : 50))
 
 struct blkdevstate
 {
-	bool scsiemu;
 	int type;
 	struct device_functions *device_func;
 	int isopen;
@@ -33,8 +27,6 @@ struct blkdevstate
 	int delayed;
 	uae_sem_t sema;
 	int sema_cnt;
-	int current_pos;
-	int play_end_pos;
 	uae_u8 play_qcode[SUBQ_SIZE];
 	TCHAR newimagefile[256];
 	int imagechangetime;
@@ -43,8 +35,6 @@ struct blkdevstate
 };
 
 static struct blkdevstate state[MAX_TOTAL_SCSI_DEVICES];
-
-static bool dev_init;
 
 /* convert minutes, seconds and frames -> logical sector number */
 int msf2lsn (int msf)
@@ -121,30 +111,25 @@ static void install_driver (int flags)
 {
 	for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
 		struct blkdevstate *st = &state[i];
-		st->scsiemu = false;
 		st->type = -1;
 		st->device_func = NULL;
 	}
 	if (flags > 0) {
 		state[0].device_func = devicetable[flags];
-		state[0].scsiemu = true;
 	} else {
 		for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
 			struct blkdevstate *st = &state[i];
-			st->scsiemu = false;
 			st->device_func = NULL;
 			switch (cdscsidevicetype[i])
 			{
 				case SCSI_UNIT_IMAGE:
 				  st->device_func = devicetable[SCSI_UNIT_IMAGE];
-				  st->scsiemu = true;
 				  break;
 			}
 		  // use image mode if driver disabled
 		  for (int j = 1; j < NUM_DEVICE_TABLE_ENTRIES; j++) {
 			  if (devicetable[j] == st->device_func && driver_installed[j] < 0) {
 				  st->device_func = devicetable[SCSI_UNIT_IMAGE];
-				  st->scsiemu = true;
 			  }
 		  }
 	  }
@@ -161,7 +146,6 @@ static void install_driver (int flags)
 					int ok = st->device_func->openbus (0);
 					if (!ok && st->device_func != devicetable[SCSI_UNIT_IMAGE]) {
 						st->device_func = devicetable[SCSI_UNIT_IMAGE];
-						st->scsiemu = true;
 						write_log (_T("Fallback to image mode, unit %d.\n"), i);
 						driver_installed[j] = -1;
 					} else {
@@ -354,14 +338,12 @@ void device_func_free(void)
 		st->cdimagefileinuse = false;
 		st->newimagefile[0] = 0;
 	}
-	dev_init = false;
 }
 
-int device_func_init (int flags)
+static int device_func_init (int flags)
 {
 	blkdev_fix_prefs (&currprefs);
 	install_driver (flags);
-	dev_init = true;
 	return 1;
 }
 
@@ -512,7 +494,6 @@ int sys_command_cd_play (int unitnum, int startlsn, int endlsn, int scan, play_s
 		return 0;
 	if (!getsem (unitnum))
 		return 0;
-	state[unitnum].play_end_pos = endlsn;
 	v = state[unitnum].device_func->play (unitnum, startlsn, endlsn, scan, statusfunc, subfunc);
 	freesem (unitnum);
 	return v;
@@ -670,7 +651,7 @@ uae_u8 *save_cd (int num, int *len)
 	sys_command_cd_qcode (num, st->play_qcode, -1, false);
 	for (int i = 0; i < SUBQ_SIZE; i++)
 		save_u8 (st->play_qcode[i]);
-	save_u32 (st->play_end_pos);
+	save_u32 (0);
 	save_path_full(currprefs.cdslots[num].name, SAVESTATE_PATH_CD);
 	*len = dst - dstbak;
 	return dstbak;
@@ -692,7 +673,7 @@ uae_u8 *restore_cd (int num, uae_u8 *src)
 		restore_u32 ();
 		for (int i = 0; i < SUBQ_SIZE; i++)
 			st->play_qcode[i] = restore_u8 ();
-		st->play_end_pos = restore_u32 ();
+		restore_u32 ();
 	}
 	if (flags & 16) {
 		xfree(s);

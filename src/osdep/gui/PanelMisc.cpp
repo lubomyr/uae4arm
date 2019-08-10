@@ -262,11 +262,10 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
 bool HelpPanelMisc(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("\"Status Line\" shows/hides the status line indicator. During emulation, you can show/hide this by pressing left");
-  helptext.push_back("shoulder and 'd'. The first value in the status line shows the idle time of the Pandora CPU in %, the second value");
-  helptext.push_back("is the current frame rate. When you have a HDD in your Amiga emulation, the HD indicator shows read (blue) and");
-  helptext.push_back("write (red) access to the HDD. The next values are showing the track number for each disk drive and indicates");
-  helptext.push_back("disk access.");
+  helptext.push_back("\"Status Line\" shows/hides the status line indicator.");
+  helptext.push_back("The first value in the status line shows the idle time of the host CPU in %, the second value is the current frame");
+  helptext.push_back("rate. When you have a HDD in your Amiga emulation, the HD indicator shows read (blue) and write (red) access");
+  helptext.push_back("to the HDD. The next values are showing the track number for each disk drive and indicates disk access.");
   helptext.push_back(" ");
   helptext.push_back("When you deactivate the option \"Show GUI on startup\" and use this configuration by specifying it with the");
   helptext.push_back("command line parameter \"-config=<file>\", the emulation starts directly without showing the GUI.");

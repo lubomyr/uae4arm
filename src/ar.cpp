@@ -201,7 +201,6 @@
 *
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
@@ -214,7 +213,6 @@
 #include "ar.h"
 #include "savestate.h"
 #include "crc32.h"
-#include "akiko.h"
 #include "gfxboard.h"
 
 static const TCHAR *cart_memnames[] = { NULL, _T("hrtmon"), _T("arhrtmon"), _T("superiv") };
@@ -529,7 +527,7 @@ STATIC_INLINE int ar3a (uaecptr addr, uae_u8 b, int writing)
 					ar_wait_pop = 0;
 					/* We get (SP+2) here, as the first word on the stack is the status register. */
 					/* We want the following long, which is the return program counter. */
-					wait_for_pc = longget (m68k_areg (regs, 7) + 2); /* Get (SP+2) */
+					wait_for_pc = get_long (m68k_areg (regs, 7) + 2); /* Get (SP+2) */
 					set_special (SPCFLAG_ACTION_REPLAY);
 
 					uaecptr pc = m68k_getpc ();
@@ -1750,7 +1748,7 @@ int hrtmon_load (void)
 	return 1;
 }
 
-void hrtmon_map_banks (void)
+static void hrtmon_map_banks (void)
 {
 	uaecptr addr;
 
@@ -1811,7 +1809,7 @@ static uae_char arVersionString[AR_VER_STR_LEN+1];
 
 /* This function extracts the version info for AR2 and AR3. */
 
-void action_replay_version(void)
+static void action_replay_version(void)
 {
 	char* tmp;
 	int iArVersionMajor = -1 ;

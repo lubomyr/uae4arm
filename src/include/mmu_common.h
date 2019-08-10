@@ -2,7 +2,6 @@
 #define UAE_MMU_COMMON_H
 
 #include "uae/types.h"
-#include "uae/likely.h"
 
 #ifdef __cplusplus
 struct m68k_exception {

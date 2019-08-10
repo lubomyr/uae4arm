@@ -289,9 +289,12 @@ bool HelpPanelDisplay(std::vector<std::string> &helptext)
   helptext.push_back("240 for \"Height\" makes no sense. When the game, demo or workbench uses Hires mode and you selected a");
   helptext.push_back("value for \"Width\" lower than 640, you will only see half of the pixels.");
   helptext.push_back(" ");
-  helptext.push_back("With \"Vert. offset\" you can adjust the position of the first drawn line of the Amiga screen. You can also change");
-  helptext.push_back("this during emulation with left and right shoulder button and dpad up/down.");
+  helptext.push_back("With \"Vert. offset\" you can adjust the position of the first drawn line of the Amiga screen.");
   helptext.push_back(" ");
+#if defined(RASPBERRY) && !defined(USE_SDL2)
+  helptext.push_back("Activate \"4/3 ratio shrink\" to force display to this aspect ratio.");
+  helptext.push_back(" ");
+#endif
   helptext.push_back("Activate line doubling to remove flicker in interlace modes.");
   helptext.push_back(" ");
   helptext.push_back("When you activate \"Frameskip\", only every second frame is drawn. This will improve performance and some");

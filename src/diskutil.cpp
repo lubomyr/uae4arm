@@ -1,8 +1,6 @@
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "crc32.h"
-#include "diskutil.h"
 
 #define MFMMASK 0x55555555
 static uae_u32 getmfmlong (uae_u16 * mbuf)

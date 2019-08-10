@@ -149,6 +149,4 @@ enum aks {
 
 #define AKS_FIRST AKS_ENTERGUI
 
-extern int target_checkcapslock (int, int *);
-
 #endif /* UAE_KEYBOARD_H */

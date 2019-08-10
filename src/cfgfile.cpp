@@ -7,10 +7,7 @@
   * Copyright 1998 Brian King, Bernd Schmidt
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
-
-#include <ctype.h>
 
 #include "options.h"
 #include "uae.h"
@@ -31,7 +28,6 @@
 #include "statusline.h"
 #include "calc.h"
 #include "gfxboard.h"
-#include "native2amiga_api.h"
 
 #define cfgfile_warning write_log
 #define cfgfile_warning_obsolete write_log
@@ -41,13 +37,6 @@ static struct strlist *temp_lines;
 static struct strlist *error_lines;
 static struct zfile *default_file, *configstore;
 static int uaeconfig;
-
-/* @@@ need to get rid of this... just cut part of the manual and print that
- * as a help text.  */
-struct cfg_lines
-{
-  const TCHAR *config_label, *config_help;
-};
 
 static const TCHAR *guimode1[] = { _T("no"), _T("yes"), _T("nowait"), 0 };
 static const TCHAR *guimode2[] = { _T("false"), _T("true"), _T("nowait"), 0 };
@@ -63,7 +52,6 @@ static const TCHAR *soundmode2[] = { _T("none"), _T("interrupts"), _T("good"), _
 static const TCHAR *stereomode[] = { _T("mono"), _T("stereo"),  0 };
 static const TCHAR *interpolmode[] = { _T("none"), _T("anti"), _T("sinc"), _T("rh"), _T("crux"), 0 };
 static const TCHAR *collmode[] = { _T("none"), _T("sprites"), _T("playfields"), _T("full"), 0 };
-static const TCHAR *kbleds[] = { _T("none"), _T("POWER"), _T("DF0"), _T("DF1"), _T("DF2"), _T("DF3"), _T("HD"), _T("CD"), _T("DFx"), 0 };
 static const TCHAR *soundfiltermode1[] = { _T("off"), _T("emulated"), _T("on"), 0 };
 static const TCHAR *soundfiltermode2[] = { _T("standard"), _T("enhanced"), 0 };
 static const TCHAR *lorestype1[] = { _T("lores"), _T("hires"), _T("superhires"), 0 };
@@ -410,6 +398,10 @@ static TCHAR *cfgfile_subst_path2 (const TCHAR *path, const TCHAR *subst, const 
     _tcscat (p, file + l);
 		p2 = target_expand_environment (p, NULL, 0);
 		xfree (p);
+		if (p2 && p2[0] == '$') {
+			xfree(p2);
+			return NULL;
+		}
 	  return p2;
   }
 	return NULL;
@@ -530,7 +522,7 @@ void cfgfile_write_bool (struct zfile *f, const TCHAR *option, bool b)
 {
 	cfg_dowrite (f, option, b ? _T("true") : _T("false"), 0, 0);
 }
-void cfgfile_dwrite_bool (struct zfile *f, const TCHAR *option, bool b)
+static void cfgfile_dwrite_bool (struct zfile *f, const TCHAR *option, bool b)
 {
 	cfg_dowrite (f, option, b ? _T("true") : _T("false"), 1, 0);
 }
@@ -979,7 +971,7 @@ static void cfgfile_writeramboard(struct uae_prefs *prefs, struct zfile *f, cons
 		_stprintf(tmp1, _T("%s_options"), name);
 }
 
-void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
+static void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type)
 {
   struct strlist *sl;
   TCHAR tmp[MAX_DPATH];
@@ -4028,6 +4020,7 @@ static int cfgfile_searchconfig(const TCHAR *in, int index, TCHAR *out, int outs
 	int joker = 0;
 	uae_u32 err = 0;
 	bool configsearchfound = false;
+	int index2 = index;
 
 	if (in[inlen - 1] == '*') {
 		joker = 1;
@@ -4055,7 +4048,7 @@ static int cfgfile_searchconfig(const TCHAR *in, int index, TCHAR *out, int outs
 
 		if (zfile_fread (&b, 1, 1, configstore) != 1) {
 			err = 10;
-			if (configsearchfound)
+			if (configsearchfound || index2 > 0)
 				err = 0;
 			goto end;
 		}
@@ -4063,7 +4056,7 @@ static int cfgfile_searchconfig(const TCHAR *in, int index, TCHAR *out, int outs
 			j = sizeof (tmp) / sizeof (TCHAR) - 1;
 		if (b == 0) {
 			err = 10;
-			if (configsearchfound)
+			if (configsearchfound || index2 > 0)
 				err = 0;
 			goto end;
 		}
@@ -4423,7 +4416,6 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 
 	blkdev_default_prefs (p);
 
-	p->cr_selected = -1;
 	struct chipset_refresh *cr;
 	for (int i = 0; i < MAX_CHIPSET_REFRESH_TOTAL; i++) {
 		cr = &p->cr[i];
@@ -4952,26 +4944,6 @@ void config_check_vsync (void)
 	}
 }
 
-bool is_error_log (void)
-{
-	return error_lines != NULL;
-}
-TCHAR *get_error_log (void)
-{
-	strlist *sl;
-	int len = 0;
-	for (sl = error_lines; sl; sl = sl->next) {
-		len += _tcslen (sl->option) + 1;
-	}
-	if (!len)
-		return NULL;
-	TCHAR *s = xcalloc (TCHAR, len + 1);
-	for (sl = error_lines; sl; sl = sl->next) {
-		_tcscat (s, sl->option);
-		_tcscat (s, _T("\n"));
-	}
-	return s;
-}
 void error_log (const TCHAR *format, ...)
 {
 	TCHAR buffer[256], *bufp;

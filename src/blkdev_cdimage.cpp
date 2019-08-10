@@ -11,7 +11,6 @@
 * Copyright 2010-2013 Toni Wilen
 *
 */
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #ifdef HAVE_SYS_TIMEB_H
@@ -19,7 +18,6 @@
 #endif
 
 #include "options.h"
-#include "traps.h"
 #include "blkdev.h"
 #include "zfile.h"
 #include "gui.h"
@@ -28,9 +26,7 @@
 #include "mp3decoder.h"
 #include "cda_play.h"
 #include "memory-uae.h"
-#include "audio.h"
 #include "uae.h"
-#include "uae/cdrom.h"
 
 #define FLAC__NO_DLL
 #include "FLAC/stream_decoder.h"
@@ -50,7 +46,6 @@ struct cdtoc
 
 	uae_s64 filesize;
 	TCHAR *fname;
-	TCHAR *extrainfo;
 	int address;
 	uae_u8 adr, ctrl;
 	int track;
@@ -1923,10 +1918,9 @@ static int parse_image (struct cdunit *cdu, const TCHAR *img)
 		write_log (_T("%7d %02d:%02d:%02d"),
 			t->address, (msf >> 16) & 0x7fff, (msf >> 8) & 0xff, (msf >> 0) & 0xff);
 		if (i < cdu->tracks) {
-			write_log (_T(" %s %x %10lld %10lld %s%s"),
+			write_log (_T(" %s %x %10lld %10lld %s"),
         (t->ctrl & 4) ? _T("DATA    ") : (t->subcode ? _T("CDA+SUB") : _T("CDA     ")),
 			  t->ctrl, t->offset, t->filesize, 
-				t->extrainfo ? t->extrainfo : _T(""),
 				t->handle == NULL ? _T("[FILE ERROR]") : _T(""));
     }
 		write_log (_T("\n"));
@@ -1963,16 +1957,8 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	if (!cdu->enabled)
 		return NULL;
 	di->open = cdu->open;
-	di->removable = 1;
-	di->bus = unitnum;
-	di->target = 0;
-	di->lun = 0;
 	di->media_inserted = 0;
-	di->bytespersector = 2048;
 	di->mediapath[0] = 0;
-	di->cylinders = 1;
-	di->trackspercylinder = 1;
-	di->sectorspertrack = (int)(cdu->cdsize / di->bytespersector);
 	if (ismedia (unitnum, 1)) {
 		di->media_inserted = 1;
 		_tcscpy (di->mediapath, cdu->imgname_out);
@@ -1980,7 +1966,6 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	}
 	memset (&di->toc, 0, sizeof (struct cd_toc_head));
 	command_toc (unitnum, &di->toc);
-	di->write_protected = 1;
 	di->type = INQ_ROMD;
 	di->unitnum = unitnum + 1;
 	if (di->mediapath[0]) {
@@ -1989,10 +1974,6 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	} else {
 		_tcscpy (di->label, _T("IMG:<EMPTY>"));
 	}
-	_tcscpy (di->vendorid, _T("UAE"));
-	_stprintf (di->productid, _T("SCSICD%d"), unitnum);
-	_tcscpy (di->revision, _T("1.0"));
-	di->backend = _T("IMAGE");
 	return di;
 }
 
@@ -2008,7 +1989,6 @@ static void unload_image (struct cdunit *cdu)
 		xfree (t->fname);
 		xfree (t->data);
 		xfree (t->subdata);
-		xfree (t->extrainfo);
 	}
 	memset (cdu->toc, 0, sizeof cdu->toc);
 	cdu->tracks = 0;

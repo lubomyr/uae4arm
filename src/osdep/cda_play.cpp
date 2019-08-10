@@ -1,12 +1,9 @@
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "audio.h"
 
 #include "cda_play.h"
 #include "sounddep/sound.h"
-#include "uae.h"
-
 
 cda_audio::~cda_audio() 
 {

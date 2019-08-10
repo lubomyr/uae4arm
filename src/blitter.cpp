@@ -7,11 +7,9 @@
   * (c) 2002 - 2005 Toni Wilen
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
-#include "uae.h"
 #include "memory-uae.h"
 #include "custom.h"
 #include "newcpu.h"

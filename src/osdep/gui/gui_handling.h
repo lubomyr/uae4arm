@@ -144,7 +144,6 @@ bool HandleNavigation(int direction);
 
 #define MAX_HD_DEVICES 5
 extern void CreateDefaultDevicename(char *name);
-extern bool DevicenameExists(const char *name);
 extern int tweakbootpri (int bp, int ab, int dnm);
   
 extern char *screenshot_filename;

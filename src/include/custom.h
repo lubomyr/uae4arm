@@ -182,7 +182,6 @@ extern void fpscounter_reset (void);
 extern unsigned long idletime;
 
 extern int current_maxvpos (void);
-extern struct chipset_refresh *get_chipset_refresh (struct uae_prefs*);
 void custom_cpuchange(void);
 
 #endif /* UAE_CUSTOM_H */

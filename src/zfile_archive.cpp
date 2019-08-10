@@ -6,23 +6,17 @@
 *     2007 Toni Wilen
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
-#ifdef _WIN32_
+#ifdef _WIN32
 #include <windows.h>
 #include "win32.h"
 #endif
 
-#include "options.h"
 #include "zfile.h"
 #include "archivers/zip/unzip.h"
-#include "archivers/dms/pfile.h"
-#include "crc32.h"
 #include "zarchive.h"
 #include "disk.h"
-
-#include <zlib.h>
 
 
 static time_t fromdostime (uae_u32 dd)
@@ -137,10 +131,6 @@ struct zfile *archive_access_select (struct znode *parent, struct zfile *zf, uns
 		diskimg = zfile_is_diskimage (zn->fullname);
 		if (isok) {
 			if (tmphist[0]) {
-#ifndef _CONSOLE
-				if (diskimg >= 0 && canhistory)
-					DISK_history_add (tmphist, -1, diskimg, 1);
-#endif
 				tmphist[0] = 0;
 				first = 0;
 			}
@@ -149,10 +139,6 @@ struct zfile *archive_access_select (struct znode *parent, struct zfile *zf, uns
 					_tcscpy (tmphist, zn->fullname);
 			} else {
 				_tcscpy (tmphist, zn->fullname);
-#ifndef _CONSOLE
-				if (diskimg >= 0 && canhistory)
-					DISK_history_add (tmphist, -1, diskimg, 1);
-#endif
 				tmphist[0] = 0;
 			}
 			select = 0;
@@ -205,8 +191,6 @@ struct zfile *archive_access_select (struct znode *parent, struct zfile *zf, uns
 	}
 #ifndef _CONSOLE
 	diskimg = zfile_is_diskimage (zfile_getname (zf));
-	if (diskimg >= 0 && first && tmphist[0] && canhistory)
-		DISK_history_add (zfile_getname (zf), -1, diskimg, 1);
 #endif
 	zfile_fclose_archive (zv);
 	if (z) {
@@ -669,7 +653,7 @@ static int canrar (void)
 
 	if (israr == 0) {
 		israr = -1;
-#ifdef _WIN32_
+#ifdef _WIN32
 		{
 			HMODULE rarlib;
 
@@ -842,7 +826,7 @@ static aapGetFileInfo aaGetFileInfo;
 static aapExtract aaExtract;
 static aapCloseArchive aaCloseArchive;
 
-#ifdef _WIN32_
+#ifdef _WIN32
 static HMODULE arcacc_mod;
 
 static void arcacc_free (void)

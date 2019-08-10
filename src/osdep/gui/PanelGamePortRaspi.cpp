@@ -428,7 +428,9 @@ void ExitPanelGamePort(const struct _ConfigCategory& category)
 bool HelpPanelGamePort(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("You can select the control type for both ports and the rate for autofire.");
+  helptext.push_back("You can select the control type, mode and autofire for all ports.");
+  helptext.push_back("");
+  helptext.push_back("The \"Autofire rate\" is used for all ports with active autofire.");
   helptext.push_back("");
   helptext.push_back("Set the emulated mouse speed to .25x, .5x, 1x, 2x and 4x to slow down or speed up the mouse.");
   return true;

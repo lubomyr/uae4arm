@@ -6,7 +6,6 @@
   * (c) 1995 Bernd Schmidt
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
@@ -15,17 +14,13 @@
 #include "custom.h"
 #include "newcpu.h"
 #include "cpummu.h"
-#include "cpu_prefetch.h"
 #include "autoconf.h"
-#include "traps.h"
 #include "gui.h"
 #include "savestate.h"
 #include "blitter.h"
 #include "ar.h"
-#include "cia.h"
 #include "inputdevice.h"
 #include "audio.h"
-#include "fpp.h"
 #include "threaddep/thread.h"
 #include "bsdsocket.h"
 #ifdef JIT
@@ -187,7 +182,7 @@ static void set_x_funcs (void)
   }
 }
 
-void flush_cpu_caches(bool force)
+static void flush_cpu_caches(bool force)
 {
 	if (currprefs.cpu_model == 68020) {
 		regs.cacr &= ~0x08;
@@ -479,11 +474,6 @@ void init_m68k (void)
 
 struct regstruct regs;
 
-int get_cpu_model(void)
-{
-  return currprefs.cpu_model;
-}
-
 STATIC_INLINE int in_rom (uaecptr pc)
 {
   return (munge24 (pc) & 0xFFF80000) == 0xF80000;
@@ -766,6 +756,8 @@ static void Exception_build_stack_frame_common (uae_u32 oldpc, uae_u32 currpc, i
 		Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x0);
 	}
 }
+
+static void exception3_notinstruction(uae_u32 opcode, uaecptr addr);
 
 void Exception (int nr)
 {
@@ -1069,6 +1061,7 @@ static void m68k_reset (bool hardreset)
   fake_mmusr_030 = 0;
 
 	regs.pcr = 0;
+	
   fill_prefetch ();
 }
 
@@ -1442,6 +1435,8 @@ void doint (void)
   	set_special (SPCFLAG_DOINT);
 }
 
+static void m68k_resumestopped (void);
+
 static int do_specialties (int cycles)
 {
 	if (regs.spcflags & SPCFLAG_MODE_CHANGE)
@@ -1522,10 +1517,6 @@ static int do_specialties (int cycles)
 	bool first = true;
   while ((regs.spcflags & SPCFLAG_STOP) && !(regs.spcflags & SPCFLAG_BRK)) {
 		check_uae_int_request();
- 		{
- 			if (bsd_int_requested)
- 				bsdsock_fake_int_handler ();
- 		}
 
 		if (!first)
       x_do_cycles (4 * CYCLE_UNIT);
@@ -2120,7 +2111,7 @@ static void exception3f (uae_u32 opcode, uaecptr addr, bool writeaccess, bool in
   Exception (3);
 }
 
-void exception3_notinstruction(uae_u32 opcode, uaecptr addr)
+static void exception3_notinstruction(uae_u32 opcode, uaecptr addr)
 {
 	exception3f (opcode, addr, true, false, true, 0xffffffff, false);
 }
@@ -2209,7 +2200,7 @@ void m68k_setstopped (void)
 	}
 }
 
-void m68k_resumestopped (void)
+static void m68k_resumestopped (void)
 {
 	if (!regs.stopped)
 		return;

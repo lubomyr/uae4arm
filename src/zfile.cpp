@@ -9,20 +9,17 @@
 
 #define RECURSIVE_ARCHIVES 1
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "zfile.h"
 #include "disk.h"
-#include "gui.h"
 #include "crc32.h"
 #include "fsdb.h"
 #include "fsusage.h"
 #include "zarchive.h"
 #include "diskutil.h"
 #include "fdi2raw.h"
-#include "uae/io.h"
 #include "uae.h"
 
 #include "archivers/zip/unzip.h"
@@ -528,7 +525,6 @@ end:
 	return NULL;
 }
 
-#include "fdi2raw.h"
 static struct zfile *fdi (struct zfile *z, int index, int *retcode)
 {
 	int i, j, r;
@@ -1056,9 +1052,9 @@ end:
 }
 #endif
 
-const TCHAR *uae_ignoreextensions[] = 
+static const TCHAR *uae_ignoreextensions[] = 
   { _T(".gif"), _T(".jpg"), _T(".png"), _T(".xml"), _T(".pdf"), _T(".txt"), 0 };
-const TCHAR *uae_diskimageextensions[] =
+static const TCHAR *uae_diskimageextensions[] =
   { _T(".adf"), _T(".adz"), _T(".ipf"), _T(".scp"), _T(".fdi"), _T(".exe"), _T(".dms"), _T(".wrp"), _T(".dsq"), 0 };
 
 int zfile_is_ignore_ext(const TCHAR *name)
@@ -1096,7 +1092,7 @@ int zfile_is_diskimage (const TCHAR *name)
 
 static const TCHAR *archive_extensions[] = {
 	_T("7z"), _T("rar"), _T("zip"), _T("lha"), _T("lzh"), _T("lzx"),
-	_T("adf"), _T("adz"), _T("dsq"), _T("dms"), _T("fdi"), _T("wrp"), _T("ima"),
+	_T("adf"), _T("adz"), _T("dsq"), _T("dms"), _T("ipf"), _T("fdi"), _T("wrp"), _T("ima"),
 	_T("hdf"), _T("tar"),
 	NULL
 };
@@ -1503,7 +1499,7 @@ static struct zfile *zfile_fopen_x (const TCHAR *name, const TCHAR *mode, int ma
   return l;
 }
 
-#ifdef _WIN32_
+#ifdef _WIN32
 static int isinternetfile (const TCHAR *name)
 {
 	if (!_tcsnicmp (name, _T("http://"), 7) || !_tcsnicmp (name, _T("https://"), 8))
@@ -1610,7 +1606,7 @@ static struct zfile *zfile_fopenx2 (const TCHAR *name, const TCHAR *mode, int ma
 	struct zfile *f;
 	TCHAR tmp[MAX_DPATH];
 
-#ifdef _WIN32_
+#ifdef _WIN32
 	if (isinternetfile (name))
 		return zfile_fopen_internet (name, mode, mask);
 #endif
@@ -2283,12 +2279,7 @@ struct zvolume *zvolume_alloc (struct zfile *z, unsigned int id, void *handle, c
   return zvolume_alloc_2 (zfile_getname (z), z, id, handle, volumename);
 }
 
-static struct zvolume *zvolume_alloc_nofile (const TCHAR *name, unsigned int id, void *handle, const TCHAR *volumename)
-{
-  return zvolume_alloc_2 (name, NULL, id, handle, volumename);
-}
-
-struct zvolume *zvolume_alloc_empty (struct zvolume *prev, const TCHAR *name)
+static struct zvolume *zvolume_alloc_empty (struct zvolume *prev, const TCHAR *name)
 {
   struct zvolume *zv = zvolume_alloc_2(name, 0, 0, 0, NULL);
   if (!zv)
@@ -2656,47 +2647,7 @@ struct znode *zvolume_addfile_abs(struct zvolume *zv, struct zarchive_info *zai)
   return zn;
 }
 
-static struct zvolume *zfile_fopen_directory (const TCHAR *dirname)
-{
-	struct zvolume *zv = NULL;
-	struct my_opendir_s *dir;
-	TCHAR fname[MAX_DPATH];
-
-	dir = my_opendir (dirname);
-	if (!dir)
-		return NULL;
-	zv = zvolume_alloc_nofile (dirname, ArchiveFormatDIR, NULL, NULL);
-	while (my_readdir (dir, fname)) {
-		TCHAR fullname[MAX_DPATH];
-		struct mystat statbuf;
-		struct zarchive_info zai = { 0 };
-		if (!_tcscmp (fname, _T(".")) || !_tcscmp (fname, _T("..")))
-			continue;
-		_tcscpy (fullname, dirname);
-		_tcscat (fullname, FSDB_DIR_SEPARATOR_S);
-		_tcscat (fullname, fname);
-		if (!my_stat (fullname, &statbuf))
-			continue;
-		zai.name = fname;
-		zai.size = statbuf.size;
-		zai.tv.tv_sec = statbuf.mtime.tv_sec;
-		zai.tv.tv_usec = statbuf.mtime.tv_usec;
-		if (statbuf.mode & FILEFLAG_DIR) {
-			zvolume_adddir_abs (zv, &zai);
-		} else {
-			struct znode *zn;
-			zn = zvolume_addfile_abs (zv, &zai);
-			//zfile_fopen_archive_recurse2 (zv, zn);
-		}
-	}
-	my_closedir (dir);
-	//    zfile_fopen_archive_recurse (zv);
-	if (zv)
-		zvolume_addtolist (zv);
-	return zv;
-}
-
-struct zvolume *zfile_fopen_archive (const TCHAR *filename, int flags)
+static struct zvolume *zfile_fopen_archive (const TCHAR *filename, int flags)
 {
   struct zvolume *zv = NULL;
   struct zfile *zf = zfile_fopen_nozip (filename, _T("rb"));
@@ -2726,37 +2677,6 @@ struct zvolume *zfile_fopen_archive (const TCHAR *filename, int flags)
 struct zvolume *zfile_fopen_archive (const TCHAR *filename)
 {
 	return zfile_fopen_archive (filename, ZFD_ALL);
-}
-
-struct zvolume *zfile_fopen_archive_root (const TCHAR *filename, int flags)
-{
-	TCHAR path[MAX_DPATH], *p1, *p2, *lastp;
-	struct zvolume *zv = NULL;
-	//int last = 0;
-	int num, i;
-
-	if (my_existsdir (filename))
-		return zfile_fopen_directory (filename);
-
-	num = 1;
-	lastp = NULL;
-	for (;;) {
-		_tcscpy (path, filename);
-		p1 = p2 = path;
-		for (i = 0; i < num; i++) {
-			while (*p1 != FSDB_DIR_SEPARATOR && *p1 != 0)
-				p1++;
-			if (*p1 == 0 && p1 == lastp)
-				return NULL;
-			if (i + 1 < num)
-				p1++;
-		}
-		*p1 = 0;
-		lastp = p1;
-		if (my_existsfile (p2))
-			return zfile_fopen_archive (p2, flags);
-		num++;
-	}
 }
 
 void zfile_fclose_archive(struct zvolume *zv)
@@ -2808,7 +2728,7 @@ struct zdirectory {
 	TCHAR **filenames;
 };
 
-struct zdirectory *zfile_opendir_archive (const TCHAR *path, int flags)
+static struct zdirectory *zfile_opendir_archive (const TCHAR *path, int flags)
 {
   struct zvolume *zv = get_zvolume(path);
 	bool created = false;
@@ -2855,7 +2775,7 @@ void zfile_closedir_archive(struct zdirectory *zd)
 	xfree (zd->filenames);
     xfree(zd);
 }
-int zfile_readdir_archive (struct zdirectory *zd, TCHAR *out, bool fullpath)
+static int zfile_readdir_archive (struct zdirectory *zd, TCHAR *out, bool fullpath)
 {
 	if (out)
 		out[0] = 0;
@@ -3003,35 +2923,6 @@ int zfile_exists_archive (const TCHAR *path, const TCHAR *rel)
   return zn ? 1 : 0;
 }
 
-int zfile_convertimage (const TCHAR *src, const TCHAR *dst)
-{
-  struct zfile *s, *d;
-  int ret = 0;
-
-	s = zfile_fopen (src, _T("rb"), ZFD_NORMAL);
-  if (s) {
-  	uae_u8 *b;
-  	int size;
-  	zfile_fseek (s, 0, SEEK_END);
-  	size = zfile_ftell (s);
-  	zfile_fseek (s, 0, SEEK_SET);
-  	b = xcalloc (uae_u8, size);
-  	if (b) {
-	    if (zfile_fread (b, size, 1, s) == 1) {
-				d = zfile_fopen (dst, _T("wb"), 0);
-    		if (d) {
-  		    if (zfile_fwrite (b, size, 1, d) == 1)
-      			ret = 1;
-  		    zfile_fclose (d);
-    		}
-	    }
-	    xfree (b);
-  	}
-  	zfile_fclose (s);
-  }
-  return ret;
-}
-
 #ifdef _CONSOLE
 static TCHAR *zerror;
 #define WRITE_LOG_BUF_SIZE 4096
@@ -3046,10 +2937,6 @@ void zfile_seterror (const TCHAR *format, ...)
 		zerror = my_strdup (buffer);
 		va_end (parms);
 	}
-}
-TCHAR *zfile_geterror (void)
-{
-	return zerror;
 }
 #else
 void zfile_seterror (const TCHAR *format, ...)

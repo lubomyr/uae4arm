@@ -17,21 +17,21 @@ uae_u32 picasso_demux (uae_u32 arg, TrapContext *ctx);
 
 struct ScreenResolution
 {
-    uae_u32 width;  /* in pixels */
-    uae_u32 height; /* in pixels */
+  uae_u32 width;  /* in pixels */
+  uae_u32 height; /* in pixels */
 };
 
 #define MAX_PICASSO_MODES 100
 #define MAX_REFRESH_RATES 10
 struct PicassoResolution
 {
-    struct ScreenResolution res;
-    int depth;   /* depth in bytes-per-pixel */
-    int residx;
-    int refresh[MAX_REFRESH_RATES]; /* refresh-rates in Hz */
-    char name[25];
-    /* Bit mask of RGBFF_xxx values.  */
-    uae_u32 colormodes;
+  struct ScreenResolution res;
+  int depth;   /* depth in bytes-per-pixel */
+  int residx;
+  int refresh[MAX_REFRESH_RATES]; /* refresh-rates in Hz */
+  char name[25];
+  /* Bit mask of RGBFF_xxx values.  */
+  uae_u32 colormodes;
 };
 extern struct PicassoResolution *DisplayModes;
 
@@ -45,11 +45,11 @@ typedef struct _RECT
 
 #define MAX_DISPLAYS 1
 struct MultiDisplay {
-    int primary, disabled, gdi;
-    char *name;
-    char *name2;
-    struct PicassoResolution *DisplayModes;
-    RECT rect;
+  int primary, disabled, gdi;
+  char *name;
+  char *name2;
+  struct PicassoResolution *DisplayModes;
+  RECT rect;
 };
 extern struct MultiDisplay Displays[MAX_DISPLAYS];
 
@@ -134,31 +134,31 @@ typedef enum {
 /************************************************************************/
 
 enum {
-    PLANAR,
-    CHUNKY,
-    HICOLOR,
-    TRUECOLOR,
-    TRUEALPHA,
-    MAXMODES
+  PLANAR,
+  CHUNKY,
+  HICOLOR,
+  TRUECOLOR,
+  TRUEALPHA,
+  MAXMODES
 };
 
 /************************************************************************/
 struct MyCLUTEntry {
-    uae_u8 Red;
-    uae_u8 Green;
-    uae_u8 Blue;
-    uae_u8 Pad;
+  uae_u8 Red;
+  uae_u8 Green;
+  uae_u8 Blue;
+  uae_u8 Pad;
 };
 
 struct ColorIndexMapping {
-    uae_u32 ColorMask;
-    uae_u32 Colors[256];
+  uae_u32 ColorMask;
+  uae_u32 Colors[256];
 };
 
 struct CLUTEntry {
-    uae_u8 Red;
-    uae_u8 Green;
-    uae_u8 Blue;
+  uae_u8 Red;
+  uae_u8 Green;
+  uae_u8 Blue;
 };
 
 #define PSSO_BitMap_BytesPerRow 0
@@ -171,29 +171,15 @@ struct CLUTEntry {
 
 struct BitMap
 {
-    uae_u16 BytesPerRow;
-    uae_u16 Rows;
-    uae_u8 Flags;
-    uae_u8 Depth;
-    uae_u16 pad;
-    uae_u8 *Planes[8];
+  uae_u16 BytesPerRow;
+  uae_u16 Rows;
+  uae_u8 Flags;
+  uae_u8 Depth;
+  uae_u16 pad;
+  uae_u8 *Planes[8];
 };
 
 /************************************************************************/
-
-#define SETTINGSNAMEMAXCHARS		30
-#define BOARDNAMEMAXCHARS		30
-
-struct Settings {
-    uae_u32					BoardType;
-    /* a value describing assignment to nth board local to boardtype
-     * to be used for reassignment when boards are added or removed.  */
-    uae_u16					LocalOrdering;
-    uae_s16					LastSelected;
-    char					NameField[SETTINGSNAMEMAXCHARS];
-    /* neu! */
-    char					*BoardName;
-};
 
 #define MAXRESOLUTIONNAMELENGTH 22
 
@@ -212,14 +198,14 @@ struct Settings {
 #define PSSO_LibResolution_sizeof (60 + MAXMODES*4)
 
 struct LibResolution {
-    char P96ID[6];
-    char Name[MAXRESOLUTIONNAMELENGTH];
-    uae_u32 DisplayID;
-    uae_u16 Width;
-    uae_u16 Height;
-    uae_u16 Flags;
-    uaecptr Modes[MAXMODES];
-    uaecptr BoardInfo;
+  char P96ID[6];
+  char Name[MAXRESOLUTIONNAMELENGTH];
+  uae_u32 DisplayID;
+  uae_u16 Width;
+  uae_u16 Height;
+  uae_u16 Flags;
+  uaecptr Modes[MAXMODES];
+  uaecptr BoardInfo;
 };
 
 #define P96B_FAMILY	0			/* obsolete (Resolution is an entire family) */
@@ -559,34 +545,33 @@ struct Line {
 /************************************************************************/
 struct picasso96_state_struct
 {
-    RGBFTYPE		RGBFormat;   /* true-colour, CLUT, hi-colour, etc. */
-    struct MyCLUTEntry	CLUT[256];   /* Duh! */
-    uaecptr		Address;     /* Active screen address (Amiga-side) */
-    uaecptr		Extent;	     /* End address of screen (Amiga-side) */
-    uae_u16		Width;	     /* Active display width  (From SetGC) */
-    uae_u16		VirtualWidth;/* Total screen width (From SetPanning) */
-    uae_u16		BytesPerRow; /* Total screen width in bytes (From SetGC) */
-    uae_u16		Height;	     /* Active display height (From SetGC) */
-    uae_u16		VirtualHeight; /* Total screen height */
-    uae_u8		GC_Depth;    /* From SetGC() */
-    uae_u8		GC_Flags;    /* From SetGC() */
-    long		XOffset;     /* From SetPanning() */
-    long		YOffset;     /* From SetPanning() */
-    uae_u8		SwitchState; /* From SetSwitch() - 0 is Amiga, 1 is Picasso */
-    uae_u8		BytesPerPixel;
-    uae_u8		CardFound;
-    //here follow winuae additional entrys
-    uae_u8    *HostAddress; /* Active screen address (PC-side) */
-    // host address is need because Windows
-    // support NO direct access all the time to gfx Card
-    // everytime windows can remove your surface from card so the mainrender place
-    // must be in memory
-    long		XYOffset;
+  RGBFTYPE		RGBFormat;   /* true-colour, CLUT, hi-colour, etc. */
+  struct MyCLUTEntry	CLUT[256];   /* Duh! */
+  uaecptr		Address;     /* Active screen address (Amiga-side) */
+  uaecptr		Extent;	     /* End address of screen (Amiga-side) */
+  uae_u16		Width;	     /* Active display width  (From SetGC) */
+  uae_u16		VirtualWidth;/* Total screen width (From SetPanning) */
+  uae_u16		BytesPerRow; /* Total screen width in bytes (From SetGC) */
+  uae_u16		Height;	     /* Active display height (From SetGC) */
+  uae_u16		VirtualHeight; /* Total screen height */
+  uae_u8		GC_Depth;    /* From SetGC() */
+  uae_u8		GC_Flags;    /* From SetGC() */
+  long		XOffset;     /* From SetPanning() */
+  long		YOffset;     /* From SetPanning() */
+  uae_u8		SwitchState; /* From SetSwitch() - 0 is Amiga, 1 is Picasso */
+  uae_u8		BytesPerPixel;
+  uae_u8		CardFound;
+  //here follow winuae additional entrys
+  uae_u8    *HostAddress; /* Active screen address (PC-side) */
+  // host address is need because Windows
+  // support NO direct access all the time to gfx Card
+  // everytime windows can remove your surface from card so the mainrender place
+  // must be in memory
+  long		XYOffset;
 };
 
 extern void InitPicasso96 (void);
 
-extern int uaegfx_card_found;
 extern bool picasso_rendered;
 
 extern struct picasso96_state_struct picasso96_state;
@@ -594,10 +579,8 @@ extern struct picasso96_state_struct picasso96_state;
 extern void picasso_enablescreen (int on);
 extern void picasso_refresh (void);
 extern void picasso_handle_vsync (void);
-extern void picasso_trigger_vblank (void);
 extern void picasso_reset (void);
-extern bool picasso_is_active (void);
-extern int picasso_palette (struct MyCLUTEntry *CLUT);
+extern int picasso_palette (struct MyCLUTEntry *CLUT, uae_u32 *clut);
 
 /* This structure describes the UAE-side framebuffer for the Picasso
  * screen.  */

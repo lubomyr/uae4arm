@@ -356,7 +356,7 @@ static bool handle_internal_functions(int sdlkeycode, int sdlmodifier)
         return true;
         
       case SDLK_s:  // Left shoulder + s -> store savestate
-        savestate_initsave(savestate_fname, 2, 0, false);
+        savestate_initsave(savestate_fname);
   			save_state (savestate_fname, "...");
         savestate_state = STATE_DOSAVE;
         return true;

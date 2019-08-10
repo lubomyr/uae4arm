@@ -3103,7 +3103,7 @@ generate_includes(FILE * f)
   fprintf (f, "#if defined(JIT)\n");
 	fprintf(f, "#include \"sysdeps.h\"\n");
 	fprintf (f, "#include \"options.h\"\n");
-	fprintf(f, "#include \"memory.h\"\n");
+	fprintf(f, "#include \"memory-uae.h\"\n");
 	fprintf(f, "#include \"newcpu.h\"\n");
 	fprintf (f, "#include \"custom.h\"\n");
 	fprintf(f, "#include \"comptbl.h\"\n");

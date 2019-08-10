@@ -24,10 +24,8 @@ struct uae_driveinfo {
 	TCHAR device_path[2048];
 	uae_u64 size;
 	uae_u64 offset;
-	int bytespersector;
 	int removablemedia;
 	int nomedia;
-	int dangerous;
 	int readonly;
 };
 
@@ -157,7 +155,6 @@ void hdf_close_target (struct hardfiledata *hfd)
 	hfd->cache = 0;
 	hfd->cache_valid = 0;
 	hfd->drive_empty = 0;
-	hfd->dangerous = 0;
 }
 
 static int hdf_seek (struct hardfiledata *hfd, uae_u64 offset)
@@ -326,8 +323,6 @@ static int hdf_write_2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, 
 	int outlen = 0;
 
 	if (hfd->ci.readonly)
-		return 0;
-	if (hfd->dangerous)
 		return 0;
 	hfd->cache_valid = 0;
 	hdf_seek (hfd, offset);

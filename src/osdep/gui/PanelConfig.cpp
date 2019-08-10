@@ -281,8 +281,8 @@ void ExitPanelConfig(const struct _ConfigCategory& category)
 bool HelpPanelConfig(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("To load a configuration, select the entry in the list and then click on \"Load\". If you doubleclick on an entry");
-  helptext.push_back("in the list, the emulation starts with this configuration.");
+  helptext.push_back("To load a configuration, select the entry in the list and then click on \"Load\". If you doubleclick on an entry in the");
+  helptext.push_back("list, the emulation starts with this configuration.");
   helptext.push_back(" ");
   helptext.push_back("If you want to create a new configuration, setup all options, enter a new name in \"Name\", provide a short");
   helptext.push_back("description and then click on \"Save\".");

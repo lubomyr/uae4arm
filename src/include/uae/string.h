@@ -7,7 +7,7 @@
 #include "uae/types.h"
 #include <string.h>
 
-#ifdef _WIN32_
+#ifdef _WIN32
 /* Make sure the real _tcs* functions are already declared before we
  * re-define them below. */
 #include <tchar.h>
@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #endif
 
-#ifdef _WIN32_
+#ifdef _WIN32
 /* Using the real _tcs* functions */
 #else
 #define _istdigit isdigit
@@ -68,21 +68,6 @@ static inline size_t uae_tcslcpy(TCHAR *dst, const TCHAR *src, size_t size)
 	}
 	memcpy(dst, src, cpy_len * sizeof(TCHAR));
 	dst[cpy_len] = _T('\0');
-	return src_len;
-}
-
-static inline size_t uae_strlcpy(char *dst, const char *src, size_t size)
-{
-	if (size == 0) {
-		return 0;
-	}
-	size_t src_len = strlen(src);
-	size_t cpy_len = src_len;
-	if (cpy_len >= size) {
-		cpy_len = size - 1;
-	}
-	memcpy(dst, src, cpy_len);
-	dst[cpy_len] = '\0';
 	return src_len;
 }
 

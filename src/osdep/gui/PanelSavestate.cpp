@@ -136,7 +136,7 @@ class SavestateActionListener : public gcn::ActionListener
       			FILE *f = fopen(savestate_fname,"rb");
       			if (f) {
       				fclose(f);
-              savestate_initsave(savestate_fname, 2, 0, false);
+              savestate_initsave(savestate_fname);
       				savestate_state = STATE_DORESTORE;
       				gui_running = false;
       			}
@@ -151,7 +151,7 @@ class SavestateActionListener : public gcn::ActionListener
         // Save current state
         //------------------------------------------
       	if(emulating) {
-          savestate_initsave(savestate_fname, 2, 0, false);
+          savestate_initsave(savestate_fname);
     			save_state (savestate_fname, "...");
           savestate_state = STATE_DOSAVE; // Just to create the screenshot
           delay_savestate_frame = 2;          
@@ -262,6 +262,6 @@ bool HelpPanelSavestate(std::vector<std::string> &helptext)
   helptext.push_back("loaded. Hold left shoulder button and press 's' to save the current state in the last active slot.");
 #endif
   helptext.push_back(" ");
-  helptext.push_back("Note: Savestates will not work with HDDs.");
+  helptext.push_back("Note: Savestates with HDDs may not work.");
   return true;
 }

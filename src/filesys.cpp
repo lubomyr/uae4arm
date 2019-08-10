@@ -22,16 +22,13 @@
   * modified at the same time by another process while UAE is running.
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "threaddep/thread.h"
 #include "options.h"
-#include "traps.h"
 #include "uae.h"
 #include "memory-uae.h"
 #include "custom.h"
-#include "newcpu.h"
 #include "filesys.h"
 #include "autoconf.h"
 #include "fsusage.h"
@@ -45,7 +42,6 @@
 #include "bsdsocket.h"
 #include "uaeresource.h"
 #include "inputdevice.h"
-#include "blkdev.h"
 #include "picasso96.h"
 #include "rommgr.h"
 
@@ -231,50 +227,36 @@ int get_filesys_unitconfig (struct uae_prefs *p, int index, struct mountedinfo *
 
   memset(mi, 0, sizeof (struct mountedinfo));
   memset(&uitmp, 0, sizeof uitmp);
-	_tcscpy (mi->rootdir, uci->ci.rootdir);
   if (!ui) {
   	ui = &uitmp;
 		if (uci->ci.type == UAEDEV_DIR) {
 			cfgfile_resolve_path_out_load(uci->ci.rootdir, filepath, MAX_DPATH, PATH_DIR);
-			_tcscpy(mi->rootdir, filepath);
 	    mi->ismounted = 1;
 			if (filepath[0] == 0)
     		return FILESYS_VIRTUAL;
 			if (my_existsfile (filepath)) {
-		    mi->ismedia = 1;
 		    return FILESYS_VIRTUAL;
 	    }
 			if (my_getvolumeinfo (filepath) < 0)
 		    return -1;
-	    mi->ismedia = true;
 	    return FILESYS_VIRTUAL;
 		} else if (uci->ci.type == UAEDEV_HDF) {
 			cfgfile_resolve_path_out_load(uci->ci.rootdir, filepath, MAX_DPATH, PATH_HDF);
-			_tcscpy(mi->rootdir, filepath);
 			ui->hf.ci.readonly = true;
 			ui->hf.ci.blocksize = uci->ci.blocksize;
 			int err = hdf_open (&ui->hf, filepath);
 			if (err <= 0) {
-		    mi->ismedia = false;
 		    mi->ismounted = true;
-				mi->error = err;
 				if (uci->ci.reserved == 0 && uci->ci.sectors == 0 && uci->ci.surfaces == 0) {
 					return FILESYS_HARDFILE_RDB;
 		    }
 		    return -1;
       }
-	    mi->ismedia = true;
-	    if (ui->hf.drive_empty)
-		    mi->ismedia = 0;
 			hdf_close (&ui->hf);
     }
   } else {
 		if (ui->hf.ci.controller_type == HD_CONTROLLER_TYPE_UAE) { // what is this? || (ui->controller && p->cs_ide)) {
 	    mi->ismounted = 1;
-			if (uci->ci.type == UAEDEV_HDF)
-		    mi->ismedia = ui->hf.drive_empty ? false : true;
-	    else
-		    mi->ismedia = true;
     }
   }
 
@@ -282,9 +264,9 @@ int get_filesys_unitconfig (struct uae_prefs *p, int index, struct mountedinfo *
 		return -1;
   mi->size = ui->hf.virtsize;
 	if (uci->ci.highcyl) {
-		uci->ci.cyls = mi->nrcyls = uci->ci.highcyl;
+		uci->ci.cyls = uci->ci.highcyl;
 	} else {
-		uci->ci.cyls = mi->nrcyls = (int)(uci->ci.sectors * uci->ci.surfaces ? (ui->hf.virtsize / uci->ci.blocksize) / (uci->ci.sectors * uci->ci.surfaces) : 0);
+		uci->ci.cyls = (int)(uci->ci.sectors * uci->ci.surfaces ? (ui->hf.virtsize / uci->ci.blocksize) / (uci->ci.sectors * uci->ci.surfaces) : 0);
 	}
 	if (uci->ci.type == UAEDEV_DIR)
   	return FILESYS_VIRTUAL;
@@ -296,10 +278,10 @@ int get_filesys_unitconfig (struct uae_prefs *p, int index, struct mountedinfo *
 
 static void stripsemicolon(TCHAR *s)
 {
-    if (!s)
-	return;
-    while(_tcslen(s) > 0 && s[_tcslen(s) - 1] == ':')
-	s[_tcslen(s) - 1] = 0;
+  if (!s)
+  	return;
+  while(_tcslen(s) > 0 && s[_tcslen(s) - 1] == ':')
+  	s[_tcslen(s) - 1] = 0;
 }
 static void stripspace (TCHAR *s)
 {
@@ -553,7 +535,7 @@ static int set_filesys_unit_1 (int nr, struct uaedev_config_info *ci, bool custo
   for (i = 0; i < MAX_FILESYSTEM_UNITS; i++) {
 		if (nr == i || !mountinfo.ui[i].open || mountinfo.ui[i].rootdir == NULL)
 	    continue;
-		if (_tcslen (c.rootdir) > 0 && !_tcsicmp (mountinfo.ui[i].rootdir, c.rootdir)) {
+		if (_tcslen(c.rootdir) > 0 && samepath(mountinfo.ui[i].rootdir, c.rootdir)) {
 			error_log (_T("directory/hardfile '%s' already added."), c.rootdir);
       return -1;
 	  }
@@ -719,20 +701,6 @@ int kill_filesys_unitconfig (struct uae_prefs *p, int nr)
   }
   p->mountitems--;
 	memset (&p->mountconfig[MOUNT_CONFIG_SIZE - 1], 0, sizeof (struct uaedev_config_data));
-  return 1;
-}
-
-int move_filesys_unitconfig (struct uae_prefs *p, int nr, int to)
-{
-	struct uaedev_config_data *uci1, *uci2, tmpuci;
-
-	uci1 = getuci (p->mountconfig, nr);
-	uci2 = getuci (p->mountconfig, to);
-  if (nr == to)
-  	return 0;
-	memcpy (&tmpuci, uci1, sizeof (struct uaedev_config_data));
-	memcpy (uci1, uci2, sizeof (struct uaedev_config_data));
-	memcpy (uci2, &tmpuci, sizeof (struct uaedev_config_data));
   return 1;
 }
 
@@ -1098,26 +1066,18 @@ typedef struct _unit {
   a_inode rootnode;
 	unsigned int aino_cache_size;
   a_inode *aino_hash[MAX_AINO_HASH];
-	unsigned int nr_cache_hits;
-	unsigned int nr_cache_lookups;
 
   struct notify *notifyhash[NOTIFY_HASH_SIZE];
 
   int volflags;
   uae_u32 lockkey;
   bool inhibited;
-  bool canremovable;
 	/* increase when media is changed.
 	 * used to detect if cached aino is valid
 	 */
   int mountcount;
 	int mount_changed;
   struct zvolume *zarchive;
-
-	TCHAR *mount_volume;
-	TCHAR *mount_rootdir;
-	bool mount_readonly;
-	int mount_flags;
 
   int reinsertdelay;
   TCHAR *newvolume;
@@ -1149,8 +1109,6 @@ static uae_u32 a_uniq, key_uniq;
 #define GET_PCK64_ARG1(p) ((uae_s32)(get_long_host((p)->packet_data + dp64_Arg1)))
 #define GET_PCK64_ARG2(p) ( (((uae_s64)(get_long_host((p)->packet_data + dp64_Arg2))) << 32) | (((uae_s64)(get_long_host((p)->packet_data + dp64_Arg2 + 4))) << 0) )
 #define GET_PCK64_ARG3(p) ((uae_s32)(get_long_host((p)->packet_data + dp64_Arg3)))
-#define GET_PCK64_ARG4(p) ((uae_s32)(get_long_host((p)->packet_data + dp64_Arg4)))
-#define GET_PCK64_ARG5(p) ( (((uae_s64)(get_long_host((p)->packet_data + dp64_Arg5))) << 32) | (((uae_s64)(get_long_host((p)->packet_data + dp64_Arg5 + 4))) << 0) )
 
 static void readdpacket(TrapContext *ctx, dpacket *packet, uaecptr pck)
 {
@@ -1223,14 +1181,6 @@ static TCHAR *bstr (TrapContext *ctx, Unit *unit, uaecptr addr)
 	buf[n] = 0;
 	au_fs_copy (unit->tmpbuf3, sizeof (unit->tmpbuf3) / sizeof (TCHAR), buf);
   return unit->tmpbuf3;
-}
-static TCHAR *cstr (TrapContext *ctx, Unit *unit, uaecptr addr)
-{
-	uae_char buf[257];
-
-	trap_get_string(ctx, buf, addr, sizeof buf);
-	au_fs_copy (unit->tmpbuf3, sizeof (unit->tmpbuf3) / sizeof (TCHAR), buf);
-	return unit->tmpbuf3;
 }
 
 static TCHAR *bstr_cut (TrapContext *ctx, Unit *unit, uaecptr addr)
@@ -1480,22 +1430,7 @@ static void clear_exkeys(Unit *unit)
   }
 }
 
-static void filesys_delayed_change (Unit *u, int frames, const TCHAR *rootdir, const TCHAR *volume, bool readonly, int flags)
-{
-	u->reinsertdelay = 50;
-	u->newflags = flags;
-	u->newreadonly = readonly;
-	u->newrootdir = my_strdup (rootdir);
-	if (volume)
-	  u->newvolume = my_strdup (volume);
-	filesys_eject(u->unit);
-  if (!rootdir || _tcslen (rootdir) == 0)
-    u->reinsertdelay = 0;
-	if (u->reinsertdelay > 0)
-    write_log (_T("FILESYS: delayed insert %d: '%s' ('%s')\n"), u->unit, volume ? volume : _T("<none>"), rootdir);
-}
-
-int filesys_eject (int nr)
+static int filesys_eject (int nr)
 {
   UnitInfo *ui = &mountinfo.ui[nr];
   Unit *u = ui->self;
@@ -1517,9 +1452,24 @@ int filesys_eject (int nr)
   return 1;
 }
 
+static void filesys_delayed_change (Unit *u, int frames, const TCHAR *rootdir, const TCHAR *volume, bool readonly, int flags)
+{
+	u->reinsertdelay = 50;
+	u->newflags = flags;
+	u->newreadonly = readonly;
+	u->newrootdir = my_strdup (rootdir);
+	if (volume)
+	  u->newvolume = my_strdup (volume);
+	filesys_eject(u->unit);
+  if (!rootdir || _tcslen (rootdir) == 0)
+    u->reinsertdelay = 0;
+	if (u->reinsertdelay > 0)
+    write_log (_T("FILESYS: delayed insert %d: '%s' ('%s')\n"), u->unit, volume ? volume : _T("<none>"), rootdir);
+}
+
 static uae_u32 heartbeat;
 
-int filesys_insert (int nr, const TCHAR *volume, const TCHAR *rootdir, bool readonly, int flags)
+static int filesys_insert (int nr, const TCHAR *volume, const TCHAR *rootdir, bool readonly, int flags)
 {
   UnitInfo *ui;
   Unit *u;
@@ -1566,10 +1516,6 @@ int filesys_insert (int nr, const TCHAR *volume, const TCHAR *rootdir, bool read
   }
   u->mountcount++;
 	u->mount_changed = 1;
-	u->mount_volume = volume ? my_strdup (volume) : NULL;
-	u->mount_rootdir = my_strdup (rootdir);
-	u->mount_readonly = readonly;
-	u->mount_flags = flags;
 
 	write_log (_T("filesys_insert %d done!\n"), nr);
 
@@ -1978,9 +1924,6 @@ static a_inode *lookup_aino (Unit *unit, uae_u32 uniq)
   a = unit->aino_hash[hash];
   if (a == 0 || a->uniq != uniq)
   	a = lookup_sub (&unit->rootnode, uniq);
-  else
-  	unit->nr_cache_hits++;
-  unit->nr_cache_lookups++;
   unit->aino_hash[hash] = a;
   return a;
 }
@@ -7014,11 +6957,15 @@ static int dofakefilesys (TrapContext *ctx, UnitInfo *uip, uaecptr parmpacket, s
 /* Fill in per-unit fields of a parampacket */
 static uae_u32 REGPARAM2 filesys_dev_storeinfo (TrapContext *ctx)
 {
-  UnitInfo *uip = mountinfo.ui;
 	int no = trap_get_dreg(ctx, 6) & 0x7fffffff;
   int unit_no = no & 65535;
   int sub_no = no >> 16;
   int type;
+
+	if (unit_no >= MAX_FILESYSTEM_UNITS)
+		return -2;
+
+  UnitInfo *uip = mountinfo.ui;
 	uaecptr parmpacket = trap_get_areg(ctx, 0);
 	struct uaedev_config_info *ci = &uip[unit_no].hf.ci;
 
@@ -7335,7 +7282,7 @@ void filesys_install_code (void)
 
 }
 
-#ifdef _WIN32_
+#ifdef _WIN32
 #include "od-win32/win32_filesys.cpp"
 #endif
 
@@ -8072,7 +8019,7 @@ end2:
 
 int save_filesys_cando(void)
 {
-    if (nr_units() == 0)
-	return -1;
-    return filesys_in_interrupt ? 0 : 1;
+  if (nr_units() == 0)
+  	return -1;
+  return filesys_in_interrupt ? 0 : 1;
 }

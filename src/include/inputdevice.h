@@ -39,18 +39,18 @@
 #define IDTYPE_MAX 4
 
 struct inputdevice_functions {
-    int (*init)(void);
-    void (*close)(void);
-    int (*acquire)(int,int);
-    void (*unacquire)(int);
-    void (*read)(void);
-    int (*get_num)(void);
-    TCHAR* (*get_friendlyname)(int);
-    TCHAR* (*get_uniquename)(int);
-    int (*get_widget_num)(int);
-    int (*get_widget_type)(int,int,TCHAR*,uae_u32*);
-    int (*get_widget_first)(int,int);
-    int (*get_flags)(int);
+  int (*init)(void);
+  void (*close)(void);
+  int (*acquire)(int,int);
+  void (*unacquire)(int);
+  void (*read)(void);
+  int (*get_num)(void);
+  TCHAR* (*get_friendlyname)(int);
+  TCHAR* (*get_uniquename)(int);
+  int (*get_widget_num)(int);
+  int (*get_widget_type)(int,int,TCHAR*,uae_u32*);
+  int (*get_widget_first)(int,int);
+  int (*get_flags)(int);
 };
 extern struct inputdevice_functions inputdevicefunc_joystick;
 extern struct inputdevice_functions inputdevicefunc_mouse;
@@ -63,8 +63,8 @@ struct uae_input_device_default_node
 };
 
 struct uae_input_device_kbr_default {
-    int scancode;
-    struct uae_input_device_default_node node[MAX_INPUT_SUB_EVENT];
+  int scancode;
+  struct uae_input_device_default_node node[MAX_INPUT_SUB_EVENT];
 };
 
 struct inputevent {
@@ -166,21 +166,12 @@ struct inputevent {
 #define AM_KT (AM_K|AM_SETTOGGLE)
 
 extern int inputdevice_iterate (int devnum, int num, TCHAR *name, int *af);
-extern bool inputdevice_set_gameports_mapping (struct uae_prefs *prefs, int devnum, int num, int evtnum, uae_u64 flags, int port, int input_selected_setting);
 extern int inputdevice_set_mapping (int devnum, int num, const TCHAR *name, uae_u64 flags, int port, int sub);
 extern int inputdevice_get_mapping (int devnum, int num, uae_u64 *pflags, int *port, TCHAR *name, int sub);
 extern void inputdevice_copyconfig (struct uae_prefs *src, struct uae_prefs *dst);
-extern void inputdevice_copy_single_config (struct uae_prefs *p, int src, int dst, int devnum, int selectedwidget);
-extern void inputdevice_copyjports(struct uae_prefs *srcprefs, struct uae_prefs *dstprefs);
-extern void inputdevice_swap_ports (struct uae_prefs *p, int devnum);
-extern void inputdevice_swap_compa_ports (struct uae_prefs *p, int portswap);
 extern void inputdevice_config_change (void);
 extern int inputdevice_config_change_test (void);
-extern int inputdevice_get_device_index (int devnum);
 extern TCHAR *inputdevice_get_device_name (int type, int devnum);
-extern TCHAR *inputdevice_get_device_name2 (int devnum);
-extern int inputdevice_get_device_status (int devnum);
-extern void inputdevice_set_device_status (int devnum, int enabled);
 extern int inputdevice_get_device_total (int type);
 extern int inputdevice_get_widget_num (int devnum);
 extern int inputdevice_get_widget_type (int devnum, int num, TCHAR *name, bool inccode);
@@ -218,12 +209,8 @@ extern void inputdevice_updateconfig (struct uae_prefs *srcprefs, struct uae_pre
 extern void send_internalevent (int eventid);
 
 extern int inputdevice_translatekeycode (int keyboard, int scancode, int state, bool alwaysrelease);
-extern void inputdevice_checkqualifierkeycode (int keyboard, int scancode, int state);
 extern void inputdevice_setkeytranslation (struct uae_input_device_kbr_default **trans, int **kbmaps);
 extern void inputdevice_do_keyboard (int code, int state);
-extern int inputdevice_iskeymapped (int keyboard, int scancode);
-extern const struct inputevent *inputdevice_get_eventinfo (int evt);
-extern bool inputdevice_get_eventname (const struct inputevent *ie, TCHAR *out);
 extern void inputdevice_compa_clear (struct uae_prefs *prefs, int index);
 extern void inputdevice_sparecopy (struct uae_input_device *uid, int num, int sub);
 extern void inputdevice_forget_unplugged_device(int portnum);
@@ -246,7 +233,6 @@ extern void inputdevice_reset (void);
 extern void write_inputdevice_config (struct uae_prefs *p, struct zfile *f);
 extern void read_inputdevice_config (struct uae_prefs *p, const TCHAR *option, TCHAR *value);
 extern void reset_inputdevice_config (struct uae_prefs *pr, bool reset);
-extern int inputdevice_joyport_config(struct uae_prefs *p, const TCHAR *value1, const TCHAR *value2, int portnum, int mode, int type, bool candefault);
 extern void inputdevice_joyport_config_store(struct uae_prefs *p, const TCHAR *value, int portnum, int mode, int type);
 extern int inputdevice_getjoyportdevice (int port, int val);
 extern void inputdevice_validate_jports (struct uae_prefs *p, int changedport, bool *fixedports);
@@ -258,15 +244,11 @@ extern void inputdevice_default_prefs (struct uae_prefs *p);
 
 extern void inputdevice_acquire (int allmode);
 extern void inputdevice_unacquire (void);
-extern void inputdevice_unacquire(bool emulationactive, int inputmask);
 extern void inputdevice_releasebuttons(void);
 
 extern void inputdevice_add_inputcode (int code, int state, const TCHAR *);
-extern void inputdevice_handle_inputcode (void);
 
 extern void inputdevice_tablet_strobe (void);
-
-extern uae_u64 input_getqualifiers (void);
 
 #define JSEM_MODE_DEFAULT 0
 #define JSEM_MODE_WHEELMOUSE 1
@@ -295,11 +277,6 @@ extern uae_u64 input_getqualifiers (void);
 #define JSEM_ISANYKBD(port,p) (jsem_iskbdjoy(port,p) >= JSEM_KBDLAYOUT && jsem_iskbdjoy(port,p) < JSEM_KBDLAYOUT + JSEM_LASTKBD)
 #endif
 
-extern int jsem_isjoy (int port, const struct uae_prefs *p);
-extern int jsem_ismouse (int port, const struct uae_prefs *p);
-extern int jsem_iskbdjoy (int port, const struct uae_prefs *p);
-
 extern int inputdevice_uaelib (const TCHAR *, const TCHAR *);
-extern int inputdevice_uaelib(const TCHAR *s, int parm, int max, bool autofire);
 
 #endif /* UAE_INPUTDEVICE_H */

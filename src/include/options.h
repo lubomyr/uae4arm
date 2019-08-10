@@ -15,7 +15,7 @@
 #include "traps.h"
 
 #define UAEMAJOR 4
-#define UAEMINOR 1
+#define UAEMINOR 2
 #define UAESUBREV 0
 
 typedef enum { KBD_LANG_US, KBD_LANG_DK, KBD_LANG_DE, KBD_LANG_SE, KBD_LANG_FR, KBD_LANG_IT, KBD_LANG_ES } KbdLang;
@@ -309,7 +309,6 @@ struct uae_prefs {
   bool ntscmode;
   double chipset_refreshrate;
 	struct chipset_refresh cr[MAX_CHIPSET_REFRESH + 2];
-	int cr_selected;
   int collision_level;
   int leds_on_screen;
 	int leds_on_screen_mask[2];
@@ -474,7 +473,6 @@ extern void cfgfile_target_write (struct zfile *, const TCHAR *option, const TCH
 extern void cfgfile_target_dwrite (struct zfile *, const TCHAR *option, const TCHAR *format,...);
 
 extern void cfgfile_write_bool (struct zfile *f, const TCHAR *option, bool b);
-extern void cfgfile_dwrite_bool (struct zfile *f,const  TCHAR *option, bool b);
 extern void cfgfile_target_write_bool (struct zfile *f, const TCHAR *option, bool b);
 extern void cfgfile_target_dwrite_bool (struct zfile *f, const TCHAR *option, bool b);
 
@@ -487,9 +485,6 @@ extern struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int i
 extern void uci_set_defaults (struct uaedev_config_info *uci, bool rdb);
 
 extern void error_log (const TCHAR*, ...);
-extern TCHAR *get_error_log (void);
-extern bool is_error_log (void);
-
 extern void default_prefs (struct uae_prefs *, bool, int);
 extern void discard_prefs (struct uae_prefs *, int);
 extern void copy_prefs(struct uae_prefs *src, struct uae_prefs *dst);
@@ -514,7 +509,6 @@ extern void target_save_options (struct zfile*, struct uae_prefs *);
 extern void target_default_options (struct uae_prefs *, int type);
 extern void target_fixup_options (struct uae_prefs *);
 extern int target_cfgfile_load (struct uae_prefs *, const TCHAR *filename, int type, int isdefault);
-extern void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type);
 extern void cfgfile_resolve_path_out_load(const TCHAR *path, TCHAR *out, int size, int type);
 extern void cfgfile_resolve_path_load(TCHAR *path, int size, int type);
 extern void cfgfile_resolve_path_out_save(const TCHAR *path, TCHAR *out, int size, int type);

@@ -44,29 +44,23 @@
   *
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
-#include "memory-uae.h"
 #include "zfile.h"
 #include "autoconf.h"
 #include "custom.h"
-#include "newcpu.h"
 #include "savestate.h"
 #include "uae.h"
 #include "gui.h"
 #include "audio.h"
 #include "filesys.h"
-#include "disk.h"
-#include "threaddep/thread.h"
 #include "devices.h"
 #include "fsdb.h"
 
 int savestate_state = 0;
 
 static struct zfile *savestate_file;
-static int savestate_docompress, savestate_nodialogs;
 
 TCHAR savestate_fname[MAX_DPATH];
 
@@ -702,17 +696,13 @@ void savestate_restore_finish (void)
 }
 
 /* 1=compressed,2=not compressed */
-void savestate_initsave (const TCHAR *filename, int mode, int nodialogs, bool save)
+void savestate_initsave (const TCHAR *filename)
 {
   if (filename == NULL) {
 	  savestate_fname[0] = 0;
-	  savestate_docompress = 0;
-	  savestate_nodialogs = 0;
 	  return;
   }
   _tcscpy (savestate_fname, filename);
-  savestate_docompress = (mode == 1) ? 1 : 0;
-  savestate_nodialogs = nodialogs;
 }
 
 static void save_rams (struct zfile *f, int comp)
@@ -934,21 +924,17 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
 int save_state (const TCHAR *filename, const TCHAR *description)
 {
 	struct zfile *f;
-  int comp = savestate_docompress;
 
-  if (!savestate_nodialogs) {
-	  state_incompatible_warn();
-	  if (!save_filesys_cando()) {
-			gui_message (_T("Filesystem active. Try again later."));
-	    return -1;
-  	}
-  }
-  savestate_nodialogs = 0;
+  state_incompatible_warn();
+  if (!save_filesys_cando()) {
+		gui_message (_T("Filesystem active. Try again later."));
+    return -1;
+	}
   custom_prepare_savestate ();
 	f = zfile_fopen (filename, _T("w+b"), 0);
   if (!f)
   	return 0;
-	int v = save_state_internal (f, description, comp, true);
+	int v = save_state_internal (f, description, false, true);
 	if (v)
     write_log (_T("Save of '%s' complete\n"), filename);
   zfile_fclose (f);

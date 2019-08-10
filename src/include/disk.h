@@ -23,11 +23,8 @@ typedef enum { DRV_NONE = -1, DRV_35_DD = 0, DRV_35_HD, DRV_525_SD, DRV_35_DD_ES
 struct diskinfo
 {
 	uae_u8 bootblock[1024];
-	bool bb_crc_valid;
 	uae_u32 crc32;
 	bool hd;
-	bool unreadable;
-	int bootblocktype;
 	TCHAR diskname[110];
 };
 
@@ -50,10 +47,6 @@ extern void DISK_reset (void);
 extern int disk_getwriteprotect (struct uae_prefs *p, const TCHAR *name);
 extern int disk_setwriteprotect (struct uae_prefs *p, int num, const TCHAR *name, bool writeprotected);
 extern bool disk_creatediskfile (struct uae_prefs *p, const TCHAR *name, int type, drive_type adftype, int hd, const TCHAR *disk_name, bool ffs, bool bootable, struct zfile *copyfrom);
-extern int DISK_history_add (const TCHAR *name, int idx, int type, int donotcheck);
-extern TCHAR *DISK_history_get (int idx, int type);
-int DISK_examine_image (struct uae_prefs *p, int num, struct diskinfo *di);
-extern TCHAR *DISK_get_saveimagepath(const TCHAR *name, int type);
 extern void DISK_reinsert (int num);
 
 extern void DSKLEN (uae_u16 v, int hpos);

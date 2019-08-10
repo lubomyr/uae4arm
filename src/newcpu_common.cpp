@@ -1,12 +1,10 @@
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "memory-uae.h"
 #include "newcpu.h"
-#include "cpu_prefetch.h"
 
-int movec_illg (int regno)
+static int movec_illg (int regno)
 {
   int regno2 = regno & 0x7ff;
 

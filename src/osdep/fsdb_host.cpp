@@ -1,6 +1,4 @@
-#include "sysconfig.h"
 #include "sysdeps.h"
-#include "config.h"
 #include "fsdb.h"
 #include "zfile.h"
 #include <sys/types.h>

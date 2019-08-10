@@ -4,11 +4,7 @@
 * RTC chips
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
-
-#include "options.h"
-
 #include "rtc.h"
 
 uae_u8 get_clock_msm(struct rtc_msm_data *data, int addr, struct tm *ct)

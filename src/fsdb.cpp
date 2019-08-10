@@ -7,20 +7,11 @@
   * Copyright 1999 Bernd Schmidt
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
-#include "uae.h"
-#include "traps.h"
 #include "memory-uae.h"
-#include "custom.h"
-#include "newcpu.h"
-#include "filesys.h"
-#include "autoconf.h"
-#include "fsusage.h"
 #include "fsdb.h"
-#include "uae/io.h"
 
 /* The on-disk format is as follows:
  * Offset 0, 1 byte, valid
@@ -30,7 +21,7 @@
  * Offset 519, 81 bytes, comment
  */
 
-TCHAR *nname_begin (TCHAR *nname)
+static TCHAR *nname_begin (TCHAR *nname)
 {
   TCHAR *p = _tcsrchr (nname, FSDB_DIR_SEPARATOR);
   if (p)
@@ -38,7 +29,7 @@ TCHAR *nname_begin (TCHAR *nname)
   return nname;
 }
 
-#ifndef _WIN32_
+#ifndef _WIN32
 /* Find the name REL in directory DIRNAME.  If we find a file that
  * has exactly the same name, return REL.  If we find a file that
  * has the same name when compared case-insensitively, return a

@@ -10,22 +10,13 @@
 
 #define __USE_ISOC9X  /* We might be able to pick up a NaN */
 
-#include <math.h>
-#include <float.h>
-#include <fenv.h>
-
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "memory-uae.h"
-#include "uae/attributes.h"
-#include "uae/vm.h"
-#include "custom.h"
 #include "newcpu.h"
 #include "fpp.h"
 #include "savestate.h"
-#include "cpu_prefetch.h"
 
 static void fpsr_set_exception(uae_u32 exception);
 
@@ -106,7 +97,7 @@ static const struct fpp_cr_entry_undef fpp_cr_undef[] = {
 	{ {0x407f0000, 0x00060000, 0x00000000} }
 };
 
-uae_u32 xhex_nan[]   ={0x7fff0000, 0xffffffff, 0xffffffff};
+static uae_u32 xhex_nan[]   ={0x7fff0000, 0xffffffff, 0xffffffff};
 
 static bool fpu_mmu_fixup;
 
@@ -626,7 +617,7 @@ static void fp_unimp_datatype(uae_u16 opcode, uae_u16 extra, uae_u32 ea, uaecptr
 				fsave_data.stag = 7; // undocumented
 			} else {
 				fpp_from_exten(src, &fsave_data.et[0], &fsave_data.et[1], &fsave_data.et[2]);
-				fsave_data.stag = get_ftag(src, (opclass == 0) ? -1 : size);
+				fsave_data.stag = get_ftag(src, (opclass == 0) ? -1U : size);
 				if (fsave_data.stag == 5) {
 					fsave_data.et[0] = (size == 1) ? 0x3f800000 : 0x3c000000; // exponent for denormalized single and double
 				}

@@ -43,7 +43,7 @@ using namespace std;
 #if defined(__x86_64__) || defined(_M_AMD64)
 #define CPU_x86_64 1
 #define CPU_64_BIT 1
-#elif defined(__i386__) || defined(_M_IX86)
+#elif defined(__i386__) || defined(_M_IX86) && !defined(__arm__)
 #define CPU_i386 1
 #elif defined(__arm__) || defined(_M_ARM)
 #define CPU_arm 1
@@ -192,7 +192,6 @@ extern TCHAR *my_strdup (const TCHAR*s);
 #endif
 extern TCHAR *my_strdup_ansi (const char*);
 extern void my_trim (TCHAR*);
-extern TCHAR *my_strdup_trim (const TCHAR*);
 extern TCHAR *au (const char*);
 extern char *ua (const TCHAR*);
 extern TCHAR *au_fs (const char*);
@@ -237,36 +236,9 @@ extern void to_upper (TCHAR *s, int len);
 #undef DONT_HAVE_STDIO
 #undef DONT_HAVE_MALLOC
 
-#if !defined(FSUAE) && defined _WIN32_
+#if !defined(FSUAE) && defined _WIN32
 
-//#ifdef FSUAE
-//#error _WIN32 should not be defined here
-//#endif
-#if defined __WATCOMC__
-
-#define O_NDELAY 0
-#include <direct.h>
-#define dirent direct
-#define mkdir(a,b) mkdir(a)
-#define strcasecmp stricmp
-
-#elif defined __MINGW32__
-
-#include <winsock.h>
-
-#define O_NDELAY 0
-
-#define FILEFLAG_DIR     0x1
-#define FILEFLAG_ARCHIVE 0x2
-#define FILEFLAG_WRITE   0x4
-#define FILEFLAG_READ    0x8
-#define FILEFLAG_EXECUTE 0x10
-#define FILEFLAG_SCRIPT  0x20
-#define FILEFLAG_PURE    0x40
-
-#define mkdir(a,b) mkdir(a)
-
-#elif defined _MSC_VER_
+#if defined _MSC_VER_
 
 #ifdef HAVE_GETTIMEOFDAY
 #include <winsock.h> // for 'struct timeval' definition
@@ -479,7 +451,7 @@ extern void gui_message (const TCHAR *,...);
  * Byte-swapping functions
  */
 
-#ifdef ARMV6T2
+#ifdef ARMV6_ASSEMBLY
 
 STATIC_INLINE uae_u32 do_byteswap_32(uae_u32 v) {
   __asm__ (
@@ -505,14 +477,12 @@ STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
 /* Else, if using SDL, try SDL's endian functions. */
 # ifdef USE_SDL
 #  include <SDL_endian.h>
-#  define bswap_16(x) SDL_Swap16(x)
-#  define bswap_32(x) SDL_Swap32(x)
 #define do_byteswap_16(x) SDL_Swap16(x)
 #define do_byteswap_32(x) SDL_Swap32(x)
 # else
 /* Otherwise, we'll roll our own. */
-#  define bswap_16(x) (((x) >> 8) | (((x) & 0xFF) << 8))
-#  define bswap_32(x) (((x) << 24) | (((x) << 8) & 0x00FF0000) | (((x) >> 8) & 0x0000FF00) | ((x) >> 24))
+#  define do_byteswap_16(x) (((x) >> 8) | (((x) & 0xFF) << 8))
+#  define do_byteswap_32(x) (((x) << 24) | (((x) << 8) & 0x00FF0000) | (((x) >> 8) & 0x0000FF00) | ((x) >> 24))
 # endif
 #endif
 

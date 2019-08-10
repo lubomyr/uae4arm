@@ -1,11 +1,8 @@
-#include "sysconfig.h"
 #include "sysdeps.h"
 #include "options.h"
 #include "include/memory-uae.h"
-#include "custom.h"
 #include "savestate.h"
 #include "blitter.h"
-#include "blitfunc.h"
 
 void blitdofast_0 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
 {

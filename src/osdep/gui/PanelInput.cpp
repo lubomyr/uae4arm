@@ -352,7 +352,9 @@ void ExitPanelInput(const struct _ConfigCategory& category)
 bool HelpPanelInput(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("...");
+  helptext.push_back("Select the device first, for which you want to change the default mapping. Then select the line of the available");
+  helptext.push_back("button/axis in the list you want to remap.");
   helptext.push_back(" ");
+  helptext.push_back("Choose the new target action in the dropdown control \"Target\" for the current selected entry.");
   return true;
 }

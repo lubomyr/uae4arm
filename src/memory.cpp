@@ -6,7 +6,6 @@
   * (c) 1995 Bernd Schmidt
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
@@ -22,9 +21,7 @@
 #include "crc32.h"
 #include "gui.h"
 #include "akiko.h"
-#include "threaddep/thread.h"
 #include "gayle.h"
-#include "gfxboard.h"
 #include "devices.h"
 
 #ifdef JIT
@@ -172,7 +169,7 @@ static int REGPARAM2 dummy_check (uaecptr addr, uae_u32 size)
   return 0;
 }
 
-addrbank *get_sub_bank(uaecptr *paddr)
+static addrbank *get_sub_bank(uaecptr *paddr)
 {
 	int i;
 	uaecptr addr = *paddr;
@@ -407,7 +404,7 @@ int REGPARAM2 default_check (uaecptr a, uae_u32 b)
   return 0;
 }
 
-static int be_cnt, be_recursive;
+static int be_recursive;
 
 uae_u8 *REGPARAM2 default_xlate (uaecptr addr)
 {
@@ -421,9 +418,7 @@ uae_u8 *REGPARAM2 default_xlate (uaecptr addr)
   if (quit_program == 0) {
     /* do this only in 68010+ mode, there are some tricky A500 programs.. */
     if(currprefs.cpu_model > 68000 || !currprefs.cpu_compatible) {
-			if (be_cnt < 3) {
-        write_log (_T("Your Amiga program just did something terribly stupid %08X PC=%08X\n"), addr, M68K_GETPC);
-      }
+      write_log (_T("Your Amiga program just did something terribly stupid %08X PC=%08X\n"), addr, M68K_GETPC);
 			if (gary_toenb && (gary_nonrange(addr) || (size > 1 && gary_nonrange(addr + size - 1)))) {
 				exception2 (addr, false, size, regs.s ? 4 : 0);
 			} else {
@@ -517,6 +512,38 @@ addrbank custmem2_bank = {
 	custmem2_wget,
 	ABFLAG_RAM | ABFLAG_THREADSAFE, 0, 0
 };
+
+static bool singlebit (uae_u32 v)
+{
+	while (v && !(v & 1))
+		v >>= 1;
+	return (v & ~1) == 0;
+}
+
+static void allocate_memory_custombanks(void)
+{
+	if (custmem1_bank.reserved_size != currprefs.custom_memory_sizes[0]) {
+		mapped_free (&custmem1_bank);
+		custmem1_bank.reserved_size = currprefs.custom_memory_sizes[0];
+		// custmem1 and 2 can have non-power of 2 size so only set correct mask if size is power of 2.
+		custmem1_bank.mask = singlebit (custmem1_bank.reserved_size) ? custmem1_bank.reserved_size - 1 : -1;
+		custmem1_bank.start = currprefs.custom_memory_addrs[0];
+		if (custmem1_bank.reserved_size) {
+			if (!mapped_malloc (&custmem1_bank))
+				custmem1_bank.reserved_size = 0;
+		}
+	}
+	if (custmem2_bank.reserved_size != currprefs.custom_memory_sizes[1]) {
+		mapped_free (&custmem2_bank);
+		custmem2_bank.reserved_size = currprefs.custom_memory_sizes[1];
+		custmem2_bank.mask = singlebit (custmem2_bank.reserved_size) ? custmem2_bank.reserved_size - 1 : -1;
+		custmem2_bank.start = currprefs.custom_memory_addrs[1];
+		if (custmem2_bank.reserved_size) {
+			if (!mapped_malloc (&custmem2_bank))
+				custmem2_bank.reserved_size = 0;
+		}
+	}
+}
 
 static const uae_char *kickstring = "exec.library";
 
@@ -635,6 +662,52 @@ static bool load_extendedkickstart (const TCHAR *romextfile, int type)
   return ret;
 }
 
+extern unsigned char arosrom[];
+extern unsigned int arosrom_len;
+static bool load_kickstart_replacement (void)
+{
+	struct zfile *f;
+	f = zfile_fopen_data (_T("aros.gz"), arosrom_len, arosrom);
+	if (!f)
+		return false;
+	f = zfile_gunzip (f);
+	if (!f)
+		return false;
+
+	extendedkickmem_bank.reserved_size = ROM_SIZE_512;
+	extendedkickmem_bank.mask = ROM_SIZE_512 - 1;
+	extendedkickmem_bank.label = _T("rom_e0");
+	extendedkickmem_type = EXTENDED_ROM_KS;
+	mapped_malloc (&extendedkickmem_bank);
+	read_kickstart (f, extendedkickmem_bank.baseaddr, ROM_SIZE_512, 0, 1);
+
+	kickmem_bank.reserved_size = ROM_SIZE_512;
+	kickmem_bank.mask = ROM_SIZE_512 - 1;
+	read_kickstart (f, kickmem_bank.baseaddr, ROM_SIZE_512, 1, 0);
+
+	zfile_fclose (f);
+
+	// if 68000-68020 config without any other fast ram with m68k aros: enable special extra RAM.
+	if (currprefs.cpu_model <= 68020 &&
+		currprefs.cachesize == 0 &&
+		currprefs.fastmem[0].size == 0 &&
+		currprefs.z3fastmem[0].size == 0 &&
+		currprefs.mbresmem_high_size == 0 &&
+		currprefs.mbresmem_low_size == 0) {
+
+		changed_prefs.custom_memory_addrs[0] = currprefs.custom_memory_addrs[0] = 0xa80000;
+		changed_prefs.custom_memory_sizes[0] = currprefs.custom_memory_sizes[0] = 512 * 1024;
+		changed_prefs.custom_memory_mask[0] = currprefs.custom_memory_mask[0] = 0;
+		changed_prefs.custom_memory_addrs[1] = currprefs.custom_memory_addrs[1] = 0xb00000;
+		changed_prefs.custom_memory_sizes[1] = currprefs.custom_memory_sizes[1] = 512 * 1024;
+		changed_prefs.custom_memory_mask[1] = currprefs.custom_memory_mask[1] = 0;
+
+		allocate_memory_custombanks();
+	}
+
+	return true;
+}
+
 /* disable incompatible drivers */
 static int patch_residents (uae_u8 *kickmemory, int size)
 {
@@ -680,50 +753,6 @@ static void patch_kick(void)
   }
   if (patched)
   	kickstart_fix_checksum (kickmem_bank.baseaddr, kickmem_bank.allocated_size);
-}
-
-extern unsigned char arosrom[];
-extern unsigned int arosrom_len;
-static bool load_kickstart_replacement (void)
-{
-	struct zfile *f;
-	f = zfile_fopen_data (_T("aros.gz"), arosrom_len, arosrom);
-	if (!f)
-		return false;
-	f = zfile_gunzip (f);
-	if (!f)
-		return false;
-
-	extendedkickmem_bank.reserved_size = ROM_SIZE_512;
-	extendedkickmem_bank.mask = ROM_SIZE_512 - 1;
-	extendedkickmem_bank.label = _T("rom_e0");
-	extendedkickmem_type = EXTENDED_ROM_KS;
-	mapped_malloc (&extendedkickmem_bank);
-	read_kickstart (f, extendedkickmem_bank.baseaddr, ROM_SIZE_512, 0, 1);
-
-	kickmem_bank.reserved_size = ROM_SIZE_512;
-	kickmem_bank.mask = ROM_SIZE_512 - 1;
-	read_kickstart (f, kickmem_bank.baseaddr, ROM_SIZE_512, 1, 0);
-
-	zfile_fclose (f);
-
-	// if 68000-68020 config without any other fast ram with m68k aros: enable special extra RAM.
-	if (currprefs.cpu_model <= 68020 &&
-		currprefs.cachesize == 0 &&
-		currprefs.fastmem[0].size == 0 &&
-		currprefs.z3fastmem[0].size == 0 &&
-		currprefs.mbresmem_high_size == 0 &&
-		currprefs.mbresmem_low_size == 0) {
-
-		changed_prefs.custom_memory_addrs[0] = currprefs.custom_memory_addrs[0] = 0xa80000;
-		changed_prefs.custom_memory_sizes[0] = currprefs.custom_memory_sizes[0] = 512 * 1024;
-		changed_prefs.custom_memory_mask[0] = currprefs.custom_memory_mask[0] = 0;
-		changed_prefs.custom_memory_addrs[1] = currprefs.custom_memory_addrs[1] = 0xb00000;
-		changed_prefs.custom_memory_sizes[1] = currprefs.custom_memory_sizes[1] = 512 * 1024;
-		changed_prefs.custom_memory_mask[1] = currprefs.custom_memory_mask[1] = 0;
-	}
-
-	return true;
 }
 
 static struct zfile *get_kickstart_filehandle(struct uae_prefs *p)
@@ -844,13 +873,6 @@ static void init_mem_banks (void)
     mem_banks[i] = &dummy_bank;
 }
 
-static bool singlebit (uae_u32 v)
-{
-	while (v && !(v & 1))
-		v >>= 1;
-	return (v & ~1) == 0;
-}
-
 static void allocate_memory (void)
 {
   if (chipmem_bank.reserved_size != currprefs.chipmem_size) {
@@ -938,27 +960,8 @@ static void allocate_memory (void)
 			}
 		}
 	}
-	if (custmem1_bank.reserved_size != currprefs.custom_memory_sizes[0]) {
-		mapped_free (&custmem1_bank);
-		custmem1_bank.reserved_size = currprefs.custom_memory_sizes[0];
-		// custmem1 and 2 can have non-power of 2 size so only set correct mask if size is power of 2.
-		custmem1_bank.mask = singlebit (custmem1_bank.reserved_size) ? custmem1_bank.reserved_size - 1 : -1;
-		custmem1_bank.start = currprefs.custom_memory_addrs[0];
-		if (custmem1_bank.reserved_size) {
-			if (!mapped_malloc (&custmem1_bank))
-				custmem1_bank.reserved_size = 0;
-		}
-	}
-	if (custmem2_bank.reserved_size != currprefs.custom_memory_sizes[1]) {
-		mapped_free (&custmem2_bank);
-		custmem2_bank.reserved_size = currprefs.custom_memory_sizes[1];
-		custmem2_bank.mask = singlebit (custmem2_bank.reserved_size) ? custmem2_bank.reserved_size - 1 : -1;
-		custmem2_bank.start = currprefs.custom_memory_addrs[1];
-		if (custmem2_bank.reserved_size) {
-			if (!mapped_malloc (&custmem2_bank))
-				custmem2_bank.reserved_size = 0;
-		}
-	}
+
+	allocate_memory_custombanks();
 
   if (savestate_state == STATE_RESTORE) {
     if (bootrom_filepos) {
@@ -1112,6 +1115,8 @@ bool read_kickstart_version(struct uae_prefs *p)
 	return true;
 }
 
+static void memory_init (void);
+
 void memory_reset (void)
 {
   int bnk, bnk_end;
@@ -1123,7 +1128,7 @@ void memory_reset (void)
 	if (mem_hardreset > 2)
 		memory_init ();
 
-	be_cnt = be_recursive = 0;
+	be_recursive = 0;
   currprefs.chipmem_size = changed_prefs.chipmem_size;
   currprefs.bogomem_size = changed_prefs.bogomem_size;
 	currprefs.mbresmem_low_size = changed_prefs.mbresmem_low_size;
@@ -1252,7 +1257,7 @@ void memory_reset (void)
   }
 	if (currprefs.cs_ksmirror_a8) {
 		if (extendedkickmem2_bank.allocated_size) {
-			map_banks_set(&extendedkickmem2_bank, 0xa8, 16, 0);
+			map_banks_set(&extendedkickmem2_bank, extendedkickmem2_bank.start >> 16, extendedkickmem2_bank.allocated_size >> 16, 0);
 		} else {
 		  struct romdata *rd = getromdatabypath (currprefs.cartfile);
 		  if (!rd || rd->id != 63) {
@@ -1263,6 +1268,8 @@ void memory_reset (void)
 		    map_banks (&kickmem_bank, 0xa8, 8, 0);
 	    }
 	  }
+	} else if (extendedkickmem2_bank.allocated_size && extendedkickmem2_bank.baseaddr) {
+		map_banks_set(&extendedkickmem2_bank, extendedkickmem2_bank.start >> 16, extendedkickmem2_bank.allocated_size >> 16, 0);
   }
 
 #ifdef ACTION_REPLAY
@@ -1288,7 +1295,7 @@ void memory_reset (void)
   write_log (_T("memory init end\n"));
 }
 
-void memory_init (void)
+static void memory_init (void)
 {
 	init_mem_banks ();
 	virtualdevice_init ();
@@ -1638,15 +1645,15 @@ uae_u8 *save_rom (int first, int *len, uae_u8 *dstptr)
 	    path = currprefs.romfile;
 	    /* 256KB or 512KB ROM? */
 	    for (i = 0; i < mem_size / 2 - 4; i++) {
-    		if (longget (i + mem_start) != longget (i + mem_start + mem_size / 2))
+    		if (get_long (i + mem_start) != get_long (i + mem_start + mem_size / 2))
   		    break;
 	    }
 	    if (i == mem_size / 2 - 4) {
     		mem_size /= 2;
     		mem_start += ROM_SIZE_256;
 	    }
-	    version = longget (mem_start + 12); /* version+revision */
-			_stprintf (tmpname, _T("Kickstart %d.%d"), wordget (mem_start + 12), wordget (mem_start + 14));
+	    version = get_long (mem_start + 12); /* version+revision */
+			_stprintf (tmpname, _T("Kickstart %d.%d"), get_word (mem_start + 12), get_word (mem_start + 14));
 	    break;
 	  case 1: /* Extended ROM */
 	    if (!extendedkickmem_type)
@@ -1655,9 +1662,9 @@ uae_u8 *save_rom (int first, int *len, uae_u8 *dstptr)
 	    mem_real_start = extendedkickmem_bank.baseaddr;
 	    mem_size = extendedkickmem_bank.allocated_size;
 	    path = currprefs.romextfile;
-			version = longget (mem_start + 12); /* version+revision */
+			version = get_long (mem_start + 12); /* version+revision */
 			if (version == 0xffffffff)
-				version = longget (mem_start + 16);
+				version = get_long (mem_start + 16);
 			_stprintf (tmpname, _T("Extended"));
 	    break;
 	  default:
@@ -1680,7 +1687,7 @@ uae_u8 *save_rom (int first, int *len, uae_u8 *dstptr)
   save_string (path);
   if (saverom) {
     for (i = 0; i < mem_size; i++)
-      *dst++ = byteget (mem_start + i);
+      *dst++ = get_byte (mem_start + i);
   }
   *len = dst - dstbak;
   return dstbak;
@@ -1701,35 +1708,6 @@ void memcpyha (uaecptr dst, const uae_u8 *src, int size)
 {
     while (size--)
 	put_byte (dst++, *src++);
-}
-void memcpyah_safe (uae_u8 *dst, uaecptr src, int size)
-{
-	if (!addr_valid (_T("memcpyah"), src, size))
-  	return;
-  while (size--)
-  	*dst++ = get_byte(src++);
-}
-void memcpyah (uae_u8 *dst, uaecptr src, int size)
-{
-  while (size--)
-  	*dst++ = get_byte(src++);
-}
-uae_char *strcpyah_safe (uae_char *dst, uaecptr src, int maxsize)
-{
-	uae_char *res = dst;
-  uae_u8 b;
-	dst[0] = 0;
-  do {
-		if (!addr_valid (_T("_tcscpyah"), src, 1))
-	    return res;
-  	b = get_byte(src++);
-  	*dst++ = b;
-		*dst = 0;
-  	maxsize--;
-		if (maxsize <= 1)
-	    break;
-  } while (b);
-  return res;
 }
 uaecptr strcpyha_safe (uaecptr dst, const uae_char *src)
 {

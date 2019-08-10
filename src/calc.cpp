@@ -12,13 +12,7 @@
 
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
-
-#include "calc.h"
-
-#include <string.h>
-#include <stdio.h>
  
 #define STACK_SIZE 32
 #define MAX_VALUES 32

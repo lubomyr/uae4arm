@@ -15,7 +15,6 @@ extern uae_u16 sndbuffer[SOUND_BUFFERS_COUNT][(SNDBUFFER_LEN+32)*DEFAULT_SOUND_C
 extern uae_u16 *sndbufpt;
 extern uae_u16 *render_sndbuff;
 extern uae_u16 *finish_sndbuff;
-extern int sndbufsize;
 extern void finish_sound_buffer (void);
 extern void restart_sound_buffer (void);
 extern void pause_sound_buffer (void);

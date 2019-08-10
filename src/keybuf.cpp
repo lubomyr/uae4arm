@@ -12,16 +12,12 @@
   * Copyright 1995, 1997 Bernd Schmidt
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
-#include <assert.h>
 
 #include "options.h"
 #include "keybuf.h"
-#include "keyboard.h"
 #include "inputdevice.h"
 #include "custom.h"
-#include "savestate.h"
 
 static int kpb_first, kpb_last;
 

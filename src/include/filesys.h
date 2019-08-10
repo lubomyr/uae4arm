@@ -21,7 +21,6 @@ struct hardfiledata {
 	struct uaedev_config_info ci;
   struct hardfilehandle *handle;
   int handle_valid;
-  int dangerous;
   int flags;
   uae_u8 *cache;
   int cache_valid;
@@ -37,7 +36,6 @@ struct hardfiledata {
   uae_u64 virtual_size;
   int unitnum;
   int byteswap;
-  int hfd_type;
 
   int drive_empty;
   TCHAR *emptyname;
@@ -52,15 +50,15 @@ struct hardfiledata {
 };
 
 struct hd_hardfiledata {
-    struct hardfiledata hfd;
-    uae_u64 size;
-    int cyls;
-    int heads;
-    int secspertrack;
-    int cyls_def;
-    int secspertrack_def;
-    int heads_def;
-    int ansi_version;
+  struct hardfiledata hfd;
+  uae_u64 size;
+  int cyls;
+  int heads;
+  int secspertrack;
+  int cyls_def;
+  int secspertrack_def;
+  int heads_def;
+  int ansi_version;
 };
 
 #define HD_CONTROLLER_EXPANSION_MAX 50
@@ -79,9 +77,6 @@ struct hd_hardfiledata {
 #define FILESYS_HARDFILE_RDB 2
 
 #define MAX_FILESYSTEM_UNITS 30
-
-struct uaedev_mount_info;
-extern struct uaedev_mount_info options_mountinfo;
 
 extern struct hardfiledata *get_hardfile_data (int nr);
 extern struct hardfiledata *get_hardfile_data_controller(int nr);
@@ -105,6 +100,5 @@ extern int hdf_open_target (struct hardfiledata *hfd, const TCHAR *name);
 extern void hdf_close_target (struct hardfiledata *hfd);
 extern int hdf_read_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
 extern int hdf_write_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
-extern void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry);
 
 #endif /* UAE_FILESYS_H */

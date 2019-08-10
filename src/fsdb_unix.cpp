@@ -8,9 +8,7 @@
   * Copyright 1999 Bernd Schmidt
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
-#include "config.h"
 
 #include "fsdb.h"
 #include "uae.h"

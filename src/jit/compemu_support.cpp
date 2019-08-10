@@ -31,7 +31,6 @@
 
 #include <math.h>
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #if defined(JIT)
@@ -109,7 +108,7 @@ static uae_u32 current_cache_size	= 0;		// Cache grows upwards: how much has bee
 #else
 #define avoid_fpu (true)
 #endif
-static int optcount	= 4;		// How often a block has to be executed before it is translated
+static const int optcount	= 4;		// How often a block has to be executed before it is translated
 
 op_properties prop[65536];
 
@@ -129,7 +128,6 @@ uae_u32 needed_flags;
 static uintptr next_pc_p;
 static uintptr taken_pc_p;
 static int branch_cc;
-static int redo_current_block;
 
 uae_u8* current_compile_p = NULL;
 static uae_u8* max_compile_start;
@@ -154,12 +152,12 @@ blockinfo* dormant;
 #if !defined (WIN32) || !defined(ANDROID)
 #include <sys/mman.h>
 
-void cache_free (uae_u8 *cache, int size)
+static void cache_free (uae_u8 *cache, int size)
 {
   munmap(cache, size);
 }
 
-uae_u8 *cache_alloc (int size)
+static uae_u8 *cache_alloc (int size)
 {
   size = size < getpagesize() ? getpagesize() : size;
 
@@ -381,20 +379,6 @@ STATIC_INLINE void create_jmpdep(blockinfo* bi, int i, uae_u32* jmpaddr, uae_u32
   tbi->deplist = &(bi->dep[i]);
 }
 
-STATIC_INLINE void block_need_recompile(blockinfo * bi)
-{
-  uae_u32 cl = cacheline(bi->pc_p);
-
-	set_dhtu(bi,bi->direct_pen);
-  bi->direct_handler = bi->direct_pen;
-
-  bi->handler_to_use = (cpuop_func *)popall_execute_normal;
-  bi->handler = (cpuop_func *)popall_execute_normal;
-  if (bi == cache_tags[cl + 1].bi)
-	  cache_tags[cl].handler = (cpuop_func *)popall_execute_normal;
-  bi->status = BI_NEED_RECOMP;
-}
-
 STATIC_INLINE blockinfo* get_blockinfo_addr_new(void* addr)
 {
   blockinfo* bi = get_blockinfo_addr(addr);
@@ -576,25 +560,15 @@ STATIC_INLINE void alloc_blockinfos(void)
 
 static uae_u8* target;
 
-STATIC_INLINE void emit_byte(uae_u8 x)
-{
-  *target++ = x;
-}
-
 STATIC_INLINE void emit_long(uae_u32 x)
 {
   *((uae_u32*)target) = x;
-  target += 4;
-}
-
-STATIC_INLINE void skip_long()
-{
 	target += 4;
 }
 
 #define MAX_COMPILE_PTR	max_compile_start
 
-void set_target(uae_u8* t)
+static void set_target(uae_u8* t)
 {
   target = t;
 }
@@ -788,15 +762,6 @@ STATIC_INLINE void writeback_const(int r)
   compemu_raw_mov_l_mi((uintptr)live.state[r].mem, live.state[r].val);
   live.state[r].val = 0;
   set_status(r, INMEM);
-}
-
-STATIC_INLINE void tomem_c(int r)
-{
-  if (isconst(r)) {
-  	writeback_const(r);
-  }
-  else
-  	tomem(r);
 }
 
 static  void evict(int r)
@@ -1365,7 +1330,7 @@ void compiler_exit(void)
 #endif
 }
 
-void init_comp(void)
+static void init_comp(void)
 {
   int i;
   uae_s8* au = always_used;
@@ -1487,7 +1452,7 @@ void flush(int save_regs)
   }
 }
 
-void freescratch(void)
+static void freescratch(void)
 {
   int i;
   for (i = 0; i < N_REGS; i++)
@@ -2302,7 +2267,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	  blockinfo* bi = NULL;
 	  blockinfo* bi2;
 
-	  redo_current_block = 0;
 	  if (current_compile_p >= MAX_COMPILE_PTR)
 	    flush_icache_hard(3);
 
@@ -2615,8 +2579,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   	  flush_icache_hard(3);
 
   	bi->status = BI_ACTIVE;
-  	if (redo_current_block)
-      block_need_recompile(bi);
 	
 #ifdef PROFILE_COMPILE_TIME
 	  compile_time += (clock() - start_time);

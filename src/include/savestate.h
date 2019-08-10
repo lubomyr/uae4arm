@@ -167,7 +167,7 @@ extern uae_u8 *restore_hrtmon (uae_u8 *);
 extern uae_u8 *save_hrtmon (int *, uae_u8 *);
 extern void restore_ar_finish (void);
 
-extern void savestate_initsave (const TCHAR *filename, int docompress, int nodialogs, bool save);
+extern void savestate_initsave (const TCHAR *filename);
 extern int save_state (const TCHAR *filename, const TCHAR *description);
 extern void restore_state (const TCHAR *filename);
 extern void savestate_restore_finish (void);

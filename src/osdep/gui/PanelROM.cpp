@@ -278,9 +278,9 @@ void InitPanelROM(const struct _ConfigCategory& category)
 #endif
 
   lblUAEROM = new gcn::Label("Advanced UAE expansion board/Boot ROM:");
-  lblUAEROM->setSize(400, LABEL_HEIGHT);
+  lblUAEROM->setSize(cboWidth, LABEL_HEIGHT);
 	cboUAEROM = new gcn::UaeDropDown(&uaeROMList);
-  cboUAEROM->setSize(400, DROPDOWN_HEIGHT);
+  cboUAEROM->setSize(cboWidth, DROPDOWN_HEIGHT);
   cboUAEROM->setBaseColor(gui_baseCol);
   cboUAEROM->setId("cboUAEROM");
   cboUAEROM->addActionListener(romActionListener);
@@ -354,5 +354,7 @@ bool HelpPanelROM(std::vector<std::string> &helptext)
   helptext.push_back(" ");
   helptext.push_back("In \"Cartridge ROM File\", you can select the CD32 FMV module to activate video playback in CD32.");
   helptext.push_back("There are also some Action Replay and Freezer cards and the built in HRTMon available.");
+  helptext.push_back("");
+  helptext.push_back("In \"Advanced UAE expansion...\", you can select the built in UAE board.");
   return true;
 }

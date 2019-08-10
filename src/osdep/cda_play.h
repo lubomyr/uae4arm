@@ -9,11 +9,11 @@ private:
   int volume[2];
   bool playing;
   bool active;
+  int currBuf;
+  int num_sectors;
 
 public:
   uae_u8 *buffers[2];
-  int currBuf;
-  int num_sectors;
 
 	cda_audio(int num_sectors, int sectorsize, int samplerate);
   ~cda_audio();

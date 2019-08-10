@@ -10,16 +10,13 @@
   * Copyright 1996 Ed Hanway
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "include/memory-uae.h"
-#include "custom.h"
 #include "newcpu.h"
 #include "threaddep/thread.h"
 #include "autoconf.h"
-#include "traps.h"
 #include "uae.h"
 
 /*

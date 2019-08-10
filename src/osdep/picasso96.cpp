@@ -39,7 +39,6 @@
  *       easier to read.
  */
  
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #if defined(PICASSO96)
@@ -71,8 +70,6 @@ static int picasso96_GCT = GCT_Unknown;
 static int picasso96_PCT = PCT_Unknown;
 
 static bool picasso_flushpixels (uae_u8 *src, int offset);
-
-bool have_done_picasso = 1; /* For the JIT compiler */
 
 #define PICASSO_STATE_SETDISPLAY 1
 #define PICASSO_STATE_SETPANNING 2
@@ -416,7 +413,7 @@ static int doskip (void)
   return p96_framecnt > 0;
 }
 
-void picasso_trigger_vblank (void)
+static void picasso_trigger_vblank (void)
 {
 	TrapContext *ctx = NULL;
   if (!ABI_interrupt || !uaegfx_base || !interrupt_enabled)
@@ -583,19 +580,13 @@ static void setconvert(void)
 
 	vidinfo->picasso_convert = getconvert (state->RGBFormat, picasso_vidinfo.pixbytes);
   vidinfo->host_mode = GetSurfacePixelFormat();
-	picasso_palette (state->CLUT);
+	picasso_palette (state->CLUT, vidinfo->clut);
 	if (vidinfo->host_mode != vidinfo->ohost_mode || state->RGBFormat != vidinfo->orgbformat) {
     write_log (_T("RTG conversion: Depth=%d HostRGBF=%d P96RGBF=%d Mode=%d\n"), 
       picasso_vidinfo.pixbytes, vidinfo->host_mode, state->RGBFormat, vidinfo->picasso_convert);
 		vidinfo->ohost_mode = vidinfo->host_mode;
 		vidinfo->orgbformat = state->RGBFormat;
 	}
-}
-
-bool picasso_is_active (void)
-{
-	struct picasso_vidbuf_description *vidinfo = &picasso_vidinfo;
-	return vidinfo->picasso_active;
 }
 
 /* Clear our screen, since we've got a new Picasso screen-mode, and refresh with the proper contents
@@ -1453,9 +1444,9 @@ static void picasso96_alloc2 (TrapContext *ctx)
 
 void picasso96_alloc (TrapContext *ctx)
 {
+	uaegfx_resname = ds (_T("uaegfx.card"));
 	if (uaegfx_old)
 		return;
-	uaegfx_resname = ds (_T("uaegfx.card"));
 	picasso96_alloc2 (ctx);
 }
 
@@ -1464,7 +1455,7 @@ static void inituaegfx(TrapContext *ctx, uaecptr ABI)
 {
   uae_u32 flags;
 
-  write_log (_T("RTG mode mask: %x\n"), currprefs.picasso96_modeflags);
+	write_log (_T("RTG mode mask: %x BI=%08x\n"), currprefs.picasso96_modeflags, ABI);
 	trap_put_word(ctx, ABI + PSSO_BoardInfo_BitsPerCannon, 8);
 	trap_put_word(ctx, ABI + PSSO_BoardInfo_RGBFormats, currprefs.picasso96_modeflags);
 	trap_put_long(ctx, ABI + PSSO_BoardInfo_BoardType, picasso96_BT);
@@ -1684,6 +1675,7 @@ static void resetpalette(struct picasso96_state_struct *state)
 static int updateclut(TrapContext *ctx, uaecptr clut, int start, int count)
 {
 	struct picasso96_state_struct *state = &picasso96_state;
+	struct picasso_vidbuf_description *vidinfo = &picasso_vidinfo;
 	uae_u8 clutbuf[256 * 3];
   int i, changed = 0;
   clut += start * 3;
@@ -1703,7 +1695,8 @@ static int updateclut(TrapContext *ctx, uaecptr clut, int start, int count)
   	state->CLUT[i].Green = g;
   	state->CLUT[i].Blue = b;
   }
-	changed |= picasso_palette (state->CLUT);
+  
+	changed |= picasso_palette (state->CLUT, vidinfo->clut);
   return changed;
 }
 static uae_u32 REGPARAM2 picasso_SetColorArray (TrapContext *ctx)
@@ -3187,7 +3180,7 @@ static void inituaegfxfuncs(TrapContext *ctx, uaecptr start, uaecptr ABI)
 
   RTGCALL2(PSSO_BoardInfo_SetInterrupt, picasso_SetInterrupt);
 
-  write_log (_T("uaegfx.card magic code: %08X-%08X ABI=%08X\n"), start, here (), ABI);
+  write_log (_T("uaegfx.card magic code: %08X-%08X BI=%08X\n"), start, here (), ABI);
 
 	if (ABI)
 		initvblankABI(ctx, uaegfx_base, ABI);
@@ -3220,7 +3213,7 @@ void uaegfx_install_code (uaecptr start)
 }
 
 #define UAEGFX_VERSION 3
-#define UAEGFX_REVISION 3
+#define UAEGFX_REVISION 4
 
 static uae_u32 REGPARAM2 gfx_open(TrapContext *ctx)
 {
@@ -3247,7 +3240,7 @@ static uaecptr uaegfx_card_install (TrapContext *ctx, uae_u32 extrasize)
 	if (uaegfx_old || !gfxmem_bank.start)
 		return 0;
 
-	uaegfx_resid = ds (_T("UAE Graphics Card 3.3"));
+	uaegfx_resid = ds (_T("UAE Graphics Card 3.4"));
 	uaegfx_vblankname = ds (_T("UAE Graphics Card VBLANK"));
 	uaegfx_portsname = ds (_T("UAE Graphics Card PORTS"));
 

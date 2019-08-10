@@ -1,17 +1,7 @@
-#include "sysconfig.h"
 #include "sysdeps.h"
-#include "config.h"
 #include "options.h"
-#include "uae.h"
-#include "include/memory-uae.h"
-#include "newcpu.h"
-#include "custom.h"
-#include "xwin.h"
-#include "drawing.h"
 #include "inputdevice.h"
 #include "keyboard.h"
-#include "keybuf.h"
-#include "gui.h"
 #include <SDL.h>
 
 char keyboard_type = 0;

@@ -7,7 +7,6 @@
 *
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
@@ -26,15 +25,6 @@ bool gfxboard_set(bool rtg)
 	}
 	set_config_changed();
 	return r;
-}
-
-const TCHAR *gfxboard_get_name(int type)
-{
-	if (type == GFXBOARD_UAE_Z2)
-		return _T("UAE Zorro II");
-	if (type == GFXBOARD_UAE_Z3)
-		return _T("UAE Zorro III");
-	return NULL;
 }
 
 const TCHAR *gfxboard_get_configname(int type)

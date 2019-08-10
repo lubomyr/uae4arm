@@ -20,8 +20,6 @@
 
 #define RTAREA_TRAPS 0x3000
 #define RTAREA_RTG 0x3800
-#define RTAREA_TRAMPOLINE 0x3a00
-#define RTAREA_DATAREGION 0xF000
 
 #define RTAREA_FSBOARD 0xFFEC
 #define RTAREA_HEARTBEAT 0xFFF0
@@ -32,14 +30,11 @@
 #define RTAREA_TRAP_DATA 0x4000
 #define RTAREA_TRAP_DATA_SIZE 0x8000
 #define RTAREA_TRAP_DATA_SLOT_SIZE 0x2000 // 8192
-#define RTAREA_TRAP_DATA_SECOND 80
-#define RTAREA_TRAP_DATA_TASKWAIT (RTAREA_TRAP_DATA_SECOND - 4)
 #define RTAREA_TRAP_DATA_EXTRA 144
 #define RTAREA_TRAP_DATA_EXTRA_SIZE (RTAREA_TRAP_DATA_SLOT_SIZE - RTAREA_TRAP_DATA_EXTRA)
 
 #define RTAREA_TRAP_STATUS 0xF000
 #define RTAREA_TRAP_STATUS_SIZE 8
-#define RTAREA_TRAP_STATUS_SECOND 4
 
 #define RTAREA_VARIABLES 0x3F00
 #define RTAREA_VARIABLES_SIZE 0x100
@@ -51,13 +46,6 @@
 #define RTAREA_TRAP_DATA_NUM (RTAREA_TRAP_DATA_SIZE / RTAREA_TRAP_DATA_SLOT_SIZE)
 #define RTAREA_TRAP_DATA_SEND_NUM 1
 
-#define RTAREA_TRAP_SEND_STATUS (RTAREA_TRAP_STATUS + RTAREA_TRAP_STATUS_SIZE * RTAREA_TRAP_DATA_NUM)
-#define RTAREA_TRAP_SEND_DATA (RTAREA_TRAP_DATA + RTAREA_TRAP_DATA_SLOT_SIZE * RTAREA_TRAP_DATA_NUM)
-
-#define UAEBOARD_DATAREGION_START 0x4000
-#define UAEBOARD_DATAREGION_SIZE 0xc000
-
-extern uae_u32 addr (int);
 extern void db (uae_u8);
 extern void dw (uae_u16);
 extern void dl (uae_u32);
@@ -94,20 +82,13 @@ struct mountedinfo
 {
   uae_s64 size;
   bool ismounted;
-  bool ismedia;
-	int error;
-  int nrcyls;
-	TCHAR rootdir[MAX_DPATH];
 };
 
 extern int get_filesys_unitconfig (struct uae_prefs *p, int index, struct mountedinfo*);
 extern int kill_filesys_unitconfig (struct uae_prefs *p, int nr);
-extern int move_filesys_unitconfig (struct uae_prefs *p, int nr, int to);
 extern TCHAR *validatedevicename (TCHAR *s, const TCHAR *def);
 extern TCHAR *validatevolumename (TCHAR *s, const TCHAR *def);
 
-int filesys_insert (int nr, const TCHAR *volume, const TCHAR *rootdir, bool readonly, int flags);
-int filesys_eject (int nr);
 int filesys_media_change (const TCHAR *rootdir, int inserted, struct uaedev_config_data *uci);
 
 extern TCHAR *filesys_createvolname (const TCHAR *volname, const TCHAR *rootdir, struct zvolume *zv, const TCHAR *def);

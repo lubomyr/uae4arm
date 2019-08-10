@@ -1,5 +1,4 @@
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "crc32.h"
@@ -330,21 +329,4 @@ void get_sha1 (void *vinput, int len, void *vout)
 	sha1_starts( &ctx );
 	sha1_update( &ctx, input, len );
 	sha1_finish( &ctx, out );
-}
-const TCHAR *get_sha1_txt (void *vinput, int len)
-{
-	uae_u8 *input = (uae_u8*)vinput;
-	static TCHAR outtxt[SHA1_SIZE * 2 + 1];
-	uae_u8 out[SHA1_SIZE];
-	int i;
-	TCHAR *p;
-
-	p = outtxt;
-	get_sha1 (input, len, out);
-	for (i = 0; i < SHA1_SIZE; i++) {
-		_stprintf (p, _T("%02X"), out[i]);
-		p += 2;
-	}
-	*p = 0;
-	return outtxt;
 }

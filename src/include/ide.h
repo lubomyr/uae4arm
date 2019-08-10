@@ -62,12 +62,10 @@ struct ide_hdf
 	int ata_level;
 	int ide_drv;
 	int media_type;
-	bool mode_8bit;
 	int uae_unitnum;
 
 	bool atapi;
 	bool atapi_drdy;
-	int cd_unit_num;
 	int packet_state;
 	int packet_data_size;
 	int packet_data_offset;
@@ -78,7 +76,6 @@ struct ide_hdf
 struct ide_thread_state
 {
 	struct ide_hdf **idetable;
-	int idetotal;
 	volatile int state;
 	smp_comm_pipe requests;	
 };

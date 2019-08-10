@@ -1,7 +1,6 @@
 /********************************************************************
  * Preferences handling. This is just a convenient place to put it  *
  ********************************************************************/
-extern bool have_done_picasso;
 
 bool check_prefs_changed_comp (bool checkonly)
 {

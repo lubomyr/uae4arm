@@ -6,7 +6,6 @@
   * (c) 1996 Bernd Schmidt, Ed Hanway, Samuel Devulder
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 #include "options.h"
 #include "custom.h"
@@ -53,20 +52,6 @@ int mask_shift (unsigned long mask)
 	return n;
 }
 
-unsigned int doMask256 (int p, int bits, int shift)
-{
-  /* p is a value from 0 to 255 (Amiga color value)
-   * shift to align msb with mask, and apply mask */
-
-  unsigned long val = p * 0x01010101UL;
-	if (bits == 0)
-		return 0;
-  val >>= (32 - bits);
-  val <<= shift;
-
-  return val;
-}
-
 static unsigned int doColor(int i, int bits, int shift)
 {
   int shift2;
@@ -76,13 +61,6 @@ static unsigned int doColor(int i, int bits, int shift)
   else 
     shift2 = 8 - bits;
   return (i >> shift2) << shift;
-}
-
-static uae_u32 lowbits (int v, int shift, int lsize)
-{
-  v >>= shift;
-  v &= (1 << lsize) - 1;
-  return v;
 }
 
 #ifndef ARMV6T2

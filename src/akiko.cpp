@@ -12,18 +12,18 @@
 */
 
 /*
-	B80000-B80003: C0CACAFE (Read-only identifier)
+	B80000-B80003: $C0CACAFE (Read-only identifier)
 
 	B80004.L: INTREQ (RO)
 	B80008.L: INTENA (R/W)
 
-	 31 = Subcode interrupt (One subcode buffer filled and B0018.B has changed)
-	 30 = Drive has received all command bytes and executed the command
-	 29 = Drive has status data pending
-	 28 = Drive command DMA transmit complete
-	 27 = Drive status DMA receive complete
-	 26 = Drive data DMA complete
-	 25 = DMA overflow (lost data)?
+	 31 $80000000 = Subcode interrupt (One subcode buffer filled and B0018.B has changed)
+	 30 $40000000 = Drive has received all command bytes and executed the command (PIO only)
+	 29 $20000000 = Drive has status data pending (PIO only)
+	 28 $10000000 = Drive command DMA transmit complete (DMA only)
+	 27 $08000000 = Drive status DMA receive complete (DMA only)
+	 26 $04000000 = Drive data DMA complete
+	 25 $02000000 = DMA overflow (lost data)?
 
 	 INTREQ is read-only, each interrupt has different method to clear the interrupt.
 
@@ -42,13 +42,13 @@
 	B0001D.B WRITE = Transmit DMA circular buffer end position.
 
 	 If written value is different than current: transmit DMA starts and sends command bytes to drive until value matches end position.
-	 Clears also transmit interrupt (bit 30)
+	 Clears also transmit interrupt (bit 28)
 	
 	B0001E.B READ = Receive DMA circular buffer current position.
 	B0001F.B WRITE = Receive DMA circular buffer end position.
 
 	 If written value is different than current: receive DMA fills DMA buffer if drive has response data remaining, until value matches end position.
-	 Clears also Receive interrupt (bit 29)
+	 Clears also Receive interrupt (bit 27)
 
 	B80020.W WRITE = DMA transfer block enable
 	
@@ -59,10 +59,12 @@
 	 Bit 14 = DMA base address + 0xe000
 	 Bit 15 = DMA base address + 0xf000
 
+	 When writing, if bit is one, matching register bit gets set, if bit is zero, nothing happens, it is not possible to clear already set bits.
 	 All one bit blocks (CD sectors) are transferred one by one. Bit 15 is always checked and processed first, then 14 and so on..
-	 Interrupt is generated after each transferred block (bit 1 to 0 transition)
+	 Interrupt is generated after each transferred block and matching register bit is cleared.
 
-	 Writing to this register also clears INTREQ bit 28.
+	 Writing to this register also clears INTREQ bit 26. Writing zero will only clear interrupt.
+	 If CONFIG data transfer DMA enable is not active: register gets cleared and writes are ignored.
 
 	 Structure of each block:
 
@@ -72,25 +74,26 @@
 	 0xc00: 146 bytes of CD error correction data?
 	 The rest is unused(?).
 
-	B80020.R READ = Read current DMA transfer status.
+	B80020.W READ = Read current DMA transfer status.
 
 	B80024.L: CONFIG (R/W)
 
-	 31 = Subcode DMA enable
-	 30 = Command write (to CD) DMA enable
-	 29 = Status read (from CD) DMA enable
-	 28 = Memory access mode?
-	 27 = Data transfer DMA enable
-	 26 = CD interface enable?
-	 25 = CD data mode?
-	 24 = CD data mode?
-	 23 = Akiko internal CIA faked vsync rate (0=50Hz,1=60Hz)
+	 31 $80000000 = Subcode DMA enable
+	 30 $40000000 = Command write (to CD) DMA enable
+	 29 $20000000 = Status read (from CD) DMA enable
+	 28 $10000000 = Memory access mode?
+	 27 $08000000 = Data transfer DMA enable
+	 26 $04000000 = CD interface enable?
+	 25 $02000000 = CD data mode?
+	 24 $01000000 = CD data mode?
+	 23 $00800000 = Akiko internal CIA faked vsync rate (0=50Hz,1=60Hz)
 	 00-22 = unused
 
-	B80028.B WRITE = PIO write (If CONFIG bit 30 off)
-	B80028.B READ = PIO read (If CONFIG bit 29 off)
+	B80028.B WRITE = PIO write (If CONFIG bit 30 off). Clears also interrupt bit 30.
+	B80028.B READ = PIO read (If CONFIG bit 29 off). Clears also interrupt bit 29 if no data available anymore.
 
-	B80030.L NVRAM I2C
+	B80030.B NVRAM I2C IO. Bit 7 = SCL, bit 6 = SDA
+	B80032.B NVRAM I2C DIRECTION. Bit 7 = SCL direction, bit 6 = SDA direction)
 
 	B80038.L C2P
 
@@ -141,7 +144,6 @@
 
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
@@ -151,7 +153,6 @@
 #include "blkdev.h"
 #include "zfile.h"
 #include "threaddep/thread.h"
-#include "akiko.h"
 #include "gui.h"
 #include "crc32.h"
 #include "uae.h"
@@ -428,7 +429,7 @@ static int sector_buffer_sector_1, sector_buffer_sector_2;
 static uae_u8 *sector_buffer_info_1, *sector_buffer_info_2;
 
 static int unitnum = -1;
-static uae_u8 cdrom_door = 1;
+static const uae_u8 cdrom_door = 1;
 static bool akiko_inited;
 static volatile int mediachanged, mediacheckcounter;
 static volatile int frame2counter;
@@ -1434,7 +1435,6 @@ STATIC_INLINE void akiko_put_long (uae_u32 *p, int offset, int v)
 static uae_u32 REGPARAM3 akiko_lget (uaecptr) REGPARAM;
 static uae_u32 REGPARAM3 akiko_wget (uaecptr) REGPARAM;
 static uae_u32 REGPARAM3 akiko_bget (uaecptr) REGPARAM;
-static uae_u32 REGPARAM3 akiko_wgeti (uaecptr) REGPARAM;
 static void REGPARAM3 akiko_lput (uaecptr, uae_u32) REGPARAM;
 static void REGPARAM3 akiko_wput (uaecptr, uae_u32) REGPARAM;
 static void REGPARAM3 akiko_bput (uaecptr, uae_u32) REGPARAM;
@@ -1776,7 +1776,7 @@ addrbank akiko_bank = {
 static const uae_u8 patchdata[]={0x0c,0x82,0x00,0x00,0x03,0xe8,0x64,0x00,0x00,0x46};
 static void patchrom (void)
 {
-    int i;
+  int i;
 	if (currprefs.cpu_model > 68020 || currprefs.cachesize || currprefs.m68k_speed != 0) {
 		uae_u8 *p = extendedkickmem_bank.baseaddr;
 		if (p) {

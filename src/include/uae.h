@@ -30,10 +30,10 @@ extern void target_quit (void);
 extern void target_restart (void);
 extern void target_getdate(int *y, int *m, int *d);
 extern void target_startup_msg(const TCHAR *title, const TCHAR *msg);
-extern void stripslashes (TCHAR *p);
 extern void fixtrailing (TCHAR *p);
 extern void getpathpart (TCHAR *outpath, int size, const TCHAR *inpath);
 extern void getfilepart (TCHAR *out, int size, const TCHAR *path);
+extern bool samepath(const TCHAR *p1, const TCHAR *p2);
 extern bool target_isrelativemode(void);
 extern uae_u32 getlocaltime (void);
 
@@ -51,8 +51,8 @@ extern TCHAR start_path_data[MAX_DPATH];
  *    0: Menu title
  */
 struct bstring {
-    const TCHAR *data;
-    int val;
+  const TCHAR *data;
+  int val;
 };
 
 extern void fetch_saveimagepath (TCHAR*, int, int);

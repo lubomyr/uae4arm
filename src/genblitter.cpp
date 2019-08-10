@@ -39,7 +39,7 @@ static void generate_func(void)
   printf("#include \"sysconfig.h\"\n");
   printf("#include \"sysdeps.h\"\n");
   printf("#include \"options.h\"\n");
-  printf("#include \"include/memory.h\"\n");
+  printf("#include \"include/memory-uae.h\"\n");
   printf("#include \"custom.h\"\n");
   printf("#include \"savestate.h\"\n");
   printf("#include \"blitter.h\"\n");
@@ -125,7 +125,7 @@ static void generate_table(void)
   printf("#include \"sysconfig.h\"\n");
   printf("#include \"sysdeps.h\"\n");
   printf("#include \"options.h\"\n");
-  printf("#include \"include/memory.h\"\n");
+  printf("#include \"include/memory-uae.h\"\n");
   printf("#include \"custom.h\"\n");
   printf("#include \"savestate.h\"\n");
   printf("#include \"blitter.h\"\n");

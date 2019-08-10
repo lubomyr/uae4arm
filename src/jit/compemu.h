@@ -56,8 +56,8 @@ typedef struct {
 } cpu_history;
 
 typedef union {
-    cpuop_func* handler;
-    struct blockinfo_t* bi;
+  cpuop_func* handler;
+  struct blockinfo_t* bi;
 } cacheline;
 
 /* (gb) When on, this option can save save up to 30% compilation time
@@ -132,11 +132,6 @@ typedef union {
 /* Functions exposed to newcpu, or to what was moved from newcpu.c to
  * compemu_support.c */
 extern void compiler_exit(void);
-extern void init_comp(void);
-extern void flush(int save_regs);
-extern void small_flush(int save_regs);
-extern void set_target(uae_u8* t);
-extern void freescratch(void);
 extern void build_comp(void);
 extern void set_cache_state(int enabled);
 #ifdef JIT
@@ -153,10 +148,6 @@ extern int check_for_cache_miss(void);
 extern void comp_fpp_opp (uae_u32 opcode, uae_u16 extra);
 extern void comp_fbcc_opp (uae_u32 opcode);
 extern void comp_fscc_opp (uae_u32 opcode, uae_u16 extra);
-void comp_fdbcc_opp (uae_u32 opcode, uae_u16 extra);
-void comp_ftrapcc_opp (uae_u32 opcode, uaecptr oldpc);
-void comp_fsave_opp (uae_u32 opcode);
-void comp_frestore_opp (uae_u32 opcode);
 
 extern uae_u32 needed_flags;
 extern uae_u8* comp_pc_p;
@@ -188,10 +179,10 @@ typedef struct {
 } freg_status;
 
 typedef struct {
-    uae_u8 use_flags;
-    uae_u8 set_flags;
-    uae_u8 is_addx;
-	  uae_u8 cflow;
+  uae_u8 use_flags;
+  uae_u8 set_flags;
+  uae_u8 is_addx;
+  uae_u8 cflow;
 } op_properties;
 
 extern op_properties prop[65536];
@@ -243,15 +234,15 @@ typedef struct {
 #define NF_HANDLER   2
 
 typedef struct {
-    /* Integer part */
-    reg_status state[VREGS];
-    n_status   nat[N_REGS];
-    uae_u32 flags_on_stack;
-    uae_u32 flags_in_flags;
-    uae_u32 flags_are_important;
-    /* FPU part */
-    freg_status fate[VFREGS];
-    fn_status   fat[N_FREGS];
+  /* Integer part */
+  reg_status state[VREGS];
+  n_status   nat[N_REGS];
+  uae_u32 flags_on_stack;
+  uae_u32 flags_in_flags;
+  uae_u32 flags_are_important;
+  /* FPU part */
+  freg_status fate[VFREGS];
+  fn_status   fat[N_FREGS];
 } bigstate;
 
 #define IMM uae_s32
@@ -336,40 +327,40 @@ typedef struct checksum_info_t {
 } checksum_info;
 
 typedef struct blockinfo_t {
-    uae_s32 count;
-    cpuop_func* direct_handler_to_use;
-    cpuop_func* handler_to_use;
-    /* The direct handler does not check for the correct address */
+  uae_s32 count;
+  cpuop_func* direct_handler_to_use;
+  cpuop_func* handler_to_use;
+  /* The direct handler does not check for the correct address */
 
-    cpuop_func* handler;
-    cpuop_func* direct_handler;
+  cpuop_func* handler;
+  cpuop_func* direct_handler;
 
-    cpuop_func* direct_pen;
-    cpuop_func* direct_pcc;
+  cpuop_func* direct_pen;
+  cpuop_func* direct_pcc;
 
-    uae_u8* nexthandler;
-    uae_u8* pc_p;
+  uae_u8* nexthandler;
+  uae_u8* pc_p;
 
-    uae_u32 c1;
-    uae_u32 c2;
+  uae_u32 c1;
+  uae_u32 c2;
 #if USE_CHECKSUM_INFO
-    checksum_info *csi;
+  checksum_info *csi;
 #else
-    uae_u32 len;
-    uae_u32 min_pcp;
+  uae_u32 len;
+  uae_u32 min_pcp;
 #endif
 
-    struct blockinfo_t* next_same_cl;
-    struct blockinfo_t** prev_same_cl_p;
-    struct blockinfo_t* next;
-    struct blockinfo_t** prev_p;
+  struct blockinfo_t* next_same_cl;
+  struct blockinfo_t** prev_same_cl_p;
+  struct blockinfo_t* next;
+  struct blockinfo_t** prev_p;
 
-    uae_u8 optlevel;
-    uae_u8 needed_flags;
-    uae_u8 status;
+  uae_u8 optlevel;
+  uae_u8 needed_flags;
+  uae_u8 status;
 
-    dependency  dep[2];  /* Holds things we depend on */
-    dependency* deplist; /* List of things that depend on this */
+  dependency  dep[2];  /* Holds things we depend on */
+  dependency* deplist; /* List of things that depend on this */
 } blockinfo;
 
 #define BI_INVALID 0

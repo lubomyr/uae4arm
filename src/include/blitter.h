@@ -28,7 +28,6 @@ extern struct bltinfo blt_info;
 
 extern int blit_interrupt;
 
-extern uae_u16 bltsize;
 extern uae_u16 bltcon0,bltcon1;
 extern uae_u32 bltapt,bltbpt,bltcpt,bltdpt;
 

@@ -12,15 +12,12 @@
   *
   */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
 #include "memory-uae.h"
 #include "custom.h"
 #include "newcpu.h"
-#include "autoconf.h"
-#include "gensound.h"
 #include "audio.h"
 #include "sounddep/sound.h"
 #include "savestate.h"
@@ -62,7 +59,8 @@ struct audio_channel_data2
 	sinc_queue_t sinc_queue[SINC_QUEUE_LENGTH];
 	int sinc_queue_time;
 	int sinc_queue_head;
-	int vol;
+	int audvol;
+	int mixvol;
   unsigned int adk_mask;
 };
 
@@ -103,7 +101,7 @@ static unsigned long last_cycles;
 static float next_sample_evtime;
 
 typedef uae_s8 sample8_t;
-#define DO_CHANNEL_1(v, c) do { (v) *= audio_channel[c].data.vol; } while (0)
+#define DO_CHANNEL_1(v, c) do { (v) *= audio_channel[c].data.mixvol; } while (0)
 
 STATIC_INLINE int FINISH_DATA (int data, int bits, int ch)
 {
@@ -284,7 +282,7 @@ static void anti_prehandler(unsigned long best_evtime)
   /* Handle accumulator antialiasiation */
   for (i = 0; i < AUDIO_CHANNELS_PAULA; i++) {
 		acd = audio_data[i];
-  	output = (acd->current_sample * acd->vol) & acd->adk_mask;
+  	output = (acd->current_sample * acd->mixvol) & acd->adk_mask;
   	acd->sample_accum += output * best_evtime;
   	acd->sample_accum_time += best_evtime;
   }
@@ -308,7 +306,7 @@ static void sinc_prehandler_paula (unsigned long best_evtime)
 
   for (i = 0; i < AUDIO_CHANNELS_PAULA; i++) {
 		acd = audio_data[i];
-		int vol = acd->vol;
+		int vol = acd->mixvol;
 		output = (acd->current_sample * vol) & acd->adk_mask;
          
     /* if output state changes, record the state change and also
@@ -379,15 +377,15 @@ void sample16_handler (void)
 {
 	int data;
   if(audio_channel[0].data.adk_mask)
-    data = audio_channel[0].data.current_sample * audio_channel[0].data.vol;
+    data = audio_channel[0].data.current_sample * audio_channel[0].data.mixvol;
   else
     data = 0;
   if(audio_channel[1].data.adk_mask)
-    data += audio_channel[1].data.current_sample * audio_channel[1].data.vol;
+    data += audio_channel[1].data.current_sample * audio_channel[1].data.mixvol;
   if(audio_channel[2].data.adk_mask)
-    data += audio_channel[2].data.current_sample * audio_channel[2].data.vol;
+    data += audio_channel[2].data.current_sample * audio_channel[2].data.mixvol;
   if(audio_channel[3].data.adk_mask)
-    data += audio_channel[3].data.current_sample * audio_channel[3].data.vol;
+    data += audio_channel[3].data.current_sample * audio_channel[3].data.mixvol;
     
 	data = FINISH_DATA (data, 16, 0);
 
@@ -566,12 +564,12 @@ static void sample16si_sinc_handler (void)
 
 void sample16s_handler (void)
 {
-  int data_l = audio_channel[0].data.adk_mask ? audio_channel[0].data.current_sample * audio_channel[0].data.vol : 0;
-  int data_r = audio_channel[1].data.adk_mask ? audio_channel[1].data.current_sample * audio_channel[1].data.vol : 0;
+  int data_l = audio_channel[0].data.adk_mask ? audio_channel[0].data.current_sample * audio_channel[0].data.mixvol : 0;
+  int data_r = audio_channel[1].data.adk_mask ? audio_channel[1].data.current_sample * audio_channel[1].data.mixvol : 0;
   if(audio_channel[2].data.adk_mask)
-    data_r += audio_channel[2].data.current_sample * audio_channel[2].data.vol;
+    data_r += audio_channel[2].data.current_sample * audio_channel[2].data.mixvol;
   if(audio_channel[3].data.adk_mask)
-    data_l += audio_channel[3].data.current_sample * audio_channel[3].data.vol;
+    data_l += audio_channel[3].data.current_sample * audio_channel[3].data.mixvol;
   data_l = FINISH_DATA(data_l, 15, 0);
   data_r = FINISH_DATA(data_r, 15, 1);
 
@@ -746,8 +744,6 @@ static void audio_event_reset (void)
 
 void audio_deactivate(void)
 {
-  gui_data.sndbuf_status = 3;
-  gui_data.sndbuf = 0;
 	audio_work_to_do = 0;
 	pause_sound_buffer ();
   clear_sound_buffers();
@@ -779,7 +775,8 @@ static void update_volume(int nr, uae_u16 v)
 	v &= 127;
 	if (v > 64)
 		v = 64;
-	cdp->data.vol = v;
+	cdp->data.audvol = v;
+	cdp->data.mixvol = v;
 }
 
 uae_u16 audio_dmal (void)
@@ -849,7 +846,7 @@ static void loaddat (int nr)
 	loaddat (nr, false);
 }
 
-STATIC_INLINE void loadper (int nr)
+static void loadper (int nr)
 {
 	struct audio_channel_data *cdp = audio_channel + nr;
 
@@ -1042,7 +1039,7 @@ void audio_reset (void)
 	    cdp = &audio_channel[i];
 	    memset (cdp, 0, sizeof *audio_channel);
 	    cdp->per = PERIOD_MAX - 1;
-			cdp->data.vol = 0;
+			cdp->data.mixvol = 0;
 	    cdp->evtime = MAX_EV;
     }
   }
@@ -1223,7 +1220,9 @@ static void set_audio(void)
 	  sample_prehandler = anti_prehandler;
   }
 	for (int i = 0; i < AUDIO_CHANNELS_PAULA; i++) {
-		audio_data[i] = &audio_channel[i].data;
+		struct audio_channel_data *cdp = audio_channel + i;
+		audio_data[i] = &cdp->data;
+		cdp->data.mixvol = cdp->data.audvol;
 	}
 
   if(currprefs.sound_stereo) {
@@ -1501,7 +1500,7 @@ uae_u8 *restore_audio (int nr, uae_u8 *src)
 
 	zerostate (nr);
   acd->state = restore_u8 ();
-	acd->data.vol = restore_u8 ();
+	acd->data.audvol = restore_u8 ();
 	acd->intreq2 = restore_u8 () ? true : false;
 	uae_u8 flags = restore_u8 ();
 	acd->dr = acd->dsr = false;
@@ -1518,6 +1517,7 @@ uae_u8 *restore_audio (int nr, uae_u8 *src)
   acd->pt = restore_u32 ();
   acd->evtime = restore_u32 ();
 	acd->dmaenstore = (dmacon & DMA_MASTER) && (dmacon & (1 << nr));
+  acd->data.mixvol = acd->data.audvol;
   return src;
 }
 
@@ -1531,7 +1531,7 @@ uae_u8 *save_audio (int nr, int *len, uae_u8 *dstptr)
   else
 		dstbak = dst = xmalloc (uae_u8, 100);
 	save_u8 (acd->state);
-	save_u8 (acd->data.vol);
+	save_u8 (acd->data.audvol);
   save_u8 (acd->intreq2);
 	save_u8 ((acd->dr ? 1 : 0) | (acd->dsr ? 2 : 0) | 0x80);
   save_u16 (acd->len);

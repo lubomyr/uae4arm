@@ -17,7 +17,5 @@ void uae_ReplyMsg(uaecptr msg);
 void uae_Signal(uaecptr task, uae_u32 mask);
 void uae_NotificationHack(uaecptr, uaecptr);
 #endif
-void uae_nativesem_wait(void);
-void uae_nativesem_post(void);
 
 #endif /* UAE_NATIVE2AMIGA_API_H */

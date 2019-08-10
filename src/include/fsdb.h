@@ -103,8 +103,6 @@ typedef struct a_inode_struct {
 	uae_u64 uniq_external;
 } a_inode;
 
-extern TCHAR *nname_begin (TCHAR *);
-
 extern TCHAR *build_nname (const TCHAR *d, const TCHAR *n);
 
 /* Filesystem-independent functions.  */
@@ -158,7 +156,6 @@ extern FILE *my_opentext (const TCHAR*);
 extern bool my_stat (const TCHAR *name, struct mystat *ms);
 extern bool my_utime (const TCHAR *name, struct mytimeval *tv);
 extern bool my_chmod (const TCHAR *name, uae_u32 mode);
-extern const TCHAR *my_getfilepart(const TCHAR *filename);
 extern bool my_issamepath(const TCHAR *path1, const TCHAR *path2);
 
 #define MYVOLUMEINFO_READONLY 1

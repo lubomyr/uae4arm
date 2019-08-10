@@ -6,16 +6,12 @@
 * (c) 2006 - 2015 Toni Wilen
 */
 
-#include "sysconfig.h"
 #include "sysdeps.h"
 
 #include "options.h"
-#include "blkdev.h"
 #include "filesys.h"
 #include "gui.h"
 #include "uae.h"
-#include "memory-uae.h"
-#include "newcpu.h"
 #include "threaddep/thread.h"
 #include "savestate.h"
 #include "scsi.h"
@@ -127,7 +123,7 @@ static void ql(uae_u8 *d, int o)
 	d[o + 7] = t;
 }
 
-void ata_byteswapidentity(uae_u8 *d)
+static void ata_byteswapidentity(uae_u8 *d)
 {
 	for (int i = 0; i < 512; i += 2)
 	{
@@ -463,11 +459,9 @@ static void ide_set_features (struct ide_hdf *ide)
 	{
 		// 8-bit mode
 		case 1:
-		ide->mode_8bit = true;
 		ide_interrupt(ide);
 		break;
 		case 0x81:
-		ide->mode_8bit = false;
 		ide_interrupt(ide);
 		break;
 		// write cache
@@ -1300,7 +1294,6 @@ void alloc_ide_mem (struct ide_hdf **idetable, int max, struct ide_thread_state 
 		struct ide_hdf *ide;
 		if (!idetable[i]) {
 			ide = idetable[i] = xcalloc (struct ide_hdf, 1);
-			ide->cd_unit_num = -1;
 		}
 		ide = idetable[i];
 		ide_grow_buffer(ide, 1024);
@@ -1348,7 +1341,6 @@ struct ide_hdf *add_ide_unit (struct ide_hdf **idetable, int max, int ch, struct
 		ide->lba = true;
 		ide->uae_unitnum = ci->uae_unitnum;
 		gui_flicker_led (LED_HD, ide->uae_unitnum, -1);
-		ide->cd_unit_num = -1;
 		ide->media_type = ci->controller_media_type;
 		ide->ata_level = ci->unit_feature_level;
 		if (!ide->ata_level && (ide->hdhfd.size >= 4 * (uae_u64)0x40000000 || ide->media_type))
