@@ -48,6 +48,9 @@ struct comptbl {
 	uae_u32	specific;
   uae_u32 opcode;
 };
+#else
+#define MIN_JIT_CACHE 0
+#define MAX_JIT_CACHE 0
 #endif
 
 extern uae_u32 REGPARAM3 op_illg (uae_u32) REGPARAM;
@@ -70,6 +73,11 @@ typedef struct
 {
 	fptype fp;
 } fpdata;
+
+#ifdef JIT
+#include "jit/comptbl.h"
+#include "jit/compemu.h"
+#endif
 
 struct regstruct
 {
@@ -122,6 +130,16 @@ struct regstruct
 
   uae_s32 pissoff;
 	uae_u8* natmem_offset;
+
+#ifdef JIT
+  /* store scratch regs also in this struct to avoid load of mem pointer */
+  uae_u32 scratchregs[VREGS - 16];
+  fpu_register scratchfregs[VFREGS - 8];
+  uae_u32 jit_exception;
+  
+  /* pointer to real arrays/structs for easier access in JIT */
+  uae_u32 *raw_cputbl_count;
+#endif  
 };
 
 extern struct regstruct regs;

@@ -90,14 +90,14 @@ static struct audio_channel_data audio_channel[AUDIO_CHANNELS_PAULA];
 static struct audio_channel_data2 *audio_data[AUDIO_CHANNELS_PAULA];
 int sound_available = 0;
 void (*sample_handler) (void);
-static void (*sample_prehandler) (unsigned long best_evtime);
+static void (*sample_prehandler) (uae_u32 best_evtime);
 
 float scaled_sample_evtime;
 
 int sound_cd_volume[2];
 static int sound_paula_volume[2];
 
-static unsigned long last_cycles;
+static uae_u32 last_cycles;
 static float next_sample_evtime;
 
 typedef uae_s8 sample8_t;
@@ -274,7 +274,7 @@ static void put_sound_word_mono_func_nofilter(uae_u32 data)
   PUT_SOUND_WORD(data);
 }
 
-static void anti_prehandler(unsigned long best_evtime)
+static void anti_prehandler(uae_u32 best_evtime)
 {
   int i, output;
   struct audio_channel_data2 *acd;
@@ -299,7 +299,7 @@ static void samplexx_anti_handler (int *datasp)
   }
 }
 
-static void sinc_prehandler_paula (unsigned long best_evtime)
+static void sinc_prehandler_paula (uae_u32 best_evtime)
 {
 	int i, output;
   struct audio_channel_data2 *acd;
@@ -409,7 +409,7 @@ static void sample16i_anti_handler (void)
 
 static void sample16i_rh_handler (void)
 {
-  unsigned long delta, ratio;
+  uae_u32 delta, ratio;
 
 	int data0 = audio_channel[0].data.current_sample;
 	int data1 = audio_channel[1].data.current_sample;
@@ -491,7 +491,7 @@ static void sample16i_crux_handler (void)
 
   {    
     struct audio_channel_data *cdp;
-    unsigned long ratio, ratio1;
+    uae_u32 ratio, ratio1;
 #define INTERVAL (scaled_sample_evtime * 3)
     cdp = audio_channel + 0;
     ratio1 = cdp->per - cdp->evtime;
@@ -608,7 +608,7 @@ static void sample16si_crux_handler (void)
 
   {    
     struct audio_channel_data *cdp;
-    unsigned long ratio, ratio1;
+    uae_u32 ratio, ratio1;
 #define INTERVAL (scaled_sample_evtime * 3)
     cdp = audio_channel + 0;
     ratio1 = cdp->per - cdp->evtime;
@@ -649,7 +649,7 @@ static void sample16si_crux_handler (void)
 
 static void sample16si_rh_handler (void)
 {
-  unsigned long delta, ratio;
+  uae_u32 delta, ratio;
 
 	int data0 = audio_channel[0].data.current_sample;
 	int data1 = audio_channel[1].data.current_sample;
@@ -712,7 +712,7 @@ static void zerostate (int nr)
 
 static void schedule_audio (void)
 {
-	unsigned long best = MAX_EV;
+	uae_u32 best = MAX_EV;
   int i;
 
 	eventtab[ev_audio].active = 0;
@@ -1262,7 +1262,7 @@ static void set_audio(void)
 
 void update_audio (void)
 {
-  unsigned long int n_cycles = 0;
+  uae_u32 n_cycles = 0;
 
   if (!isaudio())
   	goto end;
@@ -1273,8 +1273,8 @@ void update_audio (void)
 
   n_cycles = get_cycles () - last_cycles;
   while (n_cycles > 0) {
-		unsigned long int best_evtime = n_cycles + 1;
-	  unsigned long rounded;
+		uae_u32 best_evtime = n_cycles + 1;
+	  uae_u32 rounded;
     int i;
 
   	for (i = 0; i < AUDIO_CHANNELS_PAULA; i++) {
@@ -1413,7 +1413,7 @@ void AUDxLCL (int nr, uae_u16 v)
 void AUDxPER (int nr, uae_u16 v)
 {
 	struct audio_channel_data *cdp = audio_channel + nr;
-	unsigned long per;
+	uae_u32 per;
 
   audio_activate();
   update_audio ();
@@ -1463,7 +1463,7 @@ void AUDxVOL (int nr, uae_u16 v)
 void audio_update_adkmasks (void)
 {
   static int prevcon = -1;
-  unsigned long t = adkcon | (adkcon >> 4);
+  uae_u32 t = adkcon | (adkcon >> 4);
 
 	audio_channel[0].data.adk_mask = (((t >> 0) & 1) - 1);
 	audio_channel[1].data.adk_mask = (((t >> 1) & 1) - 1);

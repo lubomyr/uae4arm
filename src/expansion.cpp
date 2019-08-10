@@ -2501,7 +2501,7 @@ uae_u8 *restore_expansion (uae_u8 *src)
   z3fastmem_bank[0].start = restore_u32 ();
 	gfxmem_banks[0]->start = restore_u32 ();
   rtarea_base = restore_u32 ();
-  if (rtarea_base != 0 && rtarea_base != RTAREA_DEFAULT && rtarea_base != RTAREA_BACKUP)
+  if (rtarea_base != 0 && rtarea_base != RTAREA_DEFAULT && rtarea_base != RTAREA_BACKUP && (rtarea_base < 0xe90000 || rtarea_base >= 0xf00000))
   	rtarea_base = 0;
   return src;
 }

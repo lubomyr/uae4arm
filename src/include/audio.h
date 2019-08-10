@@ -11,7 +11,7 @@
 
 #include "uae/types.h"
 
-#define PERIOD_MAX ULONG_MAX
+#define PERIOD_MAX UINT_MAX
 #define MAX_EV ~0u
 
 void AUDxDAT (int nr, uae_u16 value);

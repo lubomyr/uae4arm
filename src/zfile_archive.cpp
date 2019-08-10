@@ -881,7 +881,7 @@ static HRESULT __stdcall readCallback (int StreamID, uae_u64 offset, uae_u32 cou
 	struct zfile *f = arcacc_stack[StreamID];
 	int ret;
 
-	zfile_fseek (f, (long)offset, SEEK_SET);
+	zfile_fseek (f, (uae_s32)offset, SEEK_SET);
 	ret = zfile_fread (buf, 1, count, f);
 	if (processedSize)
 		*processedSize = ret;

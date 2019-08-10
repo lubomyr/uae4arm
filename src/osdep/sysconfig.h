@@ -1,5 +1,5 @@
-#ifndef PANDORAUAE_SYSCONFIG_H
-#define PANDORAUAE_SYSCONFIG_H
+#ifndef UAE_SYSCONFIG_H
+#define UAE_SYSCONFIG_H
 
 #define SUPPORT_THREADS
 #define MAX_DPATH 512
@@ -13,8 +13,10 @@
 #define FILESYS /* filesys emulation */
 #define UAE_FILESYS_THREADS
 #define AUTOCONFIG /* autoconfig support, fast ram, harddrives etc.. */
+#if !defined(CPU_AARCH64)
 #define JIT /* JIT compiler support */
-#ifdef ARMV6T2
+#endif
+#if defined(ARMV6T2)
 #define USE_JIT_FPU
 #endif
 /* #define NATMEM_OFFSET regs.natmem_offset */
@@ -87,7 +89,6 @@
 /* #define CUSTOM_SIMPLE */ /* simplified custom chipset emulation */
 /* #define CPUEMU_68000_ONLY */ /* drop 68010+ commands from CPUEMU_0 */
 /* #define ADDRESS_SPACE_24BIT */
-#define INPUTDEVICE_SIMPLE /* simplified inputdevice for faster emulation */
 
 /* #define WITH_SCSI_IOCTL */
 /* #define WITH_SCSI_SPTI */
@@ -109,13 +110,17 @@
 
 #include <stdint.h>
 
+#ifdef CPU_AARCH64
+#define SIZEOF_VOID_P 8
+#else
 #define SIZEOF_VOID_P 4
+#endif
 
 #if !defined(AHI)
 #undef ENFORCER
 #endif
 
-typedef long uae_atomic;
+typedef int32_t uae_atomic;
 
 /* src/sysconfig.h.  Generated automatically by configure.  */
 /* src/sysconfig.h.in.  Generated automatically from configure.in by autoheader.  */
@@ -252,7 +257,11 @@ typedef long uae_atomic;
 #define SIZEOF_INT 4
 
 /* The number of bytes in a long.  */
+#ifdef CPU_AARCH64
+#define SIZEOF_LONG 8
+#else
 #define SIZEOF_LONG 4
+#endif
 
 /* The number of bytes in a long long.  */
 #define SIZEOF_LONG_LONG 8
@@ -521,7 +530,7 @@ typedef long uae_atomic;
 #define M68K_SPEED_25MHZ_CYCLES 128
 
 typedef unsigned int WPARAM;
-typedef long LPARAM;
+typedef int LPARAM;
 typedef int SOCKET;
 #define INVALID_SOCKET -1
 
@@ -545,11 +554,11 @@ typedef char TCHAR;
 #define _daylight           daylight
 #define _ftime(x)           ftime(x)
 #ifdef ANDROID
-#define _ftelli64(x)        ftello(x)
-#define _fseeki64(x,y,z)    fseeko(x,y,z)
+ #define _ftelli64(x)        ftello(x)
+ #define _fseeki64(x,y,z)    fseeko(x,y,z)
 #else
-#define _ftelli64(x)        ftello64(x)
-#define _fseeki64(x,y,z)    fseeko64(x,y,z)
+ #define _ftelli64(x)        ftello64(x)
+ #define _fseeki64(x,y,z)    fseeko64(x,y,z)
 #endif
 #define _wunlink(x)         unlink(x)
 #define _istalnum(x)        isalnum(x)
@@ -558,4 +567,4 @@ typedef char TCHAR;
 #define log2l(x)            (log(x)/log(2))
 #endif
 
-#endif /* PANDORAUAE_SYSCONFIG_H */
+#endif /* UAE_SYSCONFIG_H */

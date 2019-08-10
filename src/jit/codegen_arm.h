@@ -1,5 +1,5 @@
 /*
- * compiler/codegen_arm.h - IA-32 and AMD64 code generator
+ * compiler/codegen_arm.h - ARM code generator
  *
  * Copyright (c) 2013 Jens Heitmann of ARAnyM dev team (see AUTHORS)
  * 

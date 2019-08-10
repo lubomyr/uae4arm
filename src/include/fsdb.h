@@ -83,7 +83,7 @@ typedef struct a_inode_struct {
     unsigned int exnext_count;
   /* AmigaOS locking bits.  */
   int shlock;
-  long db_offset;
+  uae_s32 db_offset;
   unsigned int dir:1;
   unsigned int softlink:2;
   unsigned int elock:1;

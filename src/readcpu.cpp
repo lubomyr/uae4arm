@@ -831,7 +831,7 @@ void read_table68k (void)
 
 static int imismatch;
 
-static void handle_merges (long int opcode)
+static void handle_merges (uae_s32 opcode)
 {
 	uae_u16 smsk;
 	uae_u16 dmsk;
@@ -910,7 +910,7 @@ static void handle_merges (long int opcode)
 
 void do_merges (void)
 {
-	long int opcode;
+	uae_s32 opcode;
 	int nr = 0;
 	imismatch = 0;
 	for (opcode = 0; opcode < 65536; opcode++) {

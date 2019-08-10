@@ -873,6 +873,11 @@ static void init_mem_banks (void)
     mem_banks[i] = &dummy_bank;
 }
 
+static void map_banks_set(addrbank *bank, int start, int size, int realsize)
+{
+	map_banks(bank, start, size, realsize);
+}
+
 static void allocate_memory (void)
 {
   if (chipmem_bank.reserved_size != currprefs.chipmem_size) {
@@ -1011,11 +1016,6 @@ void map_overlay (int chip)
   }
   if (!isrestore () && valid_address (regs.pc, 4))
     m68k_setpc_normal (currPC);
-}
-
-static void map_banks_set(addrbank *bank, int start, int size, int realsize)
-{
-	map_banks(bank, start, size, realsize);
 }
 
 void memory_clear (void)
@@ -1381,7 +1381,7 @@ void map_banks_cond (addrbank *bank, int start, int size, int realsize)
 static void map_banks2 (addrbank *bank, int start, int size, int realsize)
 {
   int bnr;
-  unsigned long int hioffs = 0, endhioffs = 0x100;
+  uae_u32 hioffs = 0, endhioffs = 0x100;
   uae_u32 realstart = start;
 
   flush_icache_hard (3);	/* Sure don't want to keep any old mappings around! */

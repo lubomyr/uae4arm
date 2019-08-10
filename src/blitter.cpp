@@ -41,8 +41,8 @@ enum blitter_states bltstate;
 static int blit_cyclecounter;
 static int blit_slowdown;
 
-static long blit_firstline_cycles;
-static long blit_first_cycle;
+static uae_s32 blit_firstline_cycles;
+static uae_s32 blit_first_cycle;
 static int blit_last_cycle, blit_dmacount, blit_dmacount2;
 static int blit_nod;
 static const int *blit_diag;
@@ -282,22 +282,23 @@ STATIC_INLINE void chipmem_agnus_wput2 (uaecptr addr, uae_u32 w)
 static void blitter_dofast(void)
 {
   int i,j;
-  uaecptr bltadatptr = 0, bltbdatptr = 0, bltcdatptr = 0, bltddatptr = 0;
+  uae_u8 *bltadatptr = 0, *bltbdatptr = 0, *bltcdatptr = 0;
+  uaecptr bltddatptr = 0;
   uae_u8 mt = bltcon0 & 0xFF;
 
 	blit_masktable[0] = blt_info.bltafwm;
 	blit_masktable[blt_info.hblitsize - 1] &= blt_info.bltalwm;
 
   if (bltcon0 & 0x800) {
-	  bltadatptr = (uaecptr)&chipmem_bank.baseaddr[bltapt & chipmem_full_mask];
+	  bltadatptr = &chipmem_bank.baseaddr[bltapt & chipmem_full_mask];
 	  bltapt += (blt_info.hblitsize * 2 + blt_info.bltamod) * blt_info.vblitsize;
   }
   if (bltcon0 & 0x400) {
-	  bltbdatptr = (uaecptr)&chipmem_bank.baseaddr[bltbpt & chipmem_full_mask];
+	  bltbdatptr = &chipmem_bank.baseaddr[bltbpt & chipmem_full_mask];
 	  bltbpt += (blt_info.hblitsize * 2 + blt_info.bltbmod) * blt_info.vblitsize;
   }
   if (bltcon0 & 0x200) {
-	  bltcdatptr = (uaecptr)&chipmem_bank.baseaddr[bltcpt & chipmem_full_mask];
+	  bltcdatptr = &chipmem_bank.baseaddr[bltcpt & chipmem_full_mask];
 	  bltcpt += (blt_info.hblitsize * 2 + blt_info.bltcmod) * blt_info.vblitsize;
   }
   if (bltcon0 & 0x100) {
@@ -376,22 +377,23 @@ static void blitter_dofast(void)
 static void blitter_dofast_desc(void)
 {
   int i,j;
-  uaecptr bltadatptr = 0, bltbdatptr = 0, bltcdatptr = 0, bltddatptr = 0;
+  uae_u8 *bltadatptr = 0, *bltbdatptr = 0, *bltcdatptr = 0;
+  uaecptr bltddatptr = 0;
   uae_u8 mt = bltcon0 & 0xFF;
 
 	blit_masktable[0] = blt_info.bltafwm;
 	blit_masktable[blt_info.hblitsize - 1] &= blt_info.bltalwm;
 
   if (bltcon0 & 0x800) {
-	  bltadatptr = (uaecptr)&chipmem_bank.baseaddr[bltapt & chipmem_full_mask];
+	  bltadatptr = &chipmem_bank.baseaddr[bltapt & chipmem_full_mask];
 	  bltapt -= (blt_info.hblitsize * 2 + blt_info.bltamod) * blt_info.vblitsize;
   }
   if (bltcon0 & 0x400) {
-	  bltbdatptr = (uaecptr)&chipmem_bank.baseaddr[bltbpt & chipmem_full_mask];
+	  bltbdatptr = &chipmem_bank.baseaddr[bltbpt & chipmem_full_mask];
 	  bltbpt -= (blt_info.hblitsize * 2 + blt_info.bltbmod) * blt_info.vblitsize;
   }
   if (bltcon0 & 0x200) {
-	  bltcdatptr = (uaecptr)&chipmem_bank.baseaddr[bltcpt & chipmem_full_mask];
+	  bltcdatptr = &chipmem_bank.baseaddr[bltcpt & chipmem_full_mask];
 	  bltcpt -= (blt_info.hblitsize * 2 + blt_info.bltcmod) * blt_info.vblitsize;
   }
   if (bltcon0 & 0x100) {

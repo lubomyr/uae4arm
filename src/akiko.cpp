@@ -1250,17 +1250,21 @@ void AKIKO_hsync_handler (void)
 	if (!currprefs.cs_cd32cd || !akiko_inited)
 		return;
 
-	static float framecounter;
-	framecounter--;
-	if (framecounter <= 0) {
+	static float framecounter1, framecounter2;
+	framecounter1--;
+	if (framecounter1 <= 0) {
 		if (cdrom_seek_delay <= 0) {
 			cdrom_run_read ();
 		} else {
 			cdrom_seek_delay--;
 		}
-		framecounter += (float)maxvpos * vblank_hz / (75.0 * cdrom_speed);
+		framecounter1 += (float)maxvpos * vblank_hz / (75.0 * cdrom_speed);
 		if (currprefs.cd_speed == 0)
-			framecounter = 1;
+			framecounter1 = 1;
+	}
+	framecounter2--;
+	if (framecounter2 <= 0) {
+		framecounter2 += (float)maxvpos * vblank_hz / (75.0 * cdrom_speed);
 		framesync = true;
 	}
 
@@ -1305,7 +1309,7 @@ void AKIKO_hsync_handler (void)
 }
 
 /* cdrom data buffering thread */
-static void *akiko_thread (void *null)
+static int akiko_thread (void *null)
 {
 	int secnum;
 	uae_u8 *tmp1;

@@ -105,11 +105,11 @@ static const uae_u32 PRESERVE_MASK = ((1<<R4_INDEX)|(1<<R5_INDEX)|(1<<R6_INDEX)|
 
 #include "codegen_arm.h"
 
-STATIC_INLINE void UNSIGNED8_IMM_2_REG(W4 r, IMM v) {
+STATIC_INLINE void UNSIGNED8_IMM_2_REG(W4 r, IM8 v) {
 	MOV_ri8(r, (uae_u8) v);
 }
 
-STATIC_INLINE void SIGNED8_IMM_2_REG(W4 r, IMM v) {
+STATIC_INLINE void SIGNED8_IMM_2_REG(W4 r, IM8 v) {
 	if (v & 0x80) {
 		MVN_ri8(r, (uae_u8) ~v);
 	} else {
@@ -117,7 +117,7 @@ STATIC_INLINE void SIGNED8_IMM_2_REG(W4 r, IMM v) {
 	}
 }
 
-STATIC_INLINE void UNSIGNED16_IMM_2_REG(W4 r, IMM v) {
+STATIC_INLINE void UNSIGNED16_IMM_2_REG(W4 r, IM16 v) {
 #ifdef ARMV6T2
   MOVW_ri16(r, v);
 #else
@@ -126,7 +126,7 @@ STATIC_INLINE void UNSIGNED16_IMM_2_REG(W4 r, IMM v) {
 #endif
 }
 
-STATIC_INLINE void SIGNED16_IMM_2_REG(W4 r, IMM v) {
+STATIC_INLINE void SIGNED16_IMM_2_REG(W4 r, IM16 v) {
 #ifdef ARMV6T2
   MOVW_ri16(r, v);
   SXTH_rr(r, r);
@@ -180,8 +180,9 @@ STATIC_INLINE void raw_flags_evicted(int r)
 
 STATIC_INLINE void raw_flags_to_reg(int r)
 {
+  uae_s32 idx = (uae_u32) &(regs.ccrflags.nzcv) - (uae_u32) &regs;
 	MRS_CPSR(r);
-	STR_rRI(r, R_REGSTRUCT, 16 * 4); // Flags are next to 8 Dregs and 8 Aregs in struct regstruct
+	STR_rRI(r, R_REGSTRUCT, idx);
 	raw_flags_evicted(r);
 }
 
@@ -193,89 +194,48 @@ STATIC_INLINE void raw_reg_to_flags(int r)
 //
 // compuemu_support used raw calls
 //
-LOWFUNC(WRITE,RMW,2,compemu_raw_add_l_mi,(IMM d, IMM s))
+LOWFUNC(WRITE,RMW,2,compemu_raw_inc_opcount,(IM16 op))
 {
+  uae_s32 idx = (uae_u32) &(regs.raw_cputbl_count) - (uae_u32) &regs;
+  LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
 #ifdef ARMV6T2
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 idx = d - (uae_u32) & regs;
-    LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-	} else {
-    MOVW_ri16(REG_WORK1, d);
-    MOVT_ri16(REG_WORK1, d >> 16);
-    LDR_rR(REG_WORK2, REG_WORK1);
-	}
-
-	if(CHECK32(s)) {
-    ADD_rri(REG_WORK2, REG_WORK2, s);
-	} else {
-    MOVW_ri16(REG_WORK3, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK3, s >> 16);
-    ADD_rrr(REG_WORK2, REG_WORK2, REG_WORK3);
-	}
-
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 idx = d - (uae_u32) & regs;
-    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-	} else {
-    STR_rR(REG_WORK2, REG_WORK1);  
-	}
+  MOVW_ri16(REG_WORK1, op);
 #else
-  uae_s32 offs = data_long_offs(d);
-	LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-	LDR_rR(REG_WORK2, REG_WORK1);
-
-  offs = data_long_offs(s);
-	LDR_rRI(REG_WORK3, RPC_INDEX, offs);
-
-	ADD_rrr(REG_WORK2, REG_WORK2, REG_WORK3);
-
-	STR_rR(REG_WORK2, REG_WORK1);
+  uae_s32 offs = data_long_offs(op);
+  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
 #endif
-}
-LENDFUNC(WRITE,RMW,2,compemu_raw_add_l_mi,(IMM d, IMM s))
+  ADD_rrrLSLi(REG_WORK2, REG_WORK2, REG_WORK1, 2);
+  LDR_rR(REG_WORK1, REG_WORK2);
 
-LOWFUNC(WRITE,READ,2,compemu_raw_cmp_l_mi,(MEMR d, IMM s))
+  ADD_rri(REG_WORK1, REG_WORK1, 1);
+
+  STR_rR(REG_WORK1, REG_WORK2);
+}
+LENDFUNC(WRITE,RMW,1,compemu_raw_inc_opcount,(IM16 op))
+
+LOWFUNC(WRITE,READ,1,compemu_raw_cmp_pc,(IMPTR s))
 {
+  /* s is always >= NATMEM_OFFSETX and < NATMEM_OFFSETX + max. Amiga mem */
   clobber_flags();
   
- #ifdef ARMV6T2
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 idx = d - (uae_u32) & regs;
-    LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
-    MOVW_ri16(REG_WORK2, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK2, s >> 16);
-  } else {
-    MOVW_ri16(REG_WORK1, d);
-    MOVT_ri16(REG_WORK1, d >> 16);
-	  LDR_rR(REG_WORK1, REG_WORK1);
-    MOVW_ri16(REG_WORK2, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK2, s >> 16);
-  }
+#ifdef ARMV6T2
+  uae_s32 idx = (uae_u32) &(regs.pc_p) - (uae_u32) &regs;
+  LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
+  MOVW_ri16(REG_WORK2, s);
+  if(s >> 16)
+    MOVT_ri16(REG_WORK2, s >> 16);
 #else
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 offs = data_long_offs(s);
-    LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-    uae_s32 idx = d - (uae_u32) & regs;
-    LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
-  } else {
-    data_check_end(8, 16);
-    uae_s32 offs = data_long_offs(d);
-	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-	  LDR_rR(REG_WORK1, REG_WORK1);
-
-	  offs = data_long_offs(s);
-	  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-  }
+  uae_s32 offs = data_long_offs(s);
+  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
+  uae_s32 idx = (uae_u32) &(regs.pc_p) - (uae_u32) & regs;
+  LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
 #endif
 
 	CMP_rr(REG_WORK1, REG_WORK2);
 }
-LENDFUNC(WRITE,READ,2,compemu_raw_cmp_l_mi,(MEMR d, IMM s))
+LENDFUNC(WRITE,READ,1,compemu_raw_cmp_pc,(IMPTR s))
 
-LOWFUNC(NONE,NONE,3,compemu_raw_lea_l_brr,(W4 d, RR4 s, IMM offset))
+LOWFUNC(NONE,NONE,3,compemu_raw_lea_l_brr,(W4 d, RR4 s, IM32 offset))
 {
   if(CHECK32(offset)) {
     ADD_rri(d, s, offset);
@@ -291,62 +251,58 @@ LOWFUNC(NONE,NONE,3,compemu_raw_lea_l_brr,(W4 d, RR4 s, IMM offset))
   	ADD_rrr(d, s, REG_WORK1);
   }
 }
-LENDFUNC(NONE,NONE,3,compemu_raw_lea_l_brr,(W4 d, RR4 s, IMM offset))
+LENDFUNC(NONE,NONE,3,compemu_raw_lea_l_brr,(W4 d, RR4 s, IM32 offset))
 
-LOWFUNC(NONE,WRITE,2,compemu_raw_mov_l_mi,(MEMW d, IMM s))
+LOWFUNC(NONE,WRITE,1,compemu_raw_set_pc_i,(IMPTR s))
 {
+  /* s is always >= NATMEM_OFFSETX and < NATMEM_OFFSETX + max. Amiga mem */
 #ifdef ARMV6T2
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    MOVW_ri16(REG_WORK2, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK2, s >> 16);
-    uae_s32 idx = d - (uae_u32) & regs;
-    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  } else {
-    MOVW_ri16(REG_WORK1, d);
-    MOVT_ri16(REG_WORK1, d >> 16);
-    MOVW_ri16(REG_WORK2, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK2, s >> 16);
-	  STR_rR(REG_WORK2, REG_WORK1);
-  }
+  MOVW_ri16(REG_WORK2, s);
+  if(s >> 16)
+    MOVT_ri16(REG_WORK2, s >> 16);
+  uae_s32 idx = (uae_u32) &(regs.pc_p) - (uae_u32) &regs;
+  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
 #else
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 offs = data_long_offs(s);
-    LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-    uae_s32 idx = d - (uae_u32) & regs;
-    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  } else {
-    data_check_end(8, 12);
-    uae_s32 offs = data_long_offs(d);
-	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-	  offs = data_long_offs(s);
-	  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-	  STR_rR(REG_WORK2, REG_WORK1);
-  }
+  uae_s32 offs = data_long_offs(s);
+  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
+  uae_s32 idx = (uae_u32) &(regs.pc_p) - (uae_u32) &regs;
+  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
 #endif
 }
-LENDFUNC(NONE,WRITE,2,compemu_raw_mov_l_mi,(MEMW d, IMM s))
+LENDFUNC(NONE,WRITE,1,compemu_raw_set_pc_i,(IMPTR s))
+
+LOWFUNC(NONE,WRITE,2,compemu_raw_mov_l_mi,(MEMW d, IM32 s))
+{
+  /* d points always to memory in regs struct */
+#ifdef ARMV6T2
+  MOVW_ri16(REG_WORK2, s);
+  if(s >> 16)
+    MOVT_ri16(REG_WORK2, s >> 16);
+#else
+  uae_s32 offs = data_long_offs(s);
+  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
+#endif
+  uae_s32 idx = d - (uae_u32) & regs;
+  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+}
+LENDFUNC(NONE,WRITE,2,compemu_raw_mov_l_mi,(MEMW d, IM32 s))
+
+LOWFUNC(NONE,WRITE,1,compemu_raw_set_pc_r,(RR4 s))
+{
+  uae_s32 idx = (uae_u32) &(regs.pc_p) - (uae_u32) &regs;
+  STR_rRI(s, R_REGSTRUCT, idx);
+}
+LENDFUNC(NONE,WRITE,1,compemu_raw_set_pc_r,(RR4 s))
 
 LOWFUNC(NONE,WRITE,2,compemu_raw_mov_l_mr,(MEMW d, RR4 s))
 {
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 idx = d - (uae_u32) & regs;
-    STR_rRI(s, R_REGSTRUCT, idx);
-  } else {
-#ifdef ARMV6T2
-    MOVW_ri16(REG_WORK1, d);
-    MOVT_ri16(REG_WORK1, d >> 16);
-#else
-    uae_s32 offs = data_long_offs(d);
-	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
-	  STR_rR(s, REG_WORK1);
-  }
+  /* d points always to memory in regs struct */
+  uae_s32 idx = d - (uae_u32) & regs;
+  STR_rRI(s, R_REGSTRUCT, idx);
 }
 LENDFUNC(NONE,WRITE,2,compemu_raw_mov_l_mr,(MEMW d, RR4 s))
 
-LOWFUNC(NONE,NONE,2,compemu_raw_mov_l_ri,(W4 d, IMM s))
+LOWFUNC(NONE,NONE,2,compemu_raw_mov_l_ri,(W4 d, IM32 s))
 {
 #ifdef ARMV6T2
   MOVW_ri16(d, s);
@@ -357,7 +313,7 @@ LOWFUNC(NONE,NONE,2,compemu_raw_mov_l_ri,(W4 d, IMM s))
 	LDR_rRI(d, RPC_INDEX, offs);
 #endif
 }
-LENDFUNC(NONE,NONE,2,compemu_raw_mov_l_ri,(W4 d, IMM s))
+LENDFUNC(NONE,NONE,2,compemu_raw_mov_l_ri,(W4 d, IM32 s))
 
 LOWFUNC(NONE,READ,2,compemu_raw_mov_l_rm,(W4 d, MEMR s))
 {
@@ -383,68 +339,57 @@ LOWFUNC(NONE,NONE,2,compemu_raw_mov_l_rr,(W4 d, RR4 s))
 }
 LENDFUNC(NONE,NONE,2,compemu_raw_mov_l_rr,(W4 d, RR4 s))
 
-LOWFUNC(WRITE,RMW,2,compemu_raw_sub_l_mi,(MEMRW d, IMM s))
+LOWFUNC(WRITE,RMW,1,compemu_raw_dec_m,(MEMRW d))
 {
   clobber_flags();
 
-  if(CHECK32(s)) {
-    if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-      uae_s32 idx = d - (uae_u32) & regs;
-      LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-      SUBS_rri(REG_WORK2, REG_WORK2, s);
-      STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-    } else {
-#ifdef ARMV6T2
-      MOVW_ri16(REG_WORK1, d);
-      MOVT_ri16(REG_WORK1, d >> 16);
-#else
-    	uae_s32 offs = data_long_offs(d);
-    	LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
-      LDR_rR(REG_WORK2, REG_WORK1);
-      SUBS_rri(REG_WORK2, REG_WORK2, s);
-      STR_rR(REG_WORK2, REG_WORK1);
-    }
+  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
+    uae_s32 idx = d - (uae_u32) & regs;
+    LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+    SUBS_rri(REG_WORK2, REG_WORK2, 1);
+    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
   } else {
-    if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-      uae_s32 idx = d - (uae_u32) & regs;
-  	  LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  
 #ifdef ARMV6T2
-      MOVW_ri16(REG_WORK1, s);
-      if(s >> 16)
-        MOVT_ri16(REG_WORK1, s >> 16);
+    MOVW_ri16(REG_WORK1, d);
+    MOVT_ri16(REG_WORK1, d >> 16);
 #else
-  	  uae_s32 offs = data_long_offs(s);
-  	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
+  	uae_s32 offs = data_long_offs(d);
+  	LDR_rRI(REG_WORK1, RPC_INDEX, offs);
 #endif
-
-  	  SUBS_rrr(REG_WORK2, REG_WORK2, REG_WORK1);
-  	  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-    } else {
-#ifdef ARMV6T2
-      MOVW_ri16(REG_WORK1, d);
-      MOVT_ri16(REG_WORK1, d >> 16);
-  	  LDR_rR(REG_WORK2, REG_WORK1);
-  
-      MOVW_ri16(REG_WORK3, s);
-      if(s >> 16)
-        MOVT_ri16(REG_WORK3, s >> 16);
-#else
-      uae_s32 offs = data_long_offs(d);
-  	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-  	  LDR_rR(REG_WORK2, REG_WORK1);
-  
-  	  offs = data_long_offs(s);
-  	  LDR_rRI(REG_WORK3, RPC_INDEX, offs);
-#endif
-  
-  	  SUBS_rrr(REG_WORK2, REG_WORK2, REG_WORK3);
-  	  STR_rR(REG_WORK2, REG_WORK1);
-    }
+    LDR_rR(REG_WORK2, REG_WORK1);
+    SUBS_rri(REG_WORK2, REG_WORK2, 1);
+    STR_rR(REG_WORK2, REG_WORK1);
   }
 }
-LENDFUNC(WRITE,RMW,2,compemu_raw_sub_l_mi,(MEMRW d, IMM s))
+LENDFUNC(WRITE,RMW,1,compemu_raw_dec_m,(MEMRW ds))
+
+LOWFUNC(WRITE,RMW,2,compemu_raw_sub_l_mi,(MEMRW d, IM32 s))
+{
+  /* d points always to memory in regs struct */
+  clobber_flags();
+
+  uae_s32 idx = d - (uae_u32) & regs;
+  LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+
+  if(CHECK32(s)) {
+    SUBS_rri(REG_WORK2, REG_WORK2, s);
+    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+  } else {
+  
+#ifdef ARMV6T2
+    MOVW_ri16(REG_WORK1, s);
+    if(s >> 16)
+      MOVT_ri16(REG_WORK1, s >> 16);
+#else
+	  uae_s32 offs = data_long_offs(s);
+	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
+#endif
+
+	  SUBS_rrr(REG_WORK2, REG_WORK2, REG_WORK1);
+	  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+  }
+}
+LENDFUNC(WRITE,RMW,2,compemu_raw_sub_l_mi,(MEMRW d, IM32 s))
 
 LOWFUNC(WRITE,NONE,2,compemu_raw_test_l_rr,(RR4 d, RR4 s))
 {
@@ -453,7 +398,7 @@ LOWFUNC(WRITE,NONE,2,compemu_raw_test_l_rr,(RR4 d, RR4 s))
 }
 LENDFUNC(WRITE,NONE,2,compemu_raw_test_l_rr,(RR4 d, RR4 s))
 
-STATIC_INLINE void compemu_raw_call(uae_u32 t)
+STATIC_INLINE void compemu_raw_call(uintptr t)
 {
 #ifdef ARMV6T2
   MOVW_ri16(REG_WORK1, t);
@@ -565,21 +510,15 @@ STATIC_INLINE void compemu_raw_jcc_l_oponly(int cc)
   // emit of target into last branch will be done by caller
 }
 
-STATIC_INLINE void compemu_raw_handle_except(IMM cycles)
+STATIC_INLINE void compemu_raw_handle_except(IM32 cycles)
 {
 	uae_u32* branchadd;	
 	int offs;
 
   clobber_flags();
 
-#ifdef ARMV6T2
-  MOVW_ri16(REG_WORK2, (uae_u32)(&jit_exception));
-  MOVT_ri16(REG_WORK2, ((uae_u32)(&jit_exception)) >> 16);
-#else
-	offs = data_long_offs((uae_u32)(&jit_exception));
-	LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-#endif
-  LDR_rR(REG_WORK1, REG_WORK2);
+  uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
+  LDR_rRI(REG_WORK1, R_REGSTRUCT, idx);
 	TST_rr(REG_WORK1, REG_WORK1);
 
 	branchadd = (uae_u32*)get_target();
@@ -611,7 +550,7 @@ STATIC_INLINE void compemu_raw_handle_except(IMM cycles)
 	write_jmp_target(branchadd, (uintptr)get_target());
 }
 
-STATIC_INLINE void compemu_raw_maybe_recompile(uae_u32 t)
+STATIC_INLINE void compemu_raw_maybe_recompile(uintptr t)
 {
   BGE_i(2);
   raw_pop_preserved_regs();
@@ -619,7 +558,7 @@ STATIC_INLINE void compemu_raw_maybe_recompile(uae_u32 t)
   emit_long(t);
 }
 
-STATIC_INLINE void compemu_raw_jmp(uae_u32 t)
+STATIC_INLINE void compemu_raw_jmp(uintptr t)
 {
 	if(t >= (uae_u32)popallspace && t < (uae_u32)(popallspace + POPALLSPACE_SIZE + MAX_JIT_CACHE * 1024)) {
 		uae_u32* loc = (uae_u32*)get_target();
@@ -631,7 +570,7 @@ STATIC_INLINE void compemu_raw_jmp(uae_u32 t)
 	}
 }
 
-STATIC_INLINE void compemu_raw_jmp_m_indexed(uae_u32 base, uae_u32 r, uae_u32 m)
+STATIC_INLINE void compemu_raw_jmp_m_indexed(uintptr base, uae_u32 r, uae_u32 m)
 {
 	int shft;
 	switch(m) {
@@ -647,7 +586,7 @@ STATIC_INLINE void compemu_raw_jmp_m_indexed(uae_u32 base, uae_u32 r, uae_u32 m)
 	emit_long(base);
 }
 
-STATIC_INLINE void compemu_raw_maybe_cachemiss(uae_u32 t)
+STATIC_INLINE void compemu_raw_maybe_cachemiss(uintptr t)
 {
   BEQ_i(2);
   raw_pop_preserved_regs();
@@ -660,15 +599,15 @@ STATIC_INLINE void compemu_raw_jz_b_oponly(void)
   BEQ_i(0);   // Real distance set by caller
 }
 
-STATIC_INLINE void compemu_raw_branch(IMM d)
+STATIC_INLINE void compemu_raw_branch(IM32 d)
 {
 	B_i((d >> 2) - 1);
 }
 
 
-// Optimize access to struct regstruct with r11 and memory with r10
+// Optimize access to struct regstruct with and memory with fixed registers
 
-LOWFUNC(NONE,NONE,1,compemu_raw_init_r_regstruct,(IMM s))
+LOWFUNC(NONE,NONE,1,compemu_raw_init_r_regstruct,(IMPTR s))
 {
 #ifdef ARMV6T2
   MOVW_ri16(R_REGSTRUCT, s);
@@ -680,11 +619,11 @@ LOWFUNC(NONE,NONE,1,compemu_raw_init_r_regstruct,(IMM s))
 	uae_s32 offsmem = (uae_u32)&NATMEM_OFFSETX - (uae_u32) &regs;
   LDR_rRI(R_MEMSTART, R_REGSTRUCT, offsmem);
 }
-LENDFUNC(NONE,NONE,1,compemu_raw_init_r_regstruct,(IMM s))
+LENDFUNC(NONE,NONE,1,compemu_raw_init_r_regstruct,(IMPTR s))
 
 
 // Handle end of compiled block
-LOWFUNC(NONE,NONE,2,compemu_raw_endblock_pc_inreg,(RR4 rr_pc, IMM cycles))
+LOWFUNC(NONE,NONE,2,compemu_raw_endblock_pc_inreg,(RR4 rr_pc, IM32 cycles))
 {
   clobber_flags();
 
@@ -723,12 +662,12 @@ LOWFUNC(NONE,NONE,2,compemu_raw_endblock_pc_inreg,(RR4 rr_pc, IMM cycles))
 	emit_long((uintptr)cache_tags);
 	emit_long((uintptr)do_nothing);
 }
-LENDFUNC(NONE,NONE,2,compemu_raw_endblock_pc_inreg,(RR4 rr_pc, IMM cycles))
+LENDFUNC(NONE,NONE,2,compemu_raw_endblock_pc_inreg,(RR4 rr_pc, IM32 cycles))
 
 
-//LOWFUNC(NONE,NONE,2,compemu_raw_endblock_pc_isconst,(IMM cycles, IMM v))
-STATIC_INLINE uae_u32* compemu_raw_endblock_pc_isconst(IMM cycles, IMM v)
+STATIC_INLINE uae_u32* compemu_raw_endblock_pc_isconst(IM32 cycles, IMPTR v)
 {
+  /* v is always >= NATMEM_OFFSETX and < NATMEM_OFFSETX + max. Amiga mem */
 	uae_u32* tba;
   clobber_flags();
 
@@ -764,7 +703,6 @@ STATIC_INLINE uae_u32* compemu_raw_endblock_pc_isconst(IMM cycles, IMM v)
 
 	return tba;  
 }
-//LENDFUNC(NONE,NONE,2,compemu_raw_endblock_pc_isconst,(IMM cycles, IMM v))
 
 
 LOWFUNC(NONE,READ,2,compemu_raw_tag_pc,(W4 d, MEMR s))
@@ -1345,13 +1283,13 @@ LOWFUNC(NONE,NONE,2,raw_fp_fscc_ri,(RW4 d, int cc))
 }
 LENDFUNC(NONE,NONE,2,raw_fp_fscc_ri,(RW4 d, int cc))
 
-LOWFUNC(NONE,NONE,1,raw_roundingmode,(IMM mode))
+LOWFUNC(NONE,NONE,1,raw_roundingmode,(IM32 mode))
 {
   VMRS_r(REG_WORK1);
   BIC_rri(REG_WORK1, REG_WORK1, 0x00c00000);
   ORR_rri(REG_WORK1, REG_WORK1, mode);
   VMSR_r(REG_WORK1);
 }
-LENDFUNC(NONE,NONE,1,raw_roundingmode,(IMM mode))
+LENDFUNC(NONE,NONE,1,raw_roundingmode,(IM32 mode))
 
 #endif // USE_JIT_FPU

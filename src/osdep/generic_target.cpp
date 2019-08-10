@@ -70,7 +70,7 @@ void sleep_millis (int ms)
 
 void sleep_millis_main (int ms)
 {
-	unsigned long start = read_processor_time ();
+	uae_u32 start = read_processor_time ();
   usleep(ms * 1000);
   idletime += read_processor_time () - start;
 }
@@ -266,7 +266,7 @@ int target_cfgfile_load (struct uae_prefs *p, const char *filename, int type, in
   
   discard_prefs(p, 0);
   default_prefs(p, true, 0);
-  
+
 	const char *ptr = strstr((char *)filename, ".rp9");
   if(ptr != NULL)
   {

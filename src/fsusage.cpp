@@ -34,7 +34,7 @@
    BLOCKS FROMSIZE-byte blocks, rounding away from zero.
    TOSIZE must be positive.  Return -1 if FROMSIZE is not positive.  */
 
-static long adjust_blocks(long blocks, int fromsize, int tosize)
+static uae_s32 adjust_blocks(uae_s32 blocks, int fromsize, int tosize)
 {
   if (tosize <= 0)
     abort ();
@@ -208,7 +208,7 @@ int get_fs_usage (const TCHAR *path, const TCHAR *disk, struct fs_usage *fsp)
   fd = open (disk, O_RDONLY);
   if (fd < 0)
     return -1;
-  lseek (fd, (long) SUPERBOFF, 0);
+  lseek (fd, (uae_s32) SUPERBOFF, 0);
   if (safe_read (fd, (TCHAR *) &fsd, sizeof fsd) != sizeof fsd)
     {
       close (fd);

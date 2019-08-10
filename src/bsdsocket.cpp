@@ -27,12 +27,12 @@ static uae_u32 SockLibBase;
 
 /* ObtainSocket()/ReleaseSocket() public socket pool */
 struct sockd {
-	long sockpoolids[SOCKPOOLSIZE];
+	uae_s32 sockpoolids[SOCKPOOLSIZE];
 	SOCKET_TYPE sockpoolsocks[SOCKPOOLSIZE];
 	uae_u32 sockpoolflags[SOCKPOOLSIZE];
 };
 
-static long curruniqid = 65536;
+static uae_s32 curruniqid = 65536;
 static struct sockd *sockdata;
 
 uae_u32 strncpyha(TrapContext *ctx, uae_u32 dst, const uae_char *src, int size)
@@ -263,7 +263,7 @@ void releasesock (TrapContext *ctx, SB, int sd)
 
 void waitsig (TrapContext *ctx, SB)
 {
-	long sigs;
+	uae_s32 sigs;
 	trap_call_add_dreg(ctx, 0, (((uae_u32) 1) << sb->signal) | sb->eintrsigs);
 	if ((sigs = trap_call_lib(ctx, sb->sysbase, -0x13e)) & sb->eintrsigs) { /* Wait */
 		sockabort (sb);
@@ -624,7 +624,7 @@ static uae_u32 bsdsocklib_SetDTableSize (SB, int newSize)
 	return 0;
 }
 
-static int sockpoolindex (long id)
+static int sockpoolindex (uae_s32 id)
 {
 	int i;
 
@@ -1277,7 +1277,7 @@ static uae_u32 REGPARAM2 bsdsocklib_SocketBaseTagList(TrapContext *ctx)
 					break;
 
 				case SBTC_FDCALLBACK:
-					tagcopy(ctx, currtag, currval, tagptr, &sb->fdcallback);
+					tagcopy(ctx, currtag, currval, tagptr, (uae_u32*)&sb->fdcallback);
 					break;
 
 				case SBTC_LOGSTAT:

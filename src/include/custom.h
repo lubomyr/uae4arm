@@ -40,7 +40,7 @@ extern void init_row_map (void);
 extern void init_hz_normal (void);
 extern void init_custom (void);
 
-extern unsigned long int hsync_counter;
+extern uae_u32 hsync_counter;
 
 extern uae_u16 dmacon;
 extern uae_u16 intreq;
@@ -133,14 +133,14 @@ extern float hblank_hz;
 #define DMA_MASTER    0x0200
 #define DMA_BLITPRI   0x0400
 
-extern unsigned long timeframes;
+extern uae_u32 timeframes;
 
 /* 100 words give you 1600 horizontal pixels. Should be more than enough for
  * superhires. Don't forget to update the definition in genp2c.c as well.
  * needs to be larger for superhires support */
 #define MAX_WORDS_PER_LINE 100
 
-#ifndef ARMV6T2
+#if !defined(ARMV6T2) && !defined(CPU_AARCH64)
 /* AGA mode color lookup tables */
 extern unsigned int xredcolors[256], xgreencolors[256], xbluecolors[256];
 #endif
@@ -179,7 +179,7 @@ STATIC_INLINE int GET_PLANES(uae_u16 bplcon0)
 }
 
 extern void fpscounter_reset (void);
-extern unsigned long idletime;
+extern uae_u32 idletime;
 
 extern int current_maxvpos (void);
 void custom_cpuchange(void);

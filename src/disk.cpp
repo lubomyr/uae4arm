@@ -88,7 +88,7 @@ static uae_u16 fifo[3];
 static int fifo_inuse[3];
 static int dma_enable, bitoffset;
 static uae_u16 word, dsksync;
-static unsigned long dsksync_cycles;
+static uae_u32 dsksync_cycles;
 #define WORDSYNC_TIME 11
 /* Always carried through to the next line.  */
 static int disk_hpos;
@@ -166,7 +166,7 @@ typedef struct {
   int ddhd; /* 1=DD 2=HD */
   int drive_id_scnt; /* drive id shift counter */
   int idbit;
-  unsigned long drive_id; /* drive id to be reported */
+  uae_u32 drive_id; /* drive id to be reported */
   TCHAR newname[256]; /* storage space for new filename during eject delay */
 	bool newnamewriteprotected;
   uae_u32 crc32;
@@ -228,7 +228,7 @@ static uae_u32 disk_checksum (uae_u8 *p, uae_u8 *c)
 
 static int dirhash (const uae_char *name)
 {
-  unsigned long hash;
+  uae_u32 hash;
   int i;
 
   hash = strlen (name);

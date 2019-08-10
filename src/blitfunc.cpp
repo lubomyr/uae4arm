@@ -4,7 +4,7 @@
 #include "savestate.h"
 #include "blitter.h"
 
-void blitdofast_0 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_0 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -26,7 +26,7 @@ for (j = 0; j < b->vblitsize; j++) {
 			chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_0 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_0 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -47,7 +47,7 @@ for (j = 0; j < b->vblitsize; j++) {
 			chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -78,7 +78,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -108,7 +108,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_2a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_2a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -147,7 +147,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_2a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_2a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -185,7 +185,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_30 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_30 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -220,7 +220,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_30 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_30 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -254,7 +254,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_3a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_3a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -293,7 +293,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_3a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_3a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -331,7 +331,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_3c (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_3c (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -366,7 +366,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_3c (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_3c (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -400,7 +400,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_4a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_4a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -439,7 +439,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_4a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_4a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -477,7 +477,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_6a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_6a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -516,7 +516,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_6a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_6a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -554,7 +554,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_8a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_8a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -593,7 +593,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_8a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_8a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -631,7 +631,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_8c (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_8c (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -670,7 +670,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_8c (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_8c (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -708,7 +708,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_9a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_9a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -747,7 +747,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_9a (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_9a (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -785,7 +785,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_a8 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_a8 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -824,7 +824,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_a8 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_a8 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -862,7 +862,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_aa (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_aa (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -888,7 +888,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_aa (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_aa (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -913,7 +913,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_b1 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_b1 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -952,7 +952,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_b1 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_b1 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -990,7 +990,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_ca (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_ca (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1029,7 +1029,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_ca (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_ca (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1067,7 +1067,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_cc (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_cc (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1097,7 +1097,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_cc (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_cc (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1126,7 +1126,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_d8 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_d8 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1165,7 +1165,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_d8 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_d8 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1203,7 +1203,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_e2 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_e2 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1242,7 +1242,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_e2 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_e2 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1280,7 +1280,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_ea (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_ea (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1319,7 +1319,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_ea (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_ea (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1357,7 +1357,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_f0 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_f0 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1384,7 +1384,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_f0 (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_f0 (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1410,7 +1410,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_fa (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_fa (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1441,7 +1441,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_fa (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_fa (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;
@@ -1471,7 +1471,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_fc (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_fc (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 int i,j;
 uae_u32 totald = 0;
@@ -1506,7 +1506,7 @@ if (dstp)
   chipmem_wput_indirect (dstp, dstd);
 if ((totald<<16) != 0) b->blitzero = 0;
 }
-void blitdofast_desc_fc (uaecptr pta, uaecptr ptb, uaecptr ptc, uaecptr ptd, struct bltinfo *b)
+void blitdofast_desc_fc (uae_u8 *pta, uae_u8 *ptb, uae_u8 *ptc, uaecptr ptd, struct bltinfo *b)
 {
 uae_u32 totald = 0;
 int i,j;

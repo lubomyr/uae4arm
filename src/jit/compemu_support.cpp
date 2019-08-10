@@ -112,7 +112,6 @@ static const int optcount	= 4;		// How often a block has to be executed before i
 
 op_properties prop[65536];
 
-uae_u32 jit_exception = 0;
 bool may_raise_exception = false;
 
 
@@ -200,7 +199,7 @@ uae_u32 m68k_pc_offset;
  * case, we have to save them.
  *
  * We used to save them to the stack, but now store them back directly
- * into the regflags.cznv of the traditional emulation. Thus some odd
+ * into the regflags.nzcv of the traditional emulation. Thus some odd
  * names.
  *
  * So flags can be in either of two places (used to be three; boy were
@@ -566,6 +565,12 @@ STATIC_INLINE void emit_long(uae_u32 x)
 	target += 4;
 }
 
+STATIC_INLINE void emit_longlong(uae_u64 x)
+{
+  *((uae_u64*)target) = x;
+  target += 8;
+}
+
 #define MAX_COMPILE_PTR	max_compile_start
 
 static void set_target(uae_u8* t)
@@ -581,7 +586,7 @@ STATIC_INLINE uae_u8* get_target(void)
 /********************************************************************
  * New version of data buffer: interleave data and code             *
  ********************************************************************/
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
 
 #define DATA_BUFFER_SIZE 768             // Enlarge POPALLSPACE_SIZE if this value is greater than 768
 #define DATA_BUFFER_MAXOFFSET 4096 - 32  // max range between emit of data and use of data
@@ -592,7 +597,7 @@ static uae_u32 data_wasted = 0;
 static uae_u32 data_buffers_used = 0;
 #endif
 
-STATIC_INLINE void compemu_raw_branch(IMM d);
+STATIC_INLINE void compemu_raw_branch(IM32 d);
 
 STATIC_INLINE void data_check_end(uae_s32 n, uae_s32 codesize)
 {
@@ -655,7 +660,9 @@ STATIC_INLINE void reset_data_buffer(void)
  ********************************************************************/
 STATIC_INLINE void clobber_flags(void);
 
-#if defined(CPU_arm) 
+#if defined(CPU_AARCH64) 
+#include "codegen_armA64.cpp"
+#elif defined(CPU_arm) 
 #include "codegen_arm.cpp"
 #endif
 #if defined(CPU_i386) || defined(CPU_x86_64)
@@ -1235,7 +1242,9 @@ static void fflags_into_flags_internal(void)
 
 #endif
 
-#if defined(CPU_arm)
+#if defined(CPU_AARCH64) 
+#include "compemu_midfunc_armA64.cpp"
+#elif defined(CPU_arm)
 #include "compemu_midfunc_arm.cpp"
 #include "compemu_midfunc_arm2.cpp"
 #endif
@@ -1262,17 +1271,6 @@ void sync_m68k_pc(void)
 	  m68k_pc_offset = 0;
   }
 }
-
-/********************************************************************
- * Scratch registers management                                     *
- ********************************************************************/
-
-struct scratch_t {
-  uae_u32 regs[VREGS];
-	fpu_register	fregs[VFREGS];
-};
-
-static scratch_t scratch;
 
 /********************************************************************
  * Support functions exposed to newcpu                              *
@@ -1353,7 +1351,7 @@ static void init_comp(void)
 	    set_status(i, INMEM);
   	}
   	else
-	    live.state[i].mem = scratch.regs + i;
+	    live.state[i].mem = &regs.scratchregs[i - 16];
   }
   live.state[PC_P].mem = (uae_u32*)&(regs.pc_p);
   set_const(PC_P, (uintptr)comp_pc_p);
@@ -1380,7 +1378,7 @@ static void init_comp(void)
 			live.fate[i].status = INMEM;
 		}
 		else
-			live.fate[i].mem = (uae_u32*)(&scratch.fregs[i]);
+			live.fate[i].mem = (uae_u32*)(&regs.scratchfregs[i - 8]);
 	}
 
   for (i = 0;  i < N_REGS; i++) {
@@ -1403,7 +1401,7 @@ static void init_comp(void)
   live.flags_on_stack = VALID;
   live.flags_are_important = 1;
   
-  jit_exception = 0;
+  regs.jit_exception = 0;
 }
 
 /* Only do this if you really mean it! The next call should be to init!*/
@@ -1426,8 +1424,7 @@ void flush(int save_regs)
   		switch(live.state[i].status) {
   		  case INMEM:
   	      if (live.state[i].val) {
-  		      compemu_raw_add_l_mi((uintptr)live.state[i].mem, live.state[i].val);
-  		      live.state[i].val = 0;
+  		      write_log("JIT: flush INMEM and val != 0!\n");
   		    }
   		    break;
   	    case CLEAN:
@@ -1456,7 +1453,9 @@ static void freescratch(void)
 {
   int i;
   for (i = 0; i < N_REGS; i++)
-#if defined(CPU_arm)
+#if defined(CPU_AARCH64) 
+  	if (live.nat[i].locked && i != 2 && i != 3 && i != 4 && i != 5) {
+#elif defined(CPU_arm)
   	if (live.nat[i].locked && i != 2 && i != 3 && i != 10 && i != 11 && i != 12) {
 #else
 		if (live.nat[i].locked && i!=4 && i!= 12) {
@@ -1478,8 +1477,8 @@ static void freescratch(void)
 
 STATIC_INLINE int isinrom(uintptr addr)
 {
-  return (addr >= uae_p32(kickmem_bank.baseaddr) &&
-    addr < uae_p32(kickmem_bank.baseaddr + 8 * 65536));
+  return (addr >= (uintptr)kickmem_bank.baseaddr &&
+    addr < (uintptr)(kickmem_bank.baseaddr + 8 * 65536));
 }
 
 static void flush_all(void)
@@ -1584,7 +1583,7 @@ STATIC_INLINE void writemem_special(int address, int source, int offset)
 void writebyte(int address, int source)
 {
   if (special_mem & S_WRITE)
-  	writemem_special(address, source, 20);
+  	writemem_special(address, source, SIZEOF_VOID_P * 5);
   else
   	writemem_real(address, source, 1);
 }
@@ -1592,7 +1591,7 @@ void writebyte(int address, int source)
 void writeword(int address, int source)
 {
   if (special_mem & S_WRITE)
-  	writemem_special(address, source, 16);
+  	writemem_special(address, source, SIZEOF_VOID_P * 4);
   else
   	writemem_real(address, source, 2);
 }
@@ -1600,7 +1599,7 @@ void writeword(int address, int source)
 void writelong(int address, int source)
 {
   if (special_mem & S_WRITE)
-  	writemem_special(address, source, 12);
+  	writemem_special(address, source, SIZEOF_VOID_P * 3);
   else
   	writemem_real(address, source, 4);
 }
@@ -1609,7 +1608,7 @@ void writelong(int address, int source)
 void writeword_clobber(int address, int source)
 {
   if (special_mem & S_WRITE)
-  	writemem_special(address, source, 16);
+  	writemem_special(address, source, SIZEOF_VOID_P * 4);
   else
   	writemem_real(address, source, 2);
 	forget_about(source);
@@ -1618,7 +1617,7 @@ void writeword_clobber(int address, int source)
 void writelong_clobber(int address, int source)
 {
   if (special_mem & S_WRITE)
-  	writemem_special(address, source, 12);
+  	writemem_special(address, source, SIZEOF_VOID_P * 3);
   else
   	writemem_real(address, source, 4);
 	forget_about(source);
@@ -1657,7 +1656,7 @@ STATIC_INLINE void readmem_special(int address, int dest, int offset)
 void readbyte(int address, int dest)
 {
   if (special_mem & S_READ)
-  	readmem_special(address, dest, 8);
+  	readmem_special(address, dest, SIZEOF_VOID_P * 2);
   else
   	readmem_real(address, dest, 1);
 }
@@ -1665,7 +1664,7 @@ void readbyte(int address, int dest)
 void readword(int address, int dest)
 {
   if (special_mem & S_READ)
-  	readmem_special(address, dest, 4);
+  	readmem_special(address, dest, SIZEOF_VOID_P * 1);
   else
   	readmem_real(address, dest, 2);
 }
@@ -1673,7 +1672,7 @@ void readword(int address, int dest)
 void readlong(int address, int dest)
 {
   if (special_mem & S_READ)
-  	readmem_special(address, dest, 0);
+  	readmem_special(address, dest, SIZEOF_VOID_P * 0);
   else
   	readmem_real(address, dest, 4);
 }
@@ -1681,7 +1680,7 @@ void readlong(int address, int dest)
 /* This one might appear a bit odd... */
 STATIC_INLINE void get_n_addr_old(int address, int dest)
 {
-  readmem_special(address, dest, 24);
+  readmem_special(address, dest, SIZEOF_VOID_P * 6);
 }
 
 STATIC_INLINE void get_n_addr_real(int address, int dest)
@@ -1790,14 +1789,14 @@ void alloc_cache(void)
 
   if (compiled_code) {
 		write_log("Actual translation cache size : %d KB at %p-%p", cache_size, compiled_code, compiled_code + cache_size*1024);
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
   	max_compile_start = compiled_code + cache_size*1024 - BYTES_PER_INST - DATA_BUFFER_SIZE;
 #else
   	max_compile_start = compiled_code + cache_size*1024 - BYTES_PER_INST;
 #endif
   	current_compile_p = compiled_code;
   	current_cache_size = 0;
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
     reset_data_buffer();
 #endif
   }
@@ -1985,7 +1984,7 @@ STATIC_INLINE void create_popalls(void)
   current_compile_p = popallspace;
   set_target(current_compile_p);
 
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
   reset_data_buffer();
   data_long(0, 0); // Make sure we emit the branch over the first buffer outside pushall_call_handler
 #endif
@@ -2003,19 +2002,19 @@ STATIC_INLINE void create_popalls(void)
   raw_push_regs_to_preserve();
   compemu_raw_init_r_regstruct((uintptr)&regs);
   r = REG_PC_TMP;
-  compemu_raw_tag_pc(r, uae_p32(&regs.pc_p));
-  compemu_raw_jmp_m_indexed(uae_p32(cache_tags), r, SIZEOF_VOID_P);
+  compemu_raw_tag_pc(r, (uintptr)&regs.pc_p);
+  compemu_raw_jmp_m_indexed((uintptr)cache_tags, r, SIZEOF_VOID_P);
 
   /* now the exit points */
   popall_execute_normal = get_target();
   raw_pop_preserved_regs();
-  compemu_raw_jmp(uae_p32(execute_normal));
+  compemu_raw_jmp((uintptr)execute_normal);
 
   popall_check_checksum = get_target();
   raw_pop_preserved_regs();
-  compemu_raw_jmp(uae_p32(check_checksum));
+  compemu_raw_jmp((uintptr)check_checksum);
 
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
   reset_data_buffer();
 #endif
 }
@@ -2037,13 +2036,13 @@ static void prepare_block(blockinfo* bi)
   set_target(current_compile_p);
   bi->direct_pen = (cpuop_func *)get_target();
   compemu_raw_mov_l_rm(0, (uintptr)&(bi->pc_p));
-  compemu_raw_mov_l_mr((uintptr)&regs.pc_p, 0);
+  compemu_raw_set_pc_r(0);
   raw_pop_preserved_regs();
   compemu_raw_jmp((uintptr)execute_normal);
 
   bi->direct_pcc = (cpuop_func *)get_target();
   compemu_raw_mov_l_rm(0, (uintptr)&(bi->pc_p));
-  compemu_raw_mov_l_mr((uintptr)&regs.pc_p, 0);
+  compemu_raw_set_pc_r(0);
 	raw_pop_preserved_regs();
   compemu_raw_jmp((uintptr)check_checksum);
   flush_cpu_icache((void *)current_compile_p, (void *)target);
@@ -2076,6 +2075,10 @@ void build_comp(void)
   const struct comptbl* tbl = op_smalltbl_0_comp_ff;
   const struct comptbl* nftbl = op_smalltbl_0_comp_nf;
   int count;
+
+#ifdef PROFILE_UNTRANSLATED_INSNS
+  regs.raw_cputbl_count = raw_cputbl_count;
+#endif
 
   for (opcode = 0; opcode < 65536; opcode++) {
 		reset_compop(opcode);
@@ -2182,7 +2185,7 @@ void flush_icache_hard(int n)
   if (!compiled_code)
   	return;
 
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
   reset_data_buffer();
 #endif
 
@@ -2337,15 +2340,15 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	  current_block_start_target = (uintptr)get_target();
 
   	if (bi->count >= 0) { /* Need to generate countdown code */
-	    compemu_raw_mov_l_mi((uintptr)&regs.pc_p, (uintptr)pc_hist[0].location);
-	    compemu_raw_sub_l_mi((uintptr)&(bi->count), 1);
+	    compemu_raw_set_pc_i((uintptr)pc_hist[0].location);
+	    compemu_raw_dec_m((uintptr)&(bi->count));
 	    compemu_raw_maybe_recompile((uintptr)recompile_block);
   	}
   	if (optlev == 0) { /* No need to actually translate */
 	    /* Execute normally without keeping stats */
-	    compemu_raw_mov_l_mi((uintptr)&regs.pc_p, (uintptr)pc_hist[0].location);
+	    compemu_raw_set_pc_i((uintptr)pc_hist[0].location);
 		  raw_pop_preserved_regs();
-		  compemu_raw_jmp(uae_p32(exec_nostats));
+		  compemu_raw_jmp((uintptr)exec_nostats);
   	}
   	else {
 	    next_pc_p = 0;
@@ -2401,12 +2404,12 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   			    was_comp = 0;
   		    }
   		    compemu_raw_mov_l_ri(REG_PAR1, (uae_u32)opcode);
-  		    compemu_raw_mov_l_ri(REG_PAR2, (uae_u32)&regs);
-  		    compemu_raw_mov_l_mi((uintptr)&regs.pc_p, (uintptr)pc_hist[i].location);
+  		    compemu_raw_mov_l_rr(REG_PAR2, R_REGSTRUCT);
+  		    compemu_raw_set_pc_i((uintptr)pc_hist[i].location);
   		    compemu_raw_call((uintptr)cputbl[opcode]);
 #ifdef PROFILE_UNTRANSLATED_INSNS
   			  // raw_cputbl_count[] is indexed with plain opcode (in m68k order)
-  		    compemu_raw_add_l_mi((uintptr)&raw_cputbl_count[opcode], 1);
+  		    compemu_raw_inc_opcount(opcode);
 #endif
 
   		    if (i < blocklen - 1) {
@@ -2414,18 +2417,18 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   
   			    compemu_raw_mov_l_rm(0, (uintptr)specflags);
   			    compemu_raw_test_l_rr(0, 0);
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
             data_check_end(8, 64);
 #endif
   			    compemu_raw_jz_b_oponly();
   			    branchadd = (uae_s8 *)get_target();
-  			    compemu_raw_sub_l_mi(uae_p32(&countdown), scaled_cycles(totcycles));
+  			    compemu_raw_sub_l_mi((uintptr)&countdown, scaled_cycles(totcycles));
 					  raw_pop_preserved_regs();
   			    compemu_raw_jmp((uintptr)do_nothing);
   			    *(branchadd - 4) = (((uintptr)get_target() - (uintptr)branchadd) - 4) >> 2;
   		    }
 	    	} else if(may_raise_exception) {
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
           data_check_end(8, 64);
 #endif
 					compemu_raw_handle_except(scaled_cycles(totcycles));
@@ -2456,7 +2459,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
     		}
   
     		tmp = live; /* ouch! This is big... */
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
         data_check_end(8, 128);
 #endif
     		compemu_raw_jcc_l_oponly(cc);  // Last emitted opcode is branch to target
@@ -2489,7 +2492,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 
 		    /* Let's find out where next_handler is... */
 		    if (was_comp && isinreg(PC_P)) {
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
           data_check_end(4, 64);
 #endif
 	        r = live.state[PC_P].realreg;
@@ -2503,7 +2506,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 		      tbi = get_blockinfo_addr_new((void*)v);
 		      match_states(tbi);
 
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
           data_check_end(4, 64);
 #endif
 		      tba = compemu_raw_endblock_pc_isconst(scaled_cycles(totcycles), v);
@@ -2513,7 +2516,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
     		else {
 		      r = REG_PC_TMP;
 		      compemu_raw_mov_l_rm(r, (uintptr)&regs.pc_p);
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
           data_check_end(4, 64);
 #endif
     	    compemu_raw_endblock_pc_inreg(r, scaled_cycles(totcycles));
@@ -2558,7 +2561,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   	/* This is the non-direct handler */
   	bi->handler = 
       bi->handler_to_use = (cpuop_func *)get_target();
-  	compemu_raw_cmp_l_mi((uintptr)&regs.pc_p, (uintptr)pc_hist[0].location);
+  	compemu_raw_cmp_pc((uintptr)pc_hist[0].location);
   	compemu_raw_maybe_cachemiss((uintptr)cache_miss);
   	comp_pc_p = (uae_u8*)pc_hist[0].location;
 

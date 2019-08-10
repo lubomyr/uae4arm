@@ -556,8 +556,8 @@ struct picasso96_state_struct
   uae_u16		VirtualHeight; /* Total screen height */
   uae_u8		GC_Depth;    /* From SetGC() */
   uae_u8		GC_Flags;    /* From SetGC() */
-  long		XOffset;     /* From SetPanning() */
-  long		YOffset;     /* From SetPanning() */
+  uae_s32		XOffset;     /* From SetPanning() */
+  uae_s32		YOffset;     /* From SetPanning() */
   uae_u8		SwitchState; /* From SetSwitch() - 0 is Amiga, 1 is Picasso */
   uae_u8		BytesPerPixel;
   uae_u8		CardFound;
@@ -567,7 +567,7 @@ struct picasso96_state_struct
   // support NO direct access all the time to gfx Card
   // everytime windows can remove your surface from card so the mainrender place
   // must be in memory
-  long		XYOffset;
+  uae_s32		XYOffset;
 };
 
 extern void InitPicasso96 (void);

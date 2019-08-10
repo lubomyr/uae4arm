@@ -9,7 +9,7 @@
 #ifndef MACCESS_UAE_H
 #define MACCESS_UAE_H
 
-#ifdef ARMV6_ASSEMBLY
+#if defined(ARMV6_ASSEMBLY)
 
 STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
 {
@@ -17,6 +17,16 @@ STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
    __asm__ (
 						"ldrh %[v], [%[a]] \n\t"
 						"rev16 %[v], %[v] \n\t"
+           : [v] "=r" (v) : [a] "r" (a) ); 
+  return v;
+}
+#elif defined(CPU_AARCH64)
+STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
+{
+  uae_u16 v;
+   __asm__ (
+						"ldrh %w[v], [%x[a]] \n\t"
+						"rev16 %w[v], %w[v] \n\t"
            : [v] "=r" (v) : [a] "r" (a) ); 
   return v;
 }
@@ -30,14 +40,23 @@ STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
 #endif
 
 
-#ifdef ARMV6_ASSEMBLY
-
+#if defined(ARMV6_ASSEMBLY)
 STATIC_INLINE uae_u32 do_get_mem_long(uae_u32 *a) 
 {
   uae_u32 v;
    __asm__ (
 						"ldr %[v], [%[a]] \n\t"
 						"rev %[v], %[v] \n\t"
+           : [v] "=r" (v) : [a] "r" (a) ); 
+  return v;
+}
+#elif defined(CPU_AARCH64)
+STATIC_INLINE uae_u32 do_get_mem_long(uae_u32 *a) 
+{
+  uae_u32 v;
+   __asm__ (
+						"ldr %w[v], [%x[a]] \n\t"
+						"rev %w[v], %w[v] \n\t"
            : [v] "=r" (v) : [a] "r" (a) ); 
   return v;
 }
@@ -64,6 +83,14 @@ STATIC_INLINE void do_put_mem_word(uae_u16 *_GCCRES_ a, uae_u16 v)
 						"strh r2, [%[a]] \n\t"
            : : [v] "r" (v), [a] "r" (a) : "r2", "memory" ); 
 }
+#elif defined(CPU_AARCH64)
+STATIC_INLINE void do_put_mem_word(uae_u16 *_GCCRES_ a, uae_u16 v)
+{
+   __asm__ (
+						"rev16 w2, %w[v] \n\t"
+						"strh w2, [%x[a]] \n\t"
+           : : [v] "r" (v), [a] "r" (a) : "w2", "memory" ); 
+}
 #else
 STATIC_INLINE void do_put_mem_word(uae_u16 *_GCCRES_ a, uae_u16 v)
 {
@@ -81,6 +108,14 @@ STATIC_INLINE void do_put_mem_long(uae_u32 *_GCCRES_ a, uae_u32 v)
 						"rev r2, %[v] \n\t"
 						"str r2, [%[a]] \n\t"
            : : [v] "r" (v), [a] "r" (a) : "r2", "memory" ); 
+}
+#elif defined(CPU_AARCH64)
+STATIC_INLINE void do_put_mem_long(uae_u32 *_GCCRES_ a, uae_u32 v)
+{
+   __asm__ (
+						"rev w2, %w[v] \n\t"
+						"str w2, [%x[a]] \n\t"
+           : : [v] "r" (v), [a] "r" (a) : "w2", "memory" ); 
 }
 #else
 STATIC_INLINE void do_put_mem_long(uae_u32 *_GCCRES_ a, uae_u32 v)

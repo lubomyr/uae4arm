@@ -32,7 +32,11 @@
 #ifndef COMPEMU_H
 #define COMPEMU_H
 
+#if defined(CPU_AARCH64)
+typedef uae_u64 uintptr;
+#else
 typedef uae_u32 uintptr;
+#endif
 
 /* Flags for Bernie during development/debugging. Should go away eventually */
 #define DISTRUST_CONSISTENT_MEM 0
@@ -42,7 +46,11 @@ typedef uae_u32 uintptr;
 #define TAGMASK 0x0000ffff
 #define TAGSIZE (TAGMASK+1)
 #define MAXRUN 1024
+#if defined(CPU_AARCH64)
+#define cacheline(x) (((uae_u64)x)&TAGMASK)
+#else
 #define cacheline(x) (((uae_u32)x)&TAGMASK)
+#endif
 
 extern uae_u8* start_pc_p;
 extern uae_u32 start_pc;
@@ -121,12 +129,21 @@ typedef union {
 #define FLAG_ZNV  (FLAG_Z | FLAG_N | FLAG_V)
 
 #if defined(CPU_arm)
+
 //#define DEBUG_DATA_BUFFER
 #define ALIGN_NOT_NEEDED
+
+#if defined(CPU_AARCH64)
+#define N_REGS 18   /* really 32, but 29 to 31 are FP, LR, SP; 18 has special meaning; 27 holds memstart and 28 holds regs-struct */
+                    /* 19-28 are callee-saved, maybe we use them to hold A0-A7/D0-D7 later. */
+#else
 #define N_REGS 10  /* really 16, but 13 to 15 are SP, LR, PC; 12 is scratch reg, 10 holds memstart and 11 holds regs-struct */
+#endif
+
 #else
 #define N_REGS 8  /* really only 7, but they are numbered 0,1,2,3,5,6,7 */
 #endif
+
 #define N_FREGS 16  // We use 10 regs: 6 - FP_RESULT, 7 - SCRATCH, 8-15 - Amiga regs FP0-FP7
 
 /* Functions exposed to newcpu, or to what was moved from newcpu.c to
@@ -245,7 +262,10 @@ typedef struct {
   fn_status   fat[N_FREGS];
 } bigstate;
 
-#define IMM uae_s32
+#define IM8 uae_s32
+#define IM16 uae_s32
+#define IM32 uae_s32
+#define IMPTR uintptr
 #define RR1 uae_u32
 #define RR2 uae_u32
 #define RR4 uae_u32
@@ -255,9 +275,9 @@ typedef struct {
 #define RW1 uae_u32
 #define RW2 uae_u32
 #define RW4 uae_u32
-#define MEMR uae_u32
-#define MEMW uae_u32
-#define MEMRW uae_u32
+#define MEMR uintptr
+#define MEMW uintptr
+#define MEMRW uintptr
 
 #define FW   uae_u32
 #define FR   uae_u32
@@ -289,6 +309,7 @@ extern int failure;
 
 /* Convenience functions exposed to gencomp */
 extern uae_u32 m68k_pc_offset;
+/* address and dest are virtual register numbers */
 extern void readbyte(int address, int dest);
 extern void readword(int address, int dest);
 extern void readlong(int address, int dest);
@@ -371,7 +392,7 @@ typedef struct blockinfo_t {
 #define BI_COMPILING 5
 #define BI_FINALIZING 6
 
-#if defined(CPU_arm) && !defined(ARMV6T2)
+#if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
 const int POPALLSPACE_SIZE = 2048; /* That should be enough space */
 #else
 const int POPALLSPACE_SIZE = 512; /* That should be enough space */
@@ -382,12 +403,8 @@ void exec_nostats(void);
 void do_nothing(void);
 void execute_exception(void);
 
-/* ARAnyM uses fpu_register name, used in scratch_t */
-/* FIXME: check that no ARAnyM code assumes different floating point type */
 typedef fptype fpu_register;
 
 void jit_abort(const TCHAR *format,...);
-
-#define uae_p32(x) ((uae_u32)(x))
 
 #endif /* COMPEMU_H */

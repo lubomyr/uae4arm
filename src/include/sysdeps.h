@@ -43,9 +43,9 @@ using namespace std;
 #if defined(__x86_64__) || defined(_M_AMD64)
 #define CPU_x86_64 1
 #define CPU_64_BIT 1
-#elif defined(__i386__) || defined(_M_IX86) && !defined(__arm__)
+#elif defined(__i386__) || defined(_M_IX86) && !defined(__arm__) && !defined(__aarch64__)
 #define CPU_i386 1
-#elif defined(__arm__) || defined(_M_ARM)
+#elif defined(__arm__) || defined(_M_ARM) || defined(__aarch64__)
 #define CPU_arm 1
 #elif defined(__powerpc__) || defined(_M_PPC)
 #define CPU_powerpc 1
@@ -332,7 +332,7 @@ extern int posixemu_rmdir (const TCHAR *);
 #define unlink posixemu_unlink
 extern int posixemu_unlink (const TCHAR *);
 #define truncate posixemu_truncate
-extern int posixemu_truncate (const TCHAR *, long int);
+extern int posixemu_truncate (const TCHAR *, uae_s32);
 #define rename posixemu_rename
 extern int posixemu_rename (const TCHAR *, const TCHAR *);
 #define chmod posixemu_chmod
@@ -351,7 +351,7 @@ extern void closedir (DIR *);
 /* This isn't the best place for this, but it fits reasonably well. The logic
  * is that you probably don't have POSIX errnos if you don't have the above
  * functions. */
-extern long dos_errno (void);
+extern uae_s32 dos_errno (void);
 
 #endif
 
@@ -465,6 +465,22 @@ STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
     "uxth %0, %0"
     : "=r" (v) : "0" (v) ); return v;
 }
+
+#elif defined(CPU_AARCH64)
+
+STATIC_INLINE uae_u32 do_byteswap_32(uae_u32 v) {
+  __asm__ (
+		"rev %w0, %w0"
+    : "=r" (v) : "0" (v) ); return v;
+}
+
+STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
+  __asm__ (
+    "rev16 %w0, %w0\n\t"
+    "uxth %w0, %w0"
+    : "=r" (v) : "0" (v) ); return v;
+}
+
 #else
 
 /* Try to use system bswap_16/bswap_32 functions. */
@@ -503,8 +519,6 @@ STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
 #define xfree(T) free(T)
 
 #endif
-
-#define DBLEQU(f, i) (abs ((f) - (i)) < 0.000001)
 
 #ifdef HAVE_VAR_ATTRIBUTE_UNUSED
 #define NOWARN_UNUSED(x) __attribute__((unused)) x

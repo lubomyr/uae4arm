@@ -9,7 +9,7 @@
 #ifndef _RPT_H_
 #define _RPT_H_
 
-typedef unsigned long frame_time_t;
+typedef uae_u32 frame_time_t;
 
 extern int64_t g_uae_epoch;
 

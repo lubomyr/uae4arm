@@ -2030,7 +2030,7 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 			regs.fpiar = pc;
 			fpsr_clear_status();
 			src = regs.fp[(extra >> 7) & 7];
-			v = put_fp_value (&src, opcode, extra, pc, & ad);
+			v = put_fp_value (&src, opcode, extra, pc, (uae_u32*)& ad);
 			if (v <= 0) {
 				if (v == 0)
 					fpu_noinst (opcode, pc);
@@ -2279,7 +2279,7 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 
 			fpsr_clear_status();
 
-			v = get_fp_value (opcode, extra, &src, pc, &ad);
+			v = get_fp_value (opcode, extra, &src, pc, (uae_u32*)&ad);
 			if (v <= 0) {
 				if (v == 0)
 					fpu_noinst (opcode, pc);

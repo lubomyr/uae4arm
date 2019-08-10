@@ -185,7 +185,7 @@ static int hdf_seek (struct hardfiledata *hfd, uae_u64 offset)
 		if (ret != 0)
 			return -1;
 	} else if (hfd->handle_valid == HDF_HANDLE_ZFILE) {
-		zfile_fseek (hfd->handle->zf, (long)offset, SEEK_SET);
+		zfile_fseek (hfd->handle->zf, (uae_s32)offset, SEEK_SET);
 	}
 	return 0;
 }

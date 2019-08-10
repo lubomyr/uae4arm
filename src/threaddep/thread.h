@@ -38,19 +38,19 @@ STATIC_INLINE void uae_end_thread (uae_thread_id *tid)
 {
 }
 
-STATIC_INLINE int uae_start_thread (const TCHAR *name, void *(*f) (void *), void *arg, uae_thread_id *foo)
+STATIC_INLINE long uae_start_thread (const TCHAR *name, int(*f) (void *), void *arg, uae_thread_id *foo)
 {
 #ifdef USE_SDL2
-  uae_thread_id id = SDL_CreateThread ((int (*)(void *))f, "StartThread", arg);
+  uae_thread_id id = SDL_CreateThread (f, "StartThread", arg);
 #else
-  uae_thread_id id = SDL_CreateThread ((int (*)(void *))f, arg);
+  uae_thread_id id = SDL_CreateThread (f, arg);
 #endif
   if(foo != NULL)
     *foo = id;
-  return (int)id;
+  return (long)id;
 }
 
-STATIC_INLINE int uae_start_thread_fast (void *(*f) (void *), void *arg, uae_thread_id *foo)
+STATIC_INLINE long uae_start_thread_fast (void *(*f) (void *), void *arg, uae_thread_id *foo)
 {
 #ifdef USE_SDL2
   uae_thread_id id = SDL_CreateThread ((int (*)(void *))f, "StartThreadFast", arg);
@@ -59,7 +59,7 @@ STATIC_INLINE int uae_start_thread_fast (void *(*f) (void *), void *arg, uae_thr
 #endif
   if(foo != NULL)
     *foo = id;
-  return (int)id;
+  return (long)id;
 }
 
 STATIC_INLINE void uae_wait_thread (uae_thread_id thread)

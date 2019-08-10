@@ -30,8 +30,10 @@
 #include "include/memory-uae.h"
 #include "newcpu.h"
 #include "custom.h"
+#ifdef JIT
 #include "jit/comptbl.h"
 #include "jit/compemu.h"
+#endif
 #include "uae.h"
 
 #include <asm/sigcontext.h>
@@ -46,6 +48,7 @@ void backtrace_symbols_fd(void* const*,int,int){}
 #endif
 #include <SDL.h>
 
+#ifdef JIT
 extern uae_u8* current_compile_p;
 extern uae_u8* compiled_code;
 extern uae_u8 *popallspace;
@@ -53,6 +56,7 @@ extern blockinfo* active;
 extern blockinfo* dormant;
 extern void invalidate_block(blockinfo* bi);
 extern void raise_in_cl_list(blockinfo* bi);
+#endif
   
 
 #define SHOW_DETAILS 2
@@ -106,6 +110,7 @@ static const char * reg_names[] = {
 };
 
 
+#ifdef JIT
 static int delete_trigger(blockinfo *bi, void *pc)
 {
 	while (bi) {
@@ -122,14 +127,20 @@ static int delete_trigger(blockinfo *bi, void *pc)
 	}
 	return 0;
 }
+#endif
 
 
 #define HANDLE_EXCEPTION_NONE 0
 #define HANDLE_EXCEPTION_OK 1
 #define HANDLE_EXCEPTION_A4000RAM 2
 
+#if defined(CPU_AARCH64)
+typedef uae_u64 uintptr;
 
-static int handle_exception(unsigned long *pregs, uintptr fault_addr)  
+static int handle_exception(unsigned long long *pregs, long fault_addr)  
+#else
+static int handle_exception(unsigned long *pregs, long fault_addr)  
+#endif
 {
   int handled = HANDLE_EXCEPTION_NONE;
 	unsigned int *fault_pc = (unsigned int *)pregs[ARM_REG_PC];
@@ -146,6 +157,7 @@ static int handle_exception(unsigned long *pregs, uintptr fault_addr)
   }
   ++in_handler;
 
+#ifdef JIT
   for(;;) {
   	// We analyse only exceptions from JIT
     if(currprefs.cachesize == 0) {
@@ -164,7 +176,7 @@ static int handle_exception(unsigned long *pregs, uintptr fault_addr)
   	}
 
     // Get Amiga address of illegal memory address
-    uintptr amiga_addr = (uae_u32) fault_addr - (uae_u32) regs.natmem_offset;
+    long amiga_addr = (long) fault_addr - (long) regs.natmem_offset;
   
     // Check for stupid RAM detection of kickstart
     if(a3000lmem_bank.allocated_size > 0 && amiga_addr >= a3000lmem_bank.start - 0x00100000 && amiga_addr < a3000lmem_bank.start - 0x00100000 + 8) {
@@ -294,6 +306,7 @@ static int handle_exception(unsigned long *pregs, uintptr fault_addr)
   
     break;
   }
+#endif
 
   in_handler--;
 	return handled;
@@ -301,6 +314,7 @@ static int handle_exception(unsigned long *pregs, uintptr fault_addr)
 
 void signal_segv(int signum, siginfo_t* info, void*ptr) 
 {
+  int handled = HANDLE_EXCEPTION_NONE;
   ucontext_t *ucontext = (ucontext_t*)ptr;
   Dl_info dlinfo;
 
@@ -311,10 +325,15 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 #endif
 
 	mcontext_t *context = &(ucontext->uc_mcontext);
+
+#if defined(CPU_AARCH64)
+	unsigned long long *regs = context->regs;
+#else
 	unsigned long *regs = &context->arm_r0;
+#endif
 	uintptr addr = (uintptr)info->si_addr;
 
-  int handled = handle_exception(regs, addr);
+  handled = handle_exception(regs, addr);
 
 #if SHOW_DETAILS
   if(handled != HANDLE_EXCEPTION_A4000RAM) {
@@ -329,6 +348,14 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
     output_log(_T("info.si_addr = %08x\n"), info->si_addr);
     if(signum == 4)
       output_log(_T("       value = 0x%08x\n"), *((uae_u32*)(info->si_addr)));
+#if defined(CPU_AARCH64)
+    for(int i=0; i < 31; ++i)
+      output_log(_T("x%02d  = 0x%016lx\n"), i, ucontext->uc_mcontext.regs[i]);
+    output_log(_T("SP  = 0x%016lx\n"), ucontext->uc_mcontext.sp);
+    output_log(_T("PC  = 0x%016lx\n"), ucontext->uc_mcontext.pc);
+    output_log(_T("Fault Address = 0x%016lx\n"), ucontext->uc_mcontext.fault_address);
+    output_log(_T("PC  = 0x%016lx\n"), ucontext->uc_mcontext.pstate);
+#else
     output_log(_T("r0  = 0x%08x\n"), ucontext->uc_mcontext.arm_r0);
     output_log(_T("r1  = 0x%08x\n"), ucontext->uc_mcontext.arm_r1);
     output_log(_T("r2  = 0x%08x\n"), ucontext->uc_mcontext.arm_r2);
@@ -350,8 +377,13 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
     output_log(_T("Trap no = 0x%08x\n"), ucontext->uc_mcontext.trap_no);
     output_log(_T("Err Code = 0x%08x\n"), ucontext->uc_mcontext.error_code);
     output_log(_T("Old Mask = 0x%08x\n"), ucontext->uc_mcontext.oldmask);
+#endif
   
+#if defined(CPU_AARCH64)
+    void *getaddr = (void *)ucontext->uc_mcontext.regs[30];
+#else
     void *getaddr = (void *)ucontext->uc_mcontext.arm_lr;
+#endif
     if(dladdr(getaddr, &dlinfo))
   	  output_log(_T("LR - 0x%08X: <%s> (%s)\n"), getaddr, dlinfo.dli_sname, dlinfo.dli_fname);
     else
@@ -376,6 +408,7 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
       }
     }
   
+#if !defined(CPU_AARCH64)
     void *ip = (void*)ucontext->uc_mcontext.arm_r10;
     void **bp = (void**)ucontext->uc_mcontext.arm_r10;
     int f = 0;
@@ -392,6 +425,7 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
       ip = bp[1];
       bp = (void**)bp[0];
     }
+#endif
   
   	output_log(_T("Stack trace (non-dedicated):\n"));
     char **strings;
@@ -435,8 +469,13 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
 #endif
 
 	mcontext_t *context = &(ucontext->uc_mcontext);
+
+#if defined(CPU_AARCH64)
+	unsigned long long *regs = context->regs;
+#else
 	unsigned long *regs = &context->arm_r0;
-	uintptr addr = (uintptr)info->si_addr;
+#endif
+	uintptr_t addr = (uintptr_t)info->si_addr;
 
   output_log(_T("info.si_signo = %d\n"), signum);
   output_log(_T("info.si_errno = %d\n"), info->si_errno);
@@ -444,6 +483,14 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
   output_log(_T("info.si_addr = %08x\n"), info->si_addr);
   if(signum == 4)
     output_log(_T("       value = 0x%08x\n"), *((uae_u32*)(info->si_addr)));
+#if defined(CPU_AARCH64)
+    for(int i=0; i < 31; ++i)
+      output_log(_T("x%02d  = 0x%016lx\n"), i, ucontext->uc_mcontext.regs[i]);
+    output_log(_T("SP  = 0x%016lx\n"), ucontext->uc_mcontext.sp);
+    output_log(_T("PC  = 0x%016lx\n"), ucontext->uc_mcontext.pc);
+    output_log(_T("Fault Address = 0x%016lx\n"), ucontext->uc_mcontext.fault_address);
+    output_log(_T("PC  = 0x%016lx\n"), ucontext->uc_mcontext.pstate);
+#else
   output_log(_T("r0  = 0x%08x\n"), ucontext->uc_mcontext.arm_r0);
   output_log(_T("r1  = 0x%08x\n"), ucontext->uc_mcontext.arm_r1);
   output_log(_T("r2  = 0x%08x\n"), ucontext->uc_mcontext.arm_r2);
@@ -461,12 +508,17 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
   output_log(_T("LR  = 0x%08x\n"), ucontext->uc_mcontext.arm_lr);
   output_log(_T("PC  = 0x%08x\n"), ucontext->uc_mcontext.arm_pc);
   output_log(_T("CPSR = 0x%08x\n"), ucontext->uc_mcontext.arm_cpsr);
-  output_log(_T("Fault Address = 0x%08x\n"), ucontext->uc_mcontext.fault_address);
   output_log(_T("Trap no = 0x%08x\n"), ucontext->uc_mcontext.trap_no);
   output_log(_T("Err Code = 0x%08x\n"), ucontext->uc_mcontext.error_code);
   output_log(_T("Old Mask = 0x%08x\n"), ucontext->uc_mcontext.oldmask);
+  output_log(_T("Fault Address = 0x%08x\n"), ucontext->uc_mcontext.fault_address);
+#endif
 
+#if defined(CPU_AARCH64)
+  void *getaddr = (void *)ucontext->uc_mcontext.regs[30];
+#else
   void *getaddr = (void *)ucontext->uc_mcontext.arm_lr;
+#endif
   if(dladdr(getaddr, &dlinfo))
 	  output_log(_T("LR - 0x%08X: <%s> (%s)\n"), getaddr, dlinfo.dli_sname, dlinfo.dli_fname);
   else
@@ -487,6 +539,7 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
     }
   }
 
+#ifndef CPU_AARCH64
   void *ip = (void*)ucontext->uc_mcontext.arm_r10;
   void **bp = (void**)ucontext->uc_mcontext.arm_r10;
   int f = 0;
@@ -503,6 +556,7 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
     ip = bp[1];
     bp = (void**)bp[0];
   }
+#endif
 
 	output_log(_T("Stack trace (non-dedicated):\n"));
   char **strings;

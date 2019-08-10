@@ -171,7 +171,7 @@ extern void host_connect (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern void host_WaitSelect (TrapContext *, SB, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32, uae_u32);
 extern uae_u32 host_Inet_NtoA(TrapContext *ctx, SB, uae_u32);
 extern uae_u32 host_inet_addr(TrapContext *ctx, uae_u32);
-extern void host_gethostbynameaddr (TrapContext *, SB, uae_u32, uae_u32, long);
+extern void host_gethostbynameaddr (TrapContext *, SB, uae_u32, uae_u32, uae_s32);
 extern void host_getservbynameport (TrapContext *, SB, uae_u32, uae_u32, uae_u32);
 extern void host_getprotobyname (TrapContext *, SB, uae_u32);
 extern void host_getprotobynumber (TrapContext *, SB, uae_u32);

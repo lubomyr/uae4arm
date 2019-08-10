@@ -52,7 +52,7 @@ extern void blitter_done_notify (int hpos);
 extern void blitter_slowdown (int, int, int, int);
 extern void blitter_check_start (void);
 
-typedef void blitter_func(uaecptr, uaecptr, uaecptr, uaecptr, struct bltinfo *);
+typedef void blitter_func(uae_u8*, uae_u8*, uae_u8*, uaecptr, struct bltinfo *);
 
 #define BLITTER_MAX_WORDS 2048
 

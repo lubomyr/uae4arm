@@ -16,8 +16,8 @@
 #include <png.h>
 #include <SDL.h>
 #include <SDL_image.h>
-#include <SDL_gfxPrimitives.h>
-#include <SDL_ttf.h>
+#include <SDL/SDL_gfxPrimitives.h>
+#include <SDL/SDL_ttf.h>
 #include "threaddep/thread.h"
 #include "bcm_host.h"
 
@@ -37,8 +37,8 @@ static int display_height;
 /* SDL surface variable for output of emulation */
 SDL_Surface *prSDLScreen = NULL;
 
-unsigned long time_per_frame = 20000; // Default for PAL (50 Hz): 20000 microsecs
-static unsigned long last_synctime;
+uae_u32 time_per_frame = 20000; // Default for PAL (50 Hz): 20000 microsecs
+static uae_u32 last_synctime;
 static int host_hz = 50;
 static int currVSyncRate = 0;
 
@@ -78,16 +78,16 @@ static unsigned char current_resource_amigafb = 0;
 static bool calibrate_done = false;
 static const int calibrate_seconds = 5;
 static int calibrate_frames = -1;
-static unsigned long calibrate_total = 0;
-static unsigned long time_for_host_hz_frames = 1000000;
-static unsigned long time_per_host_frame = 1000000 / 50;
+static uae_u32 calibrate_total = 0;
+static uae_u32 time_for_host_hz_frames = 1000000;
+static uae_u32 time_per_host_frame = 1000000 / 50;
 
 static volatile uae_atomic host_frame = 0;
-static unsigned long host_frame_timestamp = 0;
+static uae_u32 host_frame_timestamp = 0;
 static int amiga_frame = 0;
 static bool sync_was_bogus = true;
 static const int sync_epsilon = 1000;
-static unsigned long next_amiga_frame_ends = 0;
+static uae_u32 next_amiga_frame_ends = 0;
 extern void sound_adjust(float factor);
 
 
@@ -95,14 +95,14 @@ static void vsync_callback(unsigned int a, void* b)
 {
   atomic_inc(&host_frame);
 
-  unsigned long currsync = read_processor_time();
+  uae_u32 currsync = read_processor_time();
   if(host_frame_timestamp == 0) {
     // first sync after start or after bogus frame
     host_frame_timestamp = currsync;
     sync_was_bogus = true;
     return;
   }
-  unsigned long diff = currsync - host_frame_timestamp;
+  uae_u32 diff = currsync - host_frame_timestamp;
   if(diff < time_per_host_frame - sync_epsilon || diff > time_per_host_frame + sync_epsilon) {
     if(diff >= time_per_host_frame * 2 - sync_epsilon && diff < time_per_host_frame * 2 + sync_epsilon) {
       // two frames since last vsync
@@ -143,7 +143,7 @@ static void vsync_callback(unsigned int a, void* b)
 
 void wait_for_vsync(void)
 {
-  unsigned long start = read_processor_time();
+  uae_u32 start = read_processor_time();
   int wait_till = host_frame;
   do {
     usleep(10);
@@ -168,7 +168,7 @@ void reset_sync(void)
 }
 
 
-static void *display_thread (void *unused)
+static int display_thread (void *unused)
 {
 	VC_DISPMANX_ALPHA_T alpha = {
 		(DISPMANX_FLAGS_ALPHA_T)(DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS), 
@@ -554,7 +554,7 @@ bool render_screen (bool immediate)
 
 void show_screen(int mode)
 {
-  unsigned long start = read_processor_time();
+  uae_u32 start = read_processor_time();
 
   last_synctime = start;
   while(last_synctime < next_amiga_frame_ends && last_synctime < start + time_per_frame) {
@@ -574,8 +574,8 @@ void show_screen(int mode)
     if(do_check && host_frame == host_hz) {
       // Check time difference between Amiga and host sync.
       // If difference is too big, slightly ajust time per frame.
-      long diff;
-      static long last_diff = 0;
+      uae_s32 diff;
+      static uae_s32 last_diff = 0;
       if(next_amiga_frame_ends > host_frame_timestamp) {
         diff = next_amiga_frame_ends - host_frame_timestamp;
         if(diff > 50 && last_diff != 0 && diff > last_diff)
@@ -611,7 +611,7 @@ void show_screen(int mode)
 }
 
 
-unsigned long target_lastsynctime(void)
+uae_u32 target_lastsynctime(void)
 {
   return last_synctime;
 }

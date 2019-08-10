@@ -139,7 +139,7 @@ void fsdb_clean_dir (a_inode *dir)
   xfree (n);
 }
 
-static a_inode *aino_from_buf (a_inode *base, uae_u8 *buf, long off)
+static a_inode *aino_from_buf (a_inode *base, uae_u8 *buf, uae_s32 off)
 {
   uae_u32 mode;
   a_inode *aino = xcalloc (a_inode, 1);
@@ -177,7 +177,7 @@ a_inode *fsdb_lookup_aino_aname (a_inode *base, const TCHAR *aname)
 	    break;
 		s = au ((char*)buf + 5);
 		if (buf[0] != 0 && same_aname (s, aname)) {
-	    long pos = ftell (f) - sizeof buf;
+	    uae_s32 pos = ftell (f) - sizeof buf;
 	    fclose (f);
 			xfree (s);
 	    return aino_from_buf (base, buf, pos);
@@ -203,7 +203,7 @@ a_inode *fsdb_lookup_aino_nname (a_inode *base, const TCHAR *nname)
   	if (fread (buf, 1, sizeof buf, f) < sizeof buf)
 	    break;
 		if (buf[0] != 0 && strcmp ((char*)buf + 5 + 257, s) == 0) {
-	    long pos = ftell (f) - sizeof buf;
+	    uae_s32 pos = ftell (f) - sizeof buf;
 	    fclose (f);
 			xfree (s);
 	    return aino_from_buf (base, buf, pos);

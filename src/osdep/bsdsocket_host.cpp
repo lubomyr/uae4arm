@@ -666,7 +666,7 @@ static uae_u32 bsdthr_WaitSelect (SB)
 static uae_u32 bsdthr_Accept_2 (SB)
 {
   int foo, s, s2;
-  long flags;
+  uae_s32 flags;
   struct sockaddr_in addr;
   socklen_t hlen = sizeof (struct sockaddr_in);
 
@@ -753,7 +753,7 @@ static uae_u32 bsdthr_SendRecvAcceptConnect (uae_u32 (*tryfunc)(SB), SB)
 static uae_u32 bsdthr_blockingstuff (uae_u32 (*tryfunc)(SB), SB)
 {
   int done = 0, foo;
-  long flags;
+  uae_s32 flags;
   int nonblock;
   if ((flags = fcntl (sb->s, F_GETFL)) == -1)
   	flags = 0;
@@ -802,7 +802,7 @@ static uae_u32 bsdthr_blockingstuff (uae_u32 (*tryfunc)(SB), SB)
 }
 
 
-static void *bsdlib_threadfunc (void *arg)
+static int bsdlib_threadfunc (void *arg)
 {
   struct socketbase *sb = static_cast<struct socketbase *>(arg);
 
@@ -813,7 +813,7 @@ static void *bsdlib_threadfunc (void *arg)
   	switch (sb->action) {
 	    case 0:       /* kill thread (CloseLibrary) */
    		uae_sem_destroy (&sb->sem);
-    		return NULL;
+    		return 0;
 
 	    case 1:       /* Connect */
     		sb->resultval = bsdthr_SendRecvAcceptConnect (bsdthr_Connect_2, sb);
@@ -865,7 +865,7 @@ static void *bsdlib_threadfunc (void *arg)
 	  SETSIGNAL;
   }
 
-  return NULL;        /* Just to keep GCC happy.. */
+  return 0;        /* Just to keep GCC happy.. */
 }
 
 
@@ -1015,7 +1015,7 @@ uae_u32 host_getpeername (TrapContext *ctx, SB, uae_u32 sd, uae_u32 name, uae_u3
   return -1;
 }
 
-void host_gethostbynameaddr (TrapContext *ctx, SB, uae_u32 name, uae_u32 namelen, long addrtype)
+void host_gethostbynameaddr (TrapContext *ctx, SB, uae_u32 name, uae_u32 namelen, uae_s32 addrtype)
 {
   sb->name      = name;
   sb->a_addrlen = namelen;
@@ -1485,7 +1485,7 @@ uae_u32 host_IoctlSocket (TrapContext *ctx, SB, uae_u32 sd, uae_u32 request, uae
 {
   int sock = getsock (ctx, sb, sd + 1);
   int r, argval = trap_get_long (ctx, arg);
-  long flags;
+  uae_s32 flags;
 
   if (sock == -1) {
 		sb->resultval = -1;

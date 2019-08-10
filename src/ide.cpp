@@ -330,7 +330,7 @@ static void ide_identity_buffer(struct ide_hdf *ide)
 		  totalsecs = 0x0fffffff;
 	  pw (ide, 60, (uae_u16)totalsecs);
 	  pw (ide, 61, (uae_u16)(totalsecs >> 16));
-	  if (ide->ata_level) {
+	  if (ide->ata_level > 0) {
 		  pw (ide, 64, ide->ata_level ? 0x03 : 0x00); /* PIO3 and PIO4 */
 		  pw (ide, 65, 120); /* MDMA2 supported */
 		  pw (ide, 66, 120);
@@ -367,7 +367,7 @@ static void ide_identity_buffer(struct ide_hdf *ide)
 
 static void ide_identify_drive (struct ide_hdf *ide)
 {
-	if (!ide_isdrive (ide)) {
+	if (!ide_isdrive (ide) || ide->ata_level < 0) {
 		ide_fail (ide);
 		return;
 	}
@@ -440,6 +440,11 @@ static void ide_initialize_drive_parameters (struct ide_hdf *ide)
 
 static void ide_set_multiple_mode (struct ide_hdf *ide)
 {
+	if (ide->ata_level < 0) {
+		ide_fail(ide);
+		return;
+	}
+
 	write_log (_T("IDE%d drive multiple mode = %d\n"), ide->num, ide->regs.ide_nsector);
 	if (ide->regs.ide_nsector > (ide->max_multiple_mode >> (ide->blocksize / 512 - 1))) {
 		ide_fail(ide);
@@ -451,6 +456,11 @@ static void ide_set_multiple_mode (struct ide_hdf *ide)
 
 static void ide_set_features (struct ide_hdf *ide)
 {
+	if (ide->ata_level < 0) {
+		ide_fail(ide);
+		return;
+	}
+
 	int type = ide->regs.ide_nsector >> 3;
 	int mode = ide->regs.ide_nsector & 7;
 
@@ -784,7 +794,7 @@ static void ide_read_sectors (struct ide_hdf *ide, int flags)
 	int multi = flags & 1;
 
 	ide->lba48cmd = (flags & 2) != 0;
-	if (multi && ide->multiple_mode == 0) {
+	if (multi && (ide->multiple_mode == 0 || ide->ata_level < 0)) {
 		ide_fail (ide);
 		return;
 	}
@@ -819,7 +829,7 @@ static void ide_write_sectors (struct ide_hdf *ide, int flags)
 	int multi = flags & 1;
 
 	ide->lba48cmd = (flags & 2) != 0;
-	if (multi && ide->multiple_mode == 0) {
+	if (multi && (ide->multiple_mode == 0 || ide->ata_level < 0)) {
 		ide_fail (ide);
 		return;
 	}
@@ -944,7 +954,11 @@ static void ide_do_command (struct ide_hdf *ide, uae_u8 cmd)
 		} else if (cmd == 0x70) { /* seek */
 			ide_interrupt (ide);
 		} else if (cmd == 0xe0 || cmd == 0xe1 || cmd == 0xe7 || cmd == 0xea) { /* standby now/idle/flush cache/flush cache ext */
-			ide_interrupt (ide);
+			if (ide->ata_level < 0) {
+				ide_fail(ide);
+			} else {
+			  ide_interrupt (ide);
+  		}
 		} else if (cmd == 0xe5) { /* check power mode */
 			ide->regs.ide_nsector = 0xff;
 			ide_interrupt (ide);
@@ -1230,7 +1244,7 @@ void ide_write_reg (struct ide_hdf *ide, int ide_reg, uae_u32 val)
 	}
 }
 
-static void *ide_thread (void *idedata)
+static int ide_thread (void *idedata)
 {
 	struct ide_thread_state *its = (struct ide_thread_state*)idedata;
 	for (;;) {

@@ -34,7 +34,7 @@
 #include "devices.h"
 #include "jit/compemu.h"
 
-long int version = 256*65536L*UAEMAJOR + 65536L*UAEMINOR + UAESUBREV;
+uae_s32 version = 256*65536L*UAEMAJOR + 65536L*UAEMINOR + UAESUBREV;
 
 struct uae_prefs currprefs, changed_prefs; 
 int config_changed;

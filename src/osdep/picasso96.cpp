@@ -153,6 +153,7 @@ static uae_u8 GetBytesPerPixel (uae_u32 RGBfmt)
   switch (RGBfmt) 
   {
   case RGBFB_CLUT:
+	case RGBFB_Y4U1V1:
   	return 1;
 
   case RGBFB_A8R8G8B8:
@@ -171,6 +172,7 @@ static uae_u8 GetBytesPerPixel (uae_u32 RGBfmt)
   case RGBFB_R5G5B5PC:
   case RGBFB_B5G6R5PC:
   case RGBFB_B5G5R5PC:
+	case RGBFB_Y4U2V2:
   	return 2;
   }
 	return 0;
@@ -884,13 +886,13 @@ void picasso_handle_vsync(void)
 * Functions to perform an action on the frame-buffer
 */
 static int do_blitrect_frame_buffer (struct RenderInfo *ri, struct
-  RenderInfo *dstri, unsigned long srcx, unsigned long srcy,
-	unsigned long dstx, unsigned long dsty, unsigned long width, unsigned 
-  long height, uae_u8 mask, BLIT_OPCODE opcode)
+  RenderInfo *dstri, uae_u32 srcx, uae_u32 srcy,
+	uae_u32 dstx, uae_u32 dsty, uae_u32 width, 
+  uae_u32 height, uae_u8 mask, BLIT_OPCODE opcode)
 {
   uae_u8 *src, *dst;
   uae_u8 Bpp = GetBytesPerPixel (ri->RGBFormat);
-  unsigned long total_width = width * Bpp;
+  uae_u32 total_width = width * Bpp;
 
   src = ri->Memory + srcx*Bpp + srcy*ri->BytesPerRow;
   dst = dstri->Memory + dstx*Bpp + dsty*dstri->BytesPerRow;
@@ -903,15 +905,15 @@ static int do_blitrect_frame_buffer (struct RenderInfo *ri, struct
 	  if(opcode == BLIT_SRC) {
 	    /* handle normal case efficiently */
 	    if (ri->Memory == dstri->Memory && dsty == srcy) {
-		    unsigned long i;
+		    uae_u32 i;
 		    for (i = 0; i < height; i++, src += ri->BytesPerRow, dst += dstri->BytesPerRow)
 		      memmove (dst, src, total_width);
 	    } else if (dsty < srcy) {
-		    unsigned long i;
+		    uae_u32 i;
 		    for (i = 0; i < height; i++, src += ri->BytesPerRow, dst += dstri->BytesPerRow)
 		      memcpy (dst, src, total_width);
 	    } else {
-		    unsigned long i;
+		    uae_u32 i;
 		    src += (height-1) * ri->BytesPerRow;
 		    dst += (height-1) * dstri->BytesPerRow;
 		    for (i = 0; i < height; i++, src -= ri->BytesPerRow, dst -= dstri->BytesPerRow)
@@ -1913,7 +1915,7 @@ static uae_u32 REGPARAM2 picasso_InvertRect (TrapContext *ctx)
   unsigned int lines;
   struct RenderInfo ri;
   uae_u8 *uae_mem, *rectstart;
-  unsigned long width_in_bytes;
+  uae_u32 width_in_bytes;
   uae_u32 result = 0;
 
   if (NOBLITTER)
@@ -1997,7 +1999,7 @@ static uae_u32 REGPARAM2 picasso_FillRect (TrapContext *ctx)
   		    uae_u8 *end = start + Height * ri.BytesPerRow;
   		    for (; start != end; start += ri.BytesPerRow) {
       			uae_u8 *p = start;
-      			unsigned long cols;
+      			uae_u32 cols;
       			for (cols = 0; cols < Width; cols++) {
     			    uae_u32 tmpval = do_get_mem_byte (p + cols) & Mask;
      			    do_put_mem_byte (p + cols, (uae_u8)(Pen | tmpval));
@@ -2039,12 +2041,12 @@ struct blitdata
   struct RenderInfo dstri_struct;
   struct RenderInfo *ri; /* Self-referencing pointers */
   struct RenderInfo *dstri;
-  unsigned long srcx;
-  unsigned long srcy;
-  unsigned long dstx;
-  unsigned long dsty;
-  unsigned long width;
-  unsigned long height;
+  uae_u32 srcx;
+  uae_u32 srcy;
+  uae_u32 dstx;
+  uae_u32 dsty;
+  uae_u32 width;
+  uae_u32 height;
   uae_u8 mask;
   BLIT_OPCODE opcode;
 } blitrectdata;
@@ -2092,8 +2094,8 @@ STATIC_INLINE int BlitRectHelper(TrapContext *ctx)
 }
 
 static int BlitRect (TrapContext *ctx, uaecptr ri, uaecptr dstri,
-  unsigned long srcx, unsigned long srcy, unsigned long dstx, unsigned long dsty,
-  unsigned long width, unsigned long height, uae_u8 mask, BLIT_OPCODE opcode )
+  uae_u32 srcx, uae_u32 srcy, uae_u32 dstx, uae_u32 dsty,
+  uae_u32 width, uae_u32 height, uae_u8 mask, BLIT_OPCODE opcode )
 {
   /* Set up the params */
 	CopyRenderInfoStructureA2U(ctx, ri, &blitrectdata.ri_struct);
@@ -2133,12 +2135,12 @@ BlitRect:
 static uae_u32 REGPARAM2 picasso_BlitRect (TrapContext *ctx)
 {
 	uaecptr renderinfo = trap_get_areg(ctx, 1);
-	unsigned long srcx = (uae_u16)trap_get_dreg(ctx, 0);
-	unsigned long srcy = (uae_u16)trap_get_dreg(ctx, 1);
-	unsigned long dstx = (uae_u16)trap_get_dreg(ctx, 2);
-	unsigned long dsty = (uae_u16)trap_get_dreg(ctx, 3);
-	unsigned long width = (uae_u16)trap_get_dreg(ctx, 4);
-	unsigned long height = (uae_u16)trap_get_dreg(ctx, 5);
+	uae_u32 srcx = (uae_u16)trap_get_dreg(ctx, 0);
+	uae_u32 srcy = (uae_u16)trap_get_dreg(ctx, 1);
+	uae_u32 dstx = (uae_u16)trap_get_dreg(ctx, 2);
+	uae_u32 dsty = (uae_u16)trap_get_dreg(ctx, 3);
+	uae_u32 width = (uae_u16)trap_get_dreg(ctx, 4);
+	uae_u32 height = (uae_u16)trap_get_dreg(ctx, 5);
 	uae_u8  Mask = (uae_u8)trap_get_dreg(ctx, 6);
   uae_u32 result = 0;
 
@@ -2170,12 +2172,12 @@ static uae_u32 REGPARAM2 picasso_BlitRectNoMaskComplete (TrapContext *ctx)
 {
 	uaecptr srcri = trap_get_areg(ctx, 1);
 	uaecptr dstri = trap_get_areg(ctx, 2);
-	unsigned long srcx = (uae_u16)trap_get_dreg(ctx, 0);
-	unsigned long srcy = (uae_u16)trap_get_dreg(ctx, 1);
-	unsigned long dstx = (uae_u16)trap_get_dreg(ctx, 2);
-	unsigned long dsty = (uae_u16)trap_get_dreg(ctx, 3);
-	unsigned long width = (uae_u16)trap_get_dreg(ctx, 4);
-	unsigned long height = (uae_u16)trap_get_dreg(ctx, 5);
+	uae_u32 srcx = (uae_u16)trap_get_dreg(ctx, 0);
+	uae_u32 srcy = (uae_u16)trap_get_dreg(ctx, 1);
+	uae_u32 dstx = (uae_u16)trap_get_dreg(ctx, 2);
+	uae_u32 dsty = (uae_u16)trap_get_dreg(ctx, 3);
+	uae_u32 width = (uae_u16)trap_get_dreg(ctx, 4);
+	uae_u32 height = (uae_u16)trap_get_dreg(ctx, 5);
 	BLIT_OPCODE OpCode = (BLIT_OPCODE)(trap_get_dreg(ctx, 6) & 0xff);
 	uae_u32 RGBFmt = trap_get_dreg(ctx, 7);
   uae_u32 result = 0;
@@ -2247,10 +2249,10 @@ static uae_u32 REGPARAM2 picasso_BlitPattern (TrapContext *ctx)
   int inversion = 0;
   struct RenderInfo ri;
   struct Pattern pattern;
-  unsigned long rows;
+  uae_u32 rows;
   uae_u8 *uae_mem;
   int xshift;
-  unsigned long ysize_mask;
+  uae_u32 ysize_mask;
   uae_u32 result = 0;
 
   if (NOBLITTER)
@@ -2290,10 +2292,10 @@ static uae_u32 REGPARAM2 picasso_BlitPattern (TrapContext *ctx)
 	    endianswap (&bgpen, Bpp);
 
 	    for (rows = 0; rows < H; rows++, uae_mem += ri.BytesPerRow) {
-    		unsigned long prow = (rows + pattern.YOffset) & ysize_mask;
+    		uae_u32 prow = (rows + pattern.YOffset) & ysize_mask;
     		unsigned int d;
     		uae_u8 *uae_mem2 = uae_mem;
-    		unsigned long cols;
+    		uae_u32 cols;
 
         d = do_get_mem_word (((uae_u16 *)pattern.Memory) + prow);
 
@@ -2301,8 +2303,8 @@ static uae_u32 REGPARAM2 picasso_BlitPattern (TrapContext *ctx)
   		    d = (d << xshift) | (d >> (16 - xshift));
 
     		for (cols = 0; cols < W; cols += 16, uae_mem2 += Bpp * 16) {
-  		    long bits;
-  		    long max = W - cols;
+  		    uae_s32 bits;
+  		    uae_s32 max = W - cols;
   		    unsigned int data = d;
 
   		    if (max > 16)
@@ -2410,7 +2412,7 @@ static uae_u32 REGPARAM2 picasso_BlitTemplate (TrapContext *ctx)
 	uae_u16 Mask = (uae_u16)trap_get_dreg(ctx, 4);
   struct Template tmp;
   struct RenderInfo ri;
-  unsigned long rows;
+  uae_u32 rows;
   int bitoffset;
   uae_u8 *uae_mem, Bpp;
   uae_u8 *tmpl_base;
@@ -2456,7 +2458,7 @@ static uae_u32 REGPARAM2 picasso_BlitTemplate (TrapContext *ctx)
 	    tmpl_base = tmp.Memory + tmp.XOffset / 8;
 
 	    for (rows = 0; rows < H; rows++, uae_mem += ri.BytesPerRow, tmpl_base += tmp.BytesPerRow) {
-		    unsigned long cols;
+		    uae_u32 cols;
     		uae_u8 *uae_mem2 = uae_mem;
     		uae_u8 *tmpl_mem = tmpl_base;
 				unsigned int data;
@@ -2465,8 +2467,8 @@ static uae_u32 REGPARAM2 picasso_BlitTemplate (TrapContext *ctx)
 
 		    for (cols = 0; cols < W; cols += 8, uae_mem2 += Bpp * 8) {
   		    unsigned int byte;
-  		    long bits;
-  		    long max = W - cols;
+  		    uae_s32 bits;
+  		    uae_s32 max = W - cols;
 
   		    if (max > 8)
   			    max = 8;
@@ -2585,9 +2587,9 @@ static uae_u32 REGPARAM2 picasso_SetDisplay (TrapContext *ctx)
 
 /* NOTE: Watch for those planeptrs of 0x00000000 and 0xFFFFFFFF for all zero / all one bitmaps !!!! */
 static void PlanarToChunky(TrapContext *ctx, struct RenderInfo *ri, struct BitMap *bm,
-  unsigned long srcx, unsigned long srcy,
-  unsigned long dstx, unsigned long dsty, 
-  unsigned long width, unsigned long height, 
+  uae_u32 srcx, uae_u32 srcy,
+  uae_u32 dstx, uae_u32 dsty, 
+  uae_u32 width, uae_u32 height, 
   uae_u8 mask)
 {
   int j;
@@ -2595,8 +2597,8 @@ static void PlanarToChunky(TrapContext *ctx, struct RenderInfo *ri, struct BitMa
   uae_u8 *PLANAR[8];
   uae_u8 *image = ri->Memory + dstx * GetBytesPerPixel (ri->RGBFormat) + dsty * ri->BytesPerRow;
   int Depth = bm->Depth;
-  unsigned long rows, bitoffset = srcx & 7;
-  long eol_offset;
+  uae_u32 rows, bitoffset = srcx & 7;
+  uae_s32 eol_offset;
 
   /* Set up our bm->Planes[] pointers to the right horizontal offset */
   for (j = 0; j < Depth; j++) {
@@ -2607,15 +2609,15 @@ static void PlanarToChunky(TrapContext *ctx, struct RenderInfo *ri, struct BitMa
 	  if ((mask & (1 << j)) == 0)
 	    PLANAR[j] = &all_zeros_bitmap;
   }
-  eol_offset = (long) bm->BytesPerRow - (long) ((width + 7) >> 3);
+  eol_offset = (uae_s32) bm->BytesPerRow - (uae_s32) ((width + 7) >> 3);
   for (rows = 0; rows < height; rows++, image += ri->BytesPerRow) {
-	  unsigned long cols;
+	  uae_u32 cols;
 
 	  for (cols = 0; cols < width; cols += 8) {
 	    int k;
 	    uae_u32 a = 0, b = 0;
 	    unsigned int msk = 0xFF;
-	    long tmp = cols + 8 - width;
+	    uae_s32 tmp = cols + 8 - width;
 	    if (tmp > 0) {
 		    msk <<= tmp;
 		    b = do_get_mem_long ((uae_u32 *) (image + cols + 4));
@@ -2673,12 +2675,12 @@ static uae_u32 REGPARAM2 picasso_BlitPlanar2Chunky (TrapContext *ctx)
 {
 	uaecptr bm = trap_get_areg(ctx, 1);
 	uaecptr ri = trap_get_areg(ctx, 2);
-	unsigned long srcx = (uae_u16)trap_get_dreg(ctx, 0);
-	unsigned long srcy = (uae_u16)trap_get_dreg(ctx, 1);
-	unsigned long dstx = (uae_u16)trap_get_dreg(ctx, 2);
-	unsigned long dsty = (uae_u16)trap_get_dreg(ctx, 3);
-	unsigned long width = (uae_u16)trap_get_dreg(ctx, 4);
-	unsigned long height = (uae_u16)trap_get_dreg(ctx, 5);
+	uae_u32 srcx = (uae_u16)trap_get_dreg(ctx, 0);
+	uae_u32 srcy = (uae_u16)trap_get_dreg(ctx, 1);
+	uae_u32 dstx = (uae_u16)trap_get_dreg(ctx, 2);
+	uae_u32 dsty = (uae_u16)trap_get_dreg(ctx, 3);
+	uae_u32 width = (uae_u16)trap_get_dreg(ctx, 4);
+	uae_u32 height = (uae_u16)trap_get_dreg(ctx, 5);
 	uae_u8 minterm = trap_get_dreg(ctx, 6) & 0xFF;
 	uae_u8 mask = trap_get_dreg(ctx, 7) & 0xFF;
   struct RenderInfo local_ri;
@@ -2699,17 +2701,17 @@ static uae_u32 REGPARAM2 picasso_BlitPlanar2Chunky (TrapContext *ctx)
 
 /* NOTE: Watch for those planeptrs of 0x00000000 and 0xFFFFFFFF for all zero / all one bitmaps !!!! */
 static void PlanarToDirect (TrapContext *ctx, struct RenderInfo *ri, struct BitMap *bm,
-  unsigned long srcx, unsigned long srcy,
-  unsigned long dstx, unsigned long dsty,
-	unsigned long width, unsigned long height, uae_u8 mask, uaecptr acim)
+  uae_u32 srcx, uae_u32 srcy,
+  uae_u32 dstx, uae_u32 dsty,
+	uae_u32 width, uae_u32 height, uae_u8 mask, uaecptr acim)
 {
   int j;
   int bpp = GetBytesPerPixel (ri->RGBFormat);
   uae_u8 *PLANAR[8];
   uae_u8 *image = ri->Memory + dstx * bpp + dsty * ri->BytesPerRow;
   int Depth = bm->Depth;
-  unsigned long rows;
-  long eol_offset;
+  uae_u32 rows;
+  uae_s32 eol_offset;
 	int maxc = -1;
 	uae_u32 cim[256];
 
@@ -2726,9 +2728,9 @@ static void PlanarToDirect (TrapContext *ctx, struct RenderInfo *ri, struct BitM
 	    PLANAR[j] = &all_zeros_bitmap;
   }
 
-  eol_offset = (long) bm->BytesPerRow - (long) ((width + (srcx & 7)) >> 3);
+  eol_offset = (uae_s32) bm->BytesPerRow - (uae_s32) ((width + (srcx & 7)) >> 3);
   for (rows = 0; rows < height; rows++, image += ri->BytesPerRow) {
-  	unsigned long cols;
+  	uae_u32 cols;
 	  uae_u8 *image2 = image;
 	  unsigned int bitoffs = 7 - (srcx & 7);
 	  int i;

@@ -87,7 +87,7 @@ struct color_entry {
 };
 
 /* convert 24 bit AGA Amiga RGB to native color */
-#ifdef ARMV6T2
+#if defined(ARMV6T2)
 STATIC_INLINE uae_u32 CONVERT_RGB(uae_u32 c)
 {
   uae_u32 ret;
@@ -111,6 +111,32 @@ STATIC_INLINE uae_u16 CONVERT_RGB_16(uae_u32 c)
 			"orr     %[v], %[v], r1, lsl #11 \n\t"
 			"orr     %[v], %[v], r2, lsl #5 \n\t"
            : [v] "=r" (ret) : [c] "r" (c) : "r1", "r2" );
+  return ret;
+}
+#elif defined(CPU_AARCH64)
+STATIC_INLINE uae_u32 CONVERT_RGB(uae_u32 c)
+{
+  uae_u32 ret;
+  __asm__ (
+			"ubfx    w1, %w[c], #19, #5 \n\t"
+			"ubfx    w2, %w[c], #10, #6 \n\t"
+			"ubfx    %w[v], %w[c], #3, #5 \n\t"
+			"orr     %w[v], %w[v], w1, lsl #11 \n\t"
+			"orr     %w[v], %w[v], w2, lsl #5 \n\t"
+			"bfi     %w[v], %w[v], #16, #16  \n\t"
+           : [v] "=r" (ret) : [c] "r" (c) : "w1", "w2" );
+  return ret;
+}
+STATIC_INLINE uae_u16 CONVERT_RGB_16(uae_u32 c)
+{
+  uae_u16 ret;
+  __asm__ (
+			"ubfx    w1, %w[c], #19, #5 \n\t"
+			"ubfx    w2, %w[c], #10, #6 \n\t"
+			"ubfx    %w[v], %w[c], #3, #5 \n\t"
+			"orr     %w[v], %w[v], w1, lsl #11 \n\t"
+			"orr     %w[v], %w[v], w2, lsl #5 \n\t"
+           : [v] "=r" (ret) : [c] "r" (c) : "w1", "w2" );
   return ret;
 }
 #else

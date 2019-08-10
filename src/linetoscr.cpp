@@ -5,17 +5,29 @@
 
 STATIC_INLINE uae_u32 merge_words(uae_u32 val, uae_u32 val2)
 {
+#if defined(CPU_AARCH64)
+  __asm__ (
+			"bfi   %w[o], %w[d], #16, #16 \n\t"
+      : [o] "+r" (val) : [d] "r" (val2) );
+#else
   __asm__ (
 			"pkhbt   %[o], %[o], %[d], lsl #16 \n\t"
       : [o] "+r" (val) : [d] "r" (val2) );
+#endif
   return val;
 }
 
 STATIC_INLINE uae_u32 double_word(uae_u32 val)
 {
+#if defined(CPU_AARCH64)
+  __asm__ (
+			"bfi   %w[o], %w[o], #16, #16 \n\t"
+      : [o] "+r" (val) );
+#else
   __asm__ (
 			"pkhbt   %[o], %[o], %[o], lsl #16 \n\t"
       : [o] "+r" (val) );
+#endif
   return val;
 }
  

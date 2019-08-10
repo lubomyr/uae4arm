@@ -26,17 +26,17 @@ extern void init_eventtab (void);
 extern void events_schedule (void);
 extern void events_reset_syncline(void);
 
-extern unsigned long currcycle, nextevent;
+extern uae_u32 currcycle, nextevent;
 extern int is_syncline;
 typedef void (*evfunc)(void);
 typedef void (*evfunc2)(uae_u32);
 
-typedef void (*do_cycles_func)(unsigned long);
+typedef void (*do_cycles_func)(uae_u32);
 extern do_cycles_func do_cycles;
-void do_cycles_cpu_fastest (unsigned long cycles_to_add);
-void do_cycles_cpu_norm (unsigned long cycles_to_add);
+void do_cycles_cpu_fastest (uae_u32 cycles_to_add);
+void do_cycles_cpu_norm (uae_u32 cycles_to_add);
 
-typedef unsigned long int evt;
+typedef uae_u32 evt;
 
 struct ev
 {
@@ -84,17 +84,17 @@ STATIC_INLINE void cycles_do_special (void)
 	}
 }
 
-STATIC_INLINE void do_extra_cycles (unsigned long cycles_to_add)
+STATIC_INLINE void do_extra_cycles (uae_u32 cycles_to_add)
 {
 	regs.pissoff -= cycles_to_add;
 }
 
-STATIC_INLINE unsigned long int get_cycles (void)
+STATIC_INLINE uae_u32 get_cycles (void)
 {
   return currcycle;
 }
 
-STATIC_INLINE void set_cycles (unsigned long int x)
+STATIC_INLINE void set_cycles (uae_u32 x)
 {
   currcycle = x;
 	eventtab[ev_hsync].oldcycles = x;
@@ -106,10 +106,10 @@ STATIC_INLINE int current_hpos (void)
 	return hp;
 }
 
-STATIC_INLINE bool cycles_in_range (unsigned long endcycles)
+STATIC_INLINE bool cycles_in_range (uae_u32 endcycles)
 {
-	signed long c = get_cycles ();
-	return (signed long)endcycles - c > 0;
+	uae_s32 c = get_cycles ();
+	return (uae_s32)endcycles - c > 0;
 }
 
 extern void MISC_handler(void);

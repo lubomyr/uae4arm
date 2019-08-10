@@ -487,7 +487,7 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 		case 4: /* FMOVE.L  <EA>, ControlReg */
 		  if (!(opcode & 0x30)) { /* Dn or An */
 			  if (extra & 0x1000) { /* FPCR */
-				  mov_l_mr (uae_p32(&regs.fpcr), opcode & 15);
+				  mov_l_mr ((uintptr)&regs.fpcr, opcode & 15);
 				  return;
 			  }
 			  if (extra & 0x0800) { /* FPSR */
@@ -496,13 +496,13 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 				  // set_fpsr(m68k_dreg (regs, opcode & 15));
 			  }
 			  if (extra & 0x0400) { /* FPIAR */
-				  mov_l_mr (uae_p32(&regs.fpiar), opcode & 15); return;
+				  mov_l_mr ((uintptr)&regs.fpiar, opcode & 15); return;
 			  }
 		  }
 		  else if ((opcode & 0x3f) == 0x3c) {
 			  if (extra & 0x1000) { /* FPCR */
 				  uae_u32 val = comp_get_ilong ((m68k_pc_offset += 4) - 4);
-				  mov_l_mi (uae_p32(&regs.fpcr), val);
+				  mov_l_mi ((uintptr)&regs.fpcr, val);
 	        switch(val & 0x30) {
 	          case 0x00:
 	            // round to nearest
@@ -530,7 +530,7 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 			  }
 			  if (extra & 0x0400) { /* FPIAR */
 				  uae_u32 val = comp_get_ilong ((m68k_pc_offset += 4) - 4);
-				  mov_l_mi (uae_p32(&regs.fpiar), val);
+				  mov_l_mi ((uintptr)&regs.fpiar, val);
 				  return;
 			  }
 		  }
@@ -539,14 +539,14 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 		case 5: /* FMOVE.L  ControlReg, <EA> */
 		  if (!(opcode & 0x30)) { /* Dn or An */
 			  if (extra & 0x1000) { /* FPCR */
-				  mov_l_rm (opcode & 15, uae_p32(&regs.fpcr)); return;
+				  mov_l_rm (opcode & 15, (uintptr)&regs.fpcr); return;
 			  }
 			  if (extra & 0x0800) { /* FPSR */
 				  FAIL (1);
 				  return;
 			  }
 			  if (extra & 0x0400) { /* FPIAR */
-				  mov_l_rm (opcode & 15, uae_p32(&regs.fpiar)); return;
+				  mov_l_rm (opcode & 15, (uintptr)&regs.fpiar); return;
 			  }
 		  }
 		  FAIL (1);
@@ -677,28 +677,28 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 			  //write_log (_T("JIT FMOVECR %x\n"), opmode);
 			  switch (opmode) {
 				  case 0x00:
-				    fmov_d_rm (dreg, uae_p32(&dhex_pi));
+				    fmov_d_rm (dreg, (uintptr)&dhex_pi);
 				    break;
 				  case 0x0b:
-				    fmov_d_rm (dreg, uae_p32(&dhex_l10_2));
+				    fmov_d_rm (dreg, (uintptr)&dhex_l10_2);
 				    break;
 				  case 0x0c:
-				    fmov_d_rm (dreg, uae_p32(&dhex_exp_1));
+				    fmov_d_rm (dreg, (uintptr)&dhex_exp_1);
 				    break;
 				  case 0x0d:
-				    fmov_d_rm (dreg, uae_p32(&dhex_l2_e));
+				    fmov_d_rm (dreg, (uintptr)&dhex_l2_e);
 				    break;
 				  case 0x0e:
-				    fmov_d_rm (dreg, uae_p32(&dhex_l10_e));
+				    fmov_d_rm (dreg, (uintptr)&dhex_l10_e);
 				    break;
 				  case 0x0f:
             fmov_d_ri_0 (dreg);
 				    break;
 				  case 0x30:
-				    fmov_d_rm (dreg, uae_p32(&dhex_ln_2));
+				    fmov_d_rm (dreg, (uintptr)&dhex_ln_2);
 				    break; 
 				  case 0x31:
-				    fmov_d_rm (dreg, uae_p32(&dhex_ln_10));
+				    fmov_d_rm (dreg, (uintptr)&dhex_ln_10);
 				    break;
 				  case 0x32:
             fmov_d_ri_1 (dreg);
@@ -713,22 +713,22 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 				    fmov_l_ri (dreg, 10000);
 				    break;
 				  case 0x36:
-				    fmov_rm (dreg, uae_p32(&fp_1e8));
+				    fmov_rm (dreg, (uintptr)&fp_1e8);
 				    break;
 				  case 0x37:
-				    fmov_d_rm (dreg, uae_p32(&dhex_1e16));
+				    fmov_d_rm (dreg, (uintptr)&dhex_1e16);
 				    break;
 				  case 0x38:
-				    fmov_d_rm (dreg, uae_p32(&dhex_1e32));
+				    fmov_d_rm (dreg, (uintptr)&dhex_1e32);
 				    break;
 				  case 0x39:
-				    fmov_d_rm (dreg, uae_p32(&dhex_1e64));
+				    fmov_d_rm (dreg, (uintptr)&dhex_1e64);
 				    break;
 				  case 0x3a:
-				    fmov_d_rm (dreg, uae_p32(&dhex_1e128));
+				    fmov_d_rm (dreg, (uintptr)&dhex_1e128);
 				    break;
 				  case 0x3b:
-				    fmov_d_rm (dreg, uae_p32(&dhex_1e256));
+				    fmov_d_rm (dreg, (uintptr)&dhex_1e256);
 				    break;
 				  default:
 				    FAIL (1);

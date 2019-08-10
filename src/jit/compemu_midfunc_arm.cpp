@@ -162,45 +162,23 @@ MIDFUNC(0,make_flags_live,(void))
 }
 MENDFUNC(0,make_flags_live,(void))
 
-MIDFUNC(2,mov_l_mi,(IMM d, IMM s))
+MIDFUNC(2,mov_l_mi,(IMPTR d, IM32 s))
 {
+  /* d points always to memory in regs struct */
 #ifdef ARMV6T2
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    MOVW_ri16(REG_WORK2, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK2, s >> 16);
-    uae_s32 idx = d - (uae_u32) &regs;
-    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  } else {
-    MOVW_ri16(REG_WORK1, d);
-    MOVT_ri16(REG_WORK1, d >> 16);
-    MOVW_ri16(REG_WORK2, s);
-    if(s >> 16)
-      MOVT_ri16(REG_WORK2, s >> 16);
-  	STR_rR(REG_WORK2, REG_WORK1);
-  }    
+  MOVW_ri16(REG_WORK2, s);
+  if(s >> 16)
+    MOVT_ri16(REG_WORK2, s >> 16);
 #else
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 offs = data_long_offs(s);
-    LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-    uae_s32 idx = d - (uae_u32) & regs;
-    STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  } else {
-    data_check_end(8, 12);
-    uae_s32 offs = data_long_offs(d);
-  
-  	LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-  
-  	offs = data_long_offs(s);
-  	LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-  
-  	STR_rR(REG_WORK2, REG_WORK1);
-  }
+  uae_s32 offs = data_long_offs(s);
+  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
 #endif
+  uae_s32 idx = d - (uae_u32) &regs;
+  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
 }
-MENDFUNC(2,mov_l_mi,(IMM d, IMM s))
+MENDFUNC(2,mov_l_mi,(IMPTR d, IM32 s))
 
-MIDFUNC(4,disp_ea20_target_add,(RW4 target, RR4 reg, IMM shift, IMM extend))
+MIDFUNC(4,disp_ea20_target_add,(RW4 target, RR4 reg, IM8 shift, IM8 extend))
 {
 	if(isconst(target) && isconst(reg)) {
 		if(extend)
@@ -223,9 +201,9 @@ MIDFUNC(4,disp_ea20_target_add,(RW4 target, RR4 reg, IMM shift, IMM extend))
 	unlock2(target);
 	unlock2(reg);
 }
-MENDFUNC(4,disp_ea20_target_add,(RW4 target, RR4 reg, IMM shift, IMM extend))
+MENDFUNC(4,disp_ea20_target_add,(RW4 target, RR4 reg, IM8 shift, IM8 extend))
 
-MIDFUNC(4,disp_ea20_target_mov,(W4 target, RR4 reg, IMM shift, IMM extend))
+MIDFUNC(4,disp_ea20_target_mov,(W4 target, RR4 reg, IM8 shift, IM8 extend))
 {
 	if(isconst(reg)) {
 		if(extend)
@@ -248,7 +226,7 @@ MIDFUNC(4,disp_ea20_target_mov,(W4 target, RR4 reg, IMM shift, IMM extend))
 	unlock2(target);
 	unlock2(reg);
 }
-MENDFUNC(4,disp_ea20_target_mov,(W4 target, RR4 reg, IMM shift, IMM extend))
+MENDFUNC(4,disp_ea20_target_mov,(W4 target, RR4 reg, IM8 shift, IM8 extend))
 
 MIDFUNC(2,sign_extend_16_rr,(W4 d, RR2 s))
 {
@@ -272,7 +250,7 @@ MIDFUNC(2,sign_extend_16_rr,(W4 d, RR2 s))
 }
 MENDFUNC(2,sign_extend_16_rr,(W4 d, RR2 s))
 
-MIDFUNC(3,lea_l_brr,(W4 d, RR4 s, IMM offset))
+MIDFUNC(3,lea_l_brr,(W4 d, RR4 s, IM32 offset))
 {
 	if (isconst(s)) {
 		COMPCALL(mov_l_ri)(d, live.state[s].val+offset);
@@ -303,9 +281,9 @@ MIDFUNC(3,lea_l_brr,(W4 d, RR4 s, IMM offset))
 
 	EXIT_REGS(d,s);
 }
-MENDFUNC(3,lea_l_brr,(W4 d, RR4 s, IMM offset))
+MENDFUNC(3,lea_l_brr,(W4 d, RR4 s, IM32 offset))
 
-MIDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IMM factor, IMM offset))
+MIDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
 {
 	if (!offset) {
 		COMPCALL(lea_l_rr_indexed)(d, s, index, factor);
@@ -333,9 +311,9 @@ MIDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IMM factor, IMM offset))
 	unlock2(index);
 	unlock2(s);
 }
-MENDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IMM factor, IMM offset))
+MENDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
 
-MIDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IMM factor))
+MIDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor))
 {
 	s = readreg(s);
 	index = readreg(index);
@@ -356,7 +334,7 @@ MIDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IMM factor))
 	unlock2(index);
 	unlock2(s);
 }
-MENDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IMM factor))
+MENDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor))
 
 MIDFUNC(2,mov_l_rr,(W4 d, RR4 s))
 {
@@ -384,8 +362,9 @@ MIDFUNC(2,mov_l_rr,(W4 d, RR4 s))
 }
 MENDFUNC(2,mov_l_rr,(W4 d, RR4 s))
 
-MIDFUNC(2,mov_l_mr,(IMM d, RR4 s))
+MIDFUNC(2,mov_l_mr,(IMPTR d, RR4 s))
 {
+  /* d points always to memory in regs struct */
 	if (isconst(s)) {
 		COMPCALL(mov_l_mi)(d, live.state[s].val);
 		return;
@@ -393,55 +372,32 @@ MIDFUNC(2,mov_l_mr,(IMM d, RR4 s))
 	
 	s = readreg(s);
 
-  if(d >= (uae_u32) &regs && d < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 idx = d - (uae_u32) &regs;
-    STR_rRI(s, R_REGSTRUCT, idx);
-  } else {
-#ifdef ARMV6T2
-    MOVW_ri16(REG_WORK1, d);
-    if(d >> 16)
-	    MOVT_ri16(REG_WORK1, d >> 16);
-#else
-    uae_s32 offs = data_long_offs(d);
-  	LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
-  	STR_rR(s, REG_WORK1);
-  }
+  uae_s32 idx = d - (uae_u32) &regs;
+  STR_rRI(s, R_REGSTRUCT, idx);
 
 	unlock2(s);
 }
-MENDFUNC(2,mov_l_mr,(IMM d, RR4 s))
+MENDFUNC(2,mov_l_mr,(IMPTR d, RR4 s))
 
-MIDFUNC(2,mov_l_rm,(W4 d, IMM s))
+MIDFUNC(2,mov_l_rm,(W4 d, IMPTR s))
 {
+  /* s points always to memory in regs struct */
 	d = writereg(d);
 
-  if(s >= (uae_u32) &regs && s < ((uae_u32) &regs) + sizeof(struct regstruct)) {
-    uae_s32 idx = s - (uae_u32) & regs;
-    LDR_rRI(d, R_REGSTRUCT, idx);
-  } else {
-#ifdef ARMV6T2
-    MOVW_ri16(REG_WORK1, s);
-    if(s >> 16)
-	    MOVT_ri16(REG_WORK1, s >> 16);
-#else
-    uae_s32 offs = data_long_offs(s);
-	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
-	  LDR_rR(d, REG_WORK1);
-  }
+  uae_s32 idx = s - (uae_u32) & regs;
+  LDR_rRI(d, R_REGSTRUCT, idx);
 
 	unlock2(d);
 }
-MENDFUNC(2,mov_l_rm,(W4 d, IMM s))
+MENDFUNC(2,mov_l_rm,(W4 d, IMPTR s))
 
-MIDFUNC(2,mov_l_ri,(W4 d, IMM s))
+MIDFUNC(2,mov_l_ri,(W4 d, IM32 s))
 {
 	set_const(d, s);
 }
-MENDFUNC(2,mov_l_ri,(W4 d, IMM s))
+MENDFUNC(2,mov_l_ri,(W4 d, IM32 s))
 
-MIDFUNC(2,mov_b_ri,(W1 d, IMM s))
+MIDFUNC(2,mov_b_ri,(W1 d, IM8 s))
 {
   if(d < 16) {
 	  if (isconst(d)) {
@@ -458,9 +414,9 @@ MIDFUNC(2,mov_b_ri,(W1 d, IMM s))
     set_const(d, s & 0xff);
   }
 }
-MENDFUNC(2,mov_b_ri,(W1 d, IMM s))
+MENDFUNC(2,mov_b_ri,(W1 d, IM8 s))
 
-MIDFUNC(2,sub_l_ri,(RW4 d, IMM i))
+MIDFUNC(2,sub_l_ri,(RW4 d, IM8 i))
 {
 	if (!i)
 	  return;
@@ -471,25 +427,13 @@ MIDFUNC(2,sub_l_ri,(RW4 d, IMM i))
 
 	d = rmw(d);
 
-  if(CHECK32(i)) {
-    SUB_rri(d, d, i);
-  } else {
-#ifdef ARMV6T2
-    MOVW_ri16(REG_WORK1, i);
-    if(i >> 16)
-      MOVT_ri16(REG_WORK1, i >> 16);
-#else
-    uae_s32 offs = data_long_offs(i);
-	  LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
-	  SUB_rrr(d, d, REG_WORK1);
-  }
+  SUB_rri(d, d, i);
 
 	unlock2(d);
 }
-MENDFUNC(2,sub_l_ri,(RW4 d, IMM i))
+MENDFUNC(2,sub_l_ri,(RW4 d, IM8 i))
 
-MIDFUNC(2,sub_w_ri,(RW2 d, IMM i))
+MIDFUNC(2,sub_w_ri,(RW2 d, IM8 i))
 {
   // This function is only called with i = 1
 	// Caller needs flags...
@@ -508,7 +452,7 @@ MIDFUNC(2,sub_w_ri,(RW2 d, IMM i))
 
 	unlock2(d);
 }
-MENDFUNC(2,sub_w_ri,(RW2 d, IMM i))
+MENDFUNC(2,sub_w_ri,(RW2 d, IM8 i))
 
 
 /* forget_about() takes a mid-layer register */
@@ -539,7 +483,7 @@ MIDFUNC(2,arm_ADD_l,(RW4 d, RR4 s))
 }
 MENDFUNC(2,arm_ADD_l,(RW4 d, RR4 s))
 
-MIDFUNC(2,arm_ADD_l_ri,(RW4 d, IMM i))
+MIDFUNC(2,arm_ADD_l_ri,(RW4 d, IM32 i))
 {
 	if (!i) 
 	  return;
@@ -566,9 +510,9 @@ MIDFUNC(2,arm_ADD_l_ri,(RW4 d, IMM i))
 	
 	unlock2(d);
 }
-MENDFUNC(2,arm_ADD_l_ri,(RW4 d, IMM i))
+MENDFUNC(2,arm_ADD_l_ri,(RW4 d, IM32 i))
 
-MIDFUNC(2,arm_ADD_l_ri8,(RW4 d, IMM i))
+MIDFUNC(2,arm_ADD_l_ri8,(RW4 d, IM8 i))
 {
 	if (!i) 
 	  return;
@@ -581,9 +525,9 @@ MIDFUNC(2,arm_ADD_l_ri8,(RW4 d, IMM i))
 	ADD_rri(d, d, i);
 	unlock2(d);
 }
-MENDFUNC(2,arm_ADD_l_ri8,(RW4 d, IMM i))
+MENDFUNC(2,arm_ADD_l_ri8,(RW4 d, IM8 i))
 
-MIDFUNC(2,arm_SUB_l_ri8,(RW4 d, IMM i))
+MIDFUNC(2,arm_SUB_l_ri8,(RW4 d, IM8 i))
 {
 	if (!i) 
 	  return;
@@ -596,7 +540,7 @@ MIDFUNC(2,arm_SUB_l_ri8,(RW4 d, IMM i))
 	SUB_rri(d, d, i);
 	unlock2(d);
 }
-MENDFUNC(2,arm_SUB_l_ri8,(RW4 d, IMM i))
+MENDFUNC(2,arm_SUB_l_ri8,(RW4 d, IM8 i))
 
 
 // Other
@@ -617,8 +561,9 @@ STATIC_INLINE void flush_cpu_icache(void *start, void *stop)
 	#endif
 }
 
-STATIC_INLINE void write_jmp_target(uae_u32* jmpaddr, uintptr a) {
-	uae_s32 off = ((uae_u32)a - (uae_u32)jmpaddr - 8) >> 2;
+STATIC_INLINE void write_jmp_target(uae_u32* jmpaddr, uintptr a) 
+{
+	uintptr off = ((uintptr)a - (uintptr)jmpaddr - 8) >> 2;
 	*(jmpaddr) = (*(jmpaddr) & 0xff000000) | (off & 0x00ffffff);
   flush_cpu_icache((void *)jmpaddr, (void *)&jmpaddr[1]);
 }
@@ -709,7 +654,7 @@ MIDFUNC(3,fmov_d_rrr,(FW d, RR4 s1, RR4 s2))
 }
 MENDFUNC(3,fmov_d_rrr,(FW d, RR4 s1, RR4 s2))
 
-MIDFUNC(2,fmov_l_ri,(FW d, IMM i))
+MIDFUNC(2,fmov_l_ri,(FW d, IM32 i))
 {
 	switch(i) {
 		case 0:
@@ -731,16 +676,16 @@ MIDFUNC(2,fmov_l_ri,(FW d, IMM i))
 			f_unlock(d);
 	} 
 }
-MENDFUNC(2,fmov_l_ri,(FW d, IMM i))
+MENDFUNC(2,fmov_l_ri,(FW d, IM32 i))
 
-MIDFUNC(2,fmov_s_ri,(FW d, IMM i))
+MIDFUNC(2,fmov_s_ri,(FW d, IM32 i))
 {
   d = f_writereg(d);
   compemu_raw_mov_l_ri(REG_WORK1, i);
   raw_fmov_s_rr(d, REG_WORK1);
 	f_unlock(d);
 }
-MENDFUNC(2,fmov_s_ri,(FW d, IMM i))
+MENDFUNC(2,fmov_s_ri,(FW d, IM32 i))
 
 MIDFUNC(2,fmov_to_l_rr,(W4 d, FR s))
 {
@@ -1107,11 +1052,11 @@ MIDFUNC(2,fp_fscc_ri,(RW4 d, int cc))
 }
 MENDFUNC(2,fp_fscc_ri,(RW4 d, int cc))
 
-MIDFUNC(1,roundingmode,(IMM mode))
+MIDFUNC(1,roundingmode,(IM32 mode))
 {
 	raw_roundingmode(mode);
 }
-MENDFUNC(1,roundingmode,(IMM mode))
+MENDFUNC(1,roundingmode,(IM32 mode))
 
 
 #endif // USE_JIT_FPU

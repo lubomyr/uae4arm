@@ -321,7 +321,7 @@ static int setstate (struct cdunit *cdu, int state, int playpos)
 	return 0;
 }
 
-static void *cdda_unpack_func (void *v)
+static int cdda_unpack_func (void *v)
 {
 	cdimage_unpack_thread = 1;
 	mp3decoder *mp3dec = NULL;
@@ -636,7 +636,7 @@ end:
 	return restart;
 }
 
-static void *cdda_play_func (void *v)
+static int cdda_play_func (void *v)
 {
 	int outpos = -1;
 	struct cdunit *cdu = (struct cdunit*)v;
@@ -656,7 +656,7 @@ static void *cdda_play_func (void *v)
 		cdu->cdda_play = 1;
 	}
 	cdu->thread_active = false;
-	return NULL;
+	return 0;
 }
 
 static void cdda_stop (struct cdunit *cdu)
