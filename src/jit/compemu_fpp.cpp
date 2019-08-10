@@ -470,7 +470,7 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 	int source = (extra >> 13) & 7;
 	int	opmode = extra & 0x7f;
 
-   if (special_mem) {
+  if (special_mem) {
     FAIL(1);
     return;
   } 
@@ -496,7 +496,8 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 				  // set_fpsr(m68k_dreg (regs, opcode & 15));
 			  }
 			  if (extra & 0x0400) { /* FPIAR */
-				  mov_l_mr ((uintptr)&regs.fpiar, opcode & 15); return;
+				  mov_l_mr ((uintptr)&regs.fpiar, opcode & 15); 
+				  return;
 			  }
 		  }
 		  else if ((opcode & 0x3f) == 0x3c) {
@@ -613,7 +614,6 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 					mov_l_rr ((opcode & 7) + 8, ad);
 			} else {
 				/* FMOVEM memory->FPP */
-
 				int ad;
 				switch ((extra >> 11) & 3) { /* Get out early if failure */
 					case 0:

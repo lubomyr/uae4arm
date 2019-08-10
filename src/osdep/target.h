@@ -12,7 +12,7 @@
 
 #define OPTIONSFILENAME "uaeconfig"
 
-#ifndef ARMV6T2
+#if !defined(ARMV6T2) && !defined(CPU_AARCH64)
 #undef USE_JIT_FPU
 #endif
 
@@ -145,38 +145,27 @@ STATIC_INLINE int max(int x, int y)
 
 #if defined(CPU_AARCH64)
 
-/* Atomic functions causing crash in current aarch64 environment. Need fix. */
-
 STATIC_INLINE void atomic_and(volatile uae_atomic *p, uae_u32 v)
 {
-//	__atomic_and_fetch(p, v, __ATOMIC_SEQ_CST);
-	*p = *p & v;
+	__atomic_and_fetch(p, v, __ATOMIC_ACQ_REL);
 }
 STATIC_INLINE void atomic_or(volatile uae_atomic *p, uae_u32 v)
 {
-//	__atomic_or_fetch(p, v, __ATOMIC_SEQ_CST);
-	*p = *p | v;
+	__atomic_or_fetch(p, v, __ATOMIC_ACQ_REL);
 }
-STATIC_INLINE uae_atomic atomic_inc(volatile uae_atomic *p)
+STATIC_INLINE void atomic_inc(volatile uae_atomic *p)
 {
-//	return __atomic_add_fetch(p, 1, __ATOMIC_SEQ_CST);
-	*p = *p + 1;
-	return *p;
+	__atomic_add_fetch(p, 1, __ATOMIC_ACQ_REL);
 }
 STATIC_INLINE uae_u32 atomic_bit_test_and_reset(volatile uae_atomic *p, uae_u32 v)
 {
-//  uae_u32 mask = (1 << v);
-//  uae_u32 res = __atomic_fetch_and(p, ~mask, __ATOMIC_SEQ_CST);
-//	return (res & mask);
   uae_u32 mask = (1 << v);
-  uae_u32 res = *p & mask;
-  *p = *p & ~mask;
-	return (res);
+  uae_u32 res = __atomic_fetch_and(p, ~mask, __ATOMIC_ACQ_REL);
+	return (res & mask);
 }
 STATIC_INLINE void atomic_set(volatile uae_atomic *p, uae_u32 v)
 {
-//  __atomic_store_n(p, v, __ATOMIC_SEQ_CST);
-  *p = v;
+  __atomic_store_n(p, v, __ATOMIC_ACQ_REL);
 }
 
 #else
@@ -193,9 +182,9 @@ STATIC_INLINE void atomic_or(volatile uae_atomic *p, uae_u32 v)
 {
 	__sync_or_and_fetch(p, v);
 }
-STATIC_INLINE uae_atomic atomic_inc(volatile uae_atomic *p)
+STATIC_INLINE void atomic_inc(volatile uae_atomic *p)
 {
-	return __sync_add_and_fetch(p, 1);
+	__sync_add_and_fetch(p, 1);
 }
 STATIC_INLINE uae_u32 atomic_bit_test_and_reset(volatile uae_atomic *p, uae_u32 v)
 {

@@ -38,8 +38,6 @@ typedef uae_u64 uintptr;
 typedef uae_u32 uintptr;
 #endif
 
-/* Flags for Bernie during development/debugging. Should go away eventually */
-#define DISTRUST_CONSISTENT_MEM 0
 /* Now that we do block chaining, and also have linked lists on each tag,
    TAGMASK can be much smaller and still do its job. Saves several megs
    of memory! */
@@ -59,7 +57,6 @@ struct blockinfo_t;
 
 typedef struct {
   uae_u16* location;
-  uae_u8  cycles;
   uae_u8  specmem;
 } cpu_history;
 
@@ -67,23 +64,6 @@ typedef union {
   cpuop_func* handler;
   struct blockinfo_t* bi;
 } cacheline;
-
-/* (gb) When on, this option can save save up to 30% compilation time
- *  when many lazy flushes occur (e.g. apps in MacOS 8.x).
- */
-#define USE_SEPARATE_BIA 1
-
-/* Use chain of checksum_info_t to compute the block checksum */
-#define USE_CHECKSUM_INFO 1
-
-/* Use code inlining, aka follow-up of constant jumps */
-#define USE_INLINING 1
-
-/* Inlining requires the chained checksuming information */
-#if USE_INLINING
-#undef  USE_CHECKSUM_INFO
-#define USE_CHECKSUM_INFO 1
-#endif
 
 #define COMP_DEBUG 0
 
@@ -110,7 +90,6 @@ typedef union {
 #define MAX_HOLD_BI 3  /* One for the current block, and up to two
 			  for jump targets */
 
-#define INDIVIDUAL_INST 0
 #if 1
 // gb-- my format from readcpu.cpp is not the same
 #define FLAG_X    0x0010
@@ -131,11 +110,9 @@ typedef union {
 #if defined(CPU_arm)
 
 //#define DEBUG_DATA_BUFFER
-#define ALIGN_NOT_NEEDED
 
 #if defined(CPU_AARCH64)
 #define N_REGS 18   /* really 32, but 29 to 31 are FP, LR, SP; 18 has special meaning; 27 holds memstart and 28 holds regs-struct */
-                    /* 19-28 are callee-saved, maybe we use them to hold A0-A7/D0-D7 later. */
 #else
 #define N_REGS 10  /* really 16, but 13 to 15 are SP, LR, PC; 12 is scratch reg, 10 holds memstart and 11 holds regs-struct */
 #endif
@@ -170,7 +147,7 @@ extern uae_u32 needed_flags;
 extern uae_u8* comp_pc_p;
 extern void* pushall_call_handler;
 
-#define VREGS 24
+#define VREGS 23
 #define VFREGS 10
 
 #define INMEM 1
@@ -185,7 +162,6 @@ typedef struct {
   uae_u8 status;
   uae_s8 realreg; /* gb-- realreg can hold -1 */
   uae_u8 realind; /* The index in the holds[] array */
-  uae_u8 validsize;
 } reg_status;
 
 typedef struct {
@@ -212,11 +188,11 @@ STATIC_INLINE int end_block(uae_u16 opcode)
 #define PC_P 16
 #define FLAGX 17
 #define FLAGTMP 18
+// Is S4 ever in use?
 #define S1 19
 #define S2 20
 #define S3 21
 #define S4 22
-#define S5 23
 
 #define FP_RESULT 8
 #define FS1 9
@@ -241,14 +217,12 @@ typedef struct {
 } fn_status;
 
 /* For flag handling */
-#define NADA 1
 #define TRASH 2
 #define VALID 3
 
 /* needflush values */
 #define NF_SCRATCH   0
 #define NF_TOMEM     1
-#define NF_HANDLER   2
 
 typedef struct {
   /* Integer part */
@@ -364,12 +338,7 @@ typedef struct blockinfo_t {
 
   uae_u32 c1;
   uae_u32 c2;
-#if USE_CHECKSUM_INFO
   checksum_info *csi;
-#else
-  uae_u32 len;
-  uae_u32 min_pcp;
-#endif
 
   struct blockinfo_t* next_same_cl;
   struct blockinfo_t** prev_same_cl_p;
@@ -401,7 +370,7 @@ const int POPALLSPACE_SIZE = 512; /* That should be enough space */
 void execute_normal(void);
 void exec_nostats(void);
 void do_nothing(void);
-void execute_exception(void);
+void execute_exception(uae_u32 cycles);
 
 typedef fptype fpu_register;
 

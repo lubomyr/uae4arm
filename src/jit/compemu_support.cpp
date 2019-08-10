@@ -62,7 +62,6 @@
 #undef abort
 #define abort() do { \
 	fprintf(stderr, "Abort in file %s at line %d\n", __FILE__, __LINE__); \
-	compiler_dumpstate(); \
   SDL_Quit();  \
 	exit(EXIT_FAILURE); \
 } while (0)
@@ -95,11 +94,7 @@ static compop_func *nfcompfunctbl[65536];
 uae_u8* comp_pc_p;
 
 // gb-- Extra data for Basilisk II/JIT
-#if USE_INLINING
 #define follow_const_jumps (true)
-#else
-const int	follow_const_jumps = 0;
-#endif
 
 static uae_u32 cache_size = 0; // Size of total cache allocated for compiled blocks
 static uae_u32 current_cache_size	= 0;		// Cache grows upwards: how much has been consumed already
@@ -179,7 +174,7 @@ static bigstate live;
 static int writereg(int r);
 static void unlock2(int r);
 static void setlock(int r);
-static int readreg_specific(int r, int spec);
+static int readreg(int r);
 static void prepare_for_call_1(void);
 static void prepare_for_call_2(void);
 
@@ -477,28 +472,9 @@ void LazyBlockAllocator<T>::release(T * const chunk)
 	mChunks = chunk;
 }
 
-template< class T >
-class HardBlockAllocator
-{
-public:
-	T * acquire() {
-		T * data = (T *)current_compile_p;
-		current_compile_p += sizeof(T);
-		return data;
-	}
 
-	void release(T * const chunk) {
-		// Deallocated on invalidation
-	}
-};
-
-#if USE_SEPARATE_BIA
 static LazyBlockAllocator<blockinfo> BlockInfoAllocator;
 static LazyBlockAllocator<checksum_info> ChecksumInfoAllocator;
-#else
-static HardBlockAllocator<blockinfo> BlockInfoAllocator;
-static HardBlockAllocator<checksum_info> ChecksumInfoAllocator;
-#endif
 
 STATIC_INLINE checksum_info *alloc_checksum_info(void)
 {
@@ -525,18 +501,14 @@ STATIC_INLINE void free_checksum_info_chain(checksum_info *csi)
 STATIC_INLINE blockinfo *alloc_blockinfo(void)
 {
 	blockinfo *bi = BlockInfoAllocator.acquire();
-#if USE_CHECKSUM_INFO
 	bi->csi = NULL;
-#endif
 	return bi;
 }
 
 STATIC_INLINE void free_blockinfo(blockinfo *bi)
 {
-#if USE_CHECKSUM_INFO
 	free_checksum_info_chain(bi->csi);
 	bi->csi = NULL;
-#endif
 	BlockInfoAllocator.release(bi);
 }
 
@@ -562,7 +534,7 @@ static uae_u8* target;
 STATIC_INLINE void emit_long(uae_u32 x)
 {
   *((uae_u32*)target) = x;
-	target += 4;
+  target += 4;
 }
 
 STATIC_INLINE void emit_longlong(uae_u64 x)
@@ -680,7 +652,7 @@ static void make_flags_live_internal(void)
   	return;
   if (live.flags_on_stack == VALID) {
 	  int tmp;
-	  tmp = readreg_specific(FLAGTMP, -1);
+	  tmp = readreg(FLAGTMP);
 	  raw_reg_to_flags(tmp);
 	  unlock2(tmp);
 
@@ -748,10 +720,8 @@ STATIC_INLINE int isinreg(int r)
 
 static void tomem(int r)
 {
-  int rr = live.state[r].realreg;
-
   if (live.state[r].status == DIRTY) {
-	  compemu_raw_mov_l_mr((uintptr)live.state[r].mem, rr);
+	  compemu_raw_mov_l_mr((uintptr)live.state[r].mem, live.state[r].realreg);
 	  set_status(r, CLEAN);
   }
 }
@@ -771,14 +741,12 @@ STATIC_INLINE void writeback_const(int r)
   set_status(r, INMEM);
 }
 
-static  void evict(int r)
+static void evict(int r)
 {
-  int rr;
-
   if (!isinreg(r))
   	return;
   tomem(r);
-  rr = live.state[r].realreg;
+  int rr = live.state[r].realreg;
 
   live.nat[rr].nholds--;
   if (live.nat[rr].nholds != live.state[r].realind) { /* Was not last */
@@ -810,7 +778,6 @@ STATIC_INLINE void isclean(int r)
 {
   if (!isinreg(r))
   	return;
-  live.state[r].validsize = 4;
   live.state[r].val = 0;
   set_status(r, CLEAN);
 }
@@ -828,39 +795,32 @@ STATIC_INLINE void set_const(int r, uae_u32 val)
   set_status(r, ISCONST);
 }
 
-static  int alloc_reg_hinted(int r, int willclobber, int hint)
+static int alloc_reg_hinted(int r, int willclobber, int hint)
 {
-  int bestreg;
-  uae_s32 when;
+  int bestreg = -1;
+  uae_s32 when = 2000000000;
   int i;
-  uae_s32 badness = 0; /* to shut up gcc */
-  bestreg = -1;
-  when = 2000000000;
 
   for (i = N_REGS - 1; i >= 0; i--) {
-  	badness = live.nat[i].touched;
-  	if (live.nat[i].nholds == 0)
-	    badness = 0;
-  	if (i == hint)
-	    badness -= 200000000;
-  	if (!live.nat[i].locked && badness < when) {
-  		bestreg = i;
-  		when = badness;
-  		if (live.nat[i].nholds == 0 && hint < 0)
-		    break;
-  		if (i == hint)
-		    break;
-	  }
+  	if(!live.nat[i].locked) {
+    	uae_s32 badness = live.nat[i].touched;
+    	if (live.nat[i].nholds == 0)
+  	    badness = 0;
+    	if (i == hint)
+  	    badness -= 200000000;
+    	if (badness < when) {
+    		bestreg = i;
+    		when = badness;
+    		if (live.nat[i].nholds == 0 && hint < 0)
+  		    break;
+    		if (i == hint)
+  		    break;
+  	  }
+  	}
   }
 
   if (live.nat[bestreg].nholds > 0) {
   	free_nreg(bestreg);
-  }
-  if (isinreg(r)) {
-  	int rr = live.state[r].realreg;
-  	/* This will happen if we read a partially dirty register at a
-	   bigger size */
-	  evict(r);
   }
 
   if (!willclobber) {
@@ -869,28 +829,24 @@ static  int alloc_reg_hinted(int r, int willclobber, int hint)
 		    compemu_raw_mov_l_ri(bestreg, live.state[r].val);
 		    live.state[r].val = 0;
 		    set_status(r, DIRTY);
-	    }
-	    else {
+	    } else {
 		    do_load_reg(bestreg, r);
 		    set_status(r, CLEAN);
 	    }
-  	}
-  	else {
+  	}	else {
 	    live.state[r].val = 0;
 	    set_status(r, CLEAN);
 	  }
-	  live.state[r].validsize = 4;
   }
   else { /* this is the easiest way, but not optimal. */
-    live.state[r].validsize = 4;
     live.state[r].val = 0;
     set_status(r, DIRTY);
   }
   live.state[r].realreg = bestreg;
-  live.state[r].realind = live.nat[bestreg].nholds;
+  live.state[r].realind = 0;
   live.nat[bestreg].touched = touchcnt++;
-  live.nat[bestreg].holds[live.nat[bestreg].nholds] = r;
-  live.nat[bestreg].nholds++;
+  live.nat[bestreg].holds[0] = r;
+  live.nat[bestreg].nholds = 1;
 
   return bestreg;
 }
@@ -901,7 +857,7 @@ static void unlock2(int r)
   live.nat[r].locked--;
 }
 
-static  void setlock(int r)
+static void setlock(int r)
 {
   live.nat[r].locked++;
 }
@@ -909,18 +865,15 @@ static  void setlock(int r)
 
 static void mov_nregs(int d, int s)
 {
-  int nd = live.nat[d].nholds;
-  int i;
-
   if (s == d)
   	return;
 
-  if (nd > 0)
+  if (live.nat[d].nholds > 0)
   	free_nreg(d);
 
   compemu_raw_mov_l_rr(d, s);
 
-  for (i=0; i<live.nat[s].nholds; i++) {
+  for (int i=0; i<live.nat[s].nholds; i++) {
   	int vs = live.nat[s].holds[i];
 
 	  live.state[vs].realreg = d;
@@ -933,36 +886,18 @@ static void mov_nregs(int d, int s)
 }
 
 
-STATIC_INLINE void make_exclusive(int r, int size)
+STATIC_INLINE void make_exclusive(int r, int needcopy)
 {
   reg_status oldstate;
   int rr = live.state[r].realreg;
   int nr;
   int nind;
-  int ndirt = 0;
-  int i;
 
   if (!isinreg(r))
   	return;
   if (live.nat[rr].nholds == 1)
   	return;
-  for (i=0; i<live.nat[rr].nholds; i++) {
-	  int vr = live.nat[rr].holds[i];
-	  if (vr != r && (live.state[vr].status == DIRTY || live.state[vr].val))
-      ndirt++;
-  }
-  if (!ndirt && size < live.state[r].validsize && !live.nat[rr].locked) {
-  	/* Everything else is clean, so let's keep this register */
-  	for (i=0; i<live.nat[rr].nholds; i++) {
-      int vr = live.nat[rr].holds[i];
-      if (vr != r) {
-	      evict(vr);
-	      i--; /* Try that index again! */
-	    }
-  	}
-  	return;
-  }
-
+  	
   /* We have to split the register */
   oldstate = live.state[r];
 
@@ -976,39 +911,24 @@ STATIC_INLINE void make_exclusive(int r, int size)
   live.state[r].realreg = nr;
   live.state[r].realind = nind;
 
-  if (size < live.state[r].validsize) {
-  	if (live.state[r].val) {
-      /* Might as well compensate for the offset now */
-      compemu_raw_lea_l_brr(nr, rr, oldstate.val);
-      live.state[r].val = 0;
-      set_status(r, DIRTY);
-  	}
-  	else
-	    compemu_raw_mov_l_rr(nr, rr);  /* Make another copy */
+  if (needcopy) {
+    compemu_raw_mov_l_rr(nr, rr);  /* Make another copy */
   }
   unlock2(rr);
 }
 
 STATIC_INLINE int readreg_general(int r, int spec)
 {
-  int n;
   int answer = -1;
 
 	if (live.state[r].status == UNDEF) {
 		jit_log("WARNING: Unexpected read of undefined register %d", r);
 	}
 
-  if (isinreg(r) && live.state[r].validsize >= 4) {
-	  n = live.state[r].realreg;
-
-    answer = n;
-
-	  if (answer < 0)
-	    evict(r);
-  }
-  /* either the value was in memory to start with, or it was evicted and
-     is in memory now */
-  if (answer < 0) {
+  if (isinreg(r)) {
+    answer = live.state[r].realreg;
+  } else {
+    /* the value is in memory to start with */
   	answer = alloc_reg_hinted(r, 0, spec);
   }
 
@@ -1043,25 +963,15 @@ static int readreg_specific(int r, int spec)
  */
 static int writereg(int r)
 {
-  int n;
   int answer = -1;
 
-  make_exclusive(r, 4);
+  make_exclusive(r, 0);
   if (isinreg(r)) {
-	  n = live.state[r].realreg;
-
-    live.state[r].validsize = 4;
-    answer = n;
-
-	  if (answer < 0)
-	    evict(r);
-  }
-  /* either the value was in memory to start with, or it was evicted and
-     is in memory now */
-  if (answer < 0) {
+    answer = live.state[r].realreg;
+  } else {
+    /* the value is in memory to start with */
   	answer = alloc_reg_hinted(r, 1, -1);
   }
-  live.state[r].validsize = 4;
 
   live.nat[answer].locked++;
   live.nat[answer].touched = touchcnt++;
@@ -1072,28 +982,20 @@ static int writereg(int r)
 
 static int rmw(int r)
 {
-  int n;
   int answer = -1;
 
   if (live.state[r].status == UNDEF) {
 		jit_log("WARNING: Unexpected read of undefined register %d", r);
 	}
-  make_exclusive(r, 0);
+  make_exclusive(r, 1);
 
-  if (isinreg(r) && live.state[r].validsize >= 4) {
-	  n = live.state[r].realreg;
-
-    answer = n;
-	  if (answer < 0)
-	    evict(r);
-  }
-  /* either the value was in memory to start with, or it was evicted and
-     is in memory now */
-  if (answer < 0) {
+  if (isinreg(r)) {
+    answer = live.state[r].realreg;
+  } else {
+    /* the value is in memory to start with */
   	answer = alloc_reg_hinted(r, 0, -1);
   }
 
- 	live.state[r].validsize = 4;
   set_status(r, DIRTY);
 
   live.nat[answer].locked++;
@@ -1164,9 +1066,9 @@ static int f_alloc_reg(int r, int willclobber)
 	if(r < 8)
 	  bestreg = r + 8;   // map real Amiga reg to ARM VFP reg 8-15 (call save)
 	else if(r == FP_RESULT)
-		bestreg = 6;	 // map FP_RESULT to ARM VFP reg 6
+		bestreg = 6;	     // map FP_RESULT to ARM VFP reg 6
 	else // FS1
-	  bestreg = 7; 	 	 // map FS1 to ARM VFP reg 7
+	  bestreg = 7; 	 	   // map FS1 to ARM VFP reg 7
 
 	if (!willclobber) {
 		if (live.fate[r].status == INMEM) {
@@ -1194,11 +1096,10 @@ STATIC_INLINE int f_readreg(int r)
 
 	if (f_isinreg(r)) {
 		answer = live.fate[r].realreg;
-	}
-	/* either the value was in memory to start with, or it was evicted and
-	is in memory now */
-	if (answer < 0)
+	} else {
+  	/* the value is in memory to start with */
 		answer = f_alloc_reg(r,0);
+  }
 
 	return answer;
 }
@@ -1209,8 +1110,7 @@ STATIC_INLINE int f_writereg(int r)
 
 	if (f_isinreg(r)) {
 		answer = live.fate[r].realreg;
-	}
-	if (answer < 0) {
+	} else {
 		answer = f_alloc_reg(r, 1);
 	}
 	live.fate[r].status = DIRTY;
@@ -1223,9 +1123,9 @@ STATIC_INLINE int f_rmw(int r)
 
 	if (f_isinreg(r)) {
 		n = live.fate[r].realreg;
-	}
-	else
+	} else {
 		n = f_alloc_reg(r, 0);
+	}
 	live.fate[r].status = DIRTY;
 	return n;
 }
@@ -1244,6 +1144,7 @@ static void fflags_into_flags_internal(void)
 
 #if defined(CPU_AARCH64) 
 #include "compemu_midfunc_armA64.cpp"
+#include "compemu_midfunc_armA64_2.cpp"
 #elif defined(CPU_arm)
 #include "compemu_midfunc_arm.cpp"
 #include "compemu_midfunc_arm2.cpp"
@@ -1454,7 +1355,7 @@ static void freescratch(void)
   int i;
   for (i = 0; i < N_REGS; i++)
 #if defined(CPU_AARCH64) 
-  	if (live.nat[i].locked && i != 2 && i != 3 && i != 4 && i != 5) {
+  	if (live.nat[i].locked && i > 5 && i < 18) {
 #elif defined(CPU_arm)
   	if (live.nat[i].locked && i != 2 && i != 3 && i != 10 && i != 11 && i != 12) {
 #else
@@ -1514,7 +1415,11 @@ static void prepare_for_call_2(void)
   int i;
   for (i = 0; i < N_REGS; i++)
   {
+#if defined(CPU_AARCH64)
+  	if (live.nat[i].nholds > 0) // in aarch64: first 18 regs not call saved
+#else
   	if (!call_saved[i] && live.nat[i].nholds > 0)
+#endif
 	    free_nreg(i);
   }
 #ifdef USE_JIT_FPU
@@ -1788,7 +1693,7 @@ void alloc_cache(void)
 	 	compiled_code = popallspace + POPALLSPACE_SIZE;
 
   if (compiled_code) {
-		write_log("Actual translation cache size : %d KB at %p-%p", cache_size, compiled_code, compiled_code + cache_size*1024);
+		write_log("Actual translation cache size : %d KB at %p-%p\n", cache_size, compiled_code, compiled_code + cache_size*1024);
 #if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
   	max_compile_start = compiled_code + cache_size*1024 - BYTES_PER_INST - DATA_BUFFER_SIZE;
 #else
@@ -1807,15 +1712,10 @@ static void calc_checksum(blockinfo* bi, uae_u32* c1, uae_u32* c2)
   uae_u32 k1 = 0;
   uae_u32 k2 = 0;
 
-#if USE_CHECKSUM_INFO
 	checksum_info *csi = bi->csi;
 	while (csi) {
 		uae_s32 len = csi->length;
 		uintptr tmp = (uintptr)csi->start_p;
-#else
-    uae_s32 len = bi->len;
-    uintptr tmp = (uintptr)bi->min_pcp;
-#endif
     uae_u32* pos;
 
     len += (tmp & 3);
@@ -1831,10 +1731,8 @@ static void calc_checksum(blockinfo* bi, uae_u32* c1, uae_u32* c2)
 			}
   	}
 
-#if USE_CHECKSUM_INFO
 		csi = csi->next;
 	}
-#endif
 
 	*c1 = k1;
 	*c2 = k2;
@@ -1980,6 +1878,7 @@ STATIC_INLINE void create_popalls(void)
 			return;
     }
   }
+	write_log("JIT popallspace: %p-%p\n", popallspace, popallspace + POPALLSPACE_SIZE);
 
   current_compile_p = popallspace;
   set_target(current_compile_p);
@@ -2000,10 +1899,13 @@ STATIC_INLINE void create_popalls(void)
   current_compile_p = get_target();
   pushall_call_handler = get_target();
   raw_push_regs_to_preserve();
+#ifdef JIT_DEBUG
+  write_log("Address of regs: 0x%016x, regs.pc_p: 0x%016x\n", &regs, &regs.pc_p);
+  write_log("Address of natmem_offset: 0x%016x, natmem_offset = 0x%016x\n", &regs.natmem_offset, regs.natmem_offset);
+  write_log("Address of cache_tags: 0x%016x\n", cache_tags);
+#endif
   compemu_raw_init_r_regstruct((uintptr)&regs);
-  r = REG_PC_TMP;
-  compemu_raw_tag_pc(r, (uintptr)&regs.pc_p);
-  compemu_raw_jmp_m_indexed((uintptr)cache_tags, r, SIZEOF_VOID_P);
+  compemu_raw_jmp_pc_tag((uintptr)cache_tags);
 
   /* now the exit points */
   popall_execute_normal = get_target();
@@ -2013,6 +1915,8 @@ STATIC_INLINE void create_popalls(void)
   popall_check_checksum = get_target();
   raw_pop_preserved_regs();
   compemu_raw_jmp((uintptr)check_checksum);
+
+  flush_cpu_icache((void *)popallspace, (void *)target);
 
 #if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
   reset_data_buffer();
@@ -2035,14 +1939,12 @@ static void prepare_block(blockinfo* bi)
 
   set_target(current_compile_p);
   bi->direct_pen = (cpuop_func *)get_target();
-  compemu_raw_mov_l_rm(0, (uintptr)&(bi->pc_p));
-  compemu_raw_set_pc_r(0);
+  compemu_raw_set_pc_m((uintptr)&(bi->pc_p));
   raw_pop_preserved_regs();
   compemu_raw_jmp((uintptr)execute_normal);
 
   bi->direct_pcc = (cpuop_func *)get_target();
-  compemu_raw_mov_l_rm(0, (uintptr)&(bi->pc_p));
-  compemu_raw_set_pc_r(0);
+  compemu_raw_set_pc_m((uintptr)&(bi->pc_p));
 	raw_pop_preserved_regs();
   compemu_raw_jmp((uintptr)check_checksum);
   flush_cpu_icache((void *)current_compile_p, (void *)target);
@@ -2079,7 +1981,8 @@ void build_comp(void)
 #ifdef PROFILE_UNTRANSLATED_INSNS
   regs.raw_cputbl_count = raw_cputbl_count;
 #endif
-
+  regs.mem_banks = (uintptr)mem_banks;
+  
   for (opcode = 0; opcode < 65536; opcode++) {
 		reset_compop(opcode);
 	  prop[opcode].use_flags = 0x1f;
@@ -2257,16 +2160,10 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	  int r;
 	  int was_comp = 0;
 	  uae_u8 liveflags[MAXRUN + 1];
-#if USE_CHECKSUM_INFO
 	  bool trace_in_rom = isinrom((uintptr)pc_hist[0].location) != 0;
 	  uintptr max_pcp = (uintptr)pc_hist[blocklen - 1].location;
 	  uintptr min_pcp = max_pcp;
-#else
-	  uintptr max_pcp = (uintptr)pc_hist[0].location;
-	  uintptr min_pcp = max_pcp;
-#endif
 	  uae_u32 cl = cacheline(pc_hist[0].location);
-	  void* specflags = (void*)&regs.spcflags;
 	  blockinfo* bi = NULL;
 	  blockinfo* bi2;
 
@@ -2287,10 +2184,8 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	  remove_deps(bi); /* We are about to create new code */
 	  bi->optlevel = optlev;
 	  bi->pc_p = (uae_u8*)pc_hist[0].location;
-#if USE_CHECKSUM_INFO
 	  free_checksum_info_chain(bi->csi);
 	  bi->csi = NULL;
-#endif
 
 	  liveflags[blocklen] = 0x1f; /* All flags needed afterwards */
 	  i = blocklen;
@@ -2298,7 +2193,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	    uae_u16* currpcp = pc_hist[i].location;
 			uae_u32 op = DO_GET_OPCODE(currpcp);
 
-#if USE_CHECKSUM_INFO
   		trace_in_rom = trace_in_rom && isinrom((uintptr)currpcp);
   		if (follow_const_jumps && is_const_jump(op)) {
   			checksum_info *csi = alloc_checksum_info();
@@ -2309,25 +2203,17 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   			max_pcp = (uintptr)currpcp;
   		}
   		min_pcp = (uintptr)currpcp;
-#else
-      if ((uintptr)currpcp < min_pcp)
-  		  min_pcp = (uintptr)currpcp;
-  	  if ((uintptr)currpcp > max_pcp)
-  		  max_pcp = (uintptr)currpcp;
-#endif
 
 		  liveflags[i] = ((liveflags[i + 1] & (~prop[op].set_flags)) | prop[op].use_flags);
 		  if (prop[op].is_addx && (liveflags[i + 1] & FLAG_Z) == 0)
 		    liveflags[i] &= ~FLAG_Z;
 	  }
 
-#if USE_CHECKSUM_INFO
 	  checksum_info *csi = alloc_checksum_info();
 	  csi->start_p = (uae_u8 *)min_pcp;
 	  csi->length = max_pcp - min_pcp + LONGEST_68K_INST;
 	  csi->next = bi->csi;
 	  bi->csi = csi;
-#endif
 
   	bi->needed_flags = liveflags[0];
 
@@ -2366,6 +2252,9 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   		  uae_u32 opcode = DO_GET_OPCODE(pc_hist[i].location);
   		  needed_flags = (liveflags[i + 1] & prop[opcode].set_flags);
   		  special_mem = pc_hist[i].specmem;
+#ifdef JIT_DEBUG
+    		write_log("    location=0x%016llx, opcode=0x%04x, target=0x%016llx, need_flags=%d\n", pc_hist[i].location, opcode, get_target(), needed_flags);
+#endif
     		if (!needed_flags) {
 		      cputbl = cpufunctbl;
 		      comptbl = nfcompfunctbl;
@@ -2390,12 +2279,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   			    /* We can forget about flags */
   			    dont_care_flags();
   		    }
-#if INDIVIDUAL_INST
-  		    flush(1);
-  		    nop();
-  		    flush(1);
-  		    was_comp = 0;
-#endif
     		}
 
   		  if (failure) {
@@ -2413,19 +2296,10 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 #endif
 
   		    if (i < blocklen - 1) {
-      			uae_s8* branchadd;
-  
-  			    compemu_raw_mov_l_rm(0, (uintptr)specflags);
-  			    compemu_raw_test_l_rr(0, 0);
 #if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
             data_check_end(8, 64);
 #endif
-  			    compemu_raw_jz_b_oponly();
-  			    branchadd = (uae_s8 *)get_target();
-  			    compemu_raw_sub_l_mi((uintptr)&countdown, scaled_cycles(totcycles));
-					  raw_pop_preserved_regs();
-  			    compemu_raw_jmp((uintptr)do_nothing);
-  			    *(branchadd - 4) = (((uintptr)get_target() - (uintptr)branchadd) - 4) >> 2;
+            compemu_raw_maybe_do_nothing(scaled_cycles(totcycles), (uintptr)do_nothing);
   		    }
 	    	} else if(may_raise_exception) {
 #if defined(CPU_arm) && !defined(ARMV6T2) && !defined(CPU_AARCH64)
@@ -2445,6 +2319,9 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   		  uae_u32* tba;
   		  bigstate tmp;
   		  blockinfo* tbi;
+#ifdef JIT_DEBUG
+     		write_log("    branch detected: t1=0x%016llx, t2=0x%016llx, cc=%d\n", t1, t2, cc);
+#endif
   
     		if (taken_pc_p < next_pc_p) {
   	      /* backward branch. Optimize for the "taken" case ---
@@ -2464,11 +2341,11 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 #endif
     		compemu_raw_jcc_l_oponly(cc);  // Last emitted opcode is branch to target
   		  branchadd = (uae_u32*)get_target() - 1;
-		
+	
   		  /* predicted outcome */
   		  tbi = get_blockinfo_addr_new((void*)t1);
   		  match_states(tbi);
-		  
+		 
   		  tba = compemu_raw_endblock_pc_isconst(scaled_cycles(totcycles), t1);
   		  write_jmp_target(tba, get_handler(t1));
   		  create_jmpdep(bi, 0, tba, t1);
@@ -2524,7 +2401,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 	    }
 	  }
 
-#if USE_CHECKSUM_INFO
   	remove_from_list(bi);
   	if (trace_in_rom) {
   		// No need to checksum that block trace on cache invalidation
@@ -2536,25 +2412,6 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
   		calc_checksum(bi, &(bi->c1), &(bi->c2));
   		add_to_active(bi);
   	}
-#else
-  	if (next_pc_p >= max_pcp && next_pc_p < max_pcp + LONGEST_68K_INST)
-      max_pcp = next_pc_p;
-  	else
-  	  max_pcp += LONGEST_68K_INST;
-  
-  	bi->len = max_pcp - min_pcp;
-  	bi->min_pcp = min_pcp;
-  
-  	remove_from_list(bi);
-  	if (isinrom(min_pcp) && isinrom(max_pcp)) {
-      add_to_dormant(bi); /* No need to checksum it on cache flush.
-                  				   Please don't start changing ROMs in flight! */
-  	}
-  	else {
-      calc_checksum(bi, &(bi->c1), &(bi->c2));
-      add_to_active(bi);
-  	}
-#endif
 
 	  current_cache_size += get_target() - (uae_u8 *)current_compile_p;
 

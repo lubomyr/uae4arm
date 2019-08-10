@@ -352,8 +352,7 @@ MIDFUNC(2,mov_l_rr,(W4 d, RR4 s))
 	s = readreg(s);
 	live.state[d].realreg = s;
 	live.state[d].realind = live.nat[s].nholds;
-	live.state[d].val = live.state[olds].val;
-	live.state[d].validsize = 4;
+	live.state[d].val = 0;
 	set_status(d, DIRTY);
 
 	live.nat[s].holds[live.nat[s].nholds] = d;

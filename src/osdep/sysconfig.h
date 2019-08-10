@@ -13,10 +13,8 @@
 #define FILESYS /* filesys emulation */
 #define UAE_FILESYS_THREADS
 #define AUTOCONFIG /* autoconfig support, fast ram, harddrives etc.. */
-#if !defined(CPU_AARCH64)
 #define JIT /* JIT compiler support */
-#endif
-#if defined(ARMV6T2)
+#if defined(ARMV6T2) || defined(CPU_AARCH64)
 #define USE_JIT_FPU
 #endif
 /* #define NATMEM_OFFSET regs.natmem_offset */

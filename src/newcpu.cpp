@@ -337,8 +337,6 @@ static void build_cpufunctbl (void)
   	}
   }
 #ifdef JIT
-	write_log(_T("JIT: &countdown =  %p\n"), &countdown);
-	write_log(_T("JIT: &build_comp = %p\n"), &build_comp);
   build_comp ();
 #endif
 
@@ -1603,8 +1601,9 @@ static void m68k_run_1 (void)
 
 #ifdef JIT  /* Completely different run_2 replacement */
 
-void execute_exception(void)
+void execute_exception(uae_u32 cycles)
 {
+  countdown -= cycles;
   Exception_cpu(regs.jit_exception);
   regs.jit_exception = 0;
   cpu_cycles = adjust_cycles(4 * CYCLE_UNIT / 2);
@@ -1655,7 +1654,7 @@ void execute_normal(void)
 		regs.instruction_pc = m68k_getpc ();
 		r->opcode = get_diword(0);
 
-  	special_mem = DISTRUST_CONSISTENT_MEM;
+  	special_mem = 0;
   	pc_hist[blocklen].location = (uae_u16*)r->pc_p;
 
   	cpu_cycles = (*cpufunctbl[r->opcode])(r->opcode);

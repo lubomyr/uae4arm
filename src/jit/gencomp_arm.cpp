@@ -2681,10 +2681,10 @@ static int gen_opcode(unsigned int opcode)
 		case 1:
 			break; /* This is silly! */
 		case 8:
-			failure;
+      //failure;
 			break; /* Work out details! FIXME */
 		case 9:
-			failure;
+			//failure;
 			break; /* Not critical, though! */
 
 		case 2:
@@ -3272,7 +3272,7 @@ static void generate_one_opcode(int rp, int noflags)
 
 	next_cpu_level = -1;
   if (table68k[opcode].mnemo == i_DIVU || table68k[opcode].mnemo == i_DIVS || table68k[opcode].mnemo == i_DIVL) {
-    comprintf("#ifndef ARMV6T2\n");
+    comprintf("#if !defined(ARMV6T2) && !defined(CPU_AARCH64)\n");
     comprintf("  FAIL(1);\n");
     comprintf("  " RETURN "\n");
     comprintf("#else\n");
