@@ -18,7 +18,10 @@ SDK Tools (tab)
 - Android SDK Build-Tools
 - Android SDK Platform-Tools
 - Android SDK Tools
-- NDK
+
+Download ndk ver r17b (newer (higher) versions not supported)
+https://dl.google.com/android/repository/android-ndk-r17b-linux-x86_64.zip
+unzip it into ~/Android directory
 
 copy path from Android SDK Location field
 
@@ -27,7 +30,7 @@ copy path from Android SDK Location field
 #!/bin/sh
 
 export ANDROID_HOME=~/Android/Sdk
-export ANDROID_NDK_HOME=~/Android/Sdk/ndk-bundle
+export ANDROID_NDK_HOME=~/Android/android-ndk-r17b
 export PATH=$ANDROID_NDK_HOME:$ANDROID_HOME/tools:$PATH
 ----------------------------------------------------------
 now you can run android build environment via console
@@ -37,6 +40,8 @@ now you can run android build environment via console
 6. Install pelya's libSDL-environment
 cd ~
 git clone git://github.com/pelya/commandergenius androidsdl
+cd androidsdl
+git checkout aa7919811
 git submodule update --init project/jni/iconv/src
 
 
