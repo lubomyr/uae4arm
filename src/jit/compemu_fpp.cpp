@@ -25,7 +25,7 @@ extern void fpp_to_exten(fpdata *fpd, uae_u32 wrd1, uae_u32 wrd2, uae_u32 wrd3);
 static const int sz1[8] = { 4, 4, 12, 12, 2, 8, 1, 0 };
 static const int sz2[8] = { 4, 4, 12, 12, 2, 8, 2, 0 };
 
-#ifdef ANDROID
+#if defined(ANDROID) && !defined(CPU_AARCH64)
 STATIC_INLINE double log2( double n )  
 {  
     // log(n)/log(2) is log2.  

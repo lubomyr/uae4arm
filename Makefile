@@ -1,14 +1,18 @@
-ifeq ($(PLATFORM),)
-	PLATFORM = android
-endif
-
-ifeq ($(PLATFORM),android)
+ifeq ($(arch),armeabi-v7a)
 	CPU_FLAGS += -mfpu=vfp
-	DEFS += -DANDROIDSDL
+	DEFS += -DANDROIDSDL -DUSE_SDL -DPANDORA
+    DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV
 	ANDROID = 1
 	USE_SDL_VERSION = sdl1
 	PROFILER_PATH = /storage/sdcard0/profile/
-else ifeq ($(PLATFORM),generic-sdl)
+else ifeq ($(arch),arm64-v8a)
+	DEFS += -DANDROIDSDL -DUSE_SDL -DPANDORA
+    DEFS += -DCPU_AARCH64
+	ANDROID = 1
+    AARCH64 = 1
+	USE_SDL_VERSION = sdl1
+	PROFILER_PATH = /storage/sdcard0/profile/
+else
 	USE_SDL_VERSION = sdl1
 endif
 
@@ -30,9 +34,6 @@ all: $(PROG)
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV -DPANDORA
-DEFS += -DUSE_SDL
-
 MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/archivers
 MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fuse-ld=gold -fdiagnostics-color=auto
@@ -44,7 +45,7 @@ LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan_sdl 
 ifndef DEBUG
 MORE_CFLAGS += -O2 -ffast-math -pipe
 MORE_CFLAGS += -frename-registers
-MORE_CFLAGS += -ftracer
+#MORE_CFLAGS += -ftracer
 # flags -Ofast and -funroll-loops caused crash on android
 else
   MORE_CFLAGS += -g -rdynamic -funwind-tables -mapcs-frame -DDEBUG -Wl,--export-dynamic
@@ -219,18 +220,17 @@ OBJS += src/osdep/gui/PanelOnScreen.o
 endif
 
 ifeq ($(USE_SDL_VERSION),sdl1)
-OBJS += src/osdep/gui/sdltruetypefont.o
-endif
-
-ifeq ($(PLATFORM),android)
+OBJS += src/sounddep/sound_sdl.o
 OBJS += src/osdep/pandora.o
 OBJS += src/osdep/pandora_gfx.o
 OBJS += src/osdep/pandora_input.o
-OBJS += src/sounddep/sound_sdl.o
+OBJS += src/osdep/gui/sdltruetypefont.o
 OBJS += src/osdep/gui/PanelGamePortPandora.o
 endif
 
-ifeq ($(PLATFORM),android)
+ifdef AARCH64
+    OBJS += src/osdep/aarch64_helper.o
+else ifeq ($(ANDROID), 1)
 	OBJS += src/osdep/arm_helper.o
 else
 	OBJS += src/osdep/neon_helper.o
