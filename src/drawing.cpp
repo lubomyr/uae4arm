@@ -1366,7 +1366,7 @@ Don't touch this if you don't know what you are doing.  */
 
 #define DATA_POINTER(n) (line_data[lineno] + (n) * MAX_WORDS_PER_LINE * 2)
 
-#if defined(CPU_AARCH64) || defined(USE_ARMNEON)
+#if !defined(ANDROID) && (defined(CPU_AARCH64) || defined(USE_ARMNEON))
 
 #ifdef __cplusplus
   extern "C" {
@@ -1471,7 +1471,7 @@ static void pfield_doline (int lineno)
   int wordcount = dp_for_drawing->plflinelen;
   uae_u32 *data = pixdata.apixels_l + MAX_PIXELS_PER_LINE / sizeof(uae_u32);
 
-#if defined(CPU_AARCH64) || defined(USE_ARMNEON)
+#if !defined(ANDROID) && (defined(CPU_AARCH64) || defined(USE_ARMNEON))
 
   pfield_doline_n[bplplanecnt](data, wordcount, lineno);
 
