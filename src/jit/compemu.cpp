@@ -16015,7 +16015,7 @@ uae_u32 REGPARAM2 op_51c8_0_comp_ff(uae_u32 opcode)
 	uae_u32 v2;
 	uae_u32 v1=get_const(PC_P);
 	v2=get_const(offs);
-	register_branch(v1, v2, 3);
+	register_branch(v1, v2, 2);
 	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }
@@ -43993,7 +43993,7 @@ uae_u32 REGPARAM2 op_51c8_0_comp_nf(uae_u32 opcode)
 	uae_u32 v2;
 	uae_u32 v1=get_const(PC_P);
 	v2=get_const(offs);
-	register_branch(v1, v2, 3);
+	register_branch(v1, v2, 2);
 	 if (m68k_pc_offset>SYNC_PC_OFFSET) sync_m68k_pc();
 return 0;
 }

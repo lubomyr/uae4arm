@@ -95,6 +95,14 @@ static const uae_u8 need_to_preserve[] = {0,0,0,0, 0,0,1,1, 1,1,1,1, 1,1,1,1, 1,
 
 #include "codegen_armA64.h"
 
+#define FIX_INVERTED_CARRY              \
+  if(flags_carry_inverted) {            \
+  	MRS_NZCV_x(REG_WORK1);              \
+  	EOR_xxCflag(REG_WORK1, REG_WORK1);  \
+  	MSR_NZCV_x(REG_WORK1);              \
+    flags_carry_inverted = false;       \
+  }
+
 
 STATIC_INLINE void SIGNED8_IMM_2_REG(W4 r, IM8 v) {
 	uae_s16 v16 = (uae_s16)(uae_s8)v;
@@ -135,9 +143,13 @@ STATIC_INLINE void SIGNED16_REG_2_REG(W4 d, RR4 s) {
 
 STATIC_INLINE void LOAD_U32(int r, uae_u32 val)
 {
-  MOV_xi(r, val);
-  if(val >> 16)
-    MOVK_xish(r, val >> 16, 16);
+  if((val & 0xffff0000) == 0xffff0000) {
+    MOVN_xi(r, ~val);
+  } else {
+    MOV_xi(r, val);
+    if(val >> 16)
+      MOVK_xish(r, val >> 16, 16);
+  }
 }
 
 STATIC_INLINE void LOAD_U64(int r, uae_u64 val)
@@ -178,6 +190,11 @@ STATIC_INLINE void raw_flags_to_reg(int r)
 {
   uintptr idx = (uintptr) &(regs.ccrflags.nzcv) - (uintptr) &regs;
 	MRS_NZCV_x(r);
+	if(flags_carry_inverted) {
+	  EOR_xxCflag(r, r);
+	  MSR_NZCV_x(r);
+	  flags_carry_inverted = false;
+	}
 	STR_wXi(r, R_REGSTRUCT, idx);
 	raw_flags_evicted(r);
 }
@@ -321,15 +338,17 @@ STATIC_INLINE void compemu_raw_call_r(RR4 r)
 
 STATIC_INLINE void compemu_raw_jcc_l_oponly(int cc)
 {
+  FIX_INVERTED_CARRY
+  
 	switch (cc) {
 		case NATIVE_CC_HI: // HI
 			BEQ_i(2);										// beq no jump
-			BCC_i(0);										// bcc jump
+ 			BCC_i(0);										// bcc jump
 			break;
 
 		case NATIVE_CC_LS: // LS
 			BEQ_i(2);										// beq jump
-			BCC_i(2);										// bcc no jump
+ 			BCC_i(2);										// bcc no jump
 			// jump
 			B_i(0); 
 			// no jump
@@ -341,7 +360,7 @@ STATIC_INLINE void compemu_raw_jcc_l_oponly(int cc)
 			break;
 
 		case NATIVE_CC_F_OGE: // Jump if valid and greater or equal
-			BVS_i(2);		// do not jump if NaN
+  		BVS_i(2);		// do not jump if NaN
 			BCS_i(0);		// jump if carry set
 			break;
 			

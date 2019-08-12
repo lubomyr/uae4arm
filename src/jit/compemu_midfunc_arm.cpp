@@ -2,6 +2,7 @@
  * compiler/compemu_midfunc_arm.cpp - Native MIDFUNCS for ARM
  *
  * Copyright (c) 2014 Jens Heitmann of ARAnyM dev team (see AUTHORS)
+ * Copyright (c) 2019 TomB
  *
  * Inspired by Christian Bauer's Basilisk II
  *
@@ -165,15 +166,8 @@ MENDFUNC(0,make_flags_live,(void))
 MIDFUNC(2,mov_l_mi,(IMPTR d, IM32 s))
 {
   /* d points always to memory in regs struct */
-#ifdef ARMV6T2
-  MOVW_ri16(REG_WORK2, s);
-  if(s >> 16)
-    MOVT_ri16(REG_WORK2, s >> 16);
-#else
-  uae_s32 offs = data_long_offs(s);
-  LDR_rRI(REG_WORK2, RPC_INDEX, offs);
-#endif
-  uae_s32 idx = d - (uae_u32) &regs;
+  LOAD_U32(REG_WORK2, s);
+  uintptr idx = d - (uintptr) &regs;
   STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
 }
 MENDFUNC(2,mov_l_mi,(IMPTR d, IM32 s))
@@ -268,14 +262,7 @@ MIDFUNC(3,lea_l_brr,(W4 d, RR4 s, IM32 offset))
   if(CHECK32(offset)) {
     ADD_rri(d, s, offset);
   } else {
-#ifdef ARMV6T2
-    MOVW_ri16(REG_WORK1, offset);
-    if(offset >> 16)
-      MOVT_ri16(REG_WORK1, offset >> 16);
-#else
-    uae_s32 offs = data_long_offs(offset);
-  	LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
+    LOAD_U32(REG_WORK1, offset);
   	ADD_rrr(d, s, REG_WORK1);
   }
 
@@ -289,10 +276,18 @@ MIDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
 		COMPCALL(lea_l_rr_indexed)(d, s, index, factor);
 		return;
 	}
+	if (isconst(s) && isconst(index)) {
+	  set_const(d, live.state[s].val + (uae_s32)(uae_s8)offset + live.state[index].val * factor);
+	  return;
+	}
 	
 	s = readreg(s);
-	index = readreg(index);
-	d = writereg(d);
+	if(d == index) {
+	  d = index = rmw(d);
+	} else {
+	  index = readreg(index);
+	  d = writereg(d);
+  }
 
 	int shft;
 	switch(factor) {
@@ -303,21 +298,34 @@ MIDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
   	default: abort();
 	}
 
-  SIGNED8_IMM_2_REG(REG_WORK1, offset);
-  ADD_rrr(REG_WORK1, s, REG_WORK1);
+  if(offset >= 0 && offset <= 127) {
+    ADD_rri(REG_WORK1, s, offset);
+  } else {
+    SUB_rri(REG_WORK1, s, -offset);
+  }
 	ADD_rrrLSLi(d, REG_WORK1, index, shft);
 
 	unlock2(d);
-	unlock2(index);
+  if(d != index)
+	  unlock2(index);
 	unlock2(s);
 }
 MENDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
 
 MIDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor))
 {
+	if (isconst(s) && isconst(index)) {
+	  set_const(d, live.state[s].val + live.state[index].val * factor);
+	  return;
+	}
+
 	s = readreg(s);
-	index = readreg(index);
-	d = writereg(d);
+	if(d == index) {
+	  d = index = rmw(d);
+	} else {
+	  index = readreg(index);
+	  d = writereg(d);
+  }
 
 	int shft;
 	switch(factor) {
@@ -331,7 +339,8 @@ MIDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor))
 	ADD_rrrLSLi(d, s, index, shft);
 
 	unlock2(d);
-	unlock2(index);
+  if(d != index)
+	  unlock2(index);
 	unlock2(s);
 }
 MENDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor))
@@ -371,7 +380,7 @@ MIDFUNC(2,mov_l_mr,(IMPTR d, RR4 s))
 	
 	s = readreg(s);
 
-  uae_s32 idx = d - (uae_u32) &regs;
+  uintptr idx = d - (uintptr) &regs;
   STR_rRI(s, R_REGSTRUCT, idx);
 
 	unlock2(s);
@@ -383,7 +392,7 @@ MIDFUNC(2,mov_l_rm,(W4 d, IMPTR s))
   /* s points always to memory in regs struct */
 	d = writereg(d);
 
-  uae_s32 idx = s - (uae_u32) & regs;
+  uintptr idx = s - (uintptr) &regs;
   LDR_rRI(d, R_REGSTRUCT, idx);
 
 	unlock2(d);
@@ -445,14 +454,9 @@ MIDFUNC(2,sub_w_ri,(RW2 d, IM8 i))
 	SUBS_rri(REG_WORK2, REG_WORK2, (i & 0xff) << 16);
   PKHTB_rrrASRi(d, d, REG_WORK2, 16);
 
-	MRS_CPSR(REG_WORK1);
-	EOR_rri(REG_WORK1, REG_WORK1, ARM_C_FLAG);
-	MSR_CPSRf_r(REG_WORK1);
-
 	unlock2(d);
 }
 MENDFUNC(2,sub_w_ri,(RW2 d, IM8 i))
-
 
 /* forget_about() takes a mid-layer register */
 MIDFUNC(1,forget_about,(W4 r))
@@ -464,8 +468,6 @@ MIDFUNC(1,forget_about,(W4 r))
 }
 MENDFUNC(1,forget_about,(W4 r))
 
-
-// ARM optimized functions
 
 MIDFUNC(2,arm_ADD_l,(RW4 d, RR4 s))
 {
@@ -496,14 +498,7 @@ MIDFUNC(2,arm_ADD_l_ri,(RW4 d, IM32 i))
 	if(CHECK32(i)) {
 		ADD_rri(d, d, i);
 	} else {
-#ifdef ARMV6T2
-	  MOVW_ri16(REG_WORK1, i);
-	  if(i >> 16)
-	    MOVT_ri16(REG_WORK1, i >> 16);
-#else
-	  uae_s32 offs = data_long_offs(i);
-		LDR_rRI(REG_WORK1, RPC_INDEX, offs);
-#endif
+    LOAD_U32(REG_WORK1, i);
 		ADD_rrr(d, d, REG_WORK1);
   }
 	
@@ -542,7 +537,6 @@ MIDFUNC(2,arm_SUB_l_ri8,(RW4 d, IM8 i))
 MENDFUNC(2,arm_SUB_l_ri8,(RW4 d, IM8 i))
 
 
-// Other
 STATIC_INLINE void flush_cpu_icache(void *start, void *stop)
 {
 	register void *_beg __asm ("a1") = start;
@@ -559,6 +553,7 @@ STATIC_INLINE void flush_cpu_icache(void *start, void *stop)
 		   		    : "0" (_beg), "r" (_end), "r" (_flg));
 	#endif
 }
+
 
 STATIC_INLINE void write_jmp_target(uae_u32* jmpaddr, uintptr a) 
 {

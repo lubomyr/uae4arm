@@ -186,10 +186,108 @@ static int handle_exception(mcontext_t *sigcont, long fault_addr)
   	if (ab)
   		output_log(_T("JIT: Address bank: %s, address %08x\n"), ab->name ? ab->name : _T("NONE"), amiga_addr);
     
-    // Analyse ARM instruction
+    // Analyse AARCH64 instruction
 	  const unsigned int opcode = ((uae_u32*)fault_pc)[0];
 		output_log(_T("JIT: AARCH64 opcode = 0x%08x\n"), opcode);
-	  
+#ifdef JIT_DEBUG
+extern void disam_range(void *start, void *stop);
+    disam_range((void*)(fault_pc - 128), (void*)(fault_pc + 32));
+#endif
+    transfer_type_t transfer_type = TYPE_UNKNOWN;
+	  int transfer_size = SIZE_UNKNOWN;
+
+    unsigned int masked_op = opcode & 0xfffffc00;
+    switch(masked_op) {
+      case 0x383b6800: // STRB_wXx
+				transfer_size = SIZE_BYTE;
+				transfer_type = TYPE_STORE;
+        break;
+
+      case 0x783b6800: // STRH_wXx
+				transfer_size = SIZE_WORD;
+				transfer_type = TYPE_STORE;
+        break;
+
+      case 0xb83b6800: // STR_wXx
+				transfer_size = SIZE_INT;
+				transfer_type = TYPE_STORE;
+        break;
+
+      case 0x387b6800: // LDRB_wXx
+				transfer_size = SIZE_BYTE;
+				transfer_type = TYPE_LOAD;
+        break;
+
+      case 0x787b6800: // LDRH_wXx
+				transfer_size = SIZE_WORD;
+				transfer_type = TYPE_LOAD;
+        break;
+
+      case 0xb87b6800: // LDR_wXx
+				transfer_size = SIZE_INT;
+				transfer_type = TYPE_LOAD;
+        break;
+
+  		default:
+  			output_log(_T("AARCH64: Handling of instruction 0x%08x not supported.\n"), opcode);
+    }
+
+  	if (transfer_size != SIZE_UNKNOWN) {
+      // Get AARCH64 register
+      int rd = opcode & 0x1f;
+
+      output_log(_T("%s %s register x%d\n"), 
+        transfer_size == SIZE_BYTE ? _T("byte") : transfer_size == SIZE_WORD ? _T("word") :	transfer_size == SIZE_INT ? _T("long") : _T("unknown"),
+    		transfer_type == TYPE_LOAD ? _T("load to") : _T("store from"),
+    		rd);
+
+    	if (transfer_type == TYPE_LOAD) {
+    	  // Perform load via indirect memory call
+    	  uae_u32 oldval = sigcont->regs[rd];
+    		switch(transfer_size) {
+    		  case SIZE_BYTE:
+    		    sigcont->regs[rd] = (uae_u8)get_byte(amiga_addr);
+    		    break;
+
+    		  case SIZE_WORD:
+    		    sigcont->regs[rd] = do_byteswap_16((uae_u16)get_word(amiga_addr));
+    		    break;
+
+    		  case SIZE_INT:
+    		    sigcont->regs[rd] = do_byteswap_32(get_long(amiga_addr));
+    		    break;
+    		}
+    	  output_log(_T("New value in x%d: 0x%08x (old: 0x%08x)\n"), rd, sigcont->regs[rd], oldval);
+    	} else {
+    	  // Perform store via indirect memory call
+    		switch(transfer_size) {
+    		  case SIZE_BYTE: {
+    		    put_byte(amiga_addr, sigcont->regs[rd]);
+    		    break;
+    		  }
+    		  case SIZE_WORD: {
+    		    put_word(amiga_addr, do_byteswap_16(sigcont->regs[rd]));
+    		    break;
+    		  }
+    		  case SIZE_INT: {
+    		    put_long(amiga_addr, do_byteswap_32(sigcont->regs[rd]));
+    		    break;
+    		  }
+    		}
+    	  output_log(_T("Stored value from x%d to 0x%08x\n"), rd, amiga_addr);
+    	}
+     	
+     	// Go to next instruction
+      sigcont->pc += 4;
+    	handled = HANDLE_EXCEPTION_OK;
+    	
+    	if (!delete_trigger(active, (void*)fault_pc)) {
+      	/* Not found in the active list. Might be a rom routine that
+      	 * is in the dormant list */
+      	delete_trigger(dormant, (void*)fault_pc);
+    	}
+    }
+
     break;
   }
 #endif

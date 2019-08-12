@@ -658,7 +658,7 @@ void m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 			// 32 * 32 = 32
 			uae_s32 b = (uae_s32)a;
       if ((a & UVAL64 (0xffffffff80000000)) != 0 && (a & UVAL64(0xffffffff80000000)) != UVAL64(0xffffffff80000000)) {
-	      SET_VFLG (1);
+  	    SET_VFLG (1);
 			}
 			SET_ZFLG(b == 0);
 			SET_NFLG(b < 0);
@@ -709,8 +709,8 @@ void m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 	  SET_CFLG (0);
 		if (extra & 0x400) {
 			m68k_dreg(regs, extra & 7) = dst_hi;
-	    SET_ZFLG (dst_hi == 0 && dst_lo == 0);
-	    SET_NFLG (((uae_s32)dst_hi) < 0);
+	  SET_ZFLG (dst_hi == 0 && dst_lo == 0);
+	  SET_NFLG (((uae_s32)dst_hi) < 0);
 		} else {
 			if ((dst_hi != 0 || (dst_lo & 0x80000000) != 0) && ((dst_hi & 0xffffffff) != 0xffffffff || (dst_lo & 0x80000000) != 0x80000000)) {
 	      SET_VFLG (1);
@@ -733,7 +733,7 @@ void m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
     	SET_NFLG (((uae_s32)dst_hi) < 0);
 		} else {
 			if (dst_hi != 0) {
-	      SET_VFLG (1);
+  	    SET_VFLG (1);
 			}
 			SET_ZFLG(dst_lo == 0);
 			SET_NFLG(((uae_s32)dst_lo) < 0);

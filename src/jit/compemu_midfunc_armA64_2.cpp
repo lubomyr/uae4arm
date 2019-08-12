@@ -52,15 +52,11 @@ const uae_u32 ARM_CCR_MAP[] = { 0, ARM_C_FLAG, // 1 C
 #define DUPLICACTE_CARRY            \
   if (needed_flags & FLAG_X) {      \
     int x = writereg(FLAGX);     		\
-    CSET_xc(x, NATIVE_CC_CS);       \
+    if (flags_carry_inverted)       \
+      CSET_xc(x, NATIVE_CC_CC);     \
+    else                            \
+      CSET_xc(x, NATIVE_CC_CS);     \
     unlock2(x);                     \
-  }
-
-#define DUPLICACTE_CARRY_FROM_REG(r)  \
-  if (needed_flags & FLAG_X) {        \
-    int x = writereg(FLAGX);       		\
-  	UBFX_xxii(x, r, 29, 1);           \
-    unlock2(x);                       \
   }
 
 /*
@@ -79,11 +75,6 @@ const uae_u32 ARM_CCR_MAP[] = { 0, ARM_C_FLAG, // 1 C
  */
 MIDFUNC(3,jnf_ADD_im8,(W4 d, RR4 s, IM8 v))
 {
-	if (isconst(s)) {
-		set_const(d, live.state[s].val + v);
-		return;
-	}
-
 	int s_is_d = (s == d);
 	if(s_is_d) {
 		s = d = rmw(d);
@@ -100,11 +91,6 @@ MENDFUNC(3,jnf_ADD_im8,(W4 d, RR4 s, IM8 v))
 
 MIDFUNC(2,jnf_ADD_b_imm,(RW1 d, IM8 v))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | (((live.state[d].val & 0xff) + (v & 0xff)) & 0x000000ff));
-		return;
-	}
-
 	INIT_REG_b(d);
 	
 	if(targetIsReg) {
@@ -140,18 +126,11 @@ MENDFUNC(2,jnf_ADD_b,(RW1 d, RR1 s))
 
 MIDFUNC(2,jnf_ADD_w_imm,(RW2 d, IM16 v))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | (((live.state[d].val & 0xffff) + (v & 0xffff)) & 0x0000ffff));
-		return;
-	}
-
 	INIT_REG_w(d);
 
 	if(targetIsReg) {
 	  if(v >= 0 && v <= 0xfff) {
 	    ADD_wwi(REG_WORK1, d, v);
-	  } else if(v >= -0xfff && v < 0) {
-	    SUB_wwi(REG_WORK1, d, -v);
 	  } else {
 		  MOV_xi(REG_WORK1, v & 0xffff);
 		  ADD_www(REG_WORK1, d, REG_WORK1);
@@ -160,8 +139,6 @@ MIDFUNC(2,jnf_ADD_w_imm,(RW2 d, IM16 v))
 	} else{
 	  if(v >= 0 && v <= 0xfff) {
 	    ADD_wwi(d, d, v);
-	  } else if(v >= -0xfff && v < 0) {
-	    SUB_wwi(d, d, -v);
 	  } else {
 		  MOV_xi(REG_WORK1, v & 0xffff);
 		  ADD_www(d, d, REG_WORK1);
@@ -195,7 +172,7 @@ MENDFUNC(2,jnf_ADD_w,(RW2 d, RR2 s))
 MIDFUNC(2,jnf_ADD_l_imm,(RW4 d, IM32 v))
 {
 	if (isconst(d)) {
-		set_const(d, live.state[d].val + v);
+		live.state[d].val = live.state[d].val + v;
 		return;
 	}
 
@@ -203,9 +180,8 @@ MIDFUNC(2,jnf_ADD_l_imm,(RW4 d, IM32 v))
 
   if(v >= 0 && v <= 0xfff) {
     ADD_wwi(d, d, v);
-  } else if(v >= -0xfff && v < 0) {
-    SUB_wwi(d, d, -v);
   } else {
+    // never reached...
     LOAD_U32(REG_WORK1, v);
 	  ADD_www(d, d, REG_WORK1);
   }
@@ -216,7 +192,11 @@ MENDFUNC(2,jnf_ADD_l_imm,(RW4 d, IM32 v))
 
 MIDFUNC(2,jnf_ADD_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
+	if (isconst(d) && isconst(s)) {
+		COMPCALL(jnf_ADD_l_imm)(d, live.state[s].val);
+		return;
+	}
+	if (isconst(s) && (uae_s32)live.state[s].val >= 0 && (uae_s32)live.state[s].val <= 0xfff) {
 		COMPCALL(jnf_ADD_l_imm)(d, live.state[s].val);
 		return;
 	}
@@ -237,6 +217,7 @@ MIDFUNC(2,jff_ADD_b_imm,(RW1 d, IM8 v))
   ADDS_wwwLSLi(REG_WORK1, REG_WORK2, d, 24);
   BFXIL_xxii(d, REG_WORK1, 24, 8);
 		
+  flags_carry_inverted = false;
   DUPLICACTE_CARRY
 
 	unlock2(d);
@@ -256,6 +237,7 @@ MIDFUNC(2,jff_ADD_b,(RW1 d, RR1 s))
   ADDS_wwwLSLi(REG_WORK1, REG_WORK2, d, 24);
   BFXIL_xxii(d, REG_WORK1, 24, 8);
 	
+  flags_carry_inverted = false;
   DUPLICACTE_CARRY
 
 	EXIT_REGS(d, s);
@@ -270,6 +252,7 @@ MIDFUNC(2,jff_ADD_w_imm,(RW2 d, IM16 v))
   ADDS_wwwLSLi(REG_WORK1, REG_WORK1, d, 16);
   BFXIL_xxii(d, REG_WORK1, 16, 16);
 	
+  flags_carry_inverted = false;
   DUPLICACTE_CARRY
 
 	unlock2(d);
@@ -289,6 +272,7 @@ MIDFUNC(2,jff_ADD_w,(RW2 d, RR2 s))
   ADDS_wwwLSLi(REG_WORK1, REG_WORK1, d, 16);
   BFXIL_xxii(d, REG_WORK1, 16, 16);
 
+  flags_carry_inverted = false;
   DUPLICACTE_CARRY
 
 	EXIT_REGS(d, s);
@@ -301,13 +285,13 @@ MIDFUNC(2,jff_ADD_l_imm,(RW4 d, IM32 v))
 
   if(v >= 0 && v <= 0xfff) {
     ADDS_wwi(d, d, v);
-  } else if(v >= -0xfff && v < 0) {
-    SUBS_wwi(d, d, -v);
   } else {
+    // never reached...
     LOAD_U32(REG_WORK2, v);
 	  ADDS_www(d, d, REG_WORK2);
   }
 
+  flags_carry_inverted = false;
   DUPLICACTE_CARRY
 
 	unlock2(d);
@@ -316,7 +300,7 @@ MENDFUNC(2,jff_ADD_l_imm,(RW4 d, IM32 v))
 
 MIDFUNC(2,jff_ADD_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
+	if (isconst(s) && (uae_s32)live.state[s].val >= 0 && (uae_s32)live.state[s].val <= 0xfff) {
 		COMPCALL(jff_ADD_l_imm)(d, live.state[s].val);
 		return;
 	}
@@ -325,6 +309,7 @@ MIDFUNC(2,jff_ADD_l,(RW4 d, RR4 s))
 
 	ADDS_www(d, d, s);
 
+  flags_carry_inverted = false;
   DUPLICACTE_CARRY
 
 	EXIT_REGS(d, s);
@@ -343,7 +328,21 @@ MENDFUNC(2,jff_ADD_l,(RW4 d, RR4 s))
 MIDFUNC(2,jnf_ADDA_w,(RW4 d, RR2 s))
 {
 	if (isconst(d) && isconst(s)) {
-		set_const(d, live.state[d].val + (uae_s32)(uae_s16)(live.state[s].val & 0xffff));
+		live.state[d].val = live.state[d].val + (uae_s32)(uae_s16)(live.state[s].val & 0xffff);
+		return;
+	}
+	if (isconst(s)) {
+    // no need to put virt. register s into a real host register via readreg()
+		d = rmw(d);
+		if((uae_s16)live.state[s].val >= 0 && (uae_s16)live.state[s].val <= 0xfff) {
+		  ADD_wwi(d, d, live.state[s].val);
+    } else if ((uae_s16)live.state[s].val >= -0xfff && (uae_s16)live.state[s].val < 0) {
+		  SUB_wwi(d, d, -(uae_s16)live.state[s].val);
+		} else {
+		  SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+		  ADD_www(d, d, REG_WORK1);
+  	}
+		unlock2(d);
 		return;
 	}
 
@@ -359,6 +358,12 @@ MIDFUNC(2,jnf_ADDA_l,(RW4 d, RR4 s))
 {
 	if (isconst(d) && isconst(s)) {
 		set_const(d, live.state[d].val + live.state[s].val);
+		return;
+	}
+	if (isconst(s) && (uae_s32)live.state[s].val >= 0 && (uae_s32)live.state[s].val <= 0xfff) {
+		d = rmw(d);
+    ADD_wwi(d, d, (uae_s32)live.state[s].val);
+		unlock2(d);
 		return;
 	}
 
@@ -389,24 +394,16 @@ MENDFUNC(2,jnf_ADDA_l,(RW4 d, RR4 s))
 MIDFUNC(2,jnf_ADDX_b,(RW1 d, RR1 s))
 {
   int x = readreg(FLAGX);
+
 	INIT_REGS_b(d, s);
 
-	if(targetIsReg) {
-		if(s_is_d) {
-			ADD_wwwLSLi(REG_WORK1, x, d, 1);
-		} else {
-			ADD_www(REG_WORK1, d, s);
-		  ADD_www(REG_WORK1, REG_WORK1, x);
-		}
-	  BFI_xxii(d, REG_WORK1, 0, 8);
+	if(s_is_d) {
+		ADD_wwwLSLi(REG_WORK1, x, d, 1);
 	} else {
-		if(s_is_d) {
-		  ADD_wwwLSLi(d, x, d, 1);
-		} else {
-			ADD_www(d, d, s);
-		  ADD_www(d, d, x);
-		}
+		ADD_www(REG_WORK1, d, s);
+	  ADD_www(REG_WORK1, REG_WORK1, x);
 	}
+  BFI_xxii(d, REG_WORK1, 0, 8);
 
 	EXIT_REGS(d, s);
 	unlock2(x);
@@ -416,24 +413,16 @@ MENDFUNC(2,jnf_ADDX_b,(RW1 d, RR1 s))
 MIDFUNC(2,jnf_ADDX_w,(RW2 d, RR2 s))
 {
   int x = readreg(FLAGX);
+
 	INIT_REGS_w(d, s);
 
-	if(targetIsReg) {
-		if(s_is_d) {
-			ADD_wwwLSLi(REG_WORK1, x, d, 1);
-		} else {
-			ADD_www(REG_WORK1, d, s);
-		  ADD_www(REG_WORK1, REG_WORK1, x);
-		}
-	  BFI_xxii(d, REG_WORK1, 0, 16);
+	if(s_is_d) {
+		ADD_wwwLSLi(REG_WORK1, x, d, 1);
 	} else {
-		if(s_is_d) {
-		  ADD_wwwLSLi(d, x, d, 1);
-		} else {
-			ADD_www(d, d, s);
-		  ADD_www(d, d, x);
-		}
+		ADD_www(REG_WORK1, d, s);
+	  ADD_www(REG_WORK1, REG_WORK1, x);
 	}
+  BFI_xxii(d, REG_WORK1, 0, 16);
 
 	EXIT_REGS(d, s);
 	unlock2(x);
@@ -443,6 +432,16 @@ MENDFUNC(2,jnf_ADDX_w,(RW2 d, RR2 s))
 MIDFUNC(2,jnf_ADDX_l,(RW4 d, RR4 s))
 {
   int x = readreg(FLAGX);
+
+  if(s != d && isconst(s) && live.state[s].val >= 0 && live.state[s].val <= 0xfff) {
+    d = rmw(d);
+    ADD_wwi(d, d, live.state[s].val);
+	  ADD_www(d, d, x);
+    unlock2(d);
+    unlock2(x);
+    return;
+  }
+
 	INIT_REGS_l(d, s);
 
 	if(s_is_d) {
@@ -462,14 +461,13 @@ MIDFUNC(2,jff_ADDX_b,(RW1 d, RR1 s))
 	INIT_REGS_b(d, s);
   int x = rmw(FLAGX);
 
-	MOVN_xi(REG_WORK2, 0);
-	MOVN_xish(REG_WORK1, 0x4000, 16); // inverse Z flag
-	CSEL_xxxc(REG_WORK2, REG_WORK1, REG_WORK2, NATIVE_CC_NE);
+	MOVN_xi(REG_WORK1, 0);
+	MOVN_xish(REG_WORK2, 0x4000, 16); // inverse Z flag
+	CSEL_xxxc(REG_WORK2, REG_WORK2, REG_WORK1, NATIVE_CC_NE);
 
 	// Restore X to carry (don't care about other flags)
-	SUBS_wwi(REG_WORK1, x, 1);
+	SUBS_wwi(REG_WORK3, x, 1);
 
-	MOVN_xi(REG_WORK1, 0);
 	BFI_xxii(REG_WORK1, s, 24, 8);
 	LSL_wwi(REG_WORK3, d, 24);
   ADCS_www(REG_WORK1, REG_WORK1, REG_WORK3);
@@ -477,9 +475,11 @@ MIDFUNC(2,jff_ADDX_b,(RW1 d, RR1 s))
 
 	MRS_NZCV_x(REG_WORK1);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
-	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
+  if (needed_flags & FLAG_X)
+  	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK1);
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, s);
 }
@@ -490,14 +490,13 @@ MIDFUNC(2,jff_ADDX_w,(RW2 d, RR2 s))
 	INIT_REGS_w(d, s);
   int x = rmw(FLAGX);
 
-	MOVN_xi(REG_WORK2, 0);
-	MOVN_xish(REG_WORK1, 0x4000, 16); // inverse Z flag
-	CSEL_xxxc(REG_WORK2, REG_WORK1, REG_WORK2, NATIVE_CC_NE);
+	MOVN_xi(REG_WORK1, 0);
+	MOVN_xish(REG_WORK2, 0x4000, 16); // inverse Z flag
+	CSEL_xxxc(REG_WORK2, REG_WORK2, REG_WORK1, NATIVE_CC_NE);
 
 	// Restore X to carry (don't care about other flags)
-	SUBS_wwi(REG_WORK1, x, 1);
+	SUBS_wwi(REG_WORK3, x, 1);
 
-	MOVN_xi(REG_WORK1, 0);
 	BFI_xxii(REG_WORK1, s, 16, 16);
 	LSL_wwi(REG_WORK3, d, 16);
   ADCS_www(REG_WORK1, REG_WORK1, REG_WORK3);
@@ -505,9 +504,11 @@ MIDFUNC(2,jff_ADDX_w,(RW2 d, RR2 s))
 
 	MRS_NZCV_x(REG_WORK1);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
-	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
+	if (needed_flags & FLAG_X)
+  	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK1);
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, s);
 }
@@ -518,20 +519,22 @@ MIDFUNC(2,jff_ADDX_l,(W4 d, RR4 s))
 	INIT_REGS_l(d, s);
   int x = rmw(FLAGX);
 
-	MOVN_xi(REG_WORK2, 0);
-	MOVN_xish(REG_WORK1, 0x4000, 16); // inverse Z flag
-	CSEL_xxxc(REG_WORK2, REG_WORK1, REG_WORK2, NATIVE_CC_NE);
+	MOVN_xi(REG_WORK1, 0);
+	MOVN_xish(REG_WORK2, 0x4000, 16); // inverse Z flag
+	CSEL_xxxc(REG_WORK2, REG_WORK2, REG_WORK1, NATIVE_CC_NE);
 
 	// Restore X to carry (don't care about other flags)
-	SUBS_wwi(REG_WORK1, x, 1);
+	SUBS_wwi(REG_WORK3, x, 1);
 
 	ADCS_www(d, d, s);
 
 	MRS_NZCV_x(REG_WORK1);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
-	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
+	if (needed_flags & FLAG_X)
+  	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK1);
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, s);
 }
@@ -553,6 +556,10 @@ MENDFUNC(2,jff_ADDX_l,(W4 d, RR4 s))
 MIDFUNC(2,jff_ANDSR,(IM32 s, IM8 x))
 {
 	MRS_NZCV_x(REG_WORK1);
+  if(flags_carry_inverted) {
+    EOR_xxCflag(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
+  }
 	MOV_xish(REG_WORK2, (s >> 16), 16);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
 	MSR_NZCV_x(REG_WORK1);
@@ -582,7 +589,7 @@ MENDFUNC(2,jff_ANDSR,(IM32 s, IM8 x))
 MIDFUNC(2,jnf_AND_b_imm,(RW1 d, IM8 v))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | ((live.state[d].val & v) & 0x000000ff));
+		live.state[d].val = (live.state[d].val & 0xffffff00) | ((live.state[d].val & v) & 0x000000ff);
 		return;
 	}
 
@@ -617,11 +624,6 @@ MENDFUNC(2,jnf_AND_b,(RW1 d, RR1 s))
 
 MIDFUNC(2,jnf_AND_w_imm,(RW2 d, IM16 v))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | ((live.state[d].val & v) & 0x0000ffff));
-		return;
-	}
-
 	INIT_REG_w(d);
 
   MOVN_xi(REG_WORK1, (~v));
@@ -651,29 +653,8 @@ MIDFUNC(2,jnf_AND_w,(RW2 d, RR2 s))
 }
 MENDFUNC(2,jnf_AND_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jnf_AND_l_imm,(RW4 d, IM32 v))
-{
-	if (isconst(d)) {
-		set_const(d, live.state[d].val & v);
-		return;
-	}
-
-	d = rmw(d);
-
-  LOAD_U32(REG_WORK1, v);
-  AND_www(d, d, REG_WORK1);
-
-	unlock2(d);
-}
-MENDFUNC(2,jnf_AND_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jnf_AND_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jnf_AND_l_imm)(d, live.state[s].val);
-		return;
-	}
-
 	INIT_REGS_l(d, s);
 
 	AND_www(d, d, s);
@@ -695,6 +676,7 @@ MIDFUNC(2,jff_AND_b_imm,(RW1 d, IM8 v))
 		ANDS_www(d, REG_WORK1, REG_WORK2);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_AND_b_imm,(RW1 d, IM8 v))
@@ -717,6 +699,7 @@ MIDFUNC(2,jff_AND_b,(RW1 d, RR1 s))
 		ANDS_www(d, REG_WORK1, REG_WORK2);
 	}
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_AND_b,(RW1 d, RR1 s))
@@ -734,6 +717,7 @@ MIDFUNC(2,jff_AND_w_imm,(RW2 d, IM16 v))
 		ANDS_www(d, REG_WORK1, REG_WORK2);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_AND_w_imm,(RW2 d, IM16 v))
@@ -756,32 +740,18 @@ MIDFUNC(2,jff_AND_w,(RW2 d, RR2 s))
 		ANDS_www(d, REG_WORK1, REG_WORK2);
 	}
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_AND_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jff_AND_l_imm,(RW4 d, IM32 v))
-{
-	d = rmw(d);
-
-  LOAD_U32(REG_WORK2, v);
-  ANDS_www(d, d, REG_WORK2);
-
-	unlock2(d);
-}
-MENDFUNC(2,jff_AND_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jff_AND_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jff_AND_l_imm)(d, live.state[s].val);
-		return;
-	}
-
 	INIT_REGS_l(d, s);
 
 	ANDS_www(d, d, s);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_AND_l,(RW4 d, RR4 s))
@@ -812,26 +782,36 @@ MIDFUNC(2,jff_ASL_b_imm,(RW1 d, IM8 i))
 		
 	LSL_wwi(REG_WORK3, d, 24);
 	if (i) {
-    LSL_wwi(REG_WORK2, REG_WORK3, i);
+    LSL_xxi(REG_WORK2, REG_WORK3, i);
     BFXIL_xxii(d, REG_WORK2, 24, 8);  // result is ready
     TST_ww(REG_WORK2, REG_WORK2);     // NZ correct, VC cleared
-    MRS_NZCV_x(REG_WORK4);
     
-		// Calculate C Flag
-    TBZ_wii(REG_WORK3, (32 - i), 2);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
+    if (needed_flags & FLAG_V) {
+		  // Calculate C Flag
+      MRS_NZCV_x(REG_WORK4);
+      TBZ_xii(REG_WORK2, 32, 2);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      
+		  // Calculate V Flag
+      CLS_ww(REG_WORK1, REG_WORK3);
+      CMP_wi(REG_WORK1, i);
+      BGE_i(2);
+      SET_xxVflag(REG_WORK4, REG_WORK4);
+
+      MSR_NZCV_x(REG_WORK4);
+    } else {
+  		// Calculate C Flag
+      TBZ_xii(REG_WORK2, 32, 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }    
     
-		// Calculate V Flag
-    CLS_ww(REG_WORK1, REG_WORK3);
-    CMP_wi(REG_WORK1, i);
-    BGE_i(2);
-    SET_xxVflag(REG_WORK4, REG_WORK4);
-    
-    MSR_NZCV_x(REG_WORK4);
-    
-		DUPLICACTE_CARRY_FROM_REG(REG_WORK4);
+    flags_carry_inverted = false;
+		DUPLICACTE_CARRY
 	} else {
 		TST_ww(REG_WORK3, REG_WORK3);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -847,26 +827,36 @@ MIDFUNC(2,jff_ASL_w_imm,(RW2 d, IM8 i))
 		
 	LSL_wwi(REG_WORK3, d, 16);
 	if (i) {
-    LSL_wwi(REG_WORK2, REG_WORK3, i);
+    LSL_xxi(REG_WORK2, REG_WORK3, i);
     BFXIL_xxii(d, REG_WORK2, 16, 16); // result is ready
     TST_ww(REG_WORK2, REG_WORK2);     // NZ correct, VC cleared
-    MRS_NZCV_x(REG_WORK4);
     
-		// Calculate C Flag
-    TBZ_wii(REG_WORK3, (32 - i), 2);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
+    if (needed_flags & FLAG_V) {
+		  // Calculate C Flag
+      MRS_NZCV_x(REG_WORK4);
+      TBZ_xii(REG_WORK2, 32, 2);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
     
-		// Calculate V Flag
-    CLS_ww(REG_WORK1, REG_WORK3);
-    CMP_wi(REG_WORK1, i);
-    BGE_i(2);
-    SET_xxVflag(REG_WORK4, REG_WORK4);
+		  // Calculate V Flag
+      CLS_ww(REG_WORK1, REG_WORK3);
+      CMP_wi(REG_WORK1, i);
+      BGE_i(2);
+      SET_xxVflag(REG_WORK4, REG_WORK4);
+
+      MSR_NZCV_x(REG_WORK4);
+    } else {
+  		// Calculate C Flag
+      TBZ_xii(REG_WORK2, 32, 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }    
     
-    MSR_NZCV_x(REG_WORK4);
-    
-		DUPLICACTE_CARRY_FROM_REG(REG_WORK4);
+    flags_carry_inverted = false;
+		DUPLICACTE_CARRY
 	} else {
 		TST_ww(REG_WORK3, REG_WORK3);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -881,26 +871,37 @@ MIDFUNC(2,jff_ASL_l_imm,(RW4 d, IM8 i))
 		d = readreg(d);
 
 	if (i) {
-  	MOV_ww(REG_WORK3, d);
-    LSL_wwi(d, REG_WORK3, i);
+    if (needed_flags & FLAG_V)
+  	  MOV_ww(REG_WORK3, d);
+    LSL_xxi(d, d, i);
     TST_ww(d, d);               // NZ correct, VC cleared
-    MRS_NZCV_x(REG_WORK4);
     
-		// Calculate C Flag
-    TBZ_wii(REG_WORK3, (32 - i), 2);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
+    if (needed_flags & FLAG_V) {
+		  // Calculate C Flag
+      MRS_NZCV_x(REG_WORK4);
+      TBZ_xii(d, 32, 2);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
     
-		// Calculate V Flag
-    CLS_ww(REG_WORK1, REG_WORK3);
-    CMP_wi(REG_WORK1, i);
-    BGE_i(2);
-    SET_xxVflag(REG_WORK4, REG_WORK4);
+		  // Calculate V Flag
+      CLS_ww(REG_WORK1, REG_WORK3);
+      CMP_wi(REG_WORK1, i);
+      BGE_i(2);
+      SET_xxVflag(REG_WORK4, REG_WORK4);
+
+      MSR_NZCV_x(REG_WORK4);
+    } else {
+  		// Calculate C Flag
+      TBZ_xii(d, 32, 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }    
     
-    MSR_NZCV_x(REG_WORK4);
-    
-		DUPLICACTE_CARRY_FROM_REG(REG_WORK4);
+    flags_carry_inverted = false;
+		DUPLICACTE_CARRY
 	} else {
 		TST_ww(d, d);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -914,7 +915,7 @@ MIDFUNC(2,jff_ASL_b_reg,(RW1 d, RR4 i))
   int x = writereg(FLAGX);
   
 	LSL_wwi(REG_WORK3, d, 24);
-	ANDS_ww7f(REG_WORK1, i);
+	ANDS_ww3f(REG_WORK1, i);
   BNE_i(3);
   
   // shift count is 0
@@ -926,21 +927,30 @@ MIDFUNC(2,jff_ASL_b_reg,(RW1 d, RR4 i))
   LSL_xxx(REG_WORK2, REG_WORK3, REG_WORK1);
   BFXIL_xxii(d, REG_WORK2, 24, 8);  // result is ready
   TST_ww(REG_WORK2, REG_WORK2);     // NZ correct, VC cleared
-  MRS_NZCV_x(REG_WORK4);
 	
-	// Calculate C Flag
-  TBZ_xii(REG_WORK2, 32, 2);
-  SET_xxCflag(REG_WORK4, REG_WORK4);
+  if (needed_flags & FLAG_V) {
+	  // Calculate C Flag
+    MRS_NZCV_x(REG_WORK4);
+    TBZ_xii(REG_WORK2, 32, 2);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
 	
-	// Calculate V Flag
-	CLS_ww(REG_WORK2, REG_WORK3);
-	CMP_ww(REG_WORK2, REG_WORK1);
-	BGE_i(2);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
+	  // Calculate V Flag
+	  CLS_ww(REG_WORK2, REG_WORK3);
+	  CMP_ww(REG_WORK2, REG_WORK1);
+	  BGE_i(2);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
 
-  MSR_NZCV_x(REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  } else {
+  	// Calculate C Flag
+    TBZ_xii(REG_WORK2, 32, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
   
-	DUPLICACTE_CARRY_FROM_REG(REG_WORK4);
+  flags_carry_inverted = false;
+	DUPLICACTE_CARRY
   
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
@@ -958,8 +968,7 @@ MIDFUNC(2,jff_ASL_w_reg,(RW2 d, RR4 i))
   int x = writereg(FLAGX);
 
 	LSL_wwi(REG_WORK3, d, 16);
-	MOV_wi(REG_WORK2, 63);
-	ANDS_www(REG_WORK1, i, REG_WORK2);
+	ANDS_ww3f(REG_WORK1, i);
   BNE_i(3);
   
   // shift count is 0
@@ -971,21 +980,30 @@ MIDFUNC(2,jff_ASL_w_reg,(RW2 d, RR4 i))
   LSL_xxx(REG_WORK2, REG_WORK3, REG_WORK1);
   BFXIL_xxii(d, REG_WORK2, 16, 16); // result is ready
   TST_ww(REG_WORK2, REG_WORK2);     // NZ correct, VC cleared
-  MRS_NZCV_x(REG_WORK4);
 	
-	// Calculate C Flag
-  TBZ_xii(REG_WORK2, 32, 2);
-  SET_xxCflag(REG_WORK4, REG_WORK4);
+  if (needed_flags & FLAG_V) {
+	  // Calculate C Flag
+    MRS_NZCV_x(REG_WORK4);
+    TBZ_xii(REG_WORK2, 32, 2);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
 	
-	// Calculate V Flag
-	CLS_ww(REG_WORK2, REG_WORK3);
-	CMP_ww(REG_WORK2, REG_WORK1);
-	BGE_i(2);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
+	  // Calculate V Flag
+	  CLS_ww(REG_WORK2, REG_WORK3);
+	  CMP_ww(REG_WORK2, REG_WORK1);
+	  BGE_i(2);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
 
-  MSR_NZCV_x(REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  } else {
+  	// Calculate C Flag
+    TBZ_xii(REG_WORK2, 32, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
   
-	DUPLICACTE_CARRY_FROM_REG(REG_WORK4);
+  flags_carry_inverted = false;
+	DUPLICACTE_CARRY
   
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
@@ -1002,9 +1020,7 @@ MIDFUNC(2,jff_ASL_l_reg,(RW4 d, RR4 i))
 	d = rmw(d);
   int x = writereg(FLAGX);
 
-	MOV_ww(REG_WORK3, d);
-	MOV_wi(REG_WORK2, 63);
-	ANDS_www(REG_WORK1, i, REG_WORK2);
+	ANDS_ww3f(REG_WORK1, i);
   BNE_i(3);
   
   // shift count is 0
@@ -1013,23 +1029,34 @@ MIDFUNC(2,jff_ASL_l_reg,(RW4 d, RR4 i))
   B_i(0); // <end>
   
   // shift count > 0
-  LSL_xxx(d, REG_WORK3, REG_WORK1);
+  if (needed_flags & FLAG_V)
+	  MOV_ww(REG_WORK3, d);
+  LSL_xxx(d, d, REG_WORK1);
   TST_ww(d, d);                     // NZ correct, VC cleared
-  MRS_NZCV_x(REG_WORK4);
 	
-	// Calculate C Flag
-  TBZ_xii(d, 32, 2);
-  SET_xxCflag(REG_WORK4, REG_WORK4);
+  if (needed_flags & FLAG_V) {
+	  // Calculate C Flag
+    MRS_NZCV_x(REG_WORK4);
+    TBZ_xii(d, 32, 2);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
 	
-	// Calculate V Flag
-	CLS_ww(REG_WORK2, REG_WORK3);
-	CMP_ww(REG_WORK2, REG_WORK1);
-	BGE_i(2);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
+	  // Calculate V Flag
+	  CLS_ww(REG_WORK2, REG_WORK3);
+	  CMP_ww(REG_WORK2, REG_WORK1);
+	  BGE_i(2);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
 
-  MSR_NZCV_x(REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  } else {
+  	// Calculate C Flag
+    TBZ_xii(d, 32, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
   
-	DUPLICACTE_CARRY_FROM_REG(REG_WORK4);
+  flags_carry_inverted = false;
+	DUPLICACTE_CARRY
   
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
@@ -1056,11 +1083,6 @@ MENDFUNC(2,jff_ASL_l_reg,(RW4 d, RR4 i))
  */
 MIDFUNC(1,jnf_ASLW,(RW2 d))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val << 1) & 0xffff);
-		return;
-	}
-
 	d = rmw(d);
 
 	LSL_wwi(d, d, 1);
@@ -1075,21 +1097,30 @@ MIDFUNC(1,jff_ASLW,(RW2 d))
 
   LSL_wwi(REG_WORK1, d, 17);
   TST_ww(REG_WORK1, REG_WORK1);
-  MRS_NZCV_x(REG_WORK4);
 
-  // Calculate C flag
-  TBZ_wii(d, 15, 2);
-  SET_xxCflag(REG_WORK4, REG_WORK4);
+  if (needed_flags & FLAG_V) {
+    // Calculate C flag
+    MRS_NZCV_x(REG_WORK4);
+    TBZ_wii(d, 15, 2);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
 
-  // Calculate V flag
-  EOR_wwwLSLi(REG_WORK1, d, d, 1); // eor bit15 and bit14 of source
-  TBZ_wii(REG_WORK1, 15, 2);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
-  
+    // Calculate V flag
+    EOR_wwwLSLi(REG_WORK1, d, d, 1); // eor bit15 and bit14 of source
+    TBZ_wii(REG_WORK1, 15, 2);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
+
+    MSR_NZCV_x(REG_WORK4);
+  } else {
+    // Calculate C flag
+    TBZ_wii(d, 15, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxCflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
   LSL_wwi(d, d, 1);
 
-  MSR_NZCV_x(REG_WORK4);
-	DUPLICACTE_CARRY_FROM_REG(REG_WORK4)
+  flags_carry_inverted = false;
+	DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -1108,8 +1139,6 @@ MENDFUNC(1,jff_ASLW,(RW2 d))
  * Z Set if the result is zero. Cleared otherwise.
  * V Set if the most significant bit is changed at any time during the shift operation. Cleared otherwise. Shift right -> always 0
  * C Set according to the last bit shifted out of the operand. Cleared for a shift count of zero.
- *
- * imm version only called with 1 <= i <= 8
  *
  */
 MIDFUNC(2,jnf_ASR_b_imm,(RW1 d, IM8 i))
@@ -1171,9 +1200,11 @@ MIDFUNC(2,jff_ASR_b_imm,(RW1 d, IM8 i))
     SET_xxCflag(REG_WORK4, REG_WORK4);
 	  MSR_NZCV_x(REG_WORK4);
 	  
+    flags_carry_inverted = false;
 		DUPLICACTE_CARRY
 	} else {
 		TST_ww(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -1199,9 +1230,11 @@ MIDFUNC(2,jff_ASR_w_imm,(RW2 d, IM8 i))
     SET_xxCflag(REG_WORK4, REG_WORK4);
 	  MSR_NZCV_x(REG_WORK4);
 	  
+    flags_carry_inverted = false;
 		DUPLICACTE_CARRY
 	} else {
 		TST_ww(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -1226,9 +1259,11 @@ MIDFUNC(2,jff_ASR_l_imm,(RW4 d, IM8 i))
     SET_xxCflag(REG_WORK4, REG_WORK4);
 	  MSR_NZCV_x(REG_WORK4);
 
+    flags_carry_inverted = false;
 		DUPLICACTE_CARRY
 	} else {
 		TST_ww(d, d);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -1237,6 +1272,11 @@ MENDFUNC(2,jff_ASR_l_imm,(RW4 d, IM8 i))
 
 MIDFUNC(2,jnf_ASR_b_reg,(RW1 d, RR4 i)) 
 {
+	if (isconst(i)) {
+	  COMPCALL(jnf_ASR_b_imm)(d, live.state[i].val & 0x3f);
+	  return;
+	}
+
 	i = readreg(i);
 	d = rmw(d);
 
@@ -1252,6 +1292,11 @@ MENDFUNC(2,jnf_ASR_b_reg,(RW1 d, RR4 i))
 
 MIDFUNC(2,jnf_ASR_w_reg,(RW2 d, RR4 i))
 {
+	if (isconst(i)) {
+	  COMPCALL(jnf_ASR_w_imm)(d, live.state[i].val & 0x3f);
+	  return;
+	}
+
 	i = readreg(i);
 	d = rmw(d);
 
@@ -1267,6 +1312,11 @@ MENDFUNC(2,jnf_ASR_w_reg,(RW2 d, RR4 i))
 
 MIDFUNC(2,jnf_ASR_l_reg,(RW4 d, RR4 i))
 {
+	if (isconst(i)) {
+	  COMPCALL(jnf_ASR_l_imm)(d, live.state[i].val & 0x3f);
+	  return;
+	}
+
 	i = readreg(i);
 	d = rmw(d);
 
@@ -1280,9 +1330,13 @@ MENDFUNC(2,jnf_ASR_l_reg,(RW4 d, RR4 i))
 
 MIDFUNC(2,jff_ASR_b_reg,(RW1 d, RR4 i))
 {
+	if (isconst(i)) {
+	  COMPCALL(jff_ASR_b_imm)(d, live.state[i].val & 0x3f);
+	  return;
+	}
+
 	i = readreg(i);
 	d = rmw(d);
-  int x = writereg(FLAGX);
 
 	SIGNED8_REG_2_REG(REG_WORK3, d);
 	ANDS_ww3f(REG_WORK1, i);
@@ -1306,12 +1360,12 @@ MIDFUNC(2,jff_ASR_b_reg,(RW1 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
   
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
 
-  unlock2(x);
 	unlock2(d);
 	unlock2(i);
 }
@@ -1319,9 +1373,13 @@ MENDFUNC(2,jff_ASR_b_reg,(RW1 d, RR4 i))
 
 MIDFUNC(2,jff_ASR_w_reg,(RW2 d, RR4 i)) 
 {
+	if (isconst(i)) {
+	  COMPCALL(jff_ASR_w_imm)(d, live.state[i].val & 0x3f);
+	  return;
+	}
+
 	i = readreg(i);
 	d = rmw(d);
-  int x = writereg(FLAGX);
 
 	SIGNED16_REG_2_REG(REG_WORK3, d);
 	ANDS_ww3f(REG_WORK1, i);
@@ -1345,12 +1403,12 @@ MIDFUNC(2,jff_ASR_w_reg,(RW2 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
   
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
 
-  unlock2(x);
 	unlock2(d);
 	unlock2(i);
 }
@@ -1358,9 +1416,13 @@ MENDFUNC(2,jff_ASR_w_reg,(RW2 d, RR4 i))
 
 MIDFUNC(2,jff_ASR_l_reg,(RW4 d, RR4 i))
 {
+	if (isconst(i)) {
+	  COMPCALL(jff_ASR_l_imm)(d, live.state[i].val & 0x3f);
+	  return;
+	}
+
 	i = readreg(i);
 	d = rmw(d);
-  int x = writereg(FLAGX);
 
 	ANDS_ww3f(REG_WORK1, i);
 	BNE_i(3);               // No shift -> X flag unchanged
@@ -1383,12 +1445,12 @@ MIDFUNC(2,jff_ASR_l_reg,(RW4 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
   
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
 
-  unlock2(x);
 	unlock2(d);
 	unlock2(i);
 }
@@ -1421,9 +1483,9 @@ MENDFUNC(1,jnf_ASRW,(RW2 d))
 
 MIDFUNC(1,jff_ASRW,(RW2 d))
 {
-	d = rmw(d);
+  d = rmw(d);
 
-	SIGNED16_REG_2_REG(REG_WORK1, d);
+  SIGNED16_REG_2_REG(REG_WORK1, d);
 	ASR_wwi(d, REG_WORK1, 1);
   TST_ww(d, d);
 
@@ -1433,6 +1495,7 @@ MIDFUNC(1,jff_ASRW,(RW2 d))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 
 	unlock2(d);
@@ -1457,10 +1520,6 @@ MENDFUNC(1,jff_ASRW,(RW2 d))
 /* BCHG.L: target is always a register */
 MIDFUNC(2,jnf_BCHG_b_imm,(RW1 d, IM8 s))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val ^ (1 << s));
-		return;
-	}
 	d = rmw(d);
 	EOR_xxbit(d, d, s & 0x1f);
 	unlock2(d);
@@ -1469,10 +1528,6 @@ MENDFUNC(2,jnf_BCHG_b_imm,(RW1 d, IM8 s))
 
 MIDFUNC(2,jnf_BCHG_l_imm,(RW4 d, IM8 s))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val ^ (1 << s));
-		return;
-	}
 	d = rmw(d);
 	EOR_xxbit(d, d, s & 0x1f);
 	unlock2(d);
@@ -1485,6 +1540,7 @@ MIDFUNC(2,jnf_BCHG_b,(RW1 d, RR4 s))
 		COMPCALL(jnf_BCHG_b_imm)(d, live.state[s].val & 7);
 		return;
 	}
+
 	s = readreg(s);
 	d = rmw(d);
 
@@ -1552,6 +1608,7 @@ MIDFUNC(2,jff_BCHG_b,(RW1 d, RR4 s))
 		COMPCALL(jff_BCHG_b_imm)(d, live.state[s].val & 7);
 		return;
 	}
+
 	s = readreg(s);
 	d = rmw(d);
 
@@ -1613,10 +1670,6 @@ MENDFUNC(2,jff_BCHG_l,(RW4 d, RR4 s))
 /* BCLR.L: target is always a register */
 MIDFUNC(2,jnf_BCLR_b_imm,(RW1 d, IM8 s))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val & ~(1 << s));
-		return;
-	}
 	d = rmw(d);
 	CLEAR_xxbit(d, d, s);
 	unlock2(d);
@@ -1626,7 +1679,7 @@ MENDFUNC(2,jnf_BCLR_b_imm,(RW1 d, IM8 s))
 MIDFUNC(2,jnf_BCLR_l_imm,(RW4 d, IM8 s))
 {
 	if(isconst(d)) {
-		set_const(d, live.state[d].val & ~(1 << s));
+		live.state[d].val = live.state[d].val & ~(1 << s);
 		return;
 	}
 	d = rmw(d);
@@ -1710,6 +1763,7 @@ MIDFUNC(2,jff_BCLR_b,(RW1 d, RR4 s))
 		COMPCALL(jff_BCLR_b_imm)(d, live.state[s].val & 7);
 		return;
 	}
+
 	s = readreg(s);
 	d = rmw(d);
 
@@ -1771,10 +1825,6 @@ MENDFUNC(2,jff_BCLR_l,(RW4 d, RR4 s))
 /* BSET.L: target is always a register */
 MIDFUNC(2,jnf_BSET_b_imm,(RW1 d, IM8 s))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val | (1 << s));
-		return;
-	}
 	d = rmw(d);
 	SET_xxbit(d, d, s & 0x1f);
 	unlock2(d);
@@ -1783,11 +1833,6 @@ MENDFUNC(2,jnf_BSET_b_imm,(RW1 d, IM8 s))
 
 MIDFUNC(2,jnf_BSET_l_imm,(RW4 d, IM8 s))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val | (1 << s));
-		return;
-	}
-
 	d = rmw(d);
 	SET_xxbit(d, d, s & 0x1f);
 	unlock2(d);
@@ -1800,6 +1845,7 @@ MIDFUNC(2,jnf_BSET_b,(RW1 d, RR4 s))
 		COMPCALL(jnf_BSET_b_imm)(d, live.state[s].val & 7);
 		return;
 	}
+
 	s = readreg(s);
 	d = rmw(d);
 
@@ -1869,6 +1915,7 @@ MIDFUNC(2,jff_BSET_b,(RW1 d, RR4 s))
 		COMPCALL(jff_BSET_b_imm)(d, live.state[s].val & 7);
 		return;
 	}
+
 	s = readreg(s);
 	d = rmw(d);
 
@@ -1962,6 +2009,7 @@ MIDFUNC(2,jff_BTST_b,(RR1 d, RR4 s))
 		COMPCALL(jff_BTST_b_imm)(d, live.state[s].val & 7);
 		return;
 	}
+
 	s = readreg(s);
 	d = readreg(d);
 
@@ -2025,10 +2073,6 @@ MENDFUNC(2,jff_BTST_l,(RR4 d, RR4 s))
  */
 MIDFUNC(1,jnf_CLR_b,(W1 d))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val & 0xffffff00);
-		return;
-	}
 	if(d >= 16) {
 		set_const(d, 0);
 		return;
@@ -2041,10 +2085,6 @@ MENDFUNC(1,jnf_CLR_b,(W1 d))
 
 MIDFUNC(1,jnf_CLR_w,(W2 d))
 {
-	if(isconst(d)) {
-		set_const(d, live.state[d].val & 0xffff0000);
-		return;
-	}
 	if(d >= 16) {
 		set_const(d, 0);
 		return;
@@ -2065,10 +2105,7 @@ MIDFUNC(1,jff_CLR_b,(W1 d))
 {
 	MOV_xish(REG_WORK1, 0x4000, 16); // set Z flag
 	MSR_NZCV_x(REG_WORK1);
-  if(isconst(d)) {
-    set_const(d, live.state[d].val & 0xffffff00);
-    return;
-  }
+  flags_carry_inverted = false;
 	if(d >= 16) {
 		set_const(d, 0);
 		return;
@@ -2083,10 +2120,7 @@ MIDFUNC(1,jff_CLR_w,(W2 d))
 {
 	MOV_xish(REG_WORK1, 0x4000, 16); // set Z flag
 	MSR_NZCV_x(REG_WORK1);
-  if(isconst(d)) {
-    set_const(d, live.state[d].val & 0xffff0000);
-    return;
-  }
+  flags_carry_inverted = false;
 	if(d >= 16) {
 		set_const(d, 0);
     return;
@@ -2101,6 +2135,7 @@ MIDFUNC(1,jff_CLR_l,(W4 d))
 {
 	MOV_xish(REG_WORK1, 0x4000, 16); // set Z flag
 	MSR_NZCV_x(REG_WORK1);
+  flags_carry_inverted = false;
 	set_const(d, 0);
 }
 MENDFUNC(1,jff_CLR_l,(W4 d))
@@ -2120,31 +2155,43 @@ MENDFUNC(1,jff_CLR_l,(W4 d))
  */
 MIDFUNC(2,jff_CMP_b,(RR1 d, RR1 s))
 {
-	INIT_RREGS_b(d, s);
-		
-	LSL_wwi(REG_WORK1, d, 24);
-	CMP_wwLSLi(REG_WORK1, s, 24);
+	if (isconst(d)) {
+	  s = readreg(s);
+	  MOV_wish(REG_WORK1, (live.state[d].val & 0xff) << 8, 16);
+	  CMP_wwLSLi(REG_WORK1, s, 24);
+	  unlock2(s);
+	} else {
+	  INIT_RREGS_b(d, s);
+		  
+	  LSL_wwi(REG_WORK1, d, 24);
+	  CMP_wwLSLi(REG_WORK1, s, 24);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-
-	EXIT_REGS(d,s);
+	  EXIT_REGS(d,s);
+  }
+  flags_carry_inverted = true;
 }
 MENDFUNC(2,jff_CMP_b,(RR1 d, RR1 s))
 
 MIDFUNC(2,jff_CMP_w,(RR2 d, RR2 s))
 {
-	INIT_RREGS_w(d, s);
+	if (isconst(d) && isconst(s)) {
+	  MOV_wish(REG_WORK1, (live.state[d].val & 0xffff), 16);
+	  MOV_wish(REG_WORK2, (live.state[s].val & 0xffff), 16);
+	  CMP_ww(REG_WORK1, REG_WORK2);
+	} else if (isconst(d)) {
+	  s = readreg(s);
+	  MOV_wish(REG_WORK1, (live.state[d].val & 0xffff), 16);
+	  CMP_wwLSLi(REG_WORK1, s, 16);
+	  unlock2(s);
+	} else {
+	  INIT_RREGS_w(d, s);
 
-	LSL_wwi(REG_WORK1, d, 16);
-	CMP_wwLSLi(REG_WORK1, s, 16);
+	  LSL_wwi(REG_WORK1, d, 16);
+	  CMP_wwLSLi(REG_WORK1, s, 16);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-
-	EXIT_REGS(d,s);
+	  EXIT_REGS(d,s);
+  }
+  flags_carry_inverted = true;
 }
 MENDFUNC(2,jff_CMP_w,(RR2 d, RR2 s))
 
@@ -2154,10 +2201,7 @@ MIDFUNC(2,jff_CMP_l,(RR4 d, RR4 s))
 
 	CMP_ww(d, s);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-
+  flags_carry_inverted = true;
 	EXIT_REGS(d,s);
 }
 MENDFUNC(2,jff_CMP_l,(RR4 d, RR4 s))
@@ -2177,15 +2221,18 @@ MENDFUNC(2,jff_CMP_l,(RR4 d, RR4 s))
  */
 MIDFUNC(2,jff_CMPA_w,(RR2 d, RR2 s))
 {
-	INIT_RREGS_w(d, s);
+  if (isconst(s)) {
+    d = readreg(d);
+    SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val & 0xffff);
+    CMP_ww(d, REG_WORK1);
+    unlock2(d);
+  } else {
+	  INIT_RREGS_w(d, s);
+    CMP_wwEX(d, s, EX_SXTH);
+	  EXIT_REGS(d,s);
+  }
 
-  CMP_wwEX(d, s, EX_SXTH);
-  
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-
-	EXIT_REGS(d,s);
+  flags_carry_inverted = true;
 }
 MENDFUNC(2,jff_CMPA_w,(RR2 d, RR2 s))
 
@@ -2195,10 +2242,7 @@ MIDFUNC(2,jff_CMPA_l,(RR4 d, RR4 s))
 
 	CMP_ww(d, s);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-
+  flags_carry_inverted = true;
 	EXIT_REGS(d,s);
 }
 MENDFUNC(2,jff_CMPA_l,(RR4 d, RR4 s))
@@ -2211,6 +2255,8 @@ MIDFUNC(2,jff_DBCC,(RW4 d, IM8 cc))
 {
   d = rmw(d);
   
+  FIX_INVERTED_CARRY
+
   // If cc true -> no branch, so we have to clear ARM_C_FLAG
 	MOV_xish(REG_WORK1, 0x2000, 16); // set C flag
 	MOV_xi(REG_WORK2, 0);
@@ -2258,22 +2304,31 @@ MENDFUNC(2,jff_DBCC,(RW4 d, IM8 cc))
  */
 MIDFUNC(2,jnf_DIVU,(RW4 d, RR4 s))
 {
-	if (isconst(d) && isconst(s) && live.state[s].val != 0) {
-		uae_u32 newv = (uae_u32)live.state[d].val / (uae_u32)(uae_u16)live.state[s].val;
-		uae_u32 rem = (uae_u32)live.state[d].val % (uae_u32)(uae_u16)live.state[s].val;
-		set_const(d, (newv & 0xffff) | ((uae_u32)rem << 16));
-		return;
-	}
-	INIT_REGS_l(d, s);
+	int init_regs_used = 0;
+  int targetIsReg;
+  int s_is_d;
+	if (isconst(s) && (uae_u16)live.state[s].val != 0) {
+	  d = rmw(d);
+	  UNSIGNED16_IMM_2_REG(REG_WORK3, (uae_u16)live.state[s].val);
+	} else {
+	  targetIsReg = (d < 16);
+	  s_is_d = (s == d);
+	  if(!s_is_d)
+		  s = readreg(s);
+	  d = rmw(d);
+	  if(s_is_d)
+		  s = d;
+    init_regs_used = 1;
   
-  UNSIGNED16_REG_2_REG(REG_WORK3, s);
-  CBNZ_wi(REG_WORK3, 4);    // src is not 0
+    UNSIGNED16_REG_2_REG(REG_WORK3, s);
+    CBNZ_wi(REG_WORK3, 4);    // src is not 0
 
-  // Signal exception 5
-  MOV_wi(REG_WORK1, 5);
-  uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
-  STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
-  B_i(7);        // end_of_op
+    // Signal exception 5
+    MOV_wi(REG_WORK1, 5);
+    uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
+    STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
+    B_i(7);        // end_of_op
+  }
 
 	// src is not 0  
 	UDIV_www(REG_WORK1, d, REG_WORK3);
@@ -2285,29 +2340,49 @@ MIDFUNC(2,jnf_DIVU,(RW4 d, RR4 s))
   MSUB_wwww(REG_WORK2, REG_WORK1, REG_WORK3, d);
   LSL_wwi(d, REG_WORK2, 16);
   BFI_wwii(d, REG_WORK1, 0, 16);
-// end_of_op
+  // end_of_op
 
-	EXIT_REGS(d, s);
+	if (init_regs_used) {
+	  EXIT_REGS(d, s);
+  } else {
+    unlock2(d);
+  }
 }
 MENDFUNC(2,jnf_DIVU,(RW4 d, R4 s))
 
 MIDFUNC(2,jff_DIVU,(RW4 d, RR4 s))
 {
-	INIT_REGS_l(d, s);
+	uae_u32* branchadd;
+	int init_regs_used = 0;
+  int targetIsReg;
+  int s_is_d;
+	if (isconst(s) && (uae_u16)live.state[s].val != 0) {
+	  d = rmw(d);
+	  UNSIGNED16_IMM_2_REG(REG_WORK3, (uae_u16)live.state[s].val);
+	} else {
+	  targetIsReg = (d < 16);
+	  s_is_d = (s == d);
+	  if(!s_is_d)
+		  s = readreg(s);
+	  d = rmw(d);
+	  if(s_is_d)
+		  s = d;
+    init_regs_used = 1;
 
-  UNSIGNED16_REG_2_REG(REG_WORK3, s);
-  CBNZ_wi(REG_WORK3, 6);     // src is not 0
+    UNSIGNED16_REG_2_REG(REG_WORK3, s);
+    CBNZ_wi(REG_WORK3, 6);     // src is not 0
 
-  // Signal exception 5
-	MOV_wi(REG_WORK1, 5);
-  uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
-  STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
-  
-  // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
-  MOV_wish(REG_WORK1, 0x5000, 16);
-  MSR_NZCV_x(REG_WORK1);
-  uae_u32* branchadd = (uae_u32*)get_target();
-  B_i(0);        // end_of_op
+    // Signal exception 5
+	  MOV_wi(REG_WORK1, 5);
+    uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
+    STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
+    
+    // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
+    MOV_wish(REG_WORK1, 0x5000, 16);
+    MSR_NZCV_x(REG_WORK1);
+    branchadd = (uae_u32*)get_target();
+    B_i(0);        // end_of_op
+  }
 
 	// src is not 0  
 	UDIV_www(REG_WORK1, d, REG_WORK3);
@@ -2327,10 +2402,14 @@ MIDFUNC(2,jff_DIVU,(RW4 d, RR4 s))
   LSL_wwi(d, REG_WORK2, 16);
   BFI_wwii(d, REG_WORK1, 0, 16);
 
-  // <end>
-  write_jmp_target(branchadd, (uintptr)get_target());
-	
-	EXIT_REGS(d, s);
+  // end_of_op
+  flags_carry_inverted = false;
+	if (init_regs_used) {
+    write_jmp_target(branchadd, (uintptr)get_target());
+	  EXIT_REGS(d, s);
+  } else {
+    unlock2(d);
+  }
 }
 MENDFUNC(2,jff_DIVU,(RW4 d, RR4 s))
  
@@ -2346,25 +2425,33 @@ MENDFUNC(2,jff_DIVU,(RW4 d, RR4 s))
  */
 MIDFUNC(2,jnf_DIVS,(RW4 d, RR4 s))
 {
-	if (isconst(d) && isconst(s) && live.state[s].val != 0) {
-		uae_s32 newv = (uae_s32)live.state[d].val / (uae_s32)(uae_s16)live.state[s].val;
-		uae_u16 rem = (uae_s32)live.state[d].val % (uae_s32)(uae_s16)live.state[s].val;
-		if (((uae_s16)rem < 0) != ((uae_s32)live.state[d].val < 0)) 
-			rem = -rem;
-		set_const(d, (newv & 0xffff) | ((uae_u32)rem << 16));
-		return;
-	}
-	INIT_REGS_l(d, s);
+	uae_u32* branchadd;
+	int init_regs_used = 0;
+  int targetIsReg;
+  int s_is_d;
+  if (isconst(s) && (uae_s16)live.state[s].val != 0) {
+    d = rmw(d);
+    SIGNED16_IMM_2_REG(REG_WORK3, (uae_s16)live.state[s].val);
+  } else {
+	  targetIsReg = (d < 16);
+	  s_is_d = (s == d);
+	  if(!s_is_d)
+		  s = readreg(s);
+	  d = rmw(d);
+	  if(s_is_d)
+		  s = d;
+    init_regs_used = 1;
   
-  SIGNED16_REG_2_REG(REG_WORK3, s);
-  CBNZ_wi(REG_WORK3, 4);     // src is not 0
+    SIGNED16_REG_2_REG(REG_WORK3, s);
+    CBNZ_wi(REG_WORK3, 4);     // src is not 0
 
-  // Signal exception 5
-  MOV_wi(REG_WORK1, 5);
-  uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
-  STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
-  uae_u32* branchadd = (uae_u32*)get_target();
-  B_i(0);        // end_of_op
+    // Signal exception 5
+    MOV_wi(REG_WORK1, 5);
+    uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
+    STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
+    branchadd = (uae_u32*)get_target();
+    B_i(0);        // end_of_op
+  }
 
 	// src is not 0  
 	SDIV_www(REG_WORK1, d, REG_WORK3);
@@ -2374,44 +2461,62 @@ MIDFUNC(2,jnf_DIVS,(RW4 d, RR4 s))
   ANDS_www(REG_WORK3, REG_WORK1, REG_WORK2);
   BEQ_i(3); 														// positive result, no overflow
 	CMP_ww(REG_WORK3, REG_WORK2);
-	BNE_i(9);															// overflow -> end_of_op
+	BNE_i(8);															// overflow -> end_of_op
 	
   // Here we have to calc remainder
   SIGNED16_REG_2_REG(REG_WORK3, s);
   MSUB_wwww(REG_WORK2, REG_WORK1, REG_WORK3, d);		// REG_WORK2 contains remainder
 	
 	EOR_www(REG_WORK3, REG_WORK2, d);	  // If sign of remainder and first operand differs, change sign of remainder
-	TST_ww(REG_WORK3, REG_WORK3);
-	BPL_i(2);
+	TBZ_wii(REG_WORK3, 31, 2);
 	NEG_ww(REG_WORK2, REG_WORK2);
 	
   LSL_wwi(d, REG_WORK2, 16);
   BFI_wwii(d, REG_WORK1, 0, 16);
 	
-  // <end>
-  write_jmp_target(branchadd, (uintptr)get_target());
-
-	EXIT_REGS(d, s);
+  // end_of_op
+  if (init_regs_used) {
+    write_jmp_target(branchadd, (uintptr)get_target());
+	  EXIT_REGS(d, s);
+  } else {
+    unlock2(d);
+  }
 }
 MENDFUNC(2,jnf_DIVS,(RW4 d, RR4 s))
 
 MIDFUNC(2,jff_DIVS,(RW4 d, RR4 s))
 {
-	INIT_REGS_l(d, s);
+	uae_u32* branchadd;
+	int init_regs_used = 0;
+  int targetIsReg;
+  int s_is_d;
+  if (isconst(s) && (uae_s16)live.state[s].val != 0) {
+    d = rmw(d);
+    SIGNED16_IMM_2_REG(REG_WORK3, (uae_s16)live.state[s].val);
+  } else {
+	  targetIsReg = (d < 16);
+	  s_is_d = (s == d);
+	  if(!s_is_d)
+		  s = readreg(s);
+	  d = rmw(d);
+	  if(s_is_d)
+		  s = d;
+    init_regs_used = 1;
 
-  SIGNED16_REG_2_REG(REG_WORK3, s);
-  CBNZ_wi(REG_WORK3, 6);     // src is not 0
+    SIGNED16_REG_2_REG(REG_WORK3, s);
+    CBNZ_wi(REG_WORK3, 6);     // src is not 0
 
-  // Signal exception 5
-	MOV_wi(REG_WORK1, 5);
-  uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
-  STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
-  
-  // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
-  MOV_wish(REG_WORK1, 0x4000, 16);
-  MSR_NZCV_x(REG_WORK1);
-  uae_u32* branchadd = (uae_u32*)get_target();
-  B_i(0);        // end_of_op
+    // Signal exception 5
+	  MOV_wi(REG_WORK1, 5);
+    uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
+    STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
+    
+    // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
+    MOV_wish(REG_WORK1, 0x4000, 16);
+    MSR_NZCV_x(REG_WORK1);
+    branchadd = (uae_u32*)get_target();
+    B_i(0);        // end_of_op
+  }
 
 	// src is not 0  
 	SDIV_www(REG_WORK1, d, REG_WORK3);
@@ -2426,7 +2531,7 @@ MIDFUNC(2,jff_DIVS,(RW4 d, RR4 s))
   // Here we handle overflow
   MOV_wish(REG_WORK1, 0x9000, 16); // set V and N
 	MSR_NZCV_x(REG_WORK1);
-  B_i(11);
+  B_i(10);
   
   // calc flags
   LSL_wwi(REG_WORK2, REG_WORK1, 16);
@@ -2437,17 +2542,20 @@ MIDFUNC(2,jff_DIVS,(RW4 d, RR4 s))
 	MSUB_wwww(REG_WORK2, REG_WORK1, REG_WORK3, d);		// REG_WORK2 contains remainder
 
 	EOR_www(REG_WORK3, REG_WORK2, d);	  // If sign of remainder and first operand differs, change sign of remainder
-	TST_ww(REG_WORK3, REG_WORK3);
-	BPL_i(2);
+	TBZ_wii(REG_WORK3, 31, 2);
 	NEG_ww(REG_WORK2, REG_WORK2);
 	
   LSL_wwi(d, REG_WORK2, 16);
   BFI_wwii(d, REG_WORK1, 0, 16);
 
-  // <end>
-  write_jmp_target(branchadd, (uintptr)get_target());
-	
-	EXIT_REGS(d, s);
+  // end_of_op
+  flags_carry_inverted = false;
+  if (init_regs_used) {
+    write_jmp_target(branchadd, (uintptr)get_target());
+	  EXIT_REGS(d, s);
+  } else {
+    unlock2(d);
+  }
 }
 MENDFUNC(2,jff_DIVS,(RW4 d, RR4 s))
 
@@ -2507,6 +2615,9 @@ MIDFUNC(3,jff_DIVLU32,(RW4 d, RR4 s1, W4 rem))
   MSUB_wwww(rem, s1, REG_WORK1, d);
   MOV_ww(d, REG_WORK1);
 
+  // end_of_op
+
+  flags_carry_inverted = false;
   unlock2(rem);
   unlock2(d);
   unlock2(s1);
@@ -2525,7 +2636,7 @@ MIDFUNC(3,jnf_DIVLS32,(RW4 d, RR4 s1, W4 rem))
 	MOV_wi(REG_WORK1, 5);
   uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
   STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
-	B_i(8);        // end_of_op
+	B_i(7);        // end_of_op
 
 	// src is not 0  
 	SDIV_www(REG_WORK1, d, s1);
@@ -2534,13 +2645,12 @@ MIDFUNC(3,jnf_DIVLS32,(RW4 d, RR4 s1, W4 rem))
   MSUB_wwww(rem, s1, REG_WORK1, d);
 
 	EOR_www(REG_WORK3, rem, d);	// If sign of remainder and first operand differs, change sign of remainder
-	TST_ww(REG_WORK3, REG_WORK3);
-	BPL_i(2);
+	TBZ_wii(REG_WORK3, 31, 2);
 	NEG_ww(rem, rem);
   
   MOV_ww(d, REG_WORK1);
 
-// end_of_op
+  // end_of_op
 	
   unlock2(rem);
   unlock2(d);
@@ -2560,7 +2670,7 @@ MIDFUNC(3,jff_DIVLS32,(RW4 d, RR4 s1, W4 rem))
 	MOV_wi(REG_WORK1, 5);
   uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
   STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
-	B_i(8);        // end_of_op
+	B_i(7);        // end_of_op
 
 	// src is not 0  
 	SDIV_www(REG_WORK1, d, s1);
@@ -2569,14 +2679,14 @@ MIDFUNC(3,jff_DIVLS32,(RW4 d, RR4 s1, W4 rem))
   MSUB_wwww(rem, s1, REG_WORK1, d);
 
 	EOR_www(REG_WORK3, rem, d);	// If sign of remainder and first operand differs, change sign of remainder
-	TST_ww(REG_WORK3, REG_WORK3);
-	BPL_i(2);
+	TBZ_wii(REG_WORK3, 31, 2);
 	NEG_ww(REG_WORK2, REG_WORK2);
 	
   MOV_ww(d, REG_WORK1);
 
-// end_of_op
+  // end_of_op
 	
+  flags_carry_inverted = false;
   unlock2(rem);
   unlock2(d);
   unlock2(s1);
@@ -2598,11 +2708,6 @@ MENDFUNC(3,jff_DIVLS32,(RW4 d, RR4 s1, W4 rem))
  */
 MIDFUNC(2,jnf_EOR_b_imm,(RW1 d, IM8 v))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | ((live.state[d].val ^ v) & 0x000000ff));
-		return;
-	}
-
 	INIT_REG_b(d);
 
   MOV_xi(REG_WORK1, (v & 0xff));
@@ -2634,11 +2739,6 @@ MENDFUNC(2,jnf_EOR_b,(RW1 d, RR1 s))
 
 MIDFUNC(2,jnf_EOR_w_imm,(RW2 d, IM16 v))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | ((live.state[d].val ^ v) & 0x0000ffff));
-		return;
-	}
-
 	INIT_REG_w(d);
 
   MOV_xi(REG_WORK1, v & 0xffff);
@@ -2657,40 +2757,15 @@ MIDFUNC(2,jnf_EOR_w,(RW2 d, RR2 s))
 
 	INIT_REGS_w(d, s);
 
-	if(targetIsReg) {
-		EOR_www(REG_WORK1, d, s);
-	  BFI_xxii(d, REG_WORK1, 0, 16);
-	} else {
-		EOR_www(d, d, s);
-	}
+	EOR_www(REG_WORK1, d, s);
+  BFI_xxii(d, REG_WORK1, 0, 16);
 
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jnf_EOR_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jnf_EOR_l_imm,(RW4 d, IM32 v))
-{
-	if (isconst(d)) {
-		set_const(d, live.state[d].val ^ v);
-		return;
-	}
-
-	d = rmw(d);
-
-  LOAD_U32(REG_WORK1, v);
-  EOR_www(d, d, REG_WORK1);
-
-	unlock2(d);
-}
-MENDFUNC(2,jnf_EOR_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jnf_EOR_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jnf_EOR_l_imm)(d, live.state[s].val);
-		return;
-	}
-
 	INIT_REGS_l(d, s);
 
 	EOR_www(d, d, s);
@@ -2714,6 +2789,7 @@ MIDFUNC(2,jff_EOR_b_imm,(RW1 d, IM8 v))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_EOR_b_imm,(RW1 d, IM8 v))
@@ -2738,6 +2814,7 @@ MIDFUNC(2,jff_EOR_b,(RW1 d, RR1 s))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_EOR_b,(RW1 d, RR1 s))
@@ -2757,6 +2834,7 @@ MIDFUNC(2,jff_EOR_w_imm,(RW2 d, IM16 v))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_EOR_w_imm,(RW2 d, IM16 v))
@@ -2781,34 +2859,19 @@ MIDFUNC(2,jff_EOR_w,(RW2 d, RR2 s))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_EOR_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jff_EOR_l_imm,(RW4 d, IM32 v))
-{
-	d = rmw(d);
-
-	LOAD_U32(REG_WORK2, v);
-  EOR_www(d, d, REG_WORK2);
-	TST_ww(d, d);
-
-	unlock2(d);
-}
-MENDFUNC(2,jff_EOR_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jff_EOR_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jff_EOR_l_imm)(d, live.state[s].val);
-		return;
-	}
-
 	INIT_REGS_l(d, s);
 
 	EOR_www(d, d, s);
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_EOR_l,(RW4 d, RR4 s))
@@ -2829,6 +2892,10 @@ MENDFUNC(2,jff_EOR_l,(RW4 d, RR4 s))
 MIDFUNC(2,jff_EORSR,(IM32 s, IM8 x))
 {
 	MRS_NZCV_x(REG_WORK1);
+  if(flags_carry_inverted) {
+    EOR_xxCflag(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
+  }
 	MOV_xish(REG_WORK2, (s >> 16), 16);
 	EOR_www(REG_WORK1, REG_WORK1, REG_WORK2);
 	MSR_NZCV_x(REG_WORK1);
@@ -2857,7 +2924,7 @@ MENDFUNC(2,jff_EORSR,(IM32 s, IM8 x))
 MIDFUNC(1,jnf_EXT_b,(RW4 d))
 {
 	if (isconst(d)) {
-		set_const(d, (uae_s32)(uae_s8)live.state[d].val);
+		live.state[d].val = (uae_s32)(uae_s8)live.state[d].val;
 		return;
 	}
 
@@ -2872,7 +2939,7 @@ MENDFUNC(1,jnf_EXT_b,(RW4 d))
 MIDFUNC(1,jnf_EXT_w,(RW4 d))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | (((uae_s32)(uae_s8)live.state[d].val) & 0x0000ffff));
+		live.state[d].val = (live.state[d].val & 0xffff0000) | (((uae_s32)(uae_s8)live.state[d].val) & 0x0000ffff);
 		return;
 	}
 
@@ -2888,7 +2955,7 @@ MENDFUNC(1,jnf_EXT_w,(RW4 d))
 MIDFUNC(1,jnf_EXT_l,(RW4 d))
 {
 	if (isconst(d)) {
-		set_const(d, (uae_s32)(uae_s16)live.state[d].val);
+		live.state[d].val = (uae_s32)(uae_s16)live.state[d].val;
 		return;
 	}
 
@@ -2913,6 +2980,7 @@ MIDFUNC(1,jff_EXT_b,(RW4 d))
 
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_EXT_b,(RW4 d))
@@ -2921,16 +2989,17 @@ MIDFUNC(1,jff_EXT_w,(RW4 d))
 {
 	if (isconst(d)) {
     uae_u8 tmp = (uae_u8)live.state[d].val;
-	  d = rmw(d);
+	  d = writereg(d);
 		SIGNED8_IMM_2_REG(REG_WORK1, tmp);
 	} else {
-		d = rmw(d);
-	  SIGNED8_REG_2_REG(REG_WORK1, d);
-	}
+    d = rmw(d);
+    SIGNED8_REG_2_REG(REG_WORK1, d);
+  }
 
 	TST_ww(REG_WORK1, REG_WORK1);
 	BFI_xxii(d, REG_WORK1, 0, 16);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_EXT_w,(RW4 d))
@@ -2947,6 +3016,7 @@ MIDFUNC(1,jff_EXT_l,(RW4 d))
 	}
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_EXT_l,(RW4 d))
@@ -2965,16 +3035,15 @@ MENDFUNC(1,jff_EXT_l,(RW4 d))
  * V Always cleared.
  * C Set according to the last bit shifted out of the operand. Cleared for a shift count of zero.
  *
- * imm version only called with 1 <= i <= 8
- *
  */
 MIDFUNC(2,jnf_LSL_b_imm,(RW1 d, IM8 i))
 {
   if(i) {
 		if (isconst(d)) {
-			set_const(d, (live.state[d].val & 0xffffff00) | ((live.state[d].val << i) & 0x000000ff));
+			live.state[d].val = (live.state[d].val & 0xffffff00) | ((live.state[d].val << i) & 0x000000ff);
 			return;
 		}
+		
 		INIT_REG_b(d);
 	  
   	LSL_wwi(REG_WORK1, d, i);
@@ -2989,9 +3058,10 @@ MIDFUNC(2,jnf_LSL_w_imm,(RW2 d, IM8 i))
 {
   if(i) {
 		if (isconst(d)) {
-			set_const(d, (live.state[d].val & 0xffff0000) | ((live.state[d].val << i) & 0x0000ffff));
+			live.state[d].val = (live.state[d].val & 0xffff0000) | ((live.state[d].val << i) & 0x0000ffff);
 			return;
 		}
+
 		INIT_REG_w(d);
 	  
   	LSL_wwi(REG_WORK1, d, i);
@@ -3006,9 +3076,10 @@ MIDFUNC(2,jnf_LSL_l_imm,(RW4 d, IM8 i))
 {
   if(i) {
 		if (isconst(d)) {
-			set_const(d, live.state[d].val << i);
+			live.state[d].val = live.state[d].val << i;
 			return;
 		}
+
 		d = rmw(d);
 		
 	  LSL_wwi(d, d, i);
@@ -3021,9 +3092,10 @@ MENDFUNC(2,jnf_LSL_l_imm,(RW4 d, IM8 i))
 MIDFUNC(2,jnf_LSL_b_reg,(RW1 d, RR4 i))
 {
 	if (isconst(i)) {
-		COMPCALL(jnf_LSL_b_imm)(d, live.state[i].val & 15);
+		COMPCALL(jnf_LSL_b_imm)(d, live.state[i].val & 0x3f);
 		return;
 	}
+
 	INIT_REGS_b(d, i);
 
   AND_ww3f(REG_WORK1, i);
@@ -3037,9 +3109,10 @@ MENDFUNC(2,jnf_LSL_b_reg,(RW1 d, RR4 i))
 MIDFUNC(2,jnf_LSL_w_reg,(RW2 d, RR4 i))
 {
 	if (isconst(i)) {
-		COMPCALL(jnf_LSL_w_imm)(d, live.state[i].val & 31);
+		COMPCALL(jnf_LSL_w_imm)(d, live.state[i].val & 0x3f);
 		return;
 	}
+
 	INIT_REGS_w(d, i);
 
 	AND_ww3f(REG_WORK1, i);
@@ -3056,9 +3129,10 @@ MIDFUNC(2,jnf_LSL_l_reg,(RW4 d, RR4 i))
 		if(i > 31)
 			set_const(d, 0);
 		else
-			COMPCALL(jnf_LSL_l_imm)(d, live.state[i].val & 31);
+			COMPCALL(jnf_LSL_l_imm)(d, live.state[i].val & 0x3f);
 		return;
 	}
+
 	INIT_REGS_l(d, i);
 
 	AND_ww3f(REG_WORK1, i);
@@ -3070,29 +3144,29 @@ MENDFUNC(2,jnf_LSL_l_reg,(RW4 d, RR4 i))
 
 MIDFUNC(2,jff_LSL_b_imm,(RW1 d, IM8 i))
 {
-	if(i)
-		d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
-    if(i == 8)
+		d = rmw(d);
+    if(i >= 8)
       MOV_wi(REG_WORK3, 0);
     else
   		LSL_wwi(REG_WORK3, d, i + 24);
 		TST_ww(REG_WORK3, REG_WORK3);
 		
-    TBZ_wii(d, (8 - i), 4);
-    MRS_NZCV_x(REG_WORK4);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
-    MSR_NZCV_x(REG_WORK4);
-    
+		if(i <= 8) {
+      TBZ_wii(d, (8 - i), 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }    
+    flags_carry_inverted = false;
   	DUPLICACTE_CARRY
 		
     BFXIL_xxii(d, REG_WORK3, 24, 8);
 	} else {
+		d = readreg(d);
 		LSL_wwi(REG_WORK3, d, 24);
 		TST_ww(REG_WORK3, REG_WORK3);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -3101,26 +3175,29 @@ MENDFUNC(2,jff_LSL_b_imm,(RW1 d, IM8 i))
 
 MIDFUNC(2,jff_LSL_w_imm,(RW2 d, IM8 i))
 {
-	if(i)
-		d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
-		LSL_wwi(REG_WORK3, d, i + 16);
+		d = rmw(d);
+    if(i >= 16)
+      MOV_wi(REG_WORK3, 0);
+    else
+		  LSL_wwi(REG_WORK3, d, i + 16);
 		TST_ww(REG_WORK3, REG_WORK3);
 
-    TBZ_wii(d, (16 - i), 4);
-    MRS_NZCV_x(REG_WORK4);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
-    MSR_NZCV_x(REG_WORK4);
-
+		if(i <= 16) {
+      TBZ_wii(d, (16 - i), 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }
+    flags_carry_inverted = false;
 		DUPLICACTE_CARRY
 
     BFXIL_xxii(d, REG_WORK3, 16, 16);
 	} else {
+		d = readreg(d);
 		LSL_wwi(REG_WORK3, d, 16);
 		TST_ww(REG_WORK3, REG_WORK3);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -3129,24 +3206,27 @@ MENDFUNC(2,jff_LSL_w_imm,(RW2 d, IM8 i))
 
 MIDFUNC(2,jff_LSL_l_imm,(RW4 d, IM8 i))
 {
-	if(i)
-	  d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
-		LSL_wwi(REG_WORK3, d, i);
+	  d = rmw(d);
+    if(i >= 32)
+      MOV_wi(REG_WORK3, 0);
+    else
+		  LSL_wwi(REG_WORK3, d, i);
 		TST_ww(REG_WORK3, REG_WORK3);
 
-    TBZ_wii(d, (32 - i), 4);
-    MRS_NZCV_x(REG_WORK4);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
-    MSR_NZCV_x(REG_WORK4);
-
+    if(i <= 32) {
+      TBZ_wii(d, (32 - i), 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }
+    flags_carry_inverted = false;
 		DUPLICACTE_CARRY
 		MOV_ww(d, REG_WORK3);
 	} else {
+		d = readreg(d);
 		TST_ww(d, d);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -3155,8 +3235,12 @@ MENDFUNC(2,jff_LSL_l_imm,(RW4 d, IM8 i))
 
 MIDFUNC(2,jff_LSL_b_reg,(RW1 d, RR4 i))
 {
+  if (isconst(i)) {
+    COMPCALL(jff_LSL_b_imm)(d, live.state[i].val & 0x3f);
+    return;
+  }
+  
 	INIT_REGS_b(d, i);
-  int x = writereg(FLAGX);
 
 	LSL_wwi(REG_WORK3, d, 24);
 	ANDS_ww3f(REG_WORK1, i);
@@ -3174,6 +3258,7 @@ MIDFUNC(2,jff_LSL_b_reg,(RW1 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
   
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 	B_i(2);
 
@@ -3181,15 +3266,18 @@ MIDFUNC(2,jff_LSL_b_reg,(RW1 d, RR4 i))
   write_jmp_target(branchadd, (uintptr)get_target());
 	TST_ww(REG_WORK3, REG_WORK3);
 
-  unlock2(x);
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_LSL_b_reg,(RW1 d, RR4 i))
 
 MIDFUNC(2,jff_LSL_w_reg,(RW2 d, RR4 i))
 {
+  if (isconst(i)) {
+    COMPCALL(jff_LSL_w_imm)(d, live.state[i].val & 0x3f);
+    return;
+  }
+
 	INIT_REGS_w(d, i);
-  int x = writereg(FLAGX);
 
 	LSL_wwi(REG_WORK3, d, 16);
 	ANDS_ww3f(REG_WORK1, i);
@@ -3206,6 +3294,7 @@ MIDFUNC(2,jff_LSL_w_reg,(RW2 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
   
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 	B_i(2);
 
@@ -3213,15 +3302,18 @@ MIDFUNC(2,jff_LSL_w_reg,(RW2 d, RR4 i))
   write_jmp_target(branchadd, (uintptr)get_target());
 	TST_ww(REG_WORK3, REG_WORK3);
 
-  unlock2(x);
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_LSL_w_reg,(RW2 d, RR4 i))
 
 MIDFUNC(2,jff_LSL_l_reg,(RW4 d, RR4 i))
 {
+  if (isconst(i)) {
+    COMPCALL(jff_LSL_l_imm)(d, live.state[i].val & 0x3f);
+    return;
+  }
+
 	INIT_REGS_l(d, i);
-  int x = writereg(FLAGX);
 
 	ANDS_ww3f(REG_WORK1, i);
   uae_u32* branchadd = (uae_u32*)get_target();
@@ -3236,6 +3328,7 @@ MIDFUNC(2,jff_LSL_l_reg,(RW4 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
   
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 	B_i(2);
 
@@ -3243,7 +3336,6 @@ MIDFUNC(2,jff_LSL_l_reg,(RW4 d, RR4 i))
   write_jmp_target(branchadd, (uintptr)get_target());
 	TST_ww(d, d);
 
-  unlock2(x);
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_LSL_l_reg,(RW4 d, RR4 i))
@@ -3265,7 +3357,7 @@ MENDFUNC(2,jff_LSL_l_reg,(RW4 d, RR4 i))
 MIDFUNC(1,jnf_LSLW,(RW2 d))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val << 1) & 0xffff);
+		live.state[d].val = (live.state[d].val << 1) & 0xffff;
 		return;
 	}
 
@@ -3290,9 +3382,10 @@ MIDFUNC(1,jff_LSLW,(RW2 d))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
-	DUPLICACTE_CARRY
-
 	LSL_wwi(d, d, 1);
+
+  flags_carry_inverted = false;
+	DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -3312,16 +3405,15 @@ MENDFUNC(1,jff_LSLW,(RW2 d))
  * V Always cleared.
  * C Set according to the last bit shifted out of the operand. Cleared for a shift count of zero.
  *
- * imm version only called with 1 <= i <= 8
- *
  */
 MIDFUNC(2,jnf_LSR_b_imm,(RW1 d, IM8 i))
 {
 	if(i) {
 		if (isconst(d)) {
-			set_const(d, (live.state[d].val & 0xffffff00) | ((live.state[d].val >> i) & 0x000000ff));
+			live.state[d].val = (live.state[d].val & 0xffffff00) | ((live.state[d].val & 0xff) >> i);
 			return;
 		}
+
 		INIT_REG_b(d);
 
 		UNSIGNED8_REG_2_REG(REG_WORK1, d);
@@ -3337,9 +3429,10 @@ MIDFUNC(2,jnf_LSR_w_imm,(RW2 d, IM8 i))
 {
 	if(i) {
 		if (isconst(d)) {
-			set_const(d, (live.state[d].val & 0xffff0000) | ((live.state[d].val >> i) & 0x0000ffff));
+			live.state[d].val = (live.state[d].val & 0xffff0000) | ((live.state[d].val & 0x0000ffff) >> i);
 			return;
 		}
+
 		INIT_REG_w(d);
 
 		UNSIGNED16_REG_2_REG(REG_WORK1, d);
@@ -3355,9 +3448,10 @@ MIDFUNC(2,jnf_LSR_l_imm,(RW4 d, IM8 i))
 {
 	if(i) {
 		if (isconst(d)) {
-			set_const(d, live.state[d].val >> i);
+			live.state[d].val = live.state[d].val >> i;
 			return;
 		}
+
 		d = rmw(d);
 
   	LSR_wwi(d, d, i);
@@ -3369,26 +3463,30 @@ MENDFUNC(2,jnf_LSR_l_imm,(RW4 d, IM8 i))
 
 MIDFUNC(2,jff_LSR_b_imm,(RW1 d, IM8 i))
 {
-	if(i)
-		d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
-  	UNSIGNED8_REG_2_REG(REG_WORK1, d);
-		LSR_wwi(REG_WORK1, REG_WORK1, i);
+		d = rmw(d);
+    if(i >= 8)
+      MOV_wi(REG_WORK1, 0);
+    else {
+    	UNSIGNED8_REG_2_REG(REG_WORK1, d);
+		  LSR_wwi(REG_WORK1, REG_WORK1, i);
+  	}
 		TST_ww(REG_WORK1, REG_WORK1);
 
-    TBZ_wii(d, i-1, 4);
-    MRS_NZCV_x(REG_WORK4);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
-    MSR_NZCV_x(REG_WORK4);
-		DUPLICACTE_CARRY
-
+    if(i <= 8) {
+      TBZ_wii(d, i-1, 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }
 	  BFI_wwii(d, REG_WORK1, 0, 8);
+    flags_carry_inverted = false;
+		DUPLICACTE_CARRY
 	} else {
+		d = readreg(d);
     SIGNED8_REG_2_REG(REG_WORK1, d);
 		TST_ww(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -3397,26 +3495,30 @@ MENDFUNC(2,jff_LSR_b_imm,(RW1 d, IM8 i))
 
 MIDFUNC(2,jff_LSR_w_imm,(RW2 d, IM8 i))
 {
-	if(i)
-		d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
-  	UNSIGNED16_REG_2_REG(REG_WORK1, d);
-		LSR_wwi(REG_WORK1, REG_WORK1, i);
+		d = rmw(d);
+    if(i >= 16)
+      MOV_wi(REG_WORK1, 0);
+    else {
+    	UNSIGNED16_REG_2_REG(REG_WORK1, d);
+		  LSR_wwi(REG_WORK1, REG_WORK1, i);
+  	}
 		TST_ww(REG_WORK1, REG_WORK1);
 
-    TBZ_wii(d, i-1, 4);
-    MRS_NZCV_x(REG_WORK4);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
-    MSR_NZCV_x(REG_WORK4);
-		DUPLICACTE_CARRY
-
+    if(i <= 16) {
+      TBZ_wii(d, i-1, 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }
 	  BFI_wwii(d, REG_WORK1, 0, 16);
+    flags_carry_inverted = false;
+		DUPLICACTE_CARRY
 	} else {
+		d = readreg(d);
 	  SIGNED16_REG_2_REG(REG_WORK1, d);
 		TST_ww(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -3425,23 +3527,24 @@ MENDFUNC(2,jff_LSR_w_imm,(RW2 d, IM8 i))
 
 MIDFUNC(2,jff_LSR_l_imm,(RW4 d, IM8 i))
 {
-	if(i)
-	  d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
+	  d = rmw(d);
 	  MOV_ww(REG_WORK1, d);
 		LSR_wwi(d, d, i);
 		TST_ww(d, d);
 
-    TBZ_wii(REG_WORK1, i-1, 4);
-    MRS_NZCV_x(REG_WORK4);
-    SET_xxCflag(REG_WORK4, REG_WORK4);
-    MSR_NZCV_x(REG_WORK4);
+    if(i <= 32) {
+      TBZ_wii(REG_WORK1, i-1, 4);
+      MRS_NZCV_x(REG_WORK4);
+      SET_xxCflag(REG_WORK4, REG_WORK4);
+      MSR_NZCV_x(REG_WORK4);
+    }
+    flags_carry_inverted = false;
 		DUPLICACTE_CARRY
 	} else {
+		d = readreg(d);
 		TST_ww(d, d);
+    flags_carry_inverted = false;
 	}
 
 	unlock2(d);
@@ -3451,9 +3554,10 @@ MENDFUNC(2,jff_LSR_l_imm,(RW4 d, IM8 i))
 MIDFUNC(2,jnf_LSR_b_reg,(RW1 d, RR4 i))
 {
 	if (isconst(i)) {
-		COMPCALL(jnf_LSR_b_imm)(d, live.state[i].val & 15);
+		COMPCALL(jnf_LSR_b_imm)(d, live.state[i].val & 0x3f);
 		return;
 	}
+
 	INIT_REGS_b(d, i);
 
 	UNSIGNED8_REG_2_REG(REG_WORK1, d);
@@ -3468,9 +3572,10 @@ MENDFUNC(2,jnf_LSR_b_reg,(RW1 d, RR4 i))
 MIDFUNC(2,jnf_LSR_w_reg,(RW2 d, RR4 i))
 {
 	if (isconst(i)) {
-		COMPCALL(jnf_LSR_w_imm)(d, live.state[i].val & 31);
+		COMPCALL(jnf_LSR_w_imm)(d, live.state[i].val & 0x3f);
 		return;
 	}
+
 	INIT_REGS_w(d, i);
 
 	UNSIGNED16_REG_2_REG(REG_WORK1, d);
@@ -3488,9 +3593,10 @@ MIDFUNC(2,jnf_LSR_l_reg,(RW4 d, RR4 i))
 		if(i > 31)
 			set_const(d, 0);
 		else
-			COMPCALL(jnf_LSR_l_imm)(d, live.state[i].val & 31);
+			COMPCALL(jnf_LSR_l_imm)(d, live.state[i].val & 0x3f);
 		return;
 	}
+
 	INIT_REGS_l(d, i);
 
 	AND_ww3f(REG_WORK1, i);
@@ -3502,14 +3608,18 @@ MENDFUNC(2,jnf_LSR_l_reg,(RW4 d, RR4 i))
 
 MIDFUNC(2,jff_LSR_b_reg,(RW1 d, RR4 i))
 {
+	if (isconst(i)) {
+		COMPCALL(jff_LSR_b_imm)(d, live.state[i].val & 0x3f);
+		return;
+	}
+
 	INIT_REGS_b(d, i);
-  int x = writereg(FLAGX);
 
 	ANDS_ww3f(REG_WORK1, i);
   uae_u32* branchadd = (uae_u32*)get_target();
 	BEQ_i(0);                       // No shift -> X flag unchanged
 	
-	UBFIZ_xxii(REG_WORK3, d, 0, 8);     // AND_rri(REG_WORK2, d, 0xff);
+	UNSIGNED8_REG_2_REG(REG_WORK3, d);
 	LSR_www(REG_WORK2, REG_WORK3, REG_WORK1);
   BFI_wwii(d, REG_WORK2, 0, 8);
 	TST_ww(REG_WORK2, REG_WORK2);
@@ -3522,6 +3632,7 @@ MIDFUNC(2,jff_LSR_b_reg,(RW1 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 
 	B_i(3);
@@ -3531,15 +3642,18 @@ MIDFUNC(2,jff_LSR_b_reg,(RW1 d, RR4 i))
 	SIGNED8_REG_2_REG(REG_WORK2, d);        // Make sure, sign is in MSB if shift count is 0 (to get correct N flag)
 	TST_ww(REG_WORK2, REG_WORK2);
 
-  unlock2(x);
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_LSR_b_reg,(RW1 d, RR4 i))
 
 MIDFUNC(2,jff_LSR_w_reg,(RW2 d, RR4 i))
 {
+	if (isconst(i)) {
+		COMPCALL(jff_LSR_w_imm)(d, live.state[i].val & 0x3f);
+		return;
+	}
+
 	INIT_REGS_w(d, i);
-  int x = writereg(FLAGX);
 
 	ANDS_ww3f(REG_WORK1, i);
   uae_u32* branchadd = (uae_u32*)get_target();
@@ -3558,6 +3672,7 @@ MIDFUNC(2,jff_LSR_w_reg,(RW2 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 
 	B_i(3);
@@ -3567,15 +3682,18 @@ MIDFUNC(2,jff_LSR_w_reg,(RW2 d, RR4 i))
 	SIGNED16_REG_2_REG(REG_WORK2, d);       // Make sure, sign is in MSB if shift count is 0 (to get correct N flag)
 	TST_ww(REG_WORK2, REG_WORK2);
 
-  unlock2(x);
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_LSR_w_reg,(RW2 d, RR4 i))
 
 MIDFUNC(2,jff_LSR_l_reg,(RW4 d, RR4 i))
 {
+	if (isconst(i)) {
+		COMPCALL(jff_LSR_l_imm)(d, live.state[i].val & 0x3f);
+		return;
+	}
+
 	INIT_REGS_l(d, i);
-  int x = writereg(FLAGX);
 
 	ANDS_ww3f(REG_WORK1, i);
   uae_u32* branchadd = (uae_u32*)get_target();
@@ -3593,6 +3711,7 @@ MIDFUNC(2,jff_LSR_l_reg,(RW4 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 
 	B_i(2);
@@ -3601,7 +3720,6 @@ MIDFUNC(2,jff_LSR_l_reg,(RW4 d, RR4 i))
   write_jmp_target(branchadd, (uintptr)get_target());
 	TST_ww(d, d);
 
-  unlock2(x);
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_LSR_l_reg,(RW4 d, RR4 i))
@@ -3623,7 +3741,7 @@ MENDFUNC(2,jff_LSR_l_reg,(RW4 d, RR4 i))
 MIDFUNC(1,jnf_LSRW,(RW2 d))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val >> 1) & 0xffff);
+		live.state[d].val = ((live.state[d].val & 0xffff) >> 1);
 		return;
 	}
 	
@@ -3649,6 +3767,7 @@ MIDFUNC(1,jff_LSRW,(RW2 d))
   MRS_NZCV_x(REG_WORK4);
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
+  flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 
 	unlock2(d);
@@ -3671,9 +3790,10 @@ MENDFUNC(1,jff_LSRW,(RW2 d))
 MIDFUNC(2,jnf_MOVE_b_imm,(W1 d, IM8 s))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | (s & 0x000000ff));
+		live.state[d].val = (live.state[d].val & 0xffffff00) | (s & 0x000000ff);
 		return;
 	}
+
 	d = rmw(d);
 
 	MOV_xi(REG_WORK1, s & 0xff);
@@ -3686,9 +3806,10 @@ MENDFUNC(2,jnf_MOVE_b_imm,(W1 d, IM8 s))
 MIDFUNC(2,jnf_MOVE_w_imm,(W2 d, IM16 s))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | (s & 0x0000ffff));
+		live.state[d].val = (live.state[d].val & 0xffff0000) | (s & 0x0000ffff);
 		return;
 	}
+
 	d = rmw(d);
 
 	MOVK_xi(d, s & 0xffff);
@@ -3697,18 +3818,8 @@ MIDFUNC(2,jnf_MOVE_w_imm,(W2 d, IM16 s))
 }
 MENDFUNC(2,jnf_MOVE_w_imm,(W2 d, IM16 s))
 
-MIDFUNC(2,jnf_MOVE_l_imm,(W4 d, IM32 s))
-{
-	set_const(d, s);
-}
-MENDFUNC(2,jnf_MOVE_l_imm,(W4 d, IM32 s))
-
 MIDFUNC(2,jnf_MOVE_b,(W1 d, RR1 s))
 {
-	if(d >= 16) {
-		mov_l_rr(d, s);
-		return;
-	}
 	if(s == d)
 		return;
 	if (isconst(s)) {
@@ -3726,10 +3837,6 @@ MENDFUNC(2,jnf_MOVE_b,(W1 d, RR1 s))
 
 MIDFUNC(2,jnf_MOVE_w,(W2 d, RR2 s))
 {
-	if(d >= 16) {
-		mov_l_rr(d, s);
-		return;
-	}
 	if(s == d)
 		return;
 	if (isconst(s)) {
@@ -3763,6 +3870,7 @@ MIDFUNC(2,jff_MOVE_b_imm,(W1 d, IM8 s))
 	TST_ww(REG_WORK1, REG_WORK1);
   BFI_xxii(d, REG_WORK1, 0, 8);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_MOVE_b_imm,(W1 d, IM8 s))
@@ -3775,6 +3883,7 @@ MIDFUNC(2,jff_MOVE_w_imm,(W2 d, IM16 s))
 	TST_ww(REG_WORK1, REG_WORK1);
   BFI_xxii(d, REG_WORK1, 0, 16);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_MOVE_w_imm,(W2 d, IM16 s))
@@ -3786,6 +3895,7 @@ MIDFUNC(2,jff_MOVE_l_imm,(W4 d, IM32 s))
 	LOAD_U32(d, s);
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_MOVE_l_imm,(W4 d, IM32 s))
@@ -3810,6 +3920,7 @@ MIDFUNC(2,jff_MOVE_b,(W1 d, RR1 s))
 	if(!s_is_d)
     BFI_xxii(d, REG_WORK1, 0, 8);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_MOVE_b,(W1 d, RR1 s))
@@ -3834,6 +3945,7 @@ MIDFUNC(2,jff_MOVE_w,(W2 d, RR2 s))
   if(!s_is_d)
     BFI_xxii(d, REG_WORK1, 0, 16);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_MOVE_w,(W2 d, RR2 s))
@@ -3847,13 +3959,14 @@ MIDFUNC(2,jff_MOVE_l,(W4 d, RR4 s))
 
 	int s_is_d = (s == d);
 	s = readreg(s);
-	if(!s_is_d)
+	
+	if(!s_is_d) {
 	  d = writereg(d);
-
-	if(!s_is_d)
 	  MOV_ww(d, s);
+	}
   TST_ww(s, s);
 
+  flags_carry_inverted = false;
 	if(!s_is_d)
 	  unlock2(d);
 	unlock2(s);
@@ -3971,6 +4084,11 @@ MENDFUNC(2,jnf_MOVE16,(RR4 d, RR4 s))
  */
 MIDFUNC(2,jnf_MOVEA_w,(W4 d, RR2 s))
 {
+	if (isconst(s)) {
+		set_const(d, (uae_s32)(uae_s16)live.state[s].val);
+		return;
+	}
+
 	INIT_REGS_l(d, s);
 	
 	SIGNED16_REG_2_REG(d, s);
@@ -4000,6 +4118,15 @@ MENDFUNC(2,jnf_MOVEA_l,(W4 d, RR4 s))
  */
 MIDFUNC(2,jnf_MULS,(RW4 d, RR4 s))
 {
+  if (isconst(s)) {
+    d = rmw(d);
+    SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    SIGNED16_REG_2_REG(d, d);
+    SMULL_xww(d, d, REG_WORK1);
+    unlock2(d);
+    return; 
+  }
+    
 	INIT_REGS_l(d, s);
   
   SIGNED16_REG_2_REG(d, d);
@@ -4019,6 +4146,7 @@ MIDFUNC(2,jff_MULS,(RW4 d, RR4 s))
 	SMULL_xww(d, d, REG_WORK1);
   TST_ww(d, d);
   
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_MULS,(RW4 d, RR4 s))
@@ -4038,14 +4166,16 @@ MIDFUNC(2,jff_MULS32,(RW4 d, RR4 s))
 	INIT_REGS_l(d, s);
 
   SMULL_xww(d, d, s);
-
   TST_ww(d, d);
-  LSR_xxi(REG_WORK1, d, 32);
-  CBZ_wi(REG_WORK1, 4);
-  MRS_NZCV_x(REG_WORK4);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
-  MSR_NZCV_x(REG_WORK4);
 
+  if (needed_flags & FLAG_V) {
+    LSR_xxi(REG_WORK1, d, 32);
+    CBZ_wi(REG_WORK1, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_MULS32,(RW4 d, RR4 s))
@@ -4070,19 +4200,22 @@ MIDFUNC(2,jff_MULS64,(RW4 d, RW4 s))
 
   SXTW_xw(REG_WORK1, d);
   SXTW_xw(REG_WORK2, s);
-  SMULH_xxx(REG_WORK3, REG_WORK1, REG_WORK2);
   SMULL_xww(d, REG_WORK1, REG_WORK2);
   TST_xx(d, d);
   LSR_xxi(s, d, 32);
 
-  // check overflow: no overflow if high part is 0 or 0xffffffff
-  CBZ_xi(REG_WORK3, 6);
-  ADD_wwi(REG_WORK3, REG_WORK3, 1);
-  CBZ_xi(REG_WORK3, 4);
-  MRS_NZCV_x(REG_WORK4);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
-  MSR_NZCV_x(REG_WORK4);
+  if (needed_flags & FLAG_V) {
+    // check overflow: no overflow if high part is 0 or 0xffffffff
+    SMULH_xxx(REG_WORK3, REG_WORK1, REG_WORK2);
+    CBZ_xi(REG_WORK3, 6);
+    ADD_wwi(REG_WORK3, REG_WORK3, 1);
+    CBZ_xi(REG_WORK3, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
     
+  flags_carry_inverted = false;
 	unlock2(s);
 	unlock2(d);
 }
@@ -4103,6 +4236,15 @@ MENDFUNC(2,jff_MULS64,(RW4 d, RW4 s))
  */
 MIDFUNC(2,jnf_MULU,(RW4 d, RR4 s))
 {
+  if (isconst(s)) {
+    d = rmw(d);
+    UNSIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    UNSIGNED16_REG_2_REG(d, d);
+    UMULL_xww(d, d, REG_WORK1);
+    unlock2(d);
+    return; 
+  }
+
 	INIT_REGS_l(d, s);
 
 	UNSIGNED16_REG_2_REG(d, d);
@@ -4115,6 +4257,17 @@ MENDFUNC(2,jnf_MULU,(RW4 d, RR4 s))
 
 MIDFUNC(2,jff_MULU,(RW4 d, RR4 s))
 {
+  if (isconst(s)) {
+    d = rmw(d);
+    UNSIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    UNSIGNED16_REG_2_REG(d, d);
+    UMULL_xww(d, d, REG_WORK1);
+    TST_ww(d, d);
+    flags_carry_inverted = false;
+    unlock2(d);
+    return; 
+  }
+
 	INIT_REGS_l(d, s);
 
 	UNSIGNED16_REG_2_REG(d, d);
@@ -4122,6 +4275,7 @@ MIDFUNC(2,jff_MULU,(RW4 d, RR4 s))
 	UMULL_xww(d, d, REG_WORK1);
   TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_MULU,(RW4 d, RR4 s))
@@ -4141,14 +4295,17 @@ MIDFUNC(2,jff_MULU32,(RW4 d, RR4 s))
 	INIT_REGS_l(d, s);
 
   UMULL_xww(d, d, s);
-
   TST_ww(d, d);
-  LSR_xxi(REG_WORK1, d, 32);
-  CBZ_wi(REG_WORK1, 4);
-  MRS_NZCV_x(REG_WORK4);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
-  MSR_NZCV_x(REG_WORK4);
 
+  if (needed_flags & FLAG_V) {
+    LSR_xxi(REG_WORK1, d, 32);
+    CBZ_wi(REG_WORK1, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
+
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_MULU32,(RW4 d, RR4 s))
@@ -4171,19 +4328,26 @@ MIDFUNC(2,jff_MULU64,(RW4 d, RW4 s))
 	s = rmw(s);
 	d = rmw(d);
 
-  MOV_ww(REG_WORK1, d);
-  MOV_ww(REG_WORK2, s);
-  UMULH_xxx(REG_WORK3, REG_WORK1, REG_WORK2);
-  UMULL_xww(d, REG_WORK1, REG_WORK2);
+  if (needed_flags & FLAG_V) {
+    MOV_ww(REG_WORK1, d);
+    MOV_ww(REG_WORK2, s);
+    UMULL_xww(d, REG_WORK1, REG_WORK2);
+  } else {
+    UMULL_xww(d, d, s);
+  }
   TST_xx(d, d);
   LSR_xxi(s, d, 32);
 
-  // check overflow: no overflow if high part is 0
-  CBZ_xi(REG_WORK3, 4);
-  MRS_NZCV_x(REG_WORK4);
-  SET_xxVflag(REG_WORK4, REG_WORK4);
-  MSR_NZCV_x(REG_WORK4);
+  if (needed_flags & FLAG_V) {
+    // check overflow: no overflow if high part is 0
+    UMULH_xxx(REG_WORK3, REG_WORK1, REG_WORK2);
+    CBZ_xi(REG_WORK3, 4);
+    MRS_NZCV_x(REG_WORK4);
+    SET_xxVflag(REG_WORK4, REG_WORK4);
+    MSR_NZCV_x(REG_WORK4);
+  }
 	
+  flags_carry_inverted = false;
 	unlock2(s);
 	unlock2(d);
 }
@@ -4199,25 +4363,16 @@ MENDFUNC(2,jff_MULU64,(RW4 d, RW4 s))
  * N Set if the result is negative. Cleared otherwise.
  * Z Set if the result is zero. Cleared otherwise.
  * V Set if an overflow occurs. Cleared otherwise.
- * C Cleared if the result is zero. Set otherwise.
+ * C Set if a borrow occurs. Cleared otherwise.
  *
  */
 MIDFUNC(1,jnf_NEG_b,(RW1 d))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | ((0 - (uae_u8)live.state[d].val) & 0x000000ff));
-		return;
-	}
-
 	INIT_REG_b(d);
 
 	SIGNED8_REG_2_REG(REG_WORK1, d);
-	if(targetIsReg) {
-		NEG_ww(REG_WORK1, REG_WORK1);
-	  BFI_xxii(d, REG_WORK1, 0, 8);
-	} else {
-		NEG_ww(d, REG_WORK1);
-	}
+	NEG_ww(REG_WORK1, REG_WORK1);
+  BFI_xxii(d, REG_WORK1, 0, 8);
 
 	unlock2(d);
 }
@@ -4225,20 +4380,11 @@ MENDFUNC(1,jnf_NEG_b,(RW1 d))
 
 MIDFUNC(1,jnf_NEG_w,(RW2 d))
 {
-	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | ((0 - (uae_u16)live.state[d].val) & 0x0000ffff));
-		return;
-	}
-
 	INIT_REG_w(d);
 
 	SIGNED16_REG_2_REG(REG_WORK1, d);
-	if(targetIsReg) {
-		NEG_ww(REG_WORK1, REG_WORK1);
-	  BFI_xxii(d, REG_WORK1, 0, 16);
-	} else {
-		NEG_ww(d, REG_WORK1);
-	}
+	NEG_ww(REG_WORK1, REG_WORK1);
+  BFI_xxii(d, REG_WORK1, 0, 16);
 
 	unlock2(d);
 }
@@ -4246,11 +4392,6 @@ MENDFUNC(1,jnf_NEG_w,(RW2 d))
 
 MIDFUNC(1,jnf_NEG_l,(RW4 d))
 {
-	if (isconst(d)) {
-		set_const(d, 0 - (uae_u32)live.state[d].val);
-		return;
-	}
-
 	d = rmw(d);
 
 	NEG_ww(d, d);
@@ -4264,17 +4405,11 @@ MIDFUNC(1,jff_NEG_b,(RW1 d))
 	INIT_REG_b(d);
 
 	SIGNED8_REG_2_REG(REG_WORK1, d);
-	if(targetIsReg) {
-		NEGS_ww(REG_WORK1, REG_WORK1);
-	  BFI_xxii(d, REG_WORK1, 0, 8);
-	} else {
-		NEGS_ww(d, REG_WORK1);
-	}
+	NEGS_ww(REG_WORK1, REG_WORK1);
+  BFI_xxii(d, REG_WORK1, 0, 8);
   
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -4285,17 +4420,11 @@ MIDFUNC(1,jff_NEG_w,(RW2 d))
 	INIT_REG_w(d);
 
 	SIGNED16_REG_2_REG(REG_WORK1, d);
-	if(targetIsReg) {
-		NEGS_ww(REG_WORK1, REG_WORK1);
-	  BFI_xxii(d, REG_WORK1, 0, 16);
-	} else {
-		NEGS_ww(d, REG_WORK1);
-	}
+	NEGS_ww(REG_WORK1, REG_WORK1);
+  BFI_xxii(d, REG_WORK1, 0, 16);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -4307,10 +4436,8 @@ MIDFUNC(1,jff_NEG_l,(RW4 d))
 
 	NEGS_ww(d, d);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -4326,7 +4453,7 @@ MENDFUNC(1,jff_NEG_l,(RW4 d))
  * N Set if the result is negative. Cleared otherwise.
  * Z Cleared if the result is nonzero; unchanged otherwise.
  * V Set if an overflow occurs. Cleared otherwise.
- * C Cleared if the result is zero. Set otherwise.
+ * C Set if a borrow occurs. Cleared otherwise.
  *
  * Attention: Z is cleared only if the result is nonzero. Unchanged otherwise
  *
@@ -4341,12 +4468,8 @@ MIDFUNC(1,jnf_NEGX_b,(RW1 d))
   NEGS_ww(REG_WORK1, x);
 
 	SIGNED8_REG_2_REG(REG_WORK1, d);
-	if(targetIsReg) {
-		NGC_ww(REG_WORK1, REG_WORK1);
-		BFI_xxii(d, REG_WORK1, 0, 8);
-	} else {
-		NGC_ww(d, REG_WORK1);
-	}
+	NGC_ww(REG_WORK1, REG_WORK1);
+	BFI_xxii(d, REG_WORK1, 0, 8);
 
 	unlock2(d);
 	unlock2(x);
@@ -4364,12 +4487,8 @@ MIDFUNC(1,jnf_NEGX_w,(RW2 d))
   NEGS_ww(REG_WORK1, x);
 
 	SIGNED16_REG_2_REG(REG_WORK1, d);
-	if(targetIsReg) {
-		NGC_ww(REG_WORK1, REG_WORK1);
-		BFI_xxii(d, REG_WORK1, 0, 16);
-	} else {
-		NGC_ww(d, REG_WORK1);
-	}
+	NGC_ww(REG_WORK1, REG_WORK1);
+	BFI_xxii(d, REG_WORK1, 0, 16);
 
 	unlock2(d);
 	unlock2(x);
@@ -4412,8 +4531,10 @@ MIDFUNC(1,jff_NEGX_b,(RW1 d))
 	MRS_NZCV_x(REG_WORK4);
 	EOR_xxCflag(REG_WORK4, REG_WORK4);
 	AND_www(REG_WORK4, REG_WORK4, REG_WORK2);
-	UBFX_wwii(x, REG_WORK4, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK4);
+  flags_carry_inverted = false;
+	if (needed_flags & FLAG_X)
+  	UBFX_wwii(x, REG_WORK4, 29, 1); // Duplicate carry
 
 	unlock2(x);
 	unlock2(d);
@@ -4439,8 +4560,10 @@ MIDFUNC(1,jff_NEGX_w,(RW2 d))
 	MRS_NZCV_x(REG_WORK4);
 	EOR_xxCflag(REG_WORK4, REG_WORK4);
 	AND_www(REG_WORK4, REG_WORK4, REG_WORK2);
-	UBFX_wwii(x, REG_WORK4, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK4);
+  flags_carry_inverted = false;
+	if (needed_flags & FLAG_X)
+  	UBFX_wwii(x, REG_WORK4, 29, 1); // Duplicate carry
 
 	unlock2(x);
 	unlock2(d);
@@ -4464,8 +4587,10 @@ MIDFUNC(1,jff_NEGX_l,(RW4 d))
 	MRS_NZCV_x(REG_WORK4);
 	EOR_xxCflag(REG_WORK4, REG_WORK4);
 	AND_www(REG_WORK4, REG_WORK4, REG_WORK2);
-	UBFX_wwii(x, REG_WORK4, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK4);
+  flags_carry_inverted = false;
+	if (needed_flags & FLAG_X)
+  	UBFX_wwii(x, REG_WORK4, 29, 1); // Duplicate carry
 
 	unlock2(x);
 	unlock2(d);
@@ -4488,7 +4613,7 @@ MENDFUNC(1,jff_NEGX_l,(RW4 d))
 MIDFUNC(1,jnf_NOT_b,(RW1 d))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | ((~live.state[d].val) & 0x000000ff));
+		live.state[d].val = (live.state[d].val & 0xffffff00) | ((~live.state[d].val) & 0x000000ff);
 		return;
 	}
 
@@ -4508,7 +4633,7 @@ MENDFUNC(1,jnf_NOT_b,(RW1 d))
 MIDFUNC(1,jnf_NOT_w,(RW2 d))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | ((~live.state[d].val) & 0x0000ffff));
+		live.state[d].val = (live.state[d].val & 0xffff0000) | ((~live.state[d].val) & 0x0000ffff);
 		return;
 	}
 
@@ -4528,7 +4653,7 @@ MENDFUNC(1,jnf_NOT_w,(RW2 d))
 MIDFUNC(1,jnf_NOT_l,(RW4 d))
 {
 	if (isconst(d)) {
-		set_const(d, ~live.state[d].val);
+		live.state[d].val = ~live.state[d].val;
 		return;
 	}
 
@@ -4554,6 +4679,7 @@ MIDFUNC(1,jff_NOT_b,(RW1 d))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_NOT_b,(RW1 d))
@@ -4572,6 +4698,7 @@ MIDFUNC(1,jff_NOT_w,(RW2 d))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_NOT_w,(RW2 d))
@@ -4583,6 +4710,7 @@ MIDFUNC(1,jff_NOT_l,(RW4 d))
 	MVN_ww(d, d);
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_NOT_l,(RW4 d))
@@ -4604,7 +4732,7 @@ MENDFUNC(1,jff_NOT_l,(RW4 d))
 MIDFUNC(2,jnf_OR_b_imm,(RW1 d, IM8 v))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | ((live.state[d].val | v) & 0x000000ff));
+		live.state[d].val = (live.state[d].val & 0xffffff00) | ((live.state[d].val | v) & 0x000000ff);
 		return;
 	}
 
@@ -4640,7 +4768,7 @@ MENDFUNC(2,jnf_OR_b,(RW1 d, RR1 s))
 MIDFUNC(2,jnf_OR_w_imm,(RW2 d, IM16 v))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | ((live.state[d].val | v) & 0x0000ffff));
+		live.state[d].val = (live.state[d].val & 0xffff0000) | ((live.state[d].val | v) & 0x0000ffff);
 		return;
 	}
 
@@ -4673,26 +4801,10 @@ MIDFUNC(2,jnf_OR_w,(RW2 d, RR2 s))
 }
 MENDFUNC(2,jnf_OR_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jnf_OR_l_imm,(RW4 d, IM32 v))
-{
-	if (isconst(d)) {
-		set_const(d, live.state[d].val | v);
-		return;
-	}
-
-	d = rmw(d);
-
-  LOAD_U32(REG_WORK1, v);
-  ORR_www(d, d, REG_WORK1);
-
-	unlock2(d);
-}
-MENDFUNC(2,jnf_OR_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jnf_OR_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jnf_OR_l_imm)(d, live.state[s].val);
+	if (isconst(d) && isconst(s)) {
+		live.state[d].val = live.state[d].val | live.state[s].val;
 		return;
 	}
 
@@ -4719,6 +4831,7 @@ MIDFUNC(2,jff_OR_b_imm,(RW1 d, IM8 v))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_OR_b_imm,(RW1 d, IM8 v))
@@ -4743,6 +4856,7 @@ MIDFUNC(2,jff_OR_b,(RW1 d, RR1 s))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_OR_b,(RW1 d, RR1 s))
@@ -4762,6 +4876,7 @@ MIDFUNC(2,jff_OR_w_imm,(RW2 d, IM16 v))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_OR_w_imm,(RW2 d, IM16 v))
@@ -4786,34 +4901,19 @@ MIDFUNC(2,jff_OR_w,(RW2 d, RR2 s))
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_OR_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jff_OR_l_imm,(RW4 d, IM32 v))
-{
-	d = rmw(d);
-
-	LOAD_U32(REG_WORK2, v);
-  ORR_www(d, d, REG_WORK2);
-	TST_ww(d, d);
-
-	unlock2(d);
-}
-MENDFUNC(2,jff_OR_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jff_OR_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jff_OR_l_imm)(d, live.state[s].val);
-		return;
-	}
-
 	INIT_REGS_l(d, s);
 
 	ORR_www(d, d, s);
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_OR_l,(RW4 d, RR4 s))
@@ -4834,6 +4934,10 @@ MENDFUNC(2,jff_OR_l,(RW4 d, RR4 s))
 MIDFUNC(1,jff_ORSR,(IM32 s, IM8 x))
 {
 	MRS_NZCV_x(REG_WORK1);
+  if (flags_carry_inverted) {
+    EOR_xxCflag(REG_WORK1, REG_WORK1);
+    flags_carry_inverted = false;
+  }
 	MOV_xish(REG_WORK2, (s >> 16), 16);
 	ORR_www(REG_WORK1, REG_WORK1, REG_WORK2);
 	MSR_NZCV_x(REG_WORK1);
@@ -4895,6 +4999,12 @@ MENDFUNC(2,jnf_ROL_w_imm,(RW2 d, IM8 i))
 MIDFUNC(2,jnf_ROL_l_imm,(RW4 d, IM8 i))
 {
   if(i & 0x1f) {
+    if (isconst(d)) {
+      i = i & 31;
+      live.state[d].val = (live.state[d].val << i) | (live.state[d].val >> (32-i));
+      return;
+    }
+
 		d = rmw(d);
 
   	ROR_wwi(d, d, (32 - (i & 0x1f)));
@@ -4928,6 +5038,7 @@ MIDFUNC(2,jff_ROL_b_imm,(RW1 d, IM8 i))
 		TST_ww(REG_WORK1, REG_WORK1);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_ROL_b_imm,(RW1 d, IM8 i))
@@ -4954,29 +5065,31 @@ MIDFUNC(2,jff_ROL_w_imm,(RW2 d, IM8 i))
 		TST_ww(REG_WORK1, REG_WORK1);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_ROL_w_imm,(RW2 d, IM8 i))
 
 MIDFUNC(2,jff_ROL_l_imm,(RW4 d, IM8 i))
 {
-	if(i)
-	  d = rmw(d);
-	else
-		d = readreg(d);
-
 	if (i) {
-		if(i & 0x1f)
+		if(i & 0x1f) {
+  	  d = rmw(d);
   		ROR_wwi(d, d, (32 - (i & 0x1f)));
+  	} else {
+  		d = readreg(d);
+  	}
     TST_ww(d, d);
 
 		MRS_NZCV_x(REG_WORK4);
 		BFI_wwii(REG_WORK4, d, 29, 1); // Handle C flag
 		MSR_NZCV_x(REG_WORK4);
 	} else {
+		d = readreg(d);
 		TST_ww(d, d);
 	}
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_ROL_l_imm,(RW4 d, IM8 i))
@@ -4987,6 +5100,7 @@ MIDFUNC(2,jnf_ROL_b,(RW1 d, RR4 i))
 		COMPCALL(jnf_ROL_b_imm)(d, (uae_u8)live.state[i].val);
 		return;
 	}
+
 	INIT_REGS_b(d, i);
 
 	UBFIZ_xxii(REG_WORK1, i, 0, 5); // AND_rri(REG_WORK1, i, 0x1f);
@@ -5009,6 +5123,7 @@ MIDFUNC(2,jnf_ROL_w,(RW2 d, RR4 i))
 		COMPCALL(jnf_ROL_w_imm)(d, (uae_u8)live.state[i].val);
 		return;
 	}
+
 	INIT_REGS_w(d, i);
 
 	UBFIZ_xxii(REG_WORK1, i, 0, 5); // AND_rri(REG_WORK1, i, 0x1f);
@@ -5030,6 +5145,7 @@ MIDFUNC(2,jnf_ROL_l,(RW4 d, RR4 i))
 		COMPCALL(jnf_ROL_l_imm)(d, (uae_u8)live.state[i].val);
 		return;
 	}
+
 	INIT_REGS_l(d, i);
 
 	UBFIZ_xxii(REG_WORK1, i, 0, 5); // AND_rri(REG_WORK1, i, 0x1f);
@@ -5077,6 +5193,7 @@ MIDFUNC(2,jff_ROL_b,(RW1 d, RR4 i))
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_ROL_b,(RW1 d, RR4 i))
@@ -5115,6 +5232,7 @@ MIDFUNC(2,jff_ROL_w,(RW2 d, RR4 i))
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_ROL_w,(RW2 d, RR4 i))
@@ -5149,6 +5267,7 @@ MIDFUNC(2,jff_ROL_l,(RW4 d, RR4 i))
   // <end>
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(d);
 	unlock2(i);
 }
@@ -5191,6 +5310,7 @@ MIDFUNC(1,jff_ROLW,(RW2 d))
 	BFI_wwii(REG_WORK4, d, 29, 1); // Handle C flag
 	MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_ROLW,(RW2 d))
@@ -5240,7 +5360,7 @@ MIDFUNC(2,jnf_ROXL_b,(RW1 d, RR4 i))
 	
 	BFI_wwii(d, REG_WORK2, 0, 8);
 	
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
 	unlock2(x);
@@ -5276,7 +5396,7 @@ MIDFUNC(2,jnf_ROXL_w,(RW2 d, RR4 i))
 	
 	BFI_wwii(d, REG_WORK2, 0, 16);
 
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
 	unlock2(x);
@@ -5307,7 +5427,7 @@ MIDFUNC(2,jnf_ROXL_l,(RW4 d, RR4 i))
 	SUB_www(REG_WORK3, REG_WORK3, REG_WORK1);
 	LSR_xxx(d, REG_WORK2, REG_WORK3);
 
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
 	unlock2(x);
@@ -5357,9 +5477,10 @@ MIDFUNC(2,jff_ROXL_b,(RW1 d, RR4 i))
   BFI_wwii(REG_WORK4, x, 29, 1);
   MSR_NZCV_x(REG_WORK4);
   
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, i);
 }
@@ -5405,9 +5526,10 @@ MIDFUNC(2,jff_ROXL_w,(RW2 d, RR4 i))
   BFI_wwii(REG_WORK4, x, 29, 1);
   MSR_NZCV_x(REG_WORK4);
 	
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, i);
 }
@@ -5448,9 +5570,10 @@ MIDFUNC(2,jff_ROXL_l,(RW4 d, RR4 i))
   BFI_wwii(REG_WORK4, x, 29, 1);
   MSR_NZCV_x(REG_WORK4);
 
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, i);
 }
@@ -5504,6 +5627,12 @@ MENDFUNC(2,jnf_ROR_w_imm,(RW2 d, IM8 i))
 MIDFUNC(2,jnf_ROR_l_imm,(RW4 d, IM8 i))
 {
 	if(i & 0x1f) {
+	  if (isconst(d)) {
+	    i = i & 31;
+	    live.state[d].val = (live.state[d].val >> i) | (live.state[d].val << (32-i));
+	    return;
+	  }
+
 		d = rmw(d);
 	
 		ROR_wwi(d, d, i & 31);
@@ -5535,6 +5664,7 @@ MIDFUNC(2,jff_ROR_b_imm,(RW1 d, IM8 i))
 	  MSR_NZCV_x(REG_WORK4);
   }
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_ROR_b_imm,(RW1 d, IM8 i))
@@ -5560,6 +5690,7 @@ MIDFUNC(2,jff_ROR_w_imm,(RW2 d, IM8 i))
 	  MSR_NZCV_x(REG_WORK4);
   }
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_ROR_w_imm,(RW2 d, IM8 i))
@@ -5582,6 +5713,7 @@ MIDFUNC(2,jff_ROR_l_imm,(RW4 d, IM8 i))
 	  MSR_NZCV_x(REG_WORK4);
   }
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(2,jff_ROR_l_imm,(RW4 d, IM8 i))
@@ -5592,6 +5724,7 @@ MIDFUNC(2,jnf_ROR_b,(RW1 d, RR4 i))
 		COMPCALL(jnf_ROR_b_imm)(d, (uae_u8)live.state[i].val);
 		return;
 	}
+
 	INIT_REGS_b(d, i);
 
 	LSL_wwi(REG_WORK1, d, 24);
@@ -5610,6 +5743,7 @@ MIDFUNC(2,jnf_ROR_w,(RW2 d, RR4 i))
 		COMPCALL(jnf_ROR_w_imm)(d, (uae_u8)live.state[i].val);
 		return;
 	}
+
 	INIT_REGS_w(d, i);
 
 	LSL_wwi(REG_WORK1, d, 16);
@@ -5627,6 +5761,7 @@ MIDFUNC(2,jnf_ROR_l,(RW4 d, RR4 i))
 		COMPCALL(jnf_ROR_l_imm)(d, (uae_u8)live.state[i].val);
 		return;
 	}
+
 	INIT_REGS_l(d, i);
 
 	ROR_www(d, d, i);
@@ -5658,6 +5793,7 @@ MIDFUNC(2,jff_ROR_b,(RW1 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_ROR_b,(RW1 d, RR4 i))
@@ -5684,6 +5820,7 @@ MIDFUNC(2,jff_ROR_w,(RW2 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_ROR_w,(RW2 d, RR4 i))
@@ -5707,6 +5844,7 @@ MIDFUNC(2,jff_ROR_l,(RW4 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	EXIT_REGS(d, i);
 }
 MENDFUNC(2,jff_ROR_l,(RW4 d, RR4 i))
@@ -5749,6 +5887,7 @@ MIDFUNC(1,jff_RORW,(RW2 d))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_RORW,(RW2 d))
@@ -5795,7 +5934,7 @@ MIDFUNC(2,jnf_ROXR_b,(RW1 d, RR4 i))
 	LSR_www(REG_WORK2, REG_WORK2, REG_WORK1);
 	BFI_wwii(d, REG_WORK2, 0, 8);
 	
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
 	unlock2(x);
@@ -5828,7 +5967,7 @@ MIDFUNC(2,jnf_ROXR_w,(RW2 d, RR4 i))
 	LSR_xxx(REG_WORK2, REG_WORK2, REG_WORK1);
 	BFI_wwii(d, REG_WORK2, 0, 16);
 	
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
 	unlock2(x);
@@ -5857,7 +5996,7 @@ MIDFUNC(2,jnf_ROXR_l,(RW4 d, RR4 i))
 
 	LSR_xxx(d, REG_WORK2, REG_WORK1);
 
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
 	unlock2(x);
@@ -5908,9 +6047,10 @@ MIDFUNC(2,jff_ROXR_b,(RW1 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 		
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, i);
 }
@@ -5956,9 +6096,10 @@ MIDFUNC(2,jff_ROXR_w,(RW2 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 	
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, i);
 }
@@ -5998,9 +6139,10 @@ MIDFUNC(2,jff_ROXR_l,(RW4 d, RR4 i))
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
 
-  // <end>
+  // end of op
   write_jmp_target(branchadd, (uintptr)get_target());
 
+  flags_carry_inverted = false;
 	unlock2(x);
 	EXIT_REGS(d, i);
 }
@@ -6012,17 +6154,19 @@ MENDFUNC(2,jff_ROXR_l,(RW4 d, RR4 i))
  */
 MIDFUNC(2,jnf_SCC,(W1 d, IM8 cc))
 {
+  FIX_INVERTED_CARRY
+
 	INIT_WREG_b(d);
  
  	switch (cc) {
 		case 9: // LS
-			CSETM_wc(REG_WORK1, NATIVE_CC_CS);
+		  CSETM_wc(REG_WORK1, NATIVE_CC_CS);
 			CSETM_wc(REG_WORK2, NATIVE_CC_EQ);
 			ORR_www(REG_WORK1, REG_WORK1, REG_WORK2);
 			break;
 
 		case 8: // HI
-			CSETM_wc(REG_WORK1, NATIVE_CC_CC);
+		  CSETM_wc(REG_WORK1, NATIVE_CC_CC);
       CSETM_wc(REG_WORK2, NATIVE_CC_NE);
       AND_www(REG_WORK1, REG_WORK1, REG_WORK2);
 			break;
@@ -6054,7 +6198,7 @@ MENDFUNC(2,jnf_SCC,(W1 d, IM8 cc))
 MIDFUNC(2,jnf_SUB_b_imm,(RW1 d, IM8 v))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffffff00) | (((live.state[d].val & 0xff) - (v & 0xff)) & 0x000000ff));
+		live.state[d].val = (live.state[d].val & 0xffffff00) | (((live.state[d].val & 0xff) - (v & 0xff)) & 0x000000ff);
 		return;
 	}
 
@@ -6094,7 +6238,7 @@ MENDFUNC(2,jnf_SUB_b,(RW1 d, RR1 s))
 MIDFUNC(2,jnf_SUB_w_imm,(RW2 d, IM16 v))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val & 0xffff0000) | (((live.state[d].val & 0xffff) - (v & 0xffff)) & 0x0000ffff));
+		live.state[d].val = (live.state[d].val & 0xffff0000) | (((live.state[d].val & 0xffff) - (v & 0xffff)) & 0x0000ffff);
 		return;
 	}
 
@@ -6132,26 +6276,10 @@ MIDFUNC(2,jnf_SUB_w,(RW2 d, RR2 s))
 }
 MENDFUNC(2,jnf_SUB_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jnf_SUB_l_imm,(RW4 d, IM32 v))
-{
-	if (isconst(d)) {
-		set_const(d, live.state[d].val - v);
-		return;
-	}
-
-	d = rmw(d);
-
-	LOAD_U32(REG_WORK1, v);
-	SUB_www(d, d, REG_WORK1);
-
-	unlock2(d);
-}
-MENDFUNC(2,jnf_SUB_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jnf_SUB_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jnf_SUB_l_imm)(d, live.state[s].val);
+	if (isconst(d) && isconst(s)) {
+		live.state[d].val = live.state[d].val - live.state[s].val;
 		return;
 	}
 
@@ -6172,10 +6300,8 @@ MIDFUNC(2,jff_SUB_b_imm,(RW1 d, IM8 v))
 	SUBS_www(REG_WORK1, REG_WORK1, REG_WORK2);
 	BFXIL_xxii(d, REG_WORK1, 24, 8);
 	
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -6194,10 +6320,8 @@ MIDFUNC(2,jff_SUB_b,(RW1 d, RR1 s))
 	SUBS_wwwLSLi(REG_WORK1, REG_WORK1, s, 24);
 	BFXIL_xxii(d, REG_WORK1, 24, 8);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	EXIT_REGS(d, s);
 }
@@ -6212,10 +6336,8 @@ MIDFUNC(2,jff_SUB_w_imm,(RW2 d, IM16 v))
 	SUBS_wwwLSLi(REG_WORK1, REG_WORK2, REG_WORK1, 16);
   BFXIL_xxii(d, REG_WORK1, 16, 16);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	unlock2(d);
 }
@@ -6234,46 +6356,21 @@ MIDFUNC(2,jff_SUB_w,(RW2 d, RR2 s))
   SUBS_wwwLSLi(REG_WORK1, REG_WORK1, s, 16);
   BFXIL_xxii(d, REG_WORK1, 16, 16);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jff_SUB_w,(RW2 d, RR2 s))
 
-MIDFUNC(2,jff_SUB_l_imm,(RW4 d, IM32 v))
-{
-	d = rmw(d);
-
-	LOAD_U32(REG_WORK2, v);
-	SUBS_www(d, d, REG_WORK2);
-
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
-
-	unlock2(d);
-}
-MENDFUNC(2,jff_SUB_l_imm,(RW4 d, IM32 v))
-
 MIDFUNC(2,jff_SUB_l,(RW4 d, RR4 s))
 {
-	if (isconst(s)) {
-		COMPCALL(jff_SUB_l_imm)(d, live.state[s].val);
-		return;
-	}
-
 	INIT_REGS_l(d, s);
 
 	SUBS_www(d, d, s);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-  DUPLICACTE_CARRY_FROM_REG(REG_WORK1)
+  flags_carry_inverted = true;
+  DUPLICACTE_CARRY
 
 	EXIT_REGS(d, s);
 }
@@ -6291,6 +6388,15 @@ MENDFUNC(2,jff_SUB_l,(RW4 d, RR4 s))
  */
 MIDFUNC(2,jnf_SUBA_w,(RW4 d, RR2 s))
 {
+	if (isconst(s)) {
+    // no need to put virt. register s into a real host register via readreg()
+		d = rmw(d);
+		SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+		SUB_www(d, d, REG_WORK1);
+		unlock2(d);
+		return;
+	}
+  
 	INIT_REGS_w(d, s);
 
 	SUB_wwwEX(d, d, s, EX_SXTH);
@@ -6402,8 +6508,10 @@ MIDFUNC(2,jff_SUBX_b,(RW1 d, RR1 s))
 	MRS_NZCV_x(REG_WORK1);
   EOR_xxCflag(REG_WORK1, REG_WORK1);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
-	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK1);
+  flags_carry_inverted = false;
+	if (needed_flags & FLAG_X)
+  	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 
 	unlock2(x);
 	EXIT_REGS(d, s);
@@ -6430,8 +6538,10 @@ MIDFUNC(2,jff_SUBX_w,(RW2 d, RR2 s))
 	MRS_NZCV_x(REG_WORK1);
   EOR_xxCflag(REG_WORK1, REG_WORK1);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
-	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK1);
+  flags_carry_inverted = false;
+	if (needed_flags & FLAG_X)
+  	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 
 	unlock2(x);
 	EXIT_REGS(d, s);
@@ -6455,8 +6565,10 @@ MIDFUNC(2,jff_SUBX_l,(RW4 d, RR4 s))
 	MRS_NZCV_x(REG_WORK1);
   EOR_xxCflag(REG_WORK1, REG_WORK1);
 	AND_xxx(REG_WORK1, REG_WORK1, REG_WORK2);
-	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 	MSR_NZCV_x(REG_WORK1);
+  flags_carry_inverted = false;
+	if (needed_flags & FLAG_X)
+  	UBFX_xxii(x, REG_WORK1, 29, 1); // Duplicate carry
 
 	unlock2(x);
 	EXIT_REGS(d, s);
@@ -6479,7 +6591,7 @@ MENDFUNC(2,jff_SUBX_l,(RW4 d, RR4 s))
 MIDFUNC(1,jnf_SWAP,(RW4 d))
 {
 	if (isconst(d)) {
-		set_const(d, (live.state[d].val >> 16) | (live.state[d].val << 16));
+		live.state[d].val = (live.state[d].val >> 16) | (live.state[d].val << 16);
 		return;
 	}
 
@@ -6498,6 +6610,7 @@ MIDFUNC(1,jff_SWAP,(RW4 d))
 	ROR_wwi(d, d, 16);
 	TST_ww(d, d);
 
+  flags_carry_inverted = false;
 	unlock2(d);
 }
 MENDFUNC(1,jff_SWAP,(RW4 d))
@@ -6525,6 +6638,7 @@ MIDFUNC(1,jff_TST_b,(RR1 s))
 		unlock2(s);
 	}
 	TST_ww(REG_WORK1, REG_WORK1);
+  flags_carry_inverted = false;
 }
 MENDFUNC(1,jff_TST_b,(RR1 s))
 
@@ -6538,20 +6652,16 @@ MIDFUNC(1,jff_TST_w,(RR2 s))
 		unlock2(s);
 	}
 	TST_ww(REG_WORK1, REG_WORK1);
+  flags_carry_inverted = false;
 }
 MENDFUNC(1,jff_TST_w,(RR2 s))
 
 MIDFUNC(1,jff_TST_l,(RR4 s))
 {
-	if (isconst(s)) {
-		LOAD_U32(REG_WORK1, live.state[s].val);
-		TST_ww(REG_WORK1, REG_WORK1);
-	}
-	else {
-		s = readreg(s);
-		TST_ww(s, s);
-		unlock2(s);
-	}
+	s = readreg(s);
+	TST_ww(s, s);
+	unlock2(s);
+  flags_carry_inverted = false;
 }
 MENDFUNC(1,jff_TST_l,(RR4 s))
 

@@ -1491,7 +1491,7 @@ static void gen_dbcc(uae_u32 opcode, struct instr *curi, char* ssize) {
 		  comprintf("\tuae_u32 v2;\n");
 		  comprintf("\tuae_u32 v1=get_const(PC_P);\n");
 		  comprintf("\tv2=get_const(offs);\n");
-		  comprintf("\tregister_branch(v1, v2, %d);\n", NATIVE_CC_CC);
+		  comprintf("\tregister_branch(v1, v2, %d);\n", NATIVE_CC_CS);
 		  break;
 
 	  case 8:

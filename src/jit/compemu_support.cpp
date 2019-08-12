@@ -108,6 +108,8 @@ static const int optcount	= 4;		// How often a block has to be executed before i
 op_properties prop[65536];
 
 bool may_raise_exception = false;
+static bool flags_carry_inverted = false;
+static bool disasm_this = false;
 
 
 STATIC_INLINE bool is_const_jump(uae_u32 opcode)
@@ -655,6 +657,7 @@ static void make_flags_live_internal(void)
 	  tmp = readreg(FLAGTMP);
 	  raw_reg_to_flags(tmp);
 	  unlock2(tmp);
+    flags_carry_inverted = false;
 
     live.flags_in_flags = VALID;
     return;
@@ -665,10 +668,13 @@ static void make_flags_live_internal(void)
 
 static void flags_to_stack(void)
 {
-  if (live.flags_on_stack == VALID)
+  if (live.flags_on_stack == VALID) {
+    flags_carry_inverted = false;
   	return;
+  }
   if (!live.flags_are_important) {
 	  live.flags_on_stack = VALID;
+    flags_carry_inverted = false;
 	  return;
   }
   {
@@ -1266,6 +1272,7 @@ static void init_comp(void)
   live.state[FLAGTMP].mem = (uae_u32*)&(regs.ccrflags.cznv);
 #endif
   set_status(FLAGTMP, INMEM);
+  flags_carry_inverted = false;
 
 	for (i = 0; i < VFREGS; i++) {
 		if (i < 8) { /* First 8 registers map to 68k FPU registers */

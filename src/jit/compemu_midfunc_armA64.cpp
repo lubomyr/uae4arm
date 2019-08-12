@@ -280,6 +280,10 @@ MIDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
 		COMPCALL(lea_l_rr_indexed)(d, s, index, factor);
 		return;
 	}
+	if (isconst(s) && isconst(index)) {
+	  set_const(d, live.state[s].val + (uae_s32)(uae_s8)offset + live.state[index].val * factor);
+	  return;
+	}
 	
 	s = readreg(s);
 	if(d == index) {
@@ -314,6 +318,11 @@ MENDFUNC(5,lea_l_brr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor, IM8 offset))
 
 MIDFUNC(4,lea_l_rr_indexed,(W4 d, RR4 s, RR4 index, IM8 factor))
 {
+	if (isconst(s) && isconst(index)) {
+	  set_const(d, live.state[s].val + live.state[index].val * factor);
+	  return;
+	}
+
 	s = readreg(s);
 	if(d == index) {
 	  d = index = rmw(d);
@@ -452,10 +461,6 @@ MIDFUNC(2,sub_w_ri,(RW2 d, IM8 i))
 	SUBS_wwish(REG_WORK2, REG_WORK2, (i & 0xff) << 4, 1);
 	BFXIL_xxii(d, REG_WORK2, 16, 16);
 
-	MRS_NZCV_x(REG_WORK1);
-	EOR_xxCflag(REG_WORK1, REG_WORK1);
-	MSR_NZCV_x(REG_WORK1);
-
 	unlock2(d);
 }
 MENDFUNC(2,sub_w_ri,(RW2 d, IM8 i))
@@ -546,18 +551,33 @@ MENDFUNC(2,arm_SUB_l_ri8,(RW4 d, IM8 i))
 
 #ifdef JIT_DEBUG
 #include "aarch64.h"
+
+void disam_range(void *start, void *stop)
+{
+  char disbuf[256];
+  uint64_t disptr = (uint64_t)start;
+  while(disptr < (uint64_t)stop) {
+    disasm(disptr, disbuf);
+    write_log("%016llx  %s\n", disptr, disbuf);
+    disptr += 4;
+  }
+}
+
 #endif
 
 STATIC_INLINE void flush_cpu_icache(void *start, void *stop)
 {
 #ifdef JIT_DEBUG
   if((uae_u64)stop - (uae_u64)start > 4) {
-    char disbuf[256];
-    uint64_t disptr = (uint64_t)start;
-    while(disptr < (uint64_t)stop) {
-      disasm(disptr, disbuf);
-      write_log("%016llx  %s\n", disptr, disbuf);
-      disptr += 4;
+    if(disasm_this) {
+      char disbuf[256];
+      uint64_t disptr = (uint64_t)start;
+      while(disptr < (uint64_t)stop) {
+        disasm(disptr, disbuf);
+        write_log("%016llx  %s\n", disptr, disbuf);
+        disptr += 4;
+      }
+      disasm_this = false;
     }
   }
 #endif
