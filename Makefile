@@ -16,7 +16,7 @@ else
 	USE_SDL_VERSION = sdl1
 endif
 
-NAME   = uae4arm
+NAME   = uae4arm-$(arch)
 O      = o
 RM     = rm -f
 #CXX    = g++
@@ -34,7 +34,7 @@ all: $(PROG)
 
 SDL_CFLAGS = `sdl-config --cflags`
 
-MORE_CFLAGS += -Isrc/osdep -Isrc -Isrc/include -Isrc/archivers
+MORE_CFLAGS += -Isrc-$(arch)/osdep -Isrc -Isrc-$(arch)/include -Isrc-$(arch)/archivers
 MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fuse-ld=gold -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
@@ -69,193 +69,193 @@ CFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
 MY_CFLAGS  = $(CFLAGS)
 
 OBJS =	\
-	src/akiko.o \
-	src/ar.o \
-	src/aros.rom.o \
-	src/audio.o \
-	src/autoconf.o \
-	src/blitfunc.o \
-	src/blittable.o \
-	src/blitter.o \
-	src/blkdev.o \
-	src/blkdev_cdimage.o \
-	src/bsdsocket.o \
-	src/calc.o \
-	src/cd32_fmv.o \
-	src/cd32_fmv_genlock.o \
-	src/cdrom.o \
-	src/cfgfile.o \
-	src/cia.o \
-	src/crc32.o \
-	src/custom.o \
-	src/devices.o \
-	src/disk.o \
-	src/diskutil.o \
-	src/dlopen.o \
-	src/drawing.o \
-	src/events.o \
-	src/expansion.o \
-	src/fdi2raw.o \
-	src/filesys.o \
-	src/flashrom.o \
-	src/fpp.o \
-	src/fsdb.o \
-	src/fsdb_unix.o \
-	src/fsusage.o \
-	src/gayle.o \
-	src/gfxboard.o \
-	src/gfxutil.o \
-	src/hardfile.o \
-	src/hrtmon.rom.o \
-	src/ide.o \
-	src/inputdevice.o \
-	src/keybuf.o \
-	src/main.o \
-	src/memory.o \
-	src/native2amiga.o \
-	src/rommgr.o \
-	src/rtc.o \
-	src/savestate.o \
-	src/scsi.o \
-	src/statusline.o \
-	src/traps.o \
-	src/uaelib.o \
-	src/uaeresource.o \
-	src/zfile.o \
-	src/zfile_archive.o \
-	src/archivers/7z/7zAlloc.o \
-	src/archivers/7z/7zBuf.o \
-	src/archivers/7z/7zCrc.o \
-	src/archivers/7z/7zCrcOpt.o \
-	src/archivers/7z/7zDec.o \
-	src/archivers/7z/7zIn.o \
-	src/archivers/7z/7zStream.o \
-	src/archivers/7z/Bcj2.o \
-	src/archivers/7z/Bra.o \
-	src/archivers/7z/Bra86.o \
-	src/archivers/7z/LzmaDec.o \
-	src/archivers/7z/Lzma2Dec.o \
-	src/archivers/7z/BraIA64.o \
-	src/archivers/7z/Delta.o \
-	src/archivers/7z/Sha256.o \
-	src/archivers/7z/Xz.o \
-	src/archivers/7z/XzCrc64.o \
-	src/archivers/7z/XzDec.o \
-	src/archivers/dms/crc_csum.o \
-	src/archivers/dms/getbits.o \
-	src/archivers/dms/maketbl.o \
-	src/archivers/dms/pfile.o \
-	src/archivers/dms/tables.o \
-	src/archivers/dms/u_deep.o \
-	src/archivers/dms/u_heavy.o \
-	src/archivers/dms/u_init.o \
-	src/archivers/dms/u_medium.o \
-	src/archivers/dms/u_quick.o \
-	src/archivers/dms/u_rle.o \
-	src/archivers/lha/crcio.o \
-	src/archivers/lha/dhuf.o \
-	src/archivers/lha/header.o \
-	src/archivers/lha/huf.o \
-	src/archivers/lha/larc.o \
-	src/archivers/lha/lhamaketbl.o \
-	src/archivers/lha/lharc.o \
-	src/archivers/lha/shuf.o \
-	src/archivers/lha/slide.o \
-	src/archivers/lha/uae_lha.o \
-	src/archivers/lha/util.o \
-	src/archivers/lzx/unlzx.o \
-	src/archivers/mp2/kjmp2.o \
-	src/archivers/wrp/warp.o \
-	src/archivers/zip/unzip.o \
-	src/machdep/support.o \
-	src/osdep/bsdsocket_host.o \
-	src/osdep/caps/generic_caps.o \
-	src/osdep/cda_play.o \
-	src/osdep/charset.o \
-	src/osdep/fsdb_host.o \
-	src/osdep/keyboard.o \
-	src/osdep/mp3decoder.o \
-	src/osdep/picasso96.o \
-	src/osdep/writelog.o \
-	src/osdep/generic_hardfile.o \
-	src/osdep/generic_target.o \
-	src/osdep/generic_filesys.o \
-	src/osdep/generic_gui.o \
-	src/osdep/generic_rp9.o \
-	src/osdep/generic_mem.o \
-	src/osdep/sigsegv_handler.o \
-	src/osdep/gui/GenericListModel.o \
-	src/osdep/gui/UaeRadioButton.o \
-	src/osdep/gui/UaeDropDown.o \
-	src/osdep/gui/UaeCheckBox.o \
-	src/osdep/gui/UaeListBox.o \
-	src/osdep/gui/SelectorEntry.o \
-	src/osdep/gui/ShowHelp.o \
-	src/osdep/gui/ShowMessage.o \
-	src/osdep/gui/SelectFolder.o \
-	src/osdep/gui/SelectFile.o \
-	src/osdep/gui/CreateFilesysHardfile.o \
-	src/osdep/gui/EditFilesysVirtual.o \
-	src/osdep/gui/EditFilesysHardfile.o \
-	src/osdep/gui/PanelPaths.o \
-	src/osdep/gui/PanelQuickstart.o \
-	src/osdep/gui/PanelConfig.o \
-	src/osdep/gui/PanelCPU.o \
-	src/osdep/gui/PanelChipset.o \
-	src/osdep/gui/PanelROM.o \
-	src/osdep/gui/PanelRAM.o \
-	src/osdep/gui/PanelFloppy.o \
-	src/osdep/gui/PanelHD.o \
-	src/osdep/gui/PanelInput.o \
-	src/osdep/gui/PanelDisplay.o \
-	src/osdep/gui/PanelSound.o \
-	src/osdep/gui/PanelMisc.o \
-	src/osdep/gui/PanelSavestate.o \
-	src/osdep/gui/main_window.o \
-	src/osdep/gui/Navigation.o
+	src-$(arch)/akiko.o \
+	src-$(arch)/ar.o \
+	src-$(arch)/aros.rom.o \
+	src-$(arch)/audio.o \
+	src-$(arch)/autoconf.o \
+	src-$(arch)/blitfunc.o \
+	src-$(arch)/blittable.o \
+	src-$(arch)/blitter.o \
+	src-$(arch)/blkdev.o \
+	src-$(arch)/blkdev_cdimage.o \
+	src-$(arch)/bsdsocket.o \
+	src-$(arch)/calc.o \
+	src-$(arch)/cd32_fmv.o \
+	src-$(arch)/cd32_fmv_genlock.o \
+	src-$(arch)/cdrom.o \
+	src-$(arch)/cfgfile.o \
+	src-$(arch)/cia.o \
+	src-$(arch)/crc32.o \
+	src-$(arch)/custom.o \
+	src-$(arch)/devices.o \
+	src-$(arch)/disk.o \
+	src-$(arch)/diskutil.o \
+	src-$(arch)/dlopen.o \
+	src-$(arch)/drawing.o \
+	src-$(arch)/events.o \
+	src-$(arch)/expansion.o \
+	src-$(arch)/fdi2raw.o \
+	src-$(arch)/filesys.o \
+	src-$(arch)/flashrom.o \
+	src-$(arch)/fpp.o \
+	src-$(arch)/fsdb.o \
+	src-$(arch)/fsdb_unix.o \
+	src-$(arch)/fsusage.o \
+	src-$(arch)/gayle.o \
+	src-$(arch)/gfxboard.o \
+	src-$(arch)/gfxutil.o \
+	src-$(arch)/hardfile.o \
+	src-$(arch)/hrtmon.rom.o \
+	src-$(arch)/ide.o \
+	src-$(arch)/inputdevice.o \
+	src-$(arch)/keybuf.o \
+	src-$(arch)/main.o \
+	src-$(arch)/memory.o \
+	src-$(arch)/native2amiga.o \
+	src-$(arch)/rommgr.o \
+	src-$(arch)/rtc.o \
+	src-$(arch)/savestate.o \
+	src-$(arch)/scsi.o \
+	src-$(arch)/statusline.o \
+	src-$(arch)/traps.o \
+	src-$(arch)/uaelib.o \
+	src-$(arch)/uaeresource.o \
+	src-$(arch)/zfile.o \
+	src-$(arch)/zfile_archive.o \
+	src-$(arch)/archivers/7z/7zAlloc.o \
+	src-$(arch)/archivers/7z/7zBuf.o \
+	src-$(arch)/archivers/7z/7zCrc.o \
+	src-$(arch)/archivers/7z/7zCrcOpt.o \
+	src-$(arch)/archivers/7z/7zDec.o \
+	src-$(arch)/archivers/7z/7zIn.o \
+	src-$(arch)/archivers/7z/7zStream.o \
+	src-$(arch)/archivers/7z/Bcj2.o \
+	src-$(arch)/archivers/7z/Bra.o \
+	src-$(arch)/archivers/7z/Bra86.o \
+	src-$(arch)/archivers/7z/LzmaDec.o \
+	src-$(arch)/archivers/7z/Lzma2Dec.o \
+	src-$(arch)/archivers/7z/BraIA64.o \
+	src-$(arch)/archivers/7z/Delta.o \
+	src-$(arch)/archivers/7z/Sha256.o \
+	src-$(arch)/archivers/7z/Xz.o \
+	src-$(arch)/archivers/7z/XzCrc64.o \
+	src-$(arch)/archivers/7z/XzDec.o \
+	src-$(arch)/archivers/dms/crc_csum.o \
+	src-$(arch)/archivers/dms/getbits.o \
+	src-$(arch)/archivers/dms/maketbl.o \
+	src-$(arch)/archivers/dms/pfile.o \
+	src-$(arch)/archivers/dms/tables.o \
+	src-$(arch)/archivers/dms/u_deep.o \
+	src-$(arch)/archivers/dms/u_heavy.o \
+	src-$(arch)/archivers/dms/u_init.o \
+	src-$(arch)/archivers/dms/u_medium.o \
+	src-$(arch)/archivers/dms/u_quick.o \
+	src-$(arch)/archivers/dms/u_rle.o \
+	src-$(arch)/archivers/lha/crcio.o \
+	src-$(arch)/archivers/lha/dhuf.o \
+	src-$(arch)/archivers/lha/header.o \
+	src-$(arch)/archivers/lha/huf.o \
+	src-$(arch)/archivers/lha/larc.o \
+	src-$(arch)/archivers/lha/lhamaketbl.o \
+	src-$(arch)/archivers/lha/lharc.o \
+	src-$(arch)/archivers/lha/shuf.o \
+	src-$(arch)/archivers/lha/slide.o \
+	src-$(arch)/archivers/lha/uae_lha.o \
+	src-$(arch)/archivers/lha/util.o \
+	src-$(arch)/archivers/lzx/unlzx.o \
+	src-$(arch)/archivers/mp2/kjmp2.o \
+	src-$(arch)/archivers/wrp/warp.o \
+	src-$(arch)/archivers/zip/unzip.o \
+	src-$(arch)/machdep/support.o \
+	src-$(arch)/osdep/bsdsocket_host.o \
+	src-$(arch)/osdep/caps/generic_caps.o \
+	src-$(arch)/osdep/cda_play.o \
+	src-$(arch)/osdep/charset.o \
+	src-$(arch)/osdep/fsdb_host.o \
+	src-$(arch)/osdep/keyboard.o \
+	src-$(arch)/osdep/mp3decoder.o \
+	src-$(arch)/osdep/picasso96.o \
+	src-$(arch)/osdep/writelog.o \
+	src-$(arch)/osdep/generic_hardfile.o \
+	src-$(arch)/osdep/generic_target.o \
+	src-$(arch)/osdep/generic_filesys.o \
+	src-$(arch)/osdep/generic_gui.o \
+	src-$(arch)/osdep/generic_rp9.o \
+	src-$(arch)/osdep/generic_mem.o \
+	src-$(arch)/osdep/sigsegv_handler.o \
+	src-$(arch)/osdep/gui/GenericListModel.o \
+	src-$(arch)/osdep/gui/UaeRadioButton.o \
+	src-$(arch)/osdep/gui/UaeDropDown.o \
+	src-$(arch)/osdep/gui/UaeCheckBox.o \
+	src-$(arch)/osdep/gui/UaeListBox.o \
+	src-$(arch)/osdep/gui/SelectorEntry.o \
+	src-$(arch)/osdep/gui/ShowHelp.o \
+	src-$(arch)/osdep/gui/ShowMessage.o \
+	src-$(arch)/osdep/gui/SelectFolder.o \
+	src-$(arch)/osdep/gui/SelectFile.o \
+	src-$(arch)/osdep/gui/CreateFilesysHardfile.o \
+	src-$(arch)/osdep/gui/EditFilesysVirtual.o \
+	src-$(arch)/osdep/gui/EditFilesysHardfile.o \
+	src-$(arch)/osdep/gui/PanelPaths.o \
+	src-$(arch)/osdep/gui/PanelQuickstart.o \
+	src-$(arch)/osdep/gui/PanelConfig.o \
+	src-$(arch)/osdep/gui/PanelCPU.o \
+	src-$(arch)/osdep/gui/PanelChipset.o \
+	src-$(arch)/osdep/gui/PanelROM.o \
+	src-$(arch)/osdep/gui/PanelRAM.o \
+	src-$(arch)/osdep/gui/PanelFloppy.o \
+	src-$(arch)/osdep/gui/PanelHD.o \
+	src-$(arch)/osdep/gui/PanelInput.o \
+	src-$(arch)/osdep/gui/PanelDisplay.o \
+	src-$(arch)/osdep/gui/PanelSound.o \
+	src-$(arch)/osdep/gui/PanelMisc.o \
+	src-$(arch)/osdep/gui/PanelSavestate.o \
+	src-$(arch)/osdep/gui/main_window.o \
+	src-$(arch)/osdep/gui/Navigation.o
 	
 ifeq ($(ANDROID), 1)
-OBJS += src/osdep/gui/androidsdl_event.o
-OBJS += src/osdep/gui/PanelOnScreen.o
+OBJS += src-$(arch)/osdep/gui/androidsdl_event.o
+OBJS += src-$(arch)/osdep/gui/PanelOnScreen.o
 endif
 
 ifeq ($(USE_SDL_VERSION),sdl1)
-OBJS += src/sounddep/sound_sdl.o
-OBJS += src/osdep/pandora.o
-OBJS += src/osdep/pandora_gfx.o
-OBJS += src/osdep/pandora_input.o
-OBJS += src/osdep/gui/sdltruetypefont.o
-OBJS += src/osdep/gui/PanelGamePortPandora.o
+OBJS += src-$(arch)/sounddep/sound_sdl.o
+OBJS += src-$(arch)/osdep/pandora.o
+OBJS += src-$(arch)/osdep/pandora_gfx.o
+OBJS += src-$(arch)/osdep/pandora_input.o
+OBJS += src-$(arch)/osdep/gui/sdltruetypefont.o
+OBJS += src-$(arch)/osdep/gui/PanelGamePortPandora.o
 endif
 
 ifdef AARCH64
-    OBJS += src/osdep/aarch64_helper.o
+    OBJS += src-$(arch)/osdep/aarch64_helper.o
 else ifeq ($(ANDROID), 1)
-	OBJS += src/osdep/arm_helper.o
+	OBJS += src-$(arch)/osdep/arm_helper.o
 else
-	OBJS += src/osdep/neon_helper.o
+	OBJS += src-$(arch)/osdep/neon_helper.o
 endif
 
-OBJS += src/newcpu.o
-OBJS += src/newcpu_common.o
-OBJS += src/readcpu.o
-OBJS += src/cpudefs.o
-OBJS += src/cpustbl.o
-OBJS += src/cpuemu_0.o
-OBJS += src/cpuemu_4.o
-OBJS += src/cpuemu_11.o
-OBJS += src/cpuemu_40.o
-OBJS += src/cpuemu_44.o
-OBJS += src/jit/compemu.o
-OBJS += src/jit/compstbl.o
-OBJS += src/jit/compemu_fpp.o
-OBJS += src/jit/compemu_support.o
+OBJS += src-$(arch)/newcpu.o
+OBJS += src-$(arch)/newcpu_common.o
+OBJS += src-$(arch)/readcpu.o
+OBJS += src-$(arch)/cpudefs.o
+OBJS += src-$(arch)/cpustbl.o
+OBJS += src-$(arch)/cpuemu_0.o
+OBJS += src-$(arch)/cpuemu_4.o
+OBJS += src-$(arch)/cpuemu_11.o
+OBJS += src-$(arch)/cpuemu_40.o
+OBJS += src-$(arch)/cpuemu_44.o
+OBJS += src-$(arch)/jit/compemu.o
+OBJS += src-$(arch)/jit/compstbl.o
+OBJS += src-$(arch)/jit/compemu_fpp.o
+OBJS += src-$(arch)/jit/compemu_support.o
 
 ifdef TRACER
-src/trace.o: src/trace.c
-	$(CC) $(MY_CFLAGS) -std=c99 -c src/trace.c -o src/trace.o
+src-$(arch)/trace.o: src-$(arch)/trace.c
+	$(CC) $(MY_CFLAGS) -std=c99 -c src-$(arch)/trace.c -o src-$(arch)/trace.o
 
-OBJS += src/trace.o
+OBJS += src-$(arch)/trace.o
 endif
 
 .cpp.o:
@@ -271,48 +271,48 @@ ifndef DEBUG
 endif
 
 ASMS = \
-	src/audio.s \
-	src/autoconf.s \
-	src/blitfunc.s \
-	src/blitter.s \
-	src/cia.s \
-	src/custom.s \
-	src/disk.s \
-	src/drawing.s \
-	src/events.s \
-	src/expansion.s \
-	src/filesys.s \
-	src/fpp.s \
-	src/fsdb.s \
-	src/fsdb_unix.s \
-	src/fsusage.s \
-	src/gfxutil.s \
-	src/hardfile.s \
-	src/inputdevice.s \
-	src/keybuf.s \
-	src/main.s \
-	src/memory.s \
-	src/native2amiga.s \
-	src/traps.s \
-	src/uaelib.s \
-	src/uaeresource.s \
-	src/zfile.s \
-	src/zfile_archive.s \
-	src/machdep/support.s \
-	src/osdep/picasso96.s \
-	src/osdep/sigsegv_handler.s \
-	src/newcpu.s \
-	src/newcpu_common.s \
-	src/readcpu.s \
-	src/cpudefs.s \
-	src/cpustbl.s \
-	src/cpuemu_0.s \
-	src/cpuemu_4.s \
-	src/cpuemu_11.s \
-	src/jit/compemu.s \
-	src/jit/compemu_fpp.s \
-	src/jit/compstbl.s \
-	src/jit/compemu_support.s
+	src-$(arch)/audio.s \
+	src-$(arch)/autoconf.s \
+	src-$(arch)/blitfunc.s \
+	src-$(arch)/blitter.s \
+	src-$(arch)/cia.s \
+	src-$(arch)/custom.s \
+	src-$(arch)/disk.s \
+	src-$(arch)/drawing.s \
+	src-$(arch)/events.s \
+	src-$(arch)/expansion.s \
+	src-$(arch)/filesys.s \
+	src-$(arch)/fpp.s \
+	src-$(arch)/fsdb.s \
+	src-$(arch)/fsdb_unix.s \
+	src-$(arch)/fsusage.s \
+	src-$(arch)/gfxutil.s \
+	src-$(arch)/hardfile.s \
+	src-$(arch)/inputdevice.s \
+	src-$(arch)/keybuf.s \
+	src-$(arch)/main.s \
+	src-$(arch)/memory.s \
+	src-$(arch)/native2amiga.s \
+	src-$(arch)/traps.s \
+	src-$(arch)/uaelib.s \
+	src-$(arch)/uaeresource.s \
+	src-$(arch)/zfile.s \
+	src-$(arch)/zfile_archive.s \
+	src-$(arch)/machdep/support.s \
+	src-$(arch)/osdep/picasso96.s \
+	src-$(arch)/osdep/sigsegv_handler.s \
+	src-$(arch)/newcpu.s \
+	src-$(arch)/newcpu_common.s \
+	src-$(arch)/readcpu.s \
+	src-$(arch)/cpudefs.s \
+	src-$(arch)/cpustbl.s \
+	src-$(arch)/cpuemu_0.s \
+	src-$(arch)/cpuemu_4.s \
+	src-$(arch)/cpuemu_11.s \
+	src-$(arch)/jit/compemu.s \
+	src-$(arch)/jit/compemu_fpp.s \
+	src-$(arch)/jit/compstbl.s \
+	src-$(arch)/jit/compemu_support.s
 
 genasm: $(ASMS)
 
@@ -324,5 +324,5 @@ delasm:
 	$(RM) $(ASMS)
 	
 bootrom:
-	od -v -t xC -w8 src/filesys |tail -n +5 | sed -e "s,^.......,," -e "s,[0123456789abcdefABCDEF][0123456789abcdefABCDEF],db(0x&);,g" > src/filesys_bootrom.cpp
-	touch src/filesys.cpp
+	od -v -t xC -w8 src-$(arch)/filesys |tail -n +5 | sed -e "s,^.......,," -e "s,[0123456789abcdefABCDEF][0123456789abcdefABCDEF],db(0x&);,g" > src-$(arch)/filesys_bootrom.cpp
+	touch src-$(arch)/filesys.cpp
