@@ -1935,11 +1935,9 @@ uae_u8 handle_parport_joystick (int port, uae_u8 pra, uae_u8 dra)
 }
 
 /* p5 (3rd button) is 1 or floating = cd32 2-button mode */
-static bool cd32padmode (uae_u16 p5dir, uae_u16 p5dat)
+static bool cd32padmode(int joy)
 {
-	if (!(potgo_value & p5dir) || ((potgo_value & p5dat) && (potgo_value & p5dir)))
-		return false;
-	return true;
+	return pot_cap[joy][0] <= 100;
 }
 
 static bool is_joystick_pullup (int joy)
@@ -1971,14 +1969,13 @@ static void cap_check (void)
 			uae_u16 p5dat = 0x0100 << (joy * 4);
 			int isbutton = getbuttonstate (joy, i == 0 ? JOYBUTTON_3 : JOYBUTTON_2);
 
-			if (cd32_pad_enabled[joy]) {
+			if (cd32_pad_enabled[joy] && !cd32padmode(joy)) {
 				// only red and blue can be read if CD32 pad and only if it is in normal pad mode
 				isbutton |= getbuttonstate (joy, JOYBUTTON_CD32_BLUE);
-				// CD32 pad 3rd button line (P5) is always floating
+				// middle button line is floating
 				if (i == 0)
 					isbutton = 0;
-				if (cd32padmode (p5dir, p5dat))
-					continue;
+				cd32_shifter[joy] = 8;
 			}
 
 			joypot = joydirpot[joy][i];
@@ -2017,8 +2014,10 @@ static void cap_check (void)
 				charge = -2; // button press overrides everything
 
 			// CD32 pad in 2-button mode: blue button is not floating
-			if (cd32_pad_enabled[joy] && i == 1 && charge == 0)
-				charge = 2;
+			if (cd32_pad_enabled[joy] && !cd32padmode(joy) && i == 1) {
+				if (charge == 0)
+				  charge = 2;
+			}
 		
 			if (charge == 0) {
 
@@ -2049,10 +2048,8 @@ uae_u8 handle_joystick_buttons (uae_u8 pra, uae_u8 dra)
 	for (i = 0; i < 2; i++) {
 		int mask = 0x40 << i;
 		if (cd32_pad_enabled[i]) {
-			uae_u16 p5dir = 0x0200 << (i * 4);
-			uae_u16 p5dat = 0x0100 << (i * 4);
 			but |= mask;
-			if (!cd32padmode (p5dir, p5dat)) {
+			if (!cd32padmode(i)) {
 				if (getbuttonstate (i, JOYBUTTON_CD32_RED) || getbuttonstate (i, JOYBUTTON_1))
 					but &= ~mask;
 				// always zero if output=1 and data=0
@@ -2083,9 +2080,7 @@ void handle_cd32_joystick_cia (uae_u8 pra, uae_u8 dra)
 	cap_check ();
 	for (i = 0; i < 2; i++) {
 		uae_u8 but = 0x40 << i;
-		uae_u16 p5dir = 0x0200 << (i * 4); /* output enable P5 */
-		uae_u16 p5dat = 0x0100 << (i * 4); /* data P5 */
-		if (cd32padmode (p5dir, p5dat)) {
+		if (cd32padmode(i)) {
 			if ((dra & but) && (pra & but) != oldstate[i]) {
 				if (!(pra & but)) {
 					cd32_shifter[i]--;
@@ -2110,16 +2105,16 @@ static uae_u16 handle_joystick_potgor (uae_u16 potgor)
 		uae_u16 p5dir = 0x0200 << (i * 4); /* output enable P5 */
 		uae_u16 p5dat = 0x0100 << (i * 4); /* data P5 */
 
-		if (cd32_pad_enabled[i] && cd32padmode (p5dir, p5dat)) {
+		if (cd32_pad_enabled[i] && cd32padmode(i)) {
 
 			/* p5 is floating in input-mode */
 			potgor &= ~p5dat;
-			potgor |= potgo_value & p5dat;
+			if (pot_cap[i][0] > 100)
+				potgor |= p5dat;
+
 			if (!(potgo_value & p9dir))
 				potgor |= p9dat;
-			/* (P5 output and 1) or floating -> shift register is kept reset (Blue button) */
-			if (!(potgo_value & p5dir) || ((potgo_value & p5dat) && (potgo_value & p5dir)))
-				cd32_shifter[i] = 8;
+
 			/* shift at 1 == return one, >1 = return button states */
 			if (cd32_shifter[i] == 0)
 				potgor &= ~p9dat; /* shift at zero == return zero */
@@ -2132,7 +2127,7 @@ static uae_u16 handle_joystick_potgor (uae_u16 potgor)
 			if (pot_cap[i][0] > 100)
 				potgor |= p5dat;
 
-			if (!cd32_pad_enabled[i] || !cd32padmode (p5dir, p5dat)) {
+			if (!cd32_pad_enabled[i] || !cd32padmode(i)) {
 				potgor &= ~p9dat;
 				if (pot_cap[i][1] > 100)
 				  potgor |= p9dat;
@@ -2200,14 +2195,6 @@ void POTGO (uae_u16 v)
 			uae_u16 data = 0x0100 << i;
 			potgo_value &= ~data;
 			potgo_value |= v & data;
-		}
-	}
-	for (i = 0; i < 2; i++) {
-		if (cd32_pad_enabled[i]) {
-			uae_u16 p5dir = 0x0200 << (i * 4); /* output enable P5 */
-			uae_u16 p5dat = 0x0100 << (i * 4); /* data P5 */
-			if (!(potgo_value & p5dir) || ((potgo_value & p5dat) && (potgo_value & p5dir)))
-				cd32_shifter[i] = 8;
 		}
 	}
 	if (v & 1) {

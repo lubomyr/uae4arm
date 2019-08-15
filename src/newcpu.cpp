@@ -32,7 +32,7 @@ bool check_prefs_changed_comp (bool checkonly) { return false; }
 #endif
 
 /* Opcode of faulting instruction */
-static uae_u16 last_op_for_exception_3;
+static uae_u32 last_op_for_exception_3;
 /* PC at fault time */
 static uaecptr last_addr_for_exception_3;
 /* Address that generated the exception */
@@ -148,12 +148,12 @@ static void set_x_funcs (void)
 		// 68000/010
 		if (currprefs.cpu_compatible) {
 			// cpu_compatible only
-			x_put_long = put_long;
-			x_put_word = put_word;
-			x_put_byte = put_byte;
-			x_get_long = get_long;
-			x_get_word = get_word;
-			x_get_byte = get_byte;
+			x_put_long = put_long_compatible;
+			x_put_word = put_word_compatible;
+			x_put_byte = put_byte_compatible;
+			x_get_long = get_long_compatible;
+			x_get_word = get_word_compatible;
+			x_get_byte = get_byte_compatible;
 		} else {
 			x_put_long = put_long;
 			x_put_word = put_word;
@@ -257,7 +257,7 @@ static void build_cpufunctbl (void)
 {
   int i;
   uae_u32 opcode;
-  const struct cputbl *tbl = 0;
+  const struct cputbl *tbl = NULL;
 	int lvl, mode;
 
 	if (!currprefs.cachesize) {
@@ -308,7 +308,7 @@ static void build_cpufunctbl (void)
 
   for (opcode = 0; opcode < 65536; opcode++) {
   	cpuop_func *f;
-		instr *table = &table68k[opcode];
+		struct instr *table = &table68k[opcode];
 
 		if (table->mnemo == i_ILLG)
 	    continue;
@@ -550,6 +550,7 @@ STATIC_INLINE void MakeFromSR_x(int t0trace)
   regs.s  = (regs.sr >> 13) & 1;
   regs.m  = (regs.sr >> 12) & 1;
   regs.intmask = (regs.sr >> 8) & 7;
+  
   if (currprefs.cpu_model >= 68020) {
   	if (olds != regs.s) {
 	    if (olds) {
@@ -631,14 +632,6 @@ static int iack_cycle(int nr)
 	return vector;
 }
 
-static uae_u32 exception_pc (int nr)
-{
-	// bus error, address error, illegal instruction, privilege violation, a-line, f-line
-	if (nr == 2 || nr == 3 || nr == 4 || nr == 8 || nr == 10 || nr == 11)
-		return regs.instruction_pc;
-	return m68k_getpc ();
-}
-
 static void add_approximate_exception_cycles(int nr)
 {
 	int cycles;
@@ -698,61 +691,6 @@ static void add_approximate_exception_cycles(int nr)
   }
 	cycles = adjust_cycles(cycles);
 	x_do_cycles(cycles);
-}
-
-static void Exception_build_stack_frame (uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int nr, int format)
-{
-  switch (format) {
-    case 0x0: // four word stack frame
-      break;
-    case 0x2: // six word stack frame
-      m68k_areg (regs, 7) -= 4;
-      x_put_long (m68k_areg (regs, 7), oldpc);
-      break;
-		case 0x3: // floating point post-instruction stack frame (68040)
-			m68k_areg (regs, 7) -= 4;
-			x_put_long (m68k_areg (regs, 7), regs.fp_ea);
-			break;
-    case 0x4: // floating point unimplemented stack frame (68LC040, 68EC040)
-			m68k_areg (regs, 7) -= 4;
-			x_put_long (m68k_areg (regs, 7), ssw);
-			m68k_areg (regs, 7) -= 4;
-			x_put_long (m68k_areg (regs, 7), oldpc);
-			break;
-		default:
-      write_log(_T("Unknown exception stack frame format: %X\n"), format);
-      return;
-    }
-    m68k_areg (regs, 7) -= 2;
-    x_put_word (m68k_areg (regs, 7), (format << 12) | (nr * 4));
-    m68k_areg (regs, 7) -= 4;
-    x_put_long (m68k_areg (regs, 7), currpc);
-    m68k_areg (regs, 7) -= 2;
-    x_put_word (m68k_areg (regs, 7), regs.sr);
-}
-
-static void Exception_build_stack_frame_common (uae_u32 oldpc, uae_u32 currpc, int nr)
-{
-	if (nr == 5 || nr == 6 || nr == 7 || nr == 9) {
-		Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x2);
-	} else if (nr == 60 || nr == 61) {
-		Exception_build_stack_frame(oldpc, regs.instruction_pc, 0, nr, 0x0);
-	} else if (nr >= 48 && nr <= 55) {
-		if (regs.fpu_exp_pre) {
-			Exception_build_stack_frame(oldpc, regs.instruction_pc, 0, nr, 0x0);
-		} else { /* post-instruction */
-			Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x3);
-		}
-	} else if (nr == 11 && regs.fp_unimp_ins) {
-		regs.fp_unimp_ins = false;
-		if (currprefs.cpu_model == 68040 && currprefs.fpu_model == 0) {
-			Exception_build_stack_frame(regs.fp_ea, currpc, regs.instruction_pc, nr, 0x4);
-		} else {
-			Exception_build_stack_frame(regs.fp_ea, currpc, 0, nr, 0x2);
-		}
-	} else {
-		Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x0);
-	}
 }
 
 static void exception3_notinstruction(uae_u32 opcode, uaecptr addr);
@@ -846,32 +784,24 @@ void Exception (int nr)
 				  goto kludge_me_do;
 
     		} else {
-		      m68k_areg(regs, 7) -= 4;
-		      x_put_long (m68k_areg(regs, 7), last_fault_for_exception_3);
-		      m68k_areg(regs, 7) -= 2;
-					x_put_word (m68k_areg (regs, 7), 0x2000 + vector_nr * 4);
+					// 68040/060 odd PC address error
+					Exception_build_stack_frame(last_fault_for_exception_3, currpc, 0, nr, 0x02);
+					used_exception_build_stack_frame = true;
     		}
-	    } else {
-				// 68020 address error
+			} else if (currprefs.cpu_model >= 68020) {
+				// 68020/030 odd PC address error (partially implemented only)
     		uae_u16 ssw = (sv ? 4 : 0) | (last_instructionaccess_for_exception_3 ? 2 : 1);
     		ssw |= last_writeaccess_for_exception_3 ? 0 : 0x40;
     		ssw |= 0x20;
-    		for (i = 0 ; i < 36; i++) {
-  		    m68k_areg(regs, 7) -= 2;
-		      x_put_word (m68k_areg(regs, 7), 0);
-		    }
-		    m68k_areg(regs, 7) -= 4;
-		    x_put_long (m68k_areg(regs, 7), last_fault_for_exception_3);
-		    m68k_areg(regs, 7) -= 2;
-		    x_put_word (m68k_areg(regs, 7), 0);
-		    m68k_areg(regs, 7) -= 2;
-		    x_put_word (m68k_areg(regs, 7), 0);
-		    m68k_areg(regs, 7) -= 2;
-		    x_put_word (m68k_areg(regs, 7), 0);
-		    m68k_areg(regs, 7) -= 2;
-		    x_put_word (m68k_areg(regs, 7), ssw);
-		    m68k_areg(regs, 7) -= 2;
-		    x_put_word (m68k_areg(regs, 7), 0xb000 + vector_nr * 4);
+				Exception_build_stack_frame(oldpc, currpc, ssw, nr, 0x0a);
+				used_exception_build_stack_frame = true;
+	    } else {
+				// 68010 address error (partially implemented only)
+    		uae_u16 ssw = (sv ? 4 : 0) | (last_instructionaccess_for_exception_3 ? 2 : 1);
+				ssw |= last_writeaccess_for_exception_3 ? 0 : 0x100;
+				ssw |= last_instructionaccess_for_exception_3 ? 0 : 0x2000;
+				Exception_build_stack_frame(oldpc, currpc, ssw, nr, 0x08);
+				used_exception_build_stack_frame = true;
 	    }
 	  } else if (regs.m && interrupt) { /* M + Interrupt */
 	    m68k_areg(regs, 7) -= 2;
@@ -893,19 +823,16 @@ void Exception (int nr)
   } else {
 		nextpc = m68k_getpc ();
     if (nr == 2 || nr == 3) {
-	    // 68000 address error
+	    // 68000 bus error/address error
 	    uae_u16 mode = (sv ? 4 : 0) | (last_instructionaccess_for_exception_3 ? 2 : 1);
 	    mode |= last_writeaccess_for_exception_3 ? 0 : 16;
 			mode |= last_notinstruction_for_exception_3 ? 8 : 0;
-			// undocumented bits seem to contain opcode
-			mode |= last_op_for_exception_3 & ~31;
-	    m68k_areg(regs, 7) -= 14;
+			uae_u16 statusormask = (last_op_for_exception_3 >> 16) & 0xff;
+			uae_u16 statusandmask = (last_op_for_exception_3 >> 24) & 0xff;
+			mode |= statusormask;
+			mode &= ~statusandmask;
 			exception_in_exception = -1;
-	    x_put_word (m68k_areg(regs, 7) + 0, mode);
-	    x_put_long (m68k_areg(regs, 7) + 2, last_fault_for_exception_3);
-	    x_put_word (m68k_areg(regs, 7) + 6, last_op_for_exception_3);
-	    x_put_word (m68k_areg(regs, 7) + 8, regs.sr);
-	    x_put_long (m68k_areg(regs, 7) + 10, last_addr_for_exception_3);
+			Exception_build_68000_address_error_stack_frame(mode, last_op_for_exception_3, last_fault_for_exception_3, last_addr_for_exception_3);
 	    goto kludge_me_do;
 		}
   }
@@ -1772,10 +1699,10 @@ void m68k_go (int may_quit)
 	cpu_prefs_changed_flag = 0;
   in_m68k_go++;
   for (;;) {
+		int restored = 0;
   	void (*run_func)(void);
 
   	if (quit_program > 0) {
-			int restored = 0;
 			bool cpu_keyboardreset = quit_program == UAE_RESET_KEYBOARD;
 			cpu_hardreset = ((quit_program == UAE_RESET_HARD ? 1 : 0) | hardboot) != 0;
 
@@ -1846,6 +1773,12 @@ void m68k_go (int may_quit)
 		}
 	  startup = 0;
 		unset_special(SPCFLAG_MODE_CHANGE);
+
+#ifdef SAVESTATE
+		if (restored) {
+			restored = 0;
+		}
+#endif
 
 		if (!regs.halted) {
 			// check that PC points to something that looks like memory.

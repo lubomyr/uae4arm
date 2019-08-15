@@ -643,8 +643,8 @@ void restore_state (const TCHAR *filename)
 			end = restore_gayle_ide (chunk);
 		else if (!_tcsncmp (name, _T("CDU"), 3))
 			end = restore_cd (name[3] - '0', chunk);
-		else if (!_tcsncmp (name, _T("EXPI"), 4))
-			end = restore_expansion_info(chunk);
+		else if (!_tcsncmp (name, _T("EXPB"), 4))
+			end = restore_expansion_boards(chunk);
 
 	  else {
 	    end = chunk + len;
@@ -682,6 +682,7 @@ void savestate_restore_finish (void)
 	restore_audio_finish ();
 	restore_disk_finish ();
 	restore_blitter_finish ();
+	restore_expansion_finish();
 	restore_akiko_finish ();
 #ifdef PICASSO96
 	restore_p96_finish ();
@@ -813,8 +814,10 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
 	xfree (dst);
 
   dst = save_custom_agacolors (&len, 0);
-	save_chunk (f, dst, len, _T("AGAC"), 0);
-  xfree (dst);
+	if (dst) {
+	  save_chunk (f, dst, len, _T("AGAC"), 0);
+    xfree (dst);
+  }
 
 	_tcscpy (name, _T("SPRx"));
   for (i = 0; i < 8; i++) {
@@ -845,9 +848,16 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
   xfree (dst);
 
 #ifdef AUTOCONFIG
-	dst = save_expansion_info(&len, 0);
-	save_chunk(f, dst, len, _T("EXPI"), 0);
-  xfree (dst);
+	// new
+	i = 0;
+	for (;;) {
+		dst = save_expansion_boards(&len, 0, i);
+		if (!dst)
+			break;
+		save_chunk(f, dst, len, _T("EXPB"), 0);
+    xfree (dst);
+		i++;
+	}
   dst = save_expansion (&len, 0);
   save_chunk (f, dst, len, _T("EXPA"), 0);
   xfree (dst);

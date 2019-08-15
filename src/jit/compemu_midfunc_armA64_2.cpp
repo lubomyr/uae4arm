@@ -333,13 +333,14 @@ MIDFUNC(2,jnf_ADDA_w,(RW4 d, RR2 s))
 	}
 	if (isconst(s)) {
     // no need to put virt. register s into a real host register via readreg()
+    uae_s16 tmp = (uae_s16)live.state[s].val;
 		d = rmw(d);
-		if((uae_s16)live.state[s].val >= 0 && (uae_s16)live.state[s].val <= 0xfff) {
-		  ADD_wwi(d, d, live.state[s].val);
-    } else if ((uae_s16)live.state[s].val >= -0xfff && (uae_s16)live.state[s].val < 0) {
-		  SUB_wwi(d, d, -(uae_s16)live.state[s].val);
+		if(tmp >= 0 && tmp <= 0xfff) {
+		  ADD_wwi(d, d, tmp);
+    } else if (tmp >= -0xfff && tmp < 0) {
+		  SUB_wwi(d, d, -tmp);
 		} else {
-		  SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+		  SIGNED16_IMM_2_REG(REG_WORK1, tmp);
 		  ADD_www(d, d, REG_WORK1);
   	}
 		unlock2(d);
@@ -361,8 +362,9 @@ MIDFUNC(2,jnf_ADDA_l,(RW4 d, RR4 s))
 		return;
 	}
 	if (isconst(s) && (uae_s32)live.state[s].val >= 0 && (uae_s32)live.state[s].val <= 0xfff) {
+	  uae_s32 tmp = (uae_s32)live.state[s].val;
 		d = rmw(d);
-    ADD_wwi(d, d, (uae_s32)live.state[s].val);
+    ADD_wwi(d, d, tmp);
 		unlock2(d);
 		return;
 	}
@@ -1254,6 +1256,8 @@ MIDFUNC(2,jff_ASR_l_imm,(RW4 d, IM8 i))
 		TST_ww(d, d);
 		
     // Calculate C flag
+    if(i > 32)
+      i = 32;
     TBZ_wii(REG_WORK1, i-1, 4);
     MRS_NZCV_x(REG_WORK4);
     SET_xxCflag(REG_WORK4, REG_WORK4);
@@ -2156,8 +2160,9 @@ MENDFUNC(1,jff_CLR_l,(W4 d))
 MIDFUNC(2,jff_CMP_b,(RR1 d, RR1 s))
 {
 	if (isconst(d)) {
+	  uae_u8 tmp = (uae_u8)(live.state[d].val & 0xff);
 	  s = readreg(s);
-	  MOV_wish(REG_WORK1, (live.state[d].val & 0xff) << 8, 16);
+	  MOV_wish(REG_WORK1, tmp << 8, 16);
 	  CMP_wwLSLi(REG_WORK1, s, 24);
 	  unlock2(s);
 	} else {
@@ -2179,8 +2184,9 @@ MIDFUNC(2,jff_CMP_w,(RR2 d, RR2 s))
 	  MOV_wish(REG_WORK2, (live.state[s].val & 0xffff), 16);
 	  CMP_ww(REG_WORK1, REG_WORK2);
 	} else if (isconst(d)) {
+	  uae_u16 tmp = (uae_u16)(live.state[d].val & 0xffff);
 	  s = readreg(s);
-	  MOV_wish(REG_WORK1, (live.state[d].val & 0xffff), 16);
+	  MOV_wish(REG_WORK1, tmp, 16);
 	  CMP_wwLSLi(REG_WORK1, s, 16);
 	  unlock2(s);
 	} else {
@@ -2222,8 +2228,9 @@ MENDFUNC(2,jff_CMP_l,(RR4 d, RR4 s))
 MIDFUNC(2,jff_CMPA_w,(RR2 d, RR2 s))
 {
   if (isconst(s)) {
+    uae_u16 tmp = (uae_u16)(live.state[s].val & 0xffff);
     d = readreg(d);
-    SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val & 0xffff);
+    SIGNED16_IMM_2_REG(REG_WORK1, tmp);
     CMP_ww(d, REG_WORK1);
     unlock2(d);
   } else {
@@ -2308,8 +2315,9 @@ MIDFUNC(2,jnf_DIVU,(RW4 d, RR4 s))
   int targetIsReg;
   int s_is_d;
 	if (isconst(s) && (uae_u16)live.state[s].val != 0) {
+	  uae_u16 tmp = (uae_u16)live.state[s].val;
 	  d = rmw(d);
-	  UNSIGNED16_IMM_2_REG(REG_WORK3, (uae_u16)live.state[s].val);
+	  UNSIGNED16_IMM_2_REG(REG_WORK3, tmp);
 	} else {
 	  targetIsReg = (d < 16);
 	  s_is_d = (s == d);
@@ -2357,8 +2365,9 @@ MIDFUNC(2,jff_DIVU,(RW4 d, RR4 s))
   int targetIsReg;
   int s_is_d;
 	if (isconst(s) && (uae_u16)live.state[s].val != 0) {
+	  uae_u16 tmp = (uae_u16)live.state[s].val;
 	  d = rmw(d);
-	  UNSIGNED16_IMM_2_REG(REG_WORK3, (uae_u16)live.state[s].val);
+	  UNSIGNED16_IMM_2_REG(REG_WORK3, tmp);
 	} else {
 	  targetIsReg = (d < 16);
 	  s_is_d = (s == d);
@@ -2370,18 +2379,30 @@ MIDFUNC(2,jff_DIVU,(RW4 d, RR4 s))
     init_regs_used = 1;
 
     UNSIGNED16_REG_2_REG(REG_WORK3, s);
-    CBNZ_wi(REG_WORK3, 6);     // src is not 0
+    uae_u32* branchadd_not0 = (uae_u32*)get_target();
+    CBNZ_wi(REG_WORK3, 0);     // src is not 0
 
     // Signal exception 5
 	  MOV_wi(REG_WORK1, 5);
     uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
     STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
     
-    // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
-    MOV_wish(REG_WORK1, 0x5000, 16);
+    // flag handling like divbyzero_special()
+  	if (currprefs.cpu_model == 68020 || currprefs.cpu_model == 68030) {
+      MOV_wish(REG_WORK1, 0x5000, 16); // Set V and Z (if d >=0)
+			TBZ_wii(d, 31, 2);
+			MOV_wish(REG_WORK1, 0x9000, 16); // Set V and N (if d < 0)
+  	} else if (currprefs.cpu_model >= 68040) {
+    	MRS_NZCV_x(REG_WORK1);
+    	CLEAR_xxCflag(REG_WORK1, REG_WORK1);
+  	} else {
+  		// 68000/010
+      MOV_wish(REG_WORK1, 0x0000, 16);
+   	}
     MSR_NZCV_x(REG_WORK1);
     branchadd = (uae_u32*)get_target();
     B_i(0);        // end_of_op
+    write_jmp_target(branchadd_not0, (uintptr)get_target());
   }
 
 	// src is not 0  
@@ -2430,8 +2451,9 @@ MIDFUNC(2,jnf_DIVS,(RW4 d, RR4 s))
   int targetIsReg;
   int s_is_d;
   if (isconst(s) && (uae_s16)live.state[s].val != 0) {
+    uae_s16 tmp = (uae_s16)live.state[s].val;
     d = rmw(d);
-    SIGNED16_IMM_2_REG(REG_WORK3, (uae_s16)live.state[s].val);
+    SIGNED16_IMM_2_REG(REG_WORK3, tmp);
   } else {
 	  targetIsReg = (d < 16);
 	  s_is_d = (s == d);
@@ -2491,8 +2513,9 @@ MIDFUNC(2,jff_DIVS,(RW4 d, RR4 s))
   int targetIsReg;
   int s_is_d;
   if (isconst(s) && (uae_s16)live.state[s].val != 0) {
+    uae_s16 tmp = (uae_s16)live.state[s].val;
     d = rmw(d);
-    SIGNED16_IMM_2_REG(REG_WORK3, (uae_s16)live.state[s].val);
+    SIGNED16_IMM_2_REG(REG_WORK3, tmp);
   } else {
 	  targetIsReg = (d < 16);
 	  s_is_d = (s == d);
@@ -2504,18 +2527,29 @@ MIDFUNC(2,jff_DIVS,(RW4 d, RR4 s))
     init_regs_used = 1;
 
     SIGNED16_REG_2_REG(REG_WORK3, s);
-    CBNZ_wi(REG_WORK3, 6);     // src is not 0
+    uae_u32* branchadd_not0 = (uae_u32*)get_target();
+    CBNZ_wi(REG_WORK3, 0);     // src is not 0
 
     // Signal exception 5
 	  MOV_wi(REG_WORK1, 5);
     uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
     STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
     
-    // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
-    MOV_wish(REG_WORK1, 0x4000, 16);
+    // flag handling like divbyzero_special()
+  	if (currprefs.cpu_model == 68020 || currprefs.cpu_model == 68030) {
+      MOV_wish(REG_WORK1, 0x4000, 16); // Set Z
+  	} else if (currprefs.cpu_model >= 68040) {
+    	MRS_NZCV_x(REG_WORK1);
+    	CLEAR_xxCflag(REG_WORK1, REG_WORK1);
+  	} else {
+  		// 68000/010
+      MOV_wish(REG_WORK1, 0x0000, 16);
+   	}
+
     MSR_NZCV_x(REG_WORK1);
     branchadd = (uae_u32*)get_target();
     B_i(0);        // end_of_op
+    write_jmp_target(branchadd_not0, (uintptr)get_target());
   }
 
 	// src is not 0  
@@ -2594,16 +2628,13 @@ MIDFUNC(3,jff_DIVLU32,(RW4 d, RR4 s1, W4 rem))
   d = rmw(d);
   rem = writereg(rem);
 
-  CBNZ_wi(s1, 6);     // src is not 0
+  CBNZ_wi(s1, 4);     // src is not 0
 
   // Signal exception 5
 	MOV_wi(REG_WORK1, 5);
   uintptr idx = (uintptr)(&regs.jit_exception) - (uintptr)(&regs);
   STR_wXi(REG_WORK1, R_REGSTRUCT, idx);
   
-  // simplified flag handling for div0: set Z and V (for signed DIV: Z only)
-  MOV_wish(REG_WORK1, 0x5000, 16);
-  MSR_NZCV_x(REG_WORK1);
 	B_i(5);        // end_of_op
 
 	// src is not 0  
@@ -3767,6 +3798,7 @@ MIDFUNC(1,jff_LSRW,(RW2 d))
   MRS_NZCV_x(REG_WORK4);
   SET_xxCflag(REG_WORK4, REG_WORK4);
   MSR_NZCV_x(REG_WORK4);
+  
   flags_carry_inverted = false;
 	DUPLICACTE_CARRY
 
@@ -4119,8 +4151,9 @@ MENDFUNC(2,jnf_MOVEA_l,(W4 d, RR4 s))
 MIDFUNC(2,jnf_MULS,(RW4 d, RR4 s))
 {
   if (isconst(s)) {
+    uae_s16 tmp = (uae_s16)live.state[s].val;
     d = rmw(d);
-    SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    SIGNED16_IMM_2_REG(REG_WORK1, tmp);
     SIGNED16_REG_2_REG(d, d);
     SMULL_xww(d, d, REG_WORK1);
     unlock2(d);
@@ -4132,7 +4165,7 @@ MIDFUNC(2,jnf_MULS,(RW4 d, RR4 s))
   SIGNED16_REG_2_REG(d, d);
   SIGNED16_REG_2_REG(REG_WORK1, s);
   SMULL_xww(d, d, REG_WORK1);
-
+  
 	EXIT_REGS(d, s);
 }
 MENDFUNC(2,jnf_MULS,(RW4 d, RR4 s))
@@ -4237,8 +4270,9 @@ MENDFUNC(2,jff_MULS64,(RW4 d, RW4 s))
 MIDFUNC(2,jnf_MULU,(RW4 d, RR4 s))
 {
   if (isconst(s)) {
+    uae_u16 tmp = (uae_u16)live.state[s].val;
     d = rmw(d);
-    UNSIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    UNSIGNED16_IMM_2_REG(REG_WORK1, tmp);
     UNSIGNED16_REG_2_REG(d, d);
     UMULL_xww(d, d, REG_WORK1);
     unlock2(d);
@@ -4258,8 +4292,9 @@ MENDFUNC(2,jnf_MULU,(RW4 d, RR4 s))
 MIDFUNC(2,jff_MULU,(RW4 d, RR4 s))
 {
   if (isconst(s)) {
+    uae_u16 tmp = (uae_u16)live.state[s].val;
     d = rmw(d);
-    UNSIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    UNSIGNED16_IMM_2_REG(REG_WORK1, tmp);
     UNSIGNED16_REG_2_REG(d, d);
     UMULL_xww(d, d, REG_WORK1);
     TST_ww(d, d);
@@ -6390,8 +6425,9 @@ MIDFUNC(2,jnf_SUBA_w,(RW4 d, RR2 s))
 {
 	if (isconst(s)) {
     // no need to put virt. register s into a real host register via readreg()
+    uae_s16 tmp = (uae_s16)live.state[s].val;
 		d = rmw(d);
-		SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+		SIGNED16_IMM_2_REG(REG_WORK1, tmp);
 		SUB_www(d, d, REG_WORK1);
 		unlock2(d);
 		return;

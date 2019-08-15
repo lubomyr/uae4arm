@@ -693,8 +693,9 @@ int kill_filesys_unitconfig (struct uae_prefs *p, int nr)
   	return 0;
 	uci = getuci (p->mountconfig, nr);
   hardfile_do_disk_change (uci, 0);
-	if (uci->configoffset >= 0 && uci->ci.controller_type == HD_CONTROLLER_TYPE_UAE)
+	if (uci->configoffset >= 0 && uci->ci.controller_type == HD_CONTROLLER_TYPE_UAE) {
 		filesys_media_change (uci->ci.rootdir, 0, uci);
+	}
   while (nr < MOUNT_CONFIG_SIZE) {
 		memmove (&p->mountconfig[nr], &p->mountconfig[nr + 1], sizeof (struct uaedev_config_data));
 	  nr++;
@@ -794,14 +795,6 @@ static void initialize_mountinfo(void)
 				added = add_ide_unit(st, unit, uci);
 				if (added)
 					break;
-			}
-		} else if (type == HD_CONTROLLER_TYPE_PCMCIA) {
-			if (uci->controller_type_unit == 0) {
-			  gayle_add_pcmcia_sram_unit (uci);
-			  added = true;
-			} else {
-			  gayle_add_pcmcia_ide_unit (uci);
-			  added = true;
 			}
     }
 		if (added)
@@ -1628,17 +1621,6 @@ int filesys_media_change (const TCHAR *rootdir, int inserted, struct uaedev_conf
 	  if (uci)
 	    uci->configoffset = nr;
 	  return 100 + nr;
-	}
-	return 0;
-}
-
-int hardfile_added (struct uaedev_config_info *ci)
-{
-	if (ci->controller_type == HD_CONTROLLER_TYPE_PCMCIA) {
-		if (ci->controller_type_unit == 1)
-		  return gayle_add_pcmcia_ide_unit(ci);
-		if (ci->controller_type_unit == 0)
-		  return gayle_add_pcmcia_sram_unit(ci);
 	}
 	return 0;
 }

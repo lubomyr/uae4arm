@@ -1,6 +1,6 @@
-diff -Nru src_93/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
---- src_93/blkdev_cdimage.cpp	2019-08-10 17:34:48.000000000 +0300
-+++ src/blkdev_cdimage.cpp	2019-08-10 17:37:32.252039526 +0300
+diff -Nru src_7f31/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
+--- src_7f31/blkdev_cdimage.cpp	2019-08-15 21:03:53.000000000 +0300
++++ src/blkdev_cdimage.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -13,7 +13,9 @@
  */
  #include "sysdeps.h"
@@ -11,7 +11,7 @@ diff -Nru src_93/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
  
  #include "options.h"
  #include "blkdev.h"
-@@ -406,13 +408,19 @@
+@@ -407,13 +409,19 @@
  #ifdef WIN32
  			struct _timeb tb1, tb2;
  #else
@@ -31,7 +31,7 @@ diff -Nru src_93/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
  			cdda_pos = cdu->cdda_start;
  			oldplay = cdu->cdda_play;
  			sector = cdu->cd_last_pos = cdda_pos;
-@@ -467,9 +475,13 @@
+@@ -468,9 +476,13 @@
  			cdda_pos -= idleframes;
  
  			if (*outpos < 0) {
@@ -45,9 +45,9 @@ diff -Nru src_93/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
  			  if (idleframes >= 0 && diff < 0 && cdu->cdda_play > 0)
  				  sleep_millis(-diff);
  			  setstate (cdu, AUDIO_STATUS_IN_PROGRESS, cdda_pos);
-diff -Nru src_93/cfgfile.cpp src/cfgfile.cpp
---- src_93/cfgfile.cpp	2019-08-10 17:34:48.000000000 +0300
-+++ src/cfgfile.cpp	2019-08-10 17:37:32.252039526 +0300
+diff -Nru src_7f31/cfgfile.cpp src/cfgfile.cpp
+--- src_7f31/cfgfile.cpp	2019-08-15 21:03:53.000000000 +0300
++++ src/cfgfile.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -147,7 +147,6 @@
  
  #define UNEXPANDED _T("$(FILE_PATH)")
@@ -56,7 +56,7 @@ diff -Nru src_93/cfgfile.cpp src/cfgfile.cpp
  static TCHAR *cfgfile_unescape(const TCHAR *s, const TCHAR **endpos, TCHAR separator, bool min)
  {
  	bool quoted = false;
-@@ -4308,22 +4307,20 @@
+@@ -4295,22 +4294,20 @@
    p->sound_filter_type = 0;
  	p->sound_volume_cd = 20;
  
@@ -82,9 +82,144 @@ diff -Nru src_93/cfgfile.cpp src/cfgfile.cpp
    p->gfx_resolution = RES_LORES;
  #endif
  	p->gfx_vresolution = VRES_NONDOUBLE;
-diff -Nru src_93/fpp_native.cpp src/fpp_native.cpp
---- src_93/fpp_native.cpp	2019-08-10 13:54:46.000000000 +0300
-+++ src/fpp_native.cpp	2019-08-10 17:37:32.252039526 +0300
+diff -Nru src_7f31/drawing.cpp src/drawing.cpp
+--- src_7f31/drawing.cpp	2019-08-15 21:03:53.000000000 +0300
++++ src/drawing.cpp	2019-08-15 21:13:16.000000000 +0300
+@@ -264,7 +264,7 @@
+    PLAYFIELD_START and PLAYFIELD_END are in window coordinates.  */
+ static int playfield_start, playfield_end;
+ static int real_playfield_start, real_playfield_end;
+-static int playfield_diff;
++static int playfield_diff;
+ static int sprite_playfield_start;
+ static int may_require_hard_way;
+ static int native_ddf_left, native_ddf_right;
+@@ -377,7 +377,7 @@
+ 			expanded = true;
+ 		}
+ 	}
+-	playfield_diff = 0;
++	playfield_diff = 0;
+ 	may_require_hard_way = 0;
+ 	if (dp_for_drawing->bordersprite_seen && !ce_is_borderblank(colors_for_drawing.extra) && dip_for_drawing->nr_sprites) {
+ 		int min = visible_right_border, max = visible_left_border, i;
+@@ -439,15 +439,15 @@
+   leftborderhidden = playfield_start - native_ddf_left2;
+ 	src_pixel = MAX_PIXELS_PER_LINE + res_shift_from_window (leftborderhidden);
+ 
+-	if (may_require_hard_way) {
+-		// must use "hard_way" rendering if negative leftborderhidden
+-		if (src_pixel < MAX_PIXELS_PER_LINE)
+-			may_require_hard_way = -1;
+-		if (playfield_start < real_playfield_start) {
+-			playfield_diff = res_shift_from_window(real_playfield_start - playfield_start);
+-		}
+-	}
+-
++	if (may_require_hard_way) {
++		// must use "hard_way" rendering if negative leftborderhidden
++		if (src_pixel < MAX_PIXELS_PER_LINE)
++			may_require_hard_way = -1;
++		if (playfield_start < real_playfield_start) {
++			playfield_diff = res_shift_from_window(real_playfield_start - playfield_start);
++		}
++	}
++
+ 	if (dip_for_drawing->nr_sprites == 0 && !expanded)
+ 		return;
+ 
+@@ -1366,7 +1366,7 @@
+ 
+ #define DATA_POINTER(n) (line_data[lineno] + (n) * MAX_WORDS_PER_LINE * 2)
+ 
+-#if defined(CPU_AARCH64) || defined(USE_ARMNEON)
++#if !defined(ANDROID) && (defined(CPU_AARCH64) || defined(USE_ARMNEON))
+ 
+ #ifdef __cplusplus
+   extern "C" {
+@@ -1471,7 +1471,7 @@
+   int wordcount = dp_for_drawing->plflinelen;
+   uae_u32 *data = pixdata.apixels_l + MAX_PIXELS_PER_LINE / sizeof(uae_u32);
+ 
+-#if defined(CPU_AARCH64) || defined(USE_ARMNEON)
++#if !defined(ANDROID) && (defined(CPU_AARCH64) || defined(USE_ARMNEON))
+ 
+   pfield_doline_n[bplplanecnt](data, wordcount, lineno);
+ 
+@@ -1729,38 +1729,38 @@
+ 
+ static void playfield_hard_way(line_draw_func worker_pfield, int first, int last)
+ {
+-	int stop = last < real_playfield_end ? last : real_playfield_end;
+-
+-	src_pixel += playfield_diff;
+-	ham_decode_pixel += playfield_diff;
+-
+-	if (first < real_playfield_start)  {
+-		int next = last < real_playfield_start ? last : real_playfield_start;
+-		// left border sprite
+-		pfield_do_linetoscr_bordersprite_aga(first, next, false);
+-		// bitplanes
+-		if (stop > real_playfield_start) {
+-			(*worker_pfield)(real_playfield_start, stop, false);
+-			// right border sprite
+-			if (last > real_playfield_end) {
+-				int sfirst = first > real_playfield_end ? first : real_playfield_end;
+-				pfield_do_linetoscr_bordersprite_aga(sfirst, last, false);
+-			}
+-		}
+-	} else {
+-		// bitplanes
+-		if (stop > real_playfield_start) {
+-			(*worker_pfield)(first, stop, false);
+-			// right border sprite
+-			if (last > real_playfield_end) {
+-				int sfirst = first > real_playfield_end ? first : real_playfield_end;
+-				pfield_do_linetoscr_bordersprite_aga(sfirst, last, false);
+-			}
+-		}
+-	}
+-
+-	src_pixel -= playfield_diff;
+-	ham_decode_pixel -= playfield_diff;
++	int stop = last < real_playfield_end ? last : real_playfield_end;
++
++	src_pixel += playfield_diff;
++	ham_decode_pixel += playfield_diff;
++
++	if (first < real_playfield_start)  {
++		int next = last < real_playfield_start ? last : real_playfield_start;
++		// left border sprite
++		pfield_do_linetoscr_bordersprite_aga(first, next, false);
++		// bitplanes
++		if (stop > real_playfield_start) {
++			(*worker_pfield)(real_playfield_start, stop, false);
++			// right border sprite
++			if (last > real_playfield_end) {
++				int sfirst = first > real_playfield_end ? first : real_playfield_end;
++				pfield_do_linetoscr_bordersprite_aga(sfirst, last, false);
++			}
++		}
++	} else {
++		// bitplanes
++		if (stop > real_playfield_start) {
++			(*worker_pfield)(first, stop, false);
++			// right border sprite
++			if (last > real_playfield_end) {
++				int sfirst = first > real_playfield_end ? first : real_playfield_end;
++				pfield_do_linetoscr_bordersprite_aga(sfirst, last, false);
++			}
++		}
++	}
++
++	src_pixel -= playfield_diff;
++	ham_decode_pixel -= playfield_diff;
+ }
+ 
+ STATIC_INLINE void do_color_changes (line_draw_func worker_border, line_draw_func worker_pfield)
+diff -Nru src_7f31/fpp_native.cpp src/fpp_native.cpp
+--- src_7f31/fpp_native.cpp	2019-08-10 13:54:46.000000000 +0300
++++ src/fpp_native.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -18,6 +18,9 @@
  #include <float.h>
  #include <fenv.h>
@@ -95,9 +230,9 @@ diff -Nru src_93/fpp_native.cpp src/fpp_native.cpp
  #define USE_HOST_ROUNDING 1
  
  static uae_u32 dhex_nan[]   ={0xffffffff, 0x7fffffff};
-diff -Nru src_93/fsusage.cpp src/fsusage.cpp
---- src_93/fsusage.cpp	2019-08-10 14:01:43.000000000 +0300
-+++ src/fsusage.cpp	2019-08-10 17:37:32.252039526 +0300
+diff -Nru src_7f31/fsusage.cpp src/fsusage.cpp
+--- src_7f31/fsusage.cpp	2019-08-10 14:01:43.000000000 +0300
++++ src/fsusage.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -24,7 +24,7 @@
  #if HAVE_SYS_STATFS_H
  # include <sys/statfs.h>
@@ -123,9 +258,9 @@ diff -Nru src_93/fsusage.cpp src/fsusage.cpp
      return -1;
    /* f_frsize isn't guaranteed to be supported.  */
  
-diff -Nru src_93/include/options.h src/include/options.h
---- src_93/include/options.h	2019-08-10 14:01:43.000000000 +0300
-+++ src/include/options.h	2019-08-10 17:37:32.252039526 +0300
+diff -Nru src_7f31/include/options.h src/include/options.h
+--- src_7f31/include/options.h	2019-08-10 14:01:43.000000000 +0300
++++ src/include/options.h	2019-08-15 21:05:59.016154472 +0300
 @@ -421,6 +421,41 @@
  	int input_mouse_speed;
    int input_tablet;
@@ -168,14 +303,14 @@ diff -Nru src_93/include/options.h src/include/options.h
  	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
  	struct uae_input_device mouse_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
  	struct uae_input_device keyboard_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
-diff -Nru src_93/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
---- src_93/jit/compemu_fpp.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/jit/compemu_fpp.cpp	2019-08-10 17:37:32.252039526 +0300
+diff -Nru src_7f31/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
+--- src_7f31/jit/compemu_fpp.cpp	2019-08-15 21:03:53.000000000 +0300
++++ src/jit/compemu_fpp.cpp	2019-08-15 21:39:26.000000000 +0300
 @@ -25,6 +25,14 @@
  static const int sz1[8] = { 4, 4, 12, 12, 2, 8, 1, 0 };
  static const int sz2[8] = { 4, 4, 12, 12, 2, 8, 2, 0 };
  
-+#ifdef ANDROID
++#if defined(ANDROID) && !defined(CPU_AARCH64)
 +STATIC_INLINE double log2( double n )  
 +{  
 +    // log(n)/log(2) is log2.  
@@ -186,7 +321,7 @@ diff -Nru src_93/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
  /* return the required floating point precision or -1 for failure, 0=E, 1=S, 2=D */
  STATIC_INLINE int comp_fp_get (uae_u32 opcode, uae_u16 extra, int treg)
  {
-@@ -543,6 +551,7 @@
+@@ -544,6 +552,7 @@
  		  }
  		  FAIL (1);
  		  return;
@@ -202,9 +337,939 @@ diff -Nru src_93/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
  		case 2: /* from <EA> to FPx */
  		  dont_care_fflags ();
  		  if ((extra & 0xfc00) == 0x5c00) { /* FMOVECR */
-diff -Nru src_93/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
---- src_93/osdep/caps/generic_caps.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/caps/generic_caps.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/aarch64_helper.s src/osdep/aarch64_helper.s
+--- src_7f31/osdep/aarch64_helper.s	2019-08-10 18:10:35.000000000 +0300
++++ src/osdep/aarch64_helper.s	2019-08-15 21:14:17.000000000 +0300
+@@ -7,14 +7,6 @@
+ .global copy_screen_8bit
+ .global copy_screen_16bit_swap
+ .global copy_screen_32bit_to_16bit
+-.global ARM_doline_n1
+-.global NEON_doline_n2
+-.global NEON_doline_n3
+-.global NEON_doline_n4
+-.global NEON_doline_n5
+-.global NEON_doline_n6
+-.global NEON_doline_n7
+-.global NEON_doline_n8
+ 
+ .text
+ 
+@@ -106,8 +98,16 @@
+ //
+ //----------------------------------------------------------------
+ copy_screen_32bit_to_16bit:
+-  ldr       x3, =Masks_rgb
+-  ld2r      {v0.4S-v1.4S}, [x3]
++  mov x3, #0xf800
++  mov v0.s[0], w3
++  mov v0.s[1], w3
++  mov v0.s[2], w3
++  mov v0.s[3], w3
++  mov x3, #0x07e0
++  mov v1.s[0], w3
++  mov v1.s[1], w3
++  mov v1.s[2], w3
++  mov v1.s[3], w3 
+ copy_screen_32bit_to_16bit_loop:
+   ld1       {v3.4S}, [x1], #16
+   rev64     v3.16B, v3.16B
+@@ -123,892 +123,5 @@
+   bne       copy_screen_32bit_to_16bit_loop
+   ret
+ 
+-
+-//----------------------------------------------------------------
+-// ARM_doline_n1
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void ARM_doline_n1(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-ARM_doline_n1:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x3, x3, x2           // real_bplpt[0]
+-
+-  ldr       x10, =Lookup_doline_n1
+- 
+-ARM_doline_n1_loop:
+-  ldr       w2, [x3], #4
+-
+-  ubfx      x5, x2, #28, #4
+-  ldr       w6, [x10, x5, lsl #2]
+-  
+-  ubfx      x5, x2, #24, #4
+-  ldr       w7, [x10, x5, lsl #2]
+-
+-  ubfx      x5, x2, #20, #4
+-  ldr       w8, [x10, x5, lsl #2]
+-
+-  ubfx      x5, x2, #16, #4
+-  ldr       w9, [x10, x5, lsl #2]
+-  stp       w6, w7, [x0], #8     
+-  stp       w8, w9, [x0], #8     
+-  
+-  ubfx      x5, x2, #12, #4
+-  ldr       w6, [x10, x5, lsl #2]
+-
+-  ubfx      x5, x2, #8, #4
+-  ldr       w7, [x10, x5, lsl #2]
+-
+-  ubfx      x5, x2, #4, #4
+-  ldr       w8, [x10, x5, lsl #2]
+-
+-  ubfx      x5, x2, #0, #4
+-  ldr       w9, [x10, x5, lsl #2]
+-  stp       w6, w7, [x0], #8     
+-  stp       w8, w9, [x0], #8     
+-
+-  subs      x1, x1, #1
+-  bgt       ARM_doline_n1_loop
+-  
+-  ret
+-
+-
+-.align 8
+-
+-//----------------------------------------------------------------
+-// NEON_doline_n2
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n2(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n2:
+-
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  
+-// Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.16b, #0x03
+-  movi      v18.8b, #1
+-  
+-NEON_doline_n2_loop:
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  
+-  ushr      v2.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v3.8b, v1.8b, v18.8b  // tmpa = a << shift
+-  bit       v1.8b, v2.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v3.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  zip2      v4.8b, v1.8b, v0.8b
+-  zip1      v5.8b, v1.8b, v0.8b
+-
+-  zip1      v5.2d, v4.2d, v5.2d
+-  
+-  ushr      v0.16b, v5.16b, #6
+-  ushr      v1.16b, v5.16b, #4
+-  ushr      v2.16b, v5.16b, #2
+-
+-  and       v1.16b, v1.16b, v17.16b
+-  and       v2.16b, v2.16b, v17.16b
+-  and       v5.16b, v5.16b, v17.16b
+-
+-  zip2      v21.8h, v0.8h, v1.8h
+-  zip1      v23.8h, v0.8h, v1.8h
+-
+-  zip2      v20.8h, v2.8h, v5.8h
+-  zip1      v22.8h, v2.8h, v5.8h
+-
+-  zip2      v1.4s, v21.4s, v20.4s
+-  zip1      v3.4s, v21.4s, v20.4s
+-
+-  uzp2      v0.2d, v1.2d, v1.2d
+-  uzp2      v2.2d, v3.2d, v3.2d
+-
+-  st4       { v0.d, v1.d, v2.d, v3.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n2_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v23.4s, v22.4s
+-  zip1      v7.4s, v23.4s, v22.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n2_loop
+-  
+-NEON_doline_n2_exit:
+-  ret
+-
+-
+ .align 8
+ 
+-//----------------------------------------------------------------
+-// NEON_doline_n3
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n3(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n3:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  add       x4, x3, #200
+-
+-  // Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.8b, #0x33
+-  movi      v18.16b, #0x0f
+-
+-NEON_doline_n3_loop:
+-  movi      v19.8b, #1
+-
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  ld1       {v2.8b}, [x4], #8
+-  movi      v3.8b, #0
+-
+-  ushr      v4.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v5.8b, v1.8b, v19.8b  // tmpa = a << shift
+-  bit       v1.8b, v4.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v5.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v4.8b, v2.8b, #1      // tmpb = b >> shift
+-  bif       v2.8b, v3.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-  bit       v3.8b, v4.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 2
+-      
+-  ushr      v4.8b, v0.8b, #2      // tmpb = b >> shift
+-  ushl      v5.8b, v2.8b, v19.8b  // tmpa = a << shift
+-  bit       v2.8b, v4.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v5.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v4.8b, v1.8b, #2      // tmpb = b >> shift
+-  ushl      v5.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v4.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v1.8b, v5.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  zip2      v4.8b, v3.8b, v2.8b
+-  zip1      v5.8b, v3.8b, v2.8b
+-  zip2      v6.8b, v1.8b, v0.8b
+-  zip1      v7.8b, v1.8b, v0.8b
+-
+-  zip1      v20.8h, v4.8h, v6.8h
+-  zip1      v21.8h, v5.8h, v7.8h
+-
+-  ushr      v0.16b, v20.16b, #4
+-  ushr      v1.16b, v21.16b, #4
+-
+-  and       v20.16b, v20.16b, v18.16b
+-  and       v21.16b, v21.16b, v18.16b
+-
+-  zip2      v5.4s, v1.4s, v21.4s
+-  zip1      v7.4s, v1.4s, v21.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n3_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v0.4s, v20.4s
+-  zip1      v7.4s, v0.4s, v20.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n3_loop
+-
+-NEON_doline_n3_exit:
+-  ret
+-
+-
+-.align 8
+-
+-//----------------------------------------------------------------
+-// NEON_doline_n4
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n4(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n4:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  add       x4, x3, #200
+-  add       x5, x4, #200
+-
+-  // Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.8b, #0x33
+-  movi      v18.16b, #0x0f
+-
+-NEON_doline_n4_loop:
+-  movi      v19.8b, #1
+-
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  ld1       {v2.8b}, [x4], #8
+-  ld1       {v3.8b}, [x5], #8
+-
+-  ushr      v4.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v5.8b, v1.8b, v19.8b  // tmpa = a << shift
+-  bit       v1.8b, v4.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v5.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v4.8b, v2.8b, #1      // tmpb = b >> shift
+-  ushl      v5.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v4.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v2.8b, v5.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 2
+-      
+-  ushr      v4.8b, v0.8b, #2      // tmpb = b >> shift
+-  ushl      v5.8b, v2.8b, v19.8b  // tmpa = a << shift
+-  bit       v2.8b, v4.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v5.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v4.8b, v1.8b, #2      // tmpb = b >> shift
+-  ushl      v5.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v4.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v1.8b, v5.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  zip2      v4.8b, v3.8b, v2.8b
+-  zip1      v5.8b, v3.8b, v2.8b
+-  zip2      v6.8b, v1.8b, v0.8b
+-  zip1      v7.8b, v1.8b, v0.8b
+-
+-  zip1      v20.8h, v4.8h, v6.8h
+-  zip1      v21.8h, v5.8h, v7.8h
+-
+-  ushr      v0.16b, v20.16b, #4
+-  ushr      v1.16b, v21.16b, #4
+-
+-  and       v20.16b, v20.16b, v18.16b
+-  and       v21.16b, v21.16b, v18.16b
+-
+-  zip2      v5.4s, v1.4s, v21.4s
+-  zip1      v7.4s, v1.4s, v21.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n4_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v0.4s, v20.4s
+-  zip1      v7.4s, v0.4s, v20.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n4_loop
+-
+-NEON_doline_n4_exit:
+-  ret
+-
+-
+-.align 8
+-
+-//----------------------------------------------------------------
+-// NEON_doline_n5
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n5(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n5:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  add       x4, x3, #200
+-  add       x5, x4, #200
+-  add       x6, x5, #200
+-
+-  // Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.8b, #0x33
+-  movi      v18.16b, #0x0f
+-
+-NEON_doline_n5_loop:
+-  movi      v19.8b, #1
+-
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  ld1       {v2.8b}, [x4], #8
+-  ld1       {v3.8b}, [x5], #8
+-  ld1       {v4.8b}, [x6], #8
+-  movi      v5.8b, #0
+-  movi      v6.8b, #0
+-  movi      v7.8b, #0
+-
+-  ushr      v20.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v1.8b, v19.8b  // tmpa = a << shift
+-  bit       v1.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v2.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v2.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #1      // tmpb = b >> shift
+-  bif       v4.8b, v5.8b, v16.8b   // b = b and bit set from tmpa if mask (0x55) is false
+-  bit       v5.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 2
+-
+-  ushr      v20.8b, v0.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v2.8b, v19.8b  // tmpa = a << shift
+-  bit       v2.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v1.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v1.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #2      // tmpb = b >> shift
+-  bif       v4.8b, v6.8b, v17.8b   // b = b and bit set from tmpa if mask (0x55) is false
+-  bit       v6.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  ushr      v20.8b, v5.8b, #2      // tmpb = b >> shift
+-  bif       v5.8b, v7.8b, v17.8b   // b = b and bit set from tmpa if mask (0x55) is false
+-  bit       v7.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 4
+-
+-  ushr      v20.8b, v3.8b, #4
+-  ushl      v21.8b, v7.8b, v19.8b
+-  bit       v7.8b, v20.8b, v18.8b
+-  bif       v3.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v2.8b, #4
+-  ushl      v21.8b, v6.8b, v19.8b
+-  bit       v6.8b, v20.8b, v18.8b
+-  bif       v2.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v1.8b, #4
+-  ushl      v21.8b, v5.8b, v19.8b
+-  bit       v5.8b, v20.8b, v18.8b
+-  bif       v1.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v0.8b, #4
+-  ushl      v21.8b, v4.8b, v19.8b
+-  bit       v4.8b, v20.8b, v18.8b
+-  bif       v0.8b, v21.8b, v18.8b
+-
+-  zip1      v20.16b, v7.16b, v6.16b
+-  zip1      v21.16b, v5.16b, v4.16b
+-  zip1      v22.16b, v3.16b, v2.16b
+-  zip1      v23.16b, v1.16b, v0.16b
+-
+-  zip2      v0.8h, v20.8h, v21.8h
+-  zip1      v1.8h, v20.8h, v21.8h
+-  zip2      v2.8h, v22.8h, v23.8h
+-  zip1      v3.8h, v22.8h, v23.8h
+-
+-  zip2      v5.4s, v1.4s, v3.4s
+-  zip1      v7.4s, v1.4s, v3.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n5_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v0.4s, v2.4s
+-  zip1      v7.4s, v0.4s, v2.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n5_loop
+-
+-NEON_doline_n5_exit:
+-  ret
+-
+-
+-.align 8
+-
+-//----------------------------------------------------------------
+-// NEON_doline_n6
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n6(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n6:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  add       x4, x3, #200
+-  add       x5, x4, #200
+-  add       x6, x5, #200
+-  add       x7, x6, #200
+-
+-  // Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.8b, #0x33
+-  movi      v18.16b, #0x0f
+-
+-NEON_doline_n6_loop:
+-  movi      v19.8b, #1
+-
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  ld1       {v2.8b}, [x4], #8
+-  ld1       {v3.8b}, [x5], #8
+-  ld1       {v4.8b}, [x6], #8
+-  ld1       {v5.8b}, [x7], #8
+-  movi      v6.8b, #0
+-  movi      v7.8b, #0
+-
+-  ushr      v20.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v1.8b, v19.8b  // tmpa = a << shift
+-  bit       v1.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v2.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v2.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v5.8b, v19.8b  // tmpa = a << shift
+-  bit       v5.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v4.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 2
+-
+-  ushr      v20.8b, v0.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v2.8b, v19.8b  // tmpa = a << shift
+-  bit       v2.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v1.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v1.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #2      // tmpb = b >> shift
+-  bif       v4.8b, v6.8b, v17.8b   // b = b and bit set from tmpa if mask (0x55) is false
+-  bit       v6.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  ushr      v20.8b, v5.8b, #2      // tmpb = b >> shift
+-  bif       v5.8b, v7.8b, v17.8b   // b = b and bit set from tmpa if mask (0x55) is false
+-  bit       v7.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 4
+-
+-  ushr      v20.8b, v3.8b, #4
+-  ushl      v21.8b, v7.8b, v19.8b
+-  bit       v7.8b, v20.8b, v18.8b
+-  bif       v3.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v2.8b, #4
+-  ushl      v21.8b, v6.8b, v19.8b
+-  bit       v6.8b, v20.8b, v18.8b
+-  bif       v2.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v1.8b, #4
+-  ushl      v21.8b, v5.8b, v19.8b
+-  bit       v5.8b, v20.8b, v18.8b
+-  bif       v1.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v0.8b, #4
+-  ushl      v21.8b, v4.8b, v19.8b
+-  bit       v4.8b, v20.8b, v18.8b
+-  bif       v0.8b, v21.8b, v18.8b
+-
+-  zip1      v20.16b, v7.16b, v6.16b
+-  zip1      v21.16b, v5.16b, v4.16b
+-  zip1      v22.16b, v3.16b, v2.16b
+-  zip1      v23.16b, v1.16b, v0.16b
+-
+-  zip2      v0.8h, v20.8h, v21.8h
+-  zip1      v1.8h, v20.8h, v21.8h
+-  zip2      v2.8h, v22.8h, v23.8h
+-  zip1      v3.8h, v22.8h, v23.8h
+-
+-  zip2      v5.4s, v1.4s, v3.4s
+-  zip1      v7.4s, v1.4s, v3.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n6_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v0.4s, v2.4s
+-  zip1      v7.4s, v0.4s, v2.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n6_loop
+-
+-NEON_doline_n6_exit:
+-  ret
+-
+-
+-.align 8
+-
+-//----------------------------------------------------------------
+-// NEON_doline_n7
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n7(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n7:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  add       x4, x3, #200
+-  add       x5, x4, #200
+-  add       x6, x5, #200
+-  add       x7, x6, #200
+-  add       x8, x7, #200
+-
+-  // Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.8b, #0x33
+-  movi      v18.16b, #0x0f
+-
+-NEON_doline_n7_loop:
+-  movi      v19.8b, #1
+-
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  ld1       {v2.8b}, [x4], #8
+-  ld1       {v3.8b}, [x5], #8
+-  ld1       {v4.8b}, [x6], #8
+-  ld1       {v5.8b}, [x7], #8
+-  ld1       {v6.8b}, [x8], #8
+-  movi      v7.8b, #0
+-
+-  ushr      v20.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v1.8b, v19.8b  // tmpa = a << shift
+-  bit       v1.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v2.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v2.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v5.8b, v19.8b  // tmpa = a << shift
+-  bit       v5.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v4.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v6.8b, #1      // tmpb = b >> shift
+-  bif       v6.8b, v7.8b, v16.8b   // b = b anh bit set from tmpa if mask (0x55) is false
+-  bit       v7.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 2
+-
+-  ushr      v20.8b, v0.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v2.8b, v19.8b  // tmpa = a << shift
+-  bit       v2.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v1.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v1.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v6.8b, v19.8b  // tmpa = a << shift
+-  bit       v6.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v4.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v5.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v7.8b, v19.8b  // tmpa = a << shift
+-  bit       v7.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v5.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 4
+-
+-  ushr      v20.8b, v3.8b, #4
+-  ushl      v21.8b, v7.8b, v19.8b
+-  bit       v7.8b, v20.8b, v18.8b
+-  bif       v3.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v2.8b, #4
+-  ushl      v21.8b, v6.8b, v19.8b
+-  bit       v6.8b, v20.8b, v18.8b
+-  bif       v2.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v1.8b, #4
+-  ushl      v21.8b, v5.8b, v19.8b
+-  bit       v5.8b, v20.8b, v18.8b
+-  bif       v1.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v0.8b, #4
+-  ushl      v21.8b, v4.8b, v19.8b
+-  bit       v4.8b, v20.8b, v18.8b
+-  bif       v0.8b, v21.8b, v18.8b
+-
+-  zip1      v20.16b, v7.16b, v6.16b
+-  zip1      v21.16b, v5.16b, v4.16b
+-  zip1      v22.16b, v3.16b, v2.16b
+-  zip1      v23.16b, v1.16b, v0.16b
+-
+-  zip2      v0.8h, v20.8h, v21.8h
+-  zip1      v1.8h, v20.8h, v21.8h
+-  zip2      v2.8h, v22.8h, v23.8h
+-  zip1      v3.8h, v22.8h, v23.8h
+-
+-  zip2      v5.4s, v1.4s, v3.4s
+-  zip1      v7.4s, v1.4s, v3.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n7_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v0.4s, v2.4s
+-  zip1      v7.4s, v0.4s, v2.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n7_loop
+-
+-NEON_doline_n7_exit:
+-  ret
+-
+-
+-.align 8
+-
+-//----------------------------------------------------------------
+-// NEON_doline_n8
+-//
+-// x0: uae_u32   *pixels
+-// x1: int       wordcount
+-// x2: int       lineno 
+-//
+-// void NEON_doline_n8(uae_u32 *pixels, int wordcount, int lineno);
+-//
+-//----------------------------------------------------------------
+-NEON_doline_n8:
+-  mov       x3, #1600
+-  mul       x2, x2, x3
+-  ldr       x3, =line_data
+-  add       x2, x3, x2           // real_bplpt[0]
+-  add       x3, x2, #200
+-  add       x4, x3, #200
+-  add       x5, x4, #200
+-  add       x6, x5, #200
+-  add       x7, x6, #200
+-  add       x8, x7, #200
+-  add       x9, x8, #200
+-
+-  // Load masks to registers
+-  movi      v16.8b, #0x55
+-  movi      v17.8b, #0x33
+-  movi      v18.16b, #0x0f
+-
+-NEON_doline_n8_loop:
+-  movi      v19.8b, #1
+-
+-  ld1       {v0.8b}, [x2], #8
+-  ld1       {v1.8b}, [x3], #8
+-  ld1       {v2.8b}, [x4], #8
+-  ld1       {v3.8b}, [x5], #8
+-  ld1       {v4.8b}, [x6], #8
+-  ld1       {v5.8b}, [x7], #8
+-  ld1       {v6.8b}, [x8], #8
+-  ld1       {v7.8b}, [x9], #8
+-
+-  ushr      v20.8b, v0.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v1.8b, v19.8b  // tmpa = a << shift
+-  bit       v1.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v2.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v2.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v5.8b, v19.8b  // tmpa = a << shift
+-  bit       v5.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v4.8b, v21.8b, v16.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v6.8b, #1      // tmpb = b >> shift
+-  ushl      v21.8b, v7.8b, v19.8b  // tmpa = a << shift
+-  bit       v7.8b, v20.8b, v16.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v6.8b, v21.8b, v16.8b  // b = b anh bit set from tmpa if mask (0x55) is false
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 2
+-
+-  ushr      v20.8b, v0.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v2.8b, v19.8b  // tmpa = a << shift
+-  bit       v2.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v0.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v1.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v3.8b, v19.8b  // tmpa = a << shift
+-  bit       v3.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v1.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v4.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v6.8b, v19.8b  // tmpa = a << shift
+-  bit       v6.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v4.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  ushr      v20.8b, v5.8b, #2      // tmpb = b >> shift
+-  ushl      v21.8b, v7.8b, v19.8b  // tmpa = a << shift
+-  bit       v7.8b, v20.8b, v17.8b  // a = a and bit set from tmpb if mask (0x55) is true 
+-  bif       v5.8b, v21.8b, v17.8b  // b = b and bit set from tmpa if mask (0x55) is false
+-
+-  add       v19.8b, v19.8b, v19.8b  // now each element contains 4
+-
+-  ushr      v20.8b, v3.8b, #4
+-  ushl      v21.8b, v7.8b, v19.8b
+-  bit       v7.8b, v20.8b, v18.8b
+-  bif       v3.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v2.8b, #4
+-  ushl      v21.8b, v6.8b, v19.8b
+-  bit       v6.8b, v20.8b, v18.8b
+-  bif       v2.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v1.8b, #4
+-  ushl      v21.8b, v5.8b, v19.8b
+-  bit       v5.8b, v20.8b, v18.8b
+-  bif       v1.8b, v21.8b, v18.8b
+-
+-  ushr      v20.8b, v0.8b, #4
+-  ushl      v21.8b, v4.8b, v19.8b
+-  bit       v4.8b, v20.8b, v18.8b
+-  bif       v0.8b, v21.8b, v18.8b
+-
+-  zip1      v20.16b, v7.16b, v6.16b
+-  zip1      v21.16b, v5.16b, v4.16b
+-  zip1      v22.16b, v3.16b, v2.16b
+-  zip1      v23.16b, v1.16b, v0.16b
+-
+-  zip2      v0.8h, v20.8h, v21.8h
+-  zip1      v1.8h, v20.8h, v21.8h
+-  zip2      v2.8h, v22.8h, v23.8h
+-  zip1      v3.8h, v22.8h, v23.8h
+-
+-  zip2      v5.4s, v1.4s, v3.4s
+-  zip1      v7.4s, v1.4s, v3.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-  
+-  cmp       x1, #1    // Exit from here if odd number of words
+-  beq       NEON_doline_n8_exit
+-   
+-  subs      x1, x1, #2    // We handle 2 words (64 bit) per loop: wordcount -= 2
+-
+-  zip2      v5.4s, v0.4s, v2.4s
+-  zip1      v7.4s, v0.4s, v2.4s
+-
+-  uzp2      v4.2d, v5.2d, v5.2d
+-  uzp2      v6.2d, v7.2d, v7.2d
+-
+-  st4       { v4.d, v5.d, v6.d, v7.d }[0], [x0], #32
+-
+-  bgt       NEON_doline_n8_loop
+-
+-NEON_doline_n8_exit:
+-  ret
+-
+-
+-
+-.align 8
+-
+-Masks_rgb:
+-  .long 0x0000f800, 0x000007e0
+-
+-Lookup_doline_n1:
+-  .long 0x00000000, 0x01000000, 0x00010000, 0x01010000
+-  .long 0x00000100, 0x01000100, 0x00010100, 0x01010100
+-  .long 0x00000001, 0x01000001, 0x00010001, 0x01010001
+-  .long 0x00000101, 0x01000101, 0x00010101, 0x01010101
+diff -Nru src_7f31/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
+--- src_7f31/osdep/caps/generic_caps.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/caps/generic_caps.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -66,7 +66,7 @@
  	if (init)
  		return 1;
@@ -214,10 +1279,9 @@ diff -Nru src_93/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
  	UAE_DLHANDLE h = uae_dlopen(tmp);
  	if (!h) {
  		if (noticed)
-Binary files src_93/osdep/caps/generic_caps.o and src/osdep/caps/generic_caps.o differ
-diff -Nru src_93/osdep/config.h src/osdep/config.h
---- src_93/osdep/config.h	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/config.h	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/config.h src/osdep/config.h
+--- src_7f31/osdep/config.h	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/config.h	2019-08-15 21:05:59.016154472 +0300
 @@ -66,14 +66,20 @@
   */
  #define VK_ESCAPE SDLK_ESCAPE
@@ -239,9 +1303,9 @@ diff -Nru src_93/osdep/config.h src/osdep/config.h
   */
  #define VK_R SDLK_RCTRL
 +
-diff -Nru src_93/osdep/generic_filesys.cpp src/osdep/generic_filesys.cpp
---- src_93/osdep/generic_filesys.cpp	2019-08-10 14:01:43.000000000 +0300
-+++ src/osdep/generic_filesys.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/generic_filesys.cpp src/osdep/generic_filesys.cpp
+--- src_7f31/osdep/generic_filesys.cpp	2019-08-10 14:01:43.000000000 +0300
++++ src/osdep/generic_filesys.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -1,4 +1,6 @@
 +#ifdef HAVE_SYS_TIMEB_H
  #include <sys/timeb.h>
@@ -249,9 +1313,9 @@ diff -Nru src_93/osdep/generic_filesys.cpp src/osdep/generic_filesys.cpp
  #include <fcntl.h>
  #include <unistd.h>
  #include "sysconfig.h"
-diff -Nru src_93/osdep/generic_mem.cpp src/osdep/generic_mem.cpp
---- src_93/osdep/generic_mem.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/generic_mem.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/generic_mem.cpp src/osdep/generic_mem.cpp
+--- src_7f31/osdep/generic_mem.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/generic_mem.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -12,6 +12,9 @@
  #include "ar.h"
  #include <sys/mman.h>
@@ -289,9 +1353,9 @@ diff -Nru src_93/osdep/generic_mem.cpp src/osdep/generic_mem.cpp
    munmap(regs.natmem_offset, natmem_size + BARRIER);
  #else
    free(regs.natmem_offset);
-diff -Nru src_93/osdep/generic_target.cpp src/osdep/generic_target.cpp
---- src_93/osdep/generic_target.cpp	2019-08-10 14:01:43.000000000 +0300
-+++ src/osdep/generic_target.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/generic_target.cpp src/osdep/generic_target.cpp
+--- src_7f31/osdep/generic_target.cpp	2019-08-10 14:01:43.000000000 +0300
++++ src/osdep/generic_target.cpp	2019-08-15 21:05:59.016154472 +0300
 @@ -13,7 +13,9 @@
  #include <asm/sigcontext.h>
  #include <signal.h>
@@ -329,9 +1393,9 @@ diff -Nru src_93/osdep/generic_target.cpp src/osdep/generic_target.cpp
  	snprintf(rp9_path, MAX_DPATH - 1, "%s/rp9/", start_path_data);
  
  	snprintf(path, MAX_DPATH - 1, "%s/conf/adfdir.conf", start_path_data);
-diff -Nru src_93/osdep/gui/androidsdl_event.cpp src/osdep/gui/androidsdl_event.cpp
---- src_93/osdep/gui/androidsdl_event.cpp	1970-01-01 03:00:00.000000000 +0300
-+++ src/osdep/gui/androidsdl_event.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/androidsdl_event.cpp src/osdep/gui/androidsdl_event.cpp
+--- src_7f31/osdep/gui/androidsdl_event.cpp	1970-01-01 03:00:00.000000000 +0300
++++ src/osdep/gui/androidsdl_event.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -0,0 +1,64 @@
 +#include <guichan/sdl.hpp>
 +
@@ -397,15 +1461,15 @@ diff -Nru src_93/osdep/gui/androidsdl_event.cpp src/osdep/gui/androidsdl_event.c
 +            }
 +}
 +
-diff -Nru src_93/osdep/gui/androidsdl_event.h src/osdep/gui/androidsdl_event.h
---- src_93/osdep/gui/androidsdl_event.h	1970-01-01 03:00:00.000000000 +0300
-+++ src/osdep/gui/androidsdl_event.h	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/androidsdl_event.h src/osdep/gui/androidsdl_event.h
+--- src_7f31/osdep/gui/androidsdl_event.h	1970-01-01 03:00:00.000000000 +0300
++++ src/osdep/gui/androidsdl_event.h	2019-08-15 21:05:59.020154409 +0300
 @@ -0,0 +1,2 @@
 +void androidsdl_event(SDL_Event event, gcn::SDLInput* gui_input);
 +
-diff -Nru src_93/osdep/gui/CreateFilesysHardfile.cpp src/osdep/gui/CreateFilesysHardfile.cpp
---- src_93/osdep/gui/CreateFilesysHardfile.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/CreateFilesysHardfile.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/CreateFilesysHardfile.cpp src/osdep/gui/CreateFilesysHardfile.cpp
+--- src_7f31/osdep/gui/CreateFilesysHardfile.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/CreateFilesysHardfile.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -23,6 +23,9 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -429,9 +1493,9 @@ diff -Nru src_93/osdep/gui/CreateFilesysHardfile.cpp src/osdep/gui/CreateFilesys
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/EditFilesysHardfile.cpp src/osdep/gui/EditFilesysHardfile.cpp
---- src_93/osdep/gui/EditFilesysHardfile.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/EditFilesysHardfile.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/EditFilesysHardfile.cpp src/osdep/gui/EditFilesysHardfile.cpp
+--- src_7f31/osdep/gui/EditFilesysHardfile.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/EditFilesysHardfile.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -25,6 +25,9 @@
  #include "gui_handling.h"
  #include "GenericListModel.h"
@@ -455,9 +1519,9 @@ diff -Nru src_93/osdep/gui/EditFilesysHardfile.cpp src/osdep/gui/EditFilesysHard
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/EditFilesysVirtual.cpp src/osdep/gui/EditFilesysVirtual.cpp
---- src_93/osdep/gui/EditFilesysVirtual.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/EditFilesysVirtual.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/EditFilesysVirtual.cpp src/osdep/gui/EditFilesysVirtual.cpp
+--- src_7f31/osdep/gui/EditFilesysVirtual.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/EditFilesysVirtual.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -23,10 +23,15 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -499,9 +1563,9 @@ diff -Nru src_93/osdep/gui/EditFilesysVirtual.cpp src/osdep/gui/EditFilesysVirtu
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/gui_handling.h src/osdep/gui/gui_handling.h
---- src_93/osdep/gui/gui_handling.h	2019-08-10 13:54:46.000000000 +0300
-+++ src/osdep/gui/gui_handling.h	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/gui_handling.h src/osdep/gui/gui_handling.h
+--- src_7f31/osdep/gui/gui_handling.h	2019-08-10 13:54:46.000000000 +0300
++++ src/osdep/gui/gui_handling.h	2019-08-15 21:05:59.020154409 +0300
 @@ -114,6 +114,12 @@
  void ExitPanelSavestate(const struct _ConfigCategory& category);
  bool HelpPanelSavestate(std::vector<std::string> &helptext);
@@ -515,9 +1579,9 @@ diff -Nru src_93/osdep/gui/gui_handling.h src/osdep/gui/gui_handling.h
  void RegisterRefreshFunc(void (*func)(void));
  
  void FocusBugWorkaround(gcn::Window *wnd);
-diff -Nru src_93/osdep/gui/main_window.cpp src/osdep/gui/main_window.cpp
---- src_93/osdep/gui/main_window.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/main_window.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/main_window.cpp src/osdep/gui/main_window.cpp
+--- src_7f31/osdep/gui/main_window.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/main_window.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -20,6 +20,13 @@
  #include "include/memory-uae.h"
  #include "autoconf.h"
@@ -699,9 +1763,9 @@ diff -Nru src_93/osdep/gui/main_window.cpp src/osdep/gui/main_window.cpp
      uae_quit();
    }
  
-diff -Nru src_93/osdep/gui/Navigation.cpp src/osdep/gui/Navigation.cpp
---- src_93/osdep/gui/Navigation.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/Navigation.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/Navigation.cpp src/osdep/gui/Navigation.cpp
+--- src_7f31/osdep/gui/Navigation.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/Navigation.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -44,13 +44,22 @@
    { "Game ports",       "cboAutofire0",   "cboPort0",       "Sound",            "Input" },
    { "Input",            "cboDevice",      "cboDevice",      "Game ports",       "Miscellaneous" },
@@ -748,9 +1812,9 @@ diff -Nru src_93/osdep/gui/Navigation.cpp src/osdep/gui/Navigation.cpp
  
  //  active            move left         move right        move up           move down
  // EditFilesysVirtual
-diff -Nru src_93/osdep/gui/PanelChipset.cpp src/osdep/gui/PanelChipset.cpp
---- src_93/osdep/gui/PanelChipset.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelChipset.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/PanelChipset.cpp src/osdep/gui/PanelChipset.cpp
+--- src_7f31/osdep/gui/PanelChipset.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelChipset.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -214,10 +214,18 @@
    chkNTSC->addActionListener(chipsetActionListener);
  
@@ -836,9 +1900,9 @@ diff -Nru src_93/osdep/gui/PanelChipset.cpp src/osdep/gui/PanelChipset.cpp
    helptext.push_back("For \"Collision Level\", select \"Sprites and Sprites vs. Playfield\" which is fine for nearly all games.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelConfig.cpp src/osdep/gui/PanelConfig.cpp
---- src_93/osdep/gui/PanelConfig.cpp	2019-08-10 13:54:46.000000000 +0300
-+++ src/osdep/gui/PanelConfig.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/PanelConfig.cpp src/osdep/gui/PanelConfig.cpp
+--- src_7f31/osdep/gui/PanelConfig.cpp	2019-08-10 13:54:46.000000000 +0300
++++ src/osdep/gui/PanelConfig.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -283,10 +283,10 @@
    helptext.clear();
    helptext.push_back("To load a configuration, select the entry in the list and then click on \"Load\". If you doubleclick on an entry in the");
@@ -852,9 +1916,9 @@ diff -Nru src_93/osdep/gui/PanelConfig.cpp src/osdep/gui/PanelConfig.cpp
    helptext.push_back("\"Delete\" will delete the selected configuration.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
---- src_93/osdep/gui/PanelCPU.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelCPU.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
+--- src_7f31/osdep/gui/PanelCPU.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelCPU.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -270,7 +270,11 @@
  	grpCPU->add(sldCachemem, 6, 290);
  	grpCPU->add(lblCachesize, 110, 290);
@@ -904,9 +1968,9 @@ diff -Nru src_93/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
 -  
 \ No newline at end of file
 +  
-diff -Nru src_93/osdep/gui/PanelDisplay.cpp src/osdep/gui/PanelDisplay.cpp
---- src_93/osdep/gui/PanelDisplay.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelDisplay.cpp	2019-08-10 17:37:32.256039396 +0300
+diff -Nru src_7f31/osdep/gui/PanelDisplay.cpp src/osdep/gui/PanelDisplay.cpp
+--- src_7f31/osdep/gui/PanelDisplay.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelDisplay.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -288,15 +288,15 @@
    helptext.push_back("Select the required width and height of the Amiga screen. If you select \"NTSC\" in chipset, a value greater than");
    helptext.push_back("240 for \"Height\" makes no sense. When the game, demo or workbench uses Hires mode and you selected a");
@@ -927,9 +1991,9 @@ diff -Nru src_93/osdep/gui/PanelDisplay.cpp src/osdep/gui/PanelDisplay.cpp
    helptext.push_back("When you activate \"Frameskip\", only every second frame is drawn. This will improve performance and some");
    helptext.push_back("more games are playable.");
    return true;
-diff -Nru src_93/osdep/gui/PanelFloppy.cpp src/osdep/gui/PanelFloppy.cpp
---- src_93/osdep/gui/PanelFloppy.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelFloppy.cpp	2019-08-10 17:37:32.260039266 +0300
+diff -Nru src_7f31/osdep/gui/PanelFloppy.cpp src/osdep/gui/PanelFloppy.cpp
+--- src_7f31/osdep/gui/PanelFloppy.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelFloppy.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -418,7 +418,11 @@
  	for(i = 0; i < 4; ++i) {
  	  posX = DISTANCE_BORDER;
@@ -959,9 +2023,9 @@ diff -Nru src_93/osdep/gui/PanelFloppy.cpp src/osdep/gui/PanelFloppy.cpp
    helptext.push_back("With the buttons \"Create 3.5'' DD disk\" and \"Create 3.5'' HD disk\" you can create a new and empty disk.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelGamePortPandora.cpp src/osdep/gui/PanelGamePortPandora.cpp
---- src_93/osdep/gui/PanelGamePortPandora.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelGamePortPandora.cpp	2019-08-10 17:37:32.260039266 +0300
+diff -Nru src_7f31/osdep/gui/PanelGamePortPandora.cpp src/osdep/gui/PanelGamePortPandora.cpp
+--- src_7f31/osdep/gui/PanelGamePortPandora.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelGamePortPandora.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -20,6 +20,9 @@
  #include "inputdevice.h"
  #include "GenericListModel.h"
@@ -1040,9 +2104,9 @@ diff -Nru src_93/osdep/gui/PanelGamePortPandora.cpp src/osdep/gui/PanelGamePortP
    helptext.push_back("\"Tap Delay\" specifies the time between taping the screen and an emulated mouse button click.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelHD.cpp src/osdep/gui/PanelHD.cpp
---- src_93/osdep/gui/PanelHD.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelHD.cpp	2019-08-10 17:37:32.260039266 +0300
+diff -Nru src_7f31/osdep/gui/PanelHD.cpp src/osdep/gui/PanelHD.cpp
+--- src_7f31/osdep/gui/PanelHD.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelHD.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -431,7 +431,11 @@
    cboCDFile->addActionListener(cdFileActionListener);
  
@@ -1075,9 +2139,9 @@ diff -Nru src_93/osdep/gui/PanelHD.cpp src/osdep/gui/PanelHD.cpp
    helptext.push_back("In current version, WAV, MP3 and FLAC is supported for audio tracks.");
    helptext.push_back("The audio volume of the CD can be adjusted with \"CD Volume\".");
    return true;
-diff -Nru src_93/osdep/gui/PanelInput.cpp src/osdep/gui/PanelInput.cpp
---- src_93/osdep/gui/PanelInput.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelInput.cpp	2019-08-10 17:37:32.260039266 +0300
+diff -Nru src_7f31/osdep/gui/PanelInput.cpp src/osdep/gui/PanelInput.cpp
+--- src_7f31/osdep/gui/PanelInput.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelInput.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -278,7 +278,11 @@
    scrAreaList = new gcn::ScrollArea(lstWidget);
    scrAreaList->setFrameSize(1);
@@ -1099,9 +2163,9 @@ diff -Nru src_93/osdep/gui/PanelInput.cpp src/osdep/gui/PanelInput.cpp
    helptext.push_back("Choose the new target action in the dropdown control \"Target\" for the current selected entry.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelMisc.cpp src/osdep/gui/PanelMisc.cpp
---- src_93/osdep/gui/PanelMisc.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelMisc.cpp	2019-08-10 17:37:32.260039266 +0300
+diff -Nru src_7f31/osdep/gui/PanelMisc.cpp src/osdep/gui/PanelMisc.cpp
+--- src_7f31/osdep/gui/PanelMisc.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelMisc.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -24,6 +24,10 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -1135,9 +2199,9 @@ diff -Nru src_93/osdep/gui/PanelMisc.cpp src/osdep/gui/PanelMisc.cpp
    helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelOnScreen.cpp src/osdep/gui/PanelOnScreen.cpp
---- src_93/osdep/gui/PanelOnScreen.cpp	1970-01-01 03:00:00.000000000 +0300
-+++ src/osdep/gui/PanelOnScreen.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelOnScreen.cpp src/osdep/gui/PanelOnScreen.cpp
+--- src_7f31/osdep/gui/PanelOnScreen.cpp	1970-01-01 03:00:00.000000000 +0300
++++ src/osdep/gui/PanelOnScreen.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -0,0 +1,443 @@
 +#include <guichan.hpp>
 +#include <SDL/SDL_ttf.h>
@@ -1582,9 +2646,9 @@ diff -Nru src_93/osdep/gui/PanelOnScreen.cpp src/osdep/gui/PanelOnScreen.cpp
 +  helptext.push_back("onScreen Help");
 +  return true;
 +}
-diff -Nru src_93/osdep/gui/PanelPaths.cpp src/osdep/gui/PanelPaths.cpp
---- src_93/osdep/gui/PanelPaths.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/PanelPaths.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelPaths.cpp src/osdep/gui/PanelPaths.cpp
+--- src_7f31/osdep/gui/PanelPaths.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/PanelPaths.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -149,7 +149,7 @@
    helptext.clear();
    helptext.push_back("Specify the location of your kickstart roms and the folder where the configuration files should be stored.");
@@ -1594,9 +2658,9 @@ diff -Nru src_93/osdep/gui/PanelPaths.cpp src/osdep/gui/PanelPaths.cpp
    helptext.push_back("After changing the location of the kickstart roms, click on \"Rescan ROMS\" to refresh the list of the available");
    helptext.push_back("ROMs.");
    return true;
-diff -Nru src_93/osdep/gui/PanelQuickstart.cpp src/osdep/gui/PanelQuickstart.cpp
---- src_93/osdep/gui/PanelQuickstart.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelQuickstart.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelQuickstart.cpp src/osdep/gui/PanelQuickstart.cpp
+--- src_7f31/osdep/gui/PanelQuickstart.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelQuickstart.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -66,23 +66,38 @@
  	     "Basic non-expanded configuration",
  	     "2 MB Chip RAM expanded configuration",
@@ -1661,9 +2725,9 @@ diff -Nru src_93/osdep/gui/PanelQuickstart.cpp src/osdep/gui/PanelQuickstart.cpp
    helptext.push_back("When you activate \"Start in Quickstart mode\", the next time you run the emulator, it  will start with the quickstart");
    helptext.push_back("panel. Otherwise you start in configuraions panel.");
    return true;
-diff -Nru src_93/osdep/gui/PanelRAM.cpp src/osdep/gui/PanelRAM.cpp
---- src_93/osdep/gui/PanelRAM.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelRAM.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelRAM.cpp src/osdep/gui/PanelRAM.cpp
+--- src_7f31/osdep/gui/PanelRAM.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelRAM.cpp	2019-08-15 21:05:59.020154409 +0300
 @@ -177,12 +177,21 @@
  void InitPanelRAM(const struct _ConfigCategory& category)
  {
@@ -1773,9 +2837,9 @@ diff -Nru src_93/osdep/gui/PanelRAM.cpp src/osdep/gui/PanelRAM.cpp
    grpRAM->setBaseColor(gui_baseCol);
    
    category.panel->add(grpRAM);
-diff -Nru src_93/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
---- src_93/osdep/gui/PanelROM.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelROM.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
+--- src_7f31/osdep/gui/PanelROM.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelROM.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -78,7 +78,7 @@
        int currIdx = -1;
        if(ROMType & (ROMTYPE_ALL_EXT | ROMTYPE_ALL_CART))
@@ -1873,9 +2937,9 @@ diff -Nru src_93/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
    helptext.push_back("In \"Cartridge ROM File\", you can select the CD32 FMV module to activate video playback in CD32.");
    helptext.push_back("There are also some Action Replay and Freezer cards and the built in HRTMon available.");
    helptext.push_back("");
-diff -Nru src_93/osdep/gui/PanelSavestate.cpp src/osdep/gui/PanelSavestate.cpp
---- src_93/osdep/gui/PanelSavestate.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelSavestate.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelSavestate.cpp src/osdep/gui/PanelSavestate.cpp
+--- src_7f31/osdep/gui/PanelSavestate.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelSavestate.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -257,11 +257,11 @@
    helptext.clear();
    helptext.push_back("Savestates are stored with the name of the disk in drive DF0 attached with the selected number.");
@@ -1890,9 +2954,9 @@ diff -Nru src_93/osdep/gui/PanelSavestate.cpp src/osdep/gui/PanelSavestate.cpp
    helptext.push_back("Note: Savestates with HDDs may not work.");
    return true;
  }
-diff -Nru src_93/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
---- src_93/osdep/gui/PanelSound.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/gui/PanelSound.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
+--- src_7f31/osdep/gui/PanelSound.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/gui/PanelSound.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -279,11 +279,22 @@
  	grpSound->add(optSoundEmulated, 5, 70);
  	grpSound->add(optSoundEmulatedBest, 5, 100);
@@ -1986,9 +3050,9 @@ diff -Nru src_93/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
    helptext.push_back("With \"Stereo separation\" and \"Stereo delay\", you can adjust how the left and right audio channels of the Amiga");
    helptext.push_back("are mixed to the left and right channels of your device. A value of 70% for separation and no delay is a good");
    helptext.push_back("start.");
-diff -Nru src_93/osdep/gui/SelectFile.cpp src/osdep/gui/SelectFile.cpp
---- src_93/osdep/gui/SelectFile.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/SelectFile.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/SelectFile.cpp src/osdep/gui/SelectFile.cpp
+--- src_7f31/osdep/gui/SelectFile.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/SelectFile.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -22,6 +22,9 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -2068,9 +3132,9 @@ diff -Nru src_93/osdep/gui/SelectFile.cpp src/osdep/gui/SelectFile.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/SelectFolder.cpp src/osdep/gui/SelectFolder.cpp
---- src_93/osdep/gui/SelectFolder.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/SelectFolder.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/SelectFolder.cpp src/osdep/gui/SelectFolder.cpp
+--- src_7f31/osdep/gui/SelectFolder.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/SelectFolder.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -20,10 +20,14 @@
  #include "uae.h"
  #include "gui_handling.h"
@@ -2162,9 +3226,9 @@ diff -Nru src_93/osdep/gui/SelectFolder.cpp src/osdep/gui/SelectFolder.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/ShowHelp.cpp src/osdep/gui/ShowHelp.cpp
---- src_93/osdep/gui/ShowHelp.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/ShowHelp.cpp	2019-08-10 17:37:32.268039006 +0300
+diff -Nru src_7f31/osdep/gui/ShowHelp.cpp src/osdep/gui/ShowHelp.cpp
+--- src_7f31/osdep/gui/ShowHelp.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/ShowHelp.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -21,6 +21,9 @@
  #include "gui_handling.h"
  #include "GenericListModel.h"
@@ -2188,9 +3252,9 @@ diff -Nru src_93/osdep/gui/ShowHelp.cpp src/osdep/gui/ShowHelp.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/ShowMessage.cpp src/osdep/gui/ShowMessage.cpp
---- src_93/osdep/gui/ShowMessage.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/ShowMessage.cpp	2019-08-10 17:37:32.272038876 +0300
+diff -Nru src_7f31/osdep/gui/ShowMessage.cpp src/osdep/gui/ShowMessage.cpp
+--- src_7f31/osdep/gui/ShowMessage.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/ShowMessage.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -20,6 +20,9 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -2214,9 +3278,9 @@ diff -Nru src_93/osdep/gui/ShowMessage.cpp src/osdep/gui/ShowMessage.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_93/osdep/gui/UaeDropDown.cpp src/osdep/gui/UaeDropDown.cpp
---- src_93/osdep/gui/UaeDropDown.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/UaeDropDown.cpp	2019-08-10 17:37:32.272038876 +0300
+diff -Nru src_7f31/osdep/gui/UaeDropDown.cpp src/osdep/gui/UaeDropDown.cpp
+--- src_7f31/osdep/gui/UaeDropDown.cpp	2019-01-03 19:49:41.000000000 +0200
++++ src/osdep/gui/UaeDropDown.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -60,8 +60,11 @@
      mPreferUp = false;
      mFoldedUpY = -1;
@@ -2230,9 +3294,9 @@ diff -Nru src_93/osdep/gui/UaeDropDown.cpp src/osdep/gui/UaeDropDown.cpp
    }
  
    UaeDropDown::~UaeDropDown()
-diff -Nru src_93/osdep/pandora.cpp src/osdep/pandora.cpp
---- src_93/osdep/pandora.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/pandora.cpp	2019-08-10 17:37:32.272038876 +0300
+diff -Nru src_7f31/osdep/pandora.cpp src/osdep/pandora.cpp
+--- src_7f31/osdep/pandora.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/pandora.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -82,6 +82,39 @@
  
  	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
@@ -2532,9 +3596,9 @@ diff -Nru src_93/osdep/pandora.cpp src/osdep/pandora.cpp
  				  case SDLK_RCTRL:  // Right shoulder button
    					if(currprefs.input_tablet > TABLET_OFF) {
    					  // Release left or right shoulder button -> stylus does left mousebutton
-diff -Nru src_93/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
---- src_93/osdep/pandora_gfx.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/pandora_gfx.cpp	2019-08-10 17:37:32.272038876 +0300
+diff -Nru src_7f31/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
+--- src_7f31/osdep/pandora_gfx.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/pandora_gfx.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -16,11 +16,13 @@
  #include <png.h>
  #include <SDL.h>
@@ -2685,9 +3749,9 @@ diff -Nru src_93/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
  {
  	int changed = 0;
  	
-diff -Nru src_93/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
---- src_93/osdep/sigsegv_handler.cpp	2019-08-10 17:34:49.000000000 +0300
-+++ src/osdep/sigsegv_handler.cpp	2019-08-10 17:37:32.272038876 +0300
+diff -Nru src_7f31/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
+--- src_7f31/osdep/sigsegv_handler.cpp	2019-08-15 21:03:54.000000000 +0300
++++ src/osdep/sigsegv_handler.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -39,7 +39,13 @@
  #include <asm/sigcontext.h>
  #include <signal.h>
@@ -2702,10 +3766,10 @@ diff -Nru src_93/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
  #include <SDL.h>
  
  #ifdef JIT
-diff -Nru src_93/osdep/sysconfig.h src/osdep/sysconfig.h
---- src_93/osdep/sysconfig.h	2019-08-10 17:28:24.000000000 +0300
-+++ src/osdep/sysconfig.h	2019-08-10 17:39:55.407972769 +0300
-@@ -553,9 +553,18 @@
+diff -Nru src_7f31/osdep/sysconfig.h src/osdep/sysconfig.h
+--- src_7f31/osdep/sysconfig.h	2019-08-10 18:10:35.000000000 +0300
++++ src/osdep/sysconfig.h	2019-08-15 21:33:23.000000000 +0300
+@@ -551,9 +551,18 @@
  #define _timezone           timezone
  #define _daylight           daylight
  #define _ftime(x)           ftime(x)
@@ -2721,14 +3785,14 @@ diff -Nru src_93/osdep/sysconfig.h src/osdep/sysconfig.h
  #define _wunlink(x)         unlink(x)
  #define _istalnum(x)        isalnum(x)
  
-+#ifdef ANDROID
++#if defined(ANDROID) && !defined(CPU_AARCH64)
 +#define log2l(x)            (log(x)/log(2))
 +#endif
 +
  #endif /* UAE_SYSCONFIG_H */
-diff -Nru src_93/osdep/writelog.cpp src/osdep/writelog.cpp
---- src_93/osdep/writelog.cpp	2019-08-10 13:54:46.000000000 +0300
-+++ src/osdep/writelog.cpp	2019-08-10 17:37:32.272038876 +0300
+diff -Nru src_7f31/osdep/writelog.cpp src/osdep/writelog.cpp
+--- src_7f31/osdep/writelog.cpp	2019-08-10 13:54:46.000000000 +0300
++++ src/osdep/writelog.cpp	2019-08-15 21:05:59.024154346 +0300
 @@ -20,7 +20,7 @@
      va_start (parms, format);
      vsnprintf (buffer, WRITE_LOG_BUF_SIZE-1, format, parms);

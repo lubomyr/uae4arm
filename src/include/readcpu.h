@@ -116,9 +116,10 @@ extern struct instr {
     unsigned int dmode:5;
     unsigned int suse:1;
     unsigned int duse:1;
+    unsigned int ccuse:1;
     unsigned int clev:3, unimpclev:3;
     unsigned int cflow:3;
-    unsigned int unused3:7;
+    unsigned int unused3:6;
 	char head, tail, clocks, fetchmode;
 } *table68k;
 

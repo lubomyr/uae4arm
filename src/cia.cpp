@@ -1256,6 +1256,8 @@ static uae_u32 REGPARAM2 cia_wget (uaecptr addr)
     }
   	break;
   }
+	if (addr & 1)
+		v = (v << 8) | (v >> 8);
 #ifdef ACTION_REPLAY
 	if (flags) {
 		action_replay_cia_access((flags & 2) != 0);
@@ -1308,7 +1310,7 @@ static void REGPARAM2 cia_bput (uaecptr addr, uae_u32 value)
   }
 }
 
-static void REGPARAM2 cia_wput (uaecptr addr, uae_u32 value)
+static void REGPARAM2 cia_wput (uaecptr addr, uae_u32 v)
 {
   int r = (addr & 0xf00) >> 8;
 
@@ -1319,15 +1321,18 @@ static void REGPARAM2 cia_wput (uaecptr addr, uae_u32 value)
 	if (!isgaylenocia (addr))
 		return;
 
+	if (addr & 1)
+		v = (v << 8) | (v >> 8);
+
 	int cs = cia_chipselect(addr);
 
   if (!issinglecia ()|| (cs & 3) != 0) {
 		uae_u32 flags = 0;
     cia_wait_pre ();
     if ((cs & 2) == 0)
-			WriteCIAB (r, value >> 8, &flags);
+			WriteCIAB (r, v >> 8, &flags);
     if ((cs & 1) == 0)
-    	WriteCIAA (r, value & 0xff);
+    	WriteCIAA (r, v & 0xff);
     cia_wait_post ();
 #ifdef ACTION_REPLAY
 		if (flags) {

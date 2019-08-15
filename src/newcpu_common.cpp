@@ -4,6 +4,11 @@
 #include "memory-uae.h"
 #include "newcpu.h"
 
+int get_cpu_model(void)
+{
+	return currprefs.cpu_model;
+}
+
 static int movec_illg (int regno)
 {
   int regno2 = regno & 0x7ff;
@@ -224,6 +229,7 @@ uae_u32 REGPARAM2 _get_disp_ea_020 (uae_u32 base)
   	regd = (uae_s32)(uae_s16)regd;
   regd <<= (dp >> 9) & 3;
   if (dp & 0x100) {
+
   	uae_s32 outer = 0;
 	  if (dp & 0x80) base = 0;
 	  if (dp & 0x40) regd = 0;
@@ -386,27 +392,41 @@ int getDivs68kCycles (uae_s32 dividend, uae_s16 divisor)
 	return mcycles * 2;
 }
 
-/* 68000 Z=1. NVC=0
- * 68020 and 68030: Signed: Z=1 NVC=0. Unsigned: V=1, N<dst, Z=!N, C=0.
+/* DIV divide by zero
+ *
+ * 68000 Signed: NVC=0 Z=1. Unsigned: VC=0 N=(dst>>16)<0 Z=(dst>>16)==0
+ * 68020 and 68030: Signed: Z=1 NC=0. V=? (sometimes random!) Unsigned: V=1, N=(dst>>16)<0 Z=(dst>>16)==0, C=0.
  * 68040/68060 C=0.
+ *
  */
 void divbyzero_special (bool issigned, uae_s32 dst)
 {
 	if (currprefs.cpu_model == 68020 || currprefs.cpu_model == 68030) {
 		CLEAR_CZNV ();
-		if (issigned == false) {
-			if (dst < 0) 
-				SET_NFLG (1);
-			SET_ZFLG (!GET_NFLG ());
-			SET_VFLG (1);
+		if (issigned) {
+			SET_ZFLG(1);
 		} else {
-			SET_ZFLG (1);
+			uae_s16 d = dst >> 16;
+			if (d < 0)
+				SET_NFLG (1);
+			else if (d == 0)
+				SET_ZFLG(1);
+			SET_VFLG (1);
 		}
 	} else if (currprefs.cpu_model >= 68040) {
 		SET_CFLG (0);
 	} else {
 		// 68000/010
 		CLEAR_CZNV ();
+		if (issigned) {
+			SET_ZFLG(1);
+		} else {
+			uae_s16 d = dst >> 16;
+			if (d < 0)
+				SET_NFLG(1);
+			else if (d == 0)
+				SET_ZFLG(1);
+		}
 	}
 }
 
@@ -468,6 +488,71 @@ void setdivsoverflowflags(uae_s32 dividend, uae_s16 divisor)
 	}
 }
 
+/*
+ * CHK.W undefined flags
+ *
+ * 68000: CV=0. Z: dst==0. N: dst < 0. !N: dst > src.
+ * 68020: Z: dst==0. N: dst < 0. V: src-dst overflow. C: if dst < 0: (dst > src || src >= 0), if dst > src: (src >= 0).
+ *
+ */
+void setchkundefinedflags(uae_s32 src, uae_s32 dst, int size)
+{
+	CLEAR_CZNV();
+	if (currprefs.cpu_model < 68020) {
+		if (dst == 0)
+			SET_ZFLG(1);
+		if (dst < 0)
+			SET_NFLG(1);
+		else if (dst > src)
+			SET_NFLG(0);
+	} else if (currprefs.cpu_model == 68020 || currprefs.cpu_model == 68030) {
+		if (dst == 0)
+			SET_ZFLG(1);
+		SET_NFLG(dst < 0);
+		if (dst < 0 || dst > src) {
+			if (size == sz_word) {
+				int flgs = ((uae_s16)(dst)) < 0;
+					int flgo = ((uae_s16)(src)) < 0;
+					uae_s16 val = (uae_s16)src - (uae_s16)dst;
+					int flgn = val < 0;
+					SET_VFLG((flgs ^ flgo) & (flgn ^ flgo));
+			} else {
+				int flgs = dst < 0;
+					int flgo = src < 0;
+					uae_s32 val = src - dst;
+				int flgn = val < 0;
+				SET_VFLG((flgs ^ flgo) & (flgn ^ flgo));
+			}
+			if (dst < 0) {
+				SET_CFLG(dst > src || src >= 0);
+			} else {
+				SET_CFLG(src >= 0);
+			}
+		}
+	}
+}
+
+void setchk2undefinedflags(uae_u32 lower, uae_u32 upper, uae_u32 val, int size)
+{
+	uae_u32 nmask;
+	if (size == sz_byte)
+		nmask = 0x80;
+	else if (size == sz_word)
+		nmask = 0x8000;
+	else
+		nmask = 0x80000000;
+
+	SET_NFLG(0);
+	if ((upper & nmask) && val > upper) {
+		SET_NFLG(1);
+	} else if (!(upper & nmask) && val > upper && val < nmask) {
+		SET_NFLG(1);
+	} else if (val < lower) {
+		SET_NFLG(1);
+	}
+	SET_VFLG(0);
+}
+
 #if !defined (uae_s64)
 STATIC_INLINE int div_unsigned(uae_u32 src_hi, uae_u32 src_lo, uae_u32 div, uae_u32 *quot, uae_u32 *rem)
 {
@@ -494,6 +579,14 @@ STATIC_INLINE int div_unsigned(uae_u32 src_hi, uae_u32 src_lo, uae_u32 div, uae_
 }
 #endif
 
+static void divl_overflow(void)
+{
+	SET_VFLG(1);
+	SET_NFLG(1);
+	SET_CFLG(0);
+	SET_ZFLG(0);
+}
+
 void m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 {
   // Done in caller
@@ -513,18 +606,14 @@ void m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
   	}
 
 		if ((uae_u64)a == 0x8000000000000000UL && src == ~0u) {
-			SET_VFLG (1);
-			SET_NFLG (1);
-			SET_CFLG (0);
+			divl_overflow();
 		} else {
     	rem = a % (uae_s64)(uae_s32)src;
     	quot = a / (uae_s64)(uae_s32)src;
     	if ((quot & UVAL64(0xffffffff80000000)) != 0
 	      && (quot & UVAL64(0xffffffff80000000)) != UVAL64(0xffffffff80000000))
     	{
-	      SET_VFLG (1);
-	      SET_NFLG (1);
-	      SET_CFLG (0);
+  			divl_overflow();
     	} else {
 	      if (((uae_s32)rem < 0) != ((uae_s64)a < 0)) rem = -rem;
 	      SET_VFLG (0);
@@ -547,9 +636,7 @@ void m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
   	rem = a % (uae_u64)src;
   	quot = a / (uae_u64)src;
   	if (quot > 0xffffffffu) {
-	    SET_VFLG (1);
-	    SET_NFLG (1);
-	    SET_CFLG (0);
+			divl_overflow();
   	} else {
 	    SET_VFLG (0);
 	    SET_CFLG (0);
@@ -581,9 +668,7 @@ void m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
   	if ((uae_s32)src < 0) src = -src;
   	if (div_unsigned(hi, lo, src, &quot, &rem) ||
 	    (sign & 0x80000000) ? quot > 0x80000000 : quot > 0x7fffffff) {
-	    SET_VFLG (1);
-	    SET_NFLG (1);
-	    SET_CFLG (0);
+			divl_overflow();
   	} else {
 	    if (sign & 0x80000000) quot = -quot;
 	    if (((uae_s32)rem < 0) != (save_high < 0)) rem = -rem;
@@ -604,9 +689,7 @@ void m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 	    hi = (uae_u32)m68k_dreg(regs, extra & 7);
   	}
   	if (div_unsigned(hi, lo, src, &quot, &rem)) {
-	    SET_VFLG (1);
-	    SET_NFLG (1);
-	    SET_CFLG (0);
+			divl_overflow();
   	} else {
 	    SET_VFLG (0);
 	    SET_CFLG (0);
@@ -651,19 +734,20 @@ void m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
   	SET_CFLG (0);
 		if (extra & 0x400) {
 			// 32 * 32 = 64
+			m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)a;
 	    m68k_dreg(regs, extra & 7) = (uae_u32)(a >> 32);
     	SET_ZFLG (a == 0);
     	SET_NFLG (a < 0);
 		} else {
 			// 32 * 32 = 32
 			uae_s32 b = (uae_s32)a;
+			m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)a;
       if ((a & UVAL64 (0xffffffff80000000)) != 0 && (a & UVAL64(0xffffffff80000000)) != UVAL64(0xffffffff80000000)) {
   	    SET_VFLG (1);
 			}
 			SET_ZFLG(b == 0);
 			SET_NFLG(b < 0);
 	  }
-  	m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)a;
   } else {
 	  /* unsigned */
 	  uae_u64 a = (uae_u64)(uae_u32)m68k_dreg(regs, (extra >> 12) & 7);
@@ -673,19 +757,20 @@ void m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 	  SET_CFLG (0);
 		if (extra & 0x400) {
 			// 32 * 32 = 64
+			m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)a;
 	    m68k_dreg(regs, extra & 7) = (uae_u32)(a >> 32);
 	    SET_ZFLG (a == 0);
 	    SET_NFLG (((uae_s64)a) < 0);
 		} else {
 			// 32 * 32 = 32
 			uae_s32 b = (uae_s32)a;
+			m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)a;
 			if ((a & UVAL64(0xffffffff00000000)) != 0) {
 	      SET_VFLG (1);
 			}
 			SET_ZFLG(b == 0);
 			SET_NFLG(b < 0);
 	  }
-	  m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)a;
   }
 #else
   if (extra & 0x800) {
@@ -741,4 +826,174 @@ void m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
   	m68k_dreg(regs, (extra >> 12) & 7) = dst_lo;
   }
 #endif
+}
+
+uae_u32 exception_pc(int nr)
+{
+	// bus error, address error, illegal instruction, privilege violation, a-line, f-line
+	if (nr == 2 || nr == 3 || nr == 4 || nr == 8 || nr == 10 || nr == 11)
+		return regs.instruction_pc;
+	return m68k_getpc ();
+}
+
+void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int nr, int format)
+{
+  switch (format) {
+    case 0x0: // four word stack frame
+	  case 0x1: // throwaway four word stack frame
+      break;
+    case 0x2: // six word stack frame
+      m68k_areg (regs, 7) -= 4;
+      x_put_long (m68k_areg (regs, 7), oldpc);
+      break;
+		case 0x3: // floating point post-instruction stack frame (68040)
+			m68k_areg (regs, 7) -= 4;
+			x_put_long (m68k_areg (regs, 7), regs.fp_ea);
+			break;
+    case 0x4: // floating point unimplemented stack frame (68LC040, 68EC040)
+			m68k_areg (regs, 7) -= 4;
+			x_put_long (m68k_areg (regs, 7), ssw);
+			m68k_areg (regs, 7) -= 4;
+			x_put_long (m68k_areg (regs, 7), oldpc);
+			break;
+  	case 0x8: // address error (68010)
+  		for (int i = 0; i < 15; i++) {
+  			m68k_areg(regs, 7) -= 2;
+  			x_put_word(m68k_areg(regs, 7), 0);
+  		}
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // version
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), regs.opcode); // instruction input buffer
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // unused
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // data input buffer
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // unused
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // data output buffer
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // unused
+  		m68k_areg(regs, 7) -= 4;
+  		x_put_long(m68k_areg(regs, 7), 0); // fault addr
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), ssw); // ssw
+  		break;
+  	case 0xA:
+  		// short bus cycle fault stack frame (68020, 68030)
+  		// used when instruction's last write causes bus fault
+  		m68k_areg(regs, 7) -= 4;
+			x_put_long(m68k_areg(regs, 7), 0);
+  		m68k_areg(regs, 7) -= 4;
+  		// Data output buffer = value that was going to be written
+  		x_put_long(m68k_areg(regs, 7), 0);
+  		m68k_areg(regs, 7) -= 4;
+			x_put_long(m68k_areg(regs, 7), regs.irc);  // Internal register (opcode storage)
+  		m68k_areg(regs, 7) -= 4;
+  		x_put_long(m68k_areg(regs, 7), 0); // data cycle fault address
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0);  // Instr. pipe stage B
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0);  // Instr. pipe stage C
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), ssw);
+  		m68k_areg(regs, 7) -= 2;
+  		x_put_word(m68k_areg(regs, 7), 0); // = mmu030_state[1]);
+  		break;
+		default:
+      write_log(_T("Unknown exception stack frame format: %X\n"), format);
+      return;
+    }
+    m68k_areg (regs, 7) -= 2;
+    x_put_word (m68k_areg (regs, 7), (format << 12) | (nr * 4));
+    m68k_areg (regs, 7) -= 4;
+    x_put_long (m68k_areg (regs, 7), currpc);
+    m68k_areg (regs, 7) -= 2;
+    x_put_word (m68k_areg (regs, 7), regs.sr);
+}
+
+void Exception_build_stack_frame_common(uae_u32 oldpc, uae_u32 currpc, int nr)
+{
+	if (nr == 5 || nr == 6 || nr == 7 || nr == 9) {
+		if (currprefs.cpu_model <= 68010)
+			Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x0);
+		else
+  		Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x2);
+	} else if (nr == 60 || nr == 61) {
+		Exception_build_stack_frame(oldpc, regs.instruction_pc, 0, nr, 0x0);
+	} else if (nr >= 48 && nr <= 55) {
+		if (regs.fpu_exp_pre) {
+			Exception_build_stack_frame(oldpc, regs.instruction_pc, 0, nr, 0x0);
+		} else { /* post-instruction */
+			Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x3);
+		}
+	} else if (nr == 11 && regs.fp_unimp_ins) {
+		regs.fp_unimp_ins = false;
+		if (currprefs.cpu_model == 68040 && currprefs.fpu_model == 0) {
+			Exception_build_stack_frame(regs.fp_ea, currpc, regs.instruction_pc, nr, 0x4);
+		} else {
+			Exception_build_stack_frame(regs.fp_ea, currpc, 0, nr, 0x2);
+		}
+	} else {
+		Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x0);
+	}
+}
+
+void Exception_build_68000_address_error_stack_frame(uae_u16 mode, uae_u16 opcode, uaecptr fault_addr, uaecptr pc)
+{
+	// undocumented bits seem to contain opcode
+	mode |= opcode & ~31;
+	m68k_areg(regs, 7) -= 14;
+	x_put_word(m68k_areg(regs, 7) + 0, mode);
+	x_put_long(m68k_areg(regs, 7) + 2, fault_addr);
+	x_put_word(m68k_areg(regs, 7) + 6, opcode);
+	x_put_word(m68k_areg(regs, 7) + 8, regs.sr);
+	x_put_long(m68k_areg(regs, 7) + 10, pc);
+}
+
+// Low word: Z and N
+void ccr_68000_long_move_ae_LZN(uae_s32 src)
+{
+	CLEAR_CZNV();
+	uae_s16 vsrc = (uae_s16)(src & 0xffff);
+	SET_ZFLG(vsrc == 0);
+	SET_NFLG(vsrc < 0);
+}
+
+// Low word: N only
+void ccr_68000_long_move_ae_LN(uae_s32 src)
+{
+	CLEAR_CZNV();
+	uae_s16 vsrc = (uae_s16)(src & 0xffff);
+	SET_NFLG(vsrc < 0);
+}
+
+// High word: N and Z clear.
+void ccr_68000_long_move_ae_HNZ(uae_s32 src)
+{
+	uae_s16 vsrc = (uae_s16)(src >> 16);
+	if(vsrc < 0) {
+		SET_NFLG(1);
+		SET_ZFLG(0);
+	} else if (vsrc) {
+		SET_NFLG(0);
+		SET_ZFLG(0);
+	} else {
+		SET_NFLG(0);
+	}
+}
+
+// Set normally.
+void ccr_68000_long_move_ae_normal(uae_s32 src)
+{
+	CLEAR_CZNV();
+	SET_ZFLG(src == 0);
+	SET_NFLG(src < 0);
+}
+void ccr_68000_word_move_ae_normal(uae_s16 src)
+{
+	CLEAR_CZNV();
+	SET_ZFLG(src == 0);
+	SET_NFLG(src < 0);
 }

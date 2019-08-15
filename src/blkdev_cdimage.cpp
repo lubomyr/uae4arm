@@ -388,6 +388,7 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 	bool foundsub;
 	int oldtrack = -1;
 	bool restart = false;
+	bool first = true;
 
 	cdu->thread_active = true;
 
@@ -598,6 +599,11 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
 					setstate (cdu, AUDIO_STATUS_PLAY_ERROR, -1);
 			  goto end;
 		  }
+
+			if (first) {
+				first = false;
+				setstate(cdu, -3, -1);
+			}
 
 			if (dofinish) {
 				cdda_pos = cdu->cdda_end + 1;
@@ -1602,6 +1608,9 @@ static int parsecue (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img)
 					if (!secoffset) {
 						// secoffset == 0: same file contained also previous track
 						t->offset = fileoffset - pregap * t->size;
+					} else {
+						// pregap was already added, do not add extra silence.
+						t->pregap = 0;
 					}
 					t->address += postgap;
 					if (fnametypeid == AUDENC_PCM && t->handle) {

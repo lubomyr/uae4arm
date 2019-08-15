@@ -312,6 +312,7 @@ extern uae_u32 REGPARAM3 _get_disp_ea_020 (uae_u32 base) REGPARAM;
 
 extern uae_u32 REGPARAM3 get_bitfield (uae_u32 src, uae_u32 bdata[2], uae_s32 offset, int width) REGPARAM;
 extern void REGPARAM3 put_bitfield (uae_u32 dst, uae_u32 bdata[2], uae_u32 val, uae_s32 offset, int width) REGPARAM;
+extern int get_cpu_model (void);
 
 extern void set_cpu_caches (bool flush);
 extern void flush_cpu_caches_040(uae_u16 opcode);
@@ -334,7 +335,19 @@ extern int getDivs68kCycles(uae_s32 dividend, uae_s16 divisor);
 extern void divbyzero_special (bool issigned, uae_s32 dst);
 extern void setdivuoverflowflags(uae_u32 dividend, uae_u16 divisor);
 extern void setdivsoverflowflags(uae_s32 dividend, uae_s16 divisor);
+extern void setchkundefinedflags(uae_s32 src, uae_s32 dst, int size);
+extern void setchk2undefinedflags(uae_u32 lower, uae_u32 upper, uae_u32 val, int size);
 extern void protect_roms (bool);
+extern void Exception_build_stack_frame_common(uae_u32 oldpc, uae_u32 currpc, int nr);
+extern void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int nr, int format);
+extern void Exception_build_68000_address_error_stack_frame(uae_u16 mode, uae_u16 opcode, uaecptr fault_addr, uaecptr pc);
+extern uae_u32 exception_pc(int nr);
+
+void ccr_68000_long_move_ae_LZN(uae_s32 src);
+void ccr_68000_long_move_ae_LN(uae_s32 src);
+void ccr_68000_long_move_ae_HNZ(uae_s32 src);
+void ccr_68000_long_move_ae_normal(uae_s32 src);
+void ccr_68000_word_move_ae_normal(uae_s16 src);
 
 STATIC_INLINE int bitset_count16(uae_u16 data)
 {

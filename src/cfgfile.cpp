@@ -763,11 +763,6 @@ static void write_filesys_config (struct uae_prefs *p, struct zfile *f)
 			romtype = expansionroms[ct - HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST].romtype;
 		} else if (ct == HD_CONTROLLER_TYPE_IDE_AUTO) {
 			_stprintf(hdcs, _T("ide%d"), ci->controller_unit);
-		} else if (ct == HD_CONTROLLER_TYPE_PCMCIA) {
-			if (ci->controller_type_unit == 0)
-				_tcscpy(hdcs, _T("scsram"));
-			else
-				_tcscpy(hdcs, _T("scide"));
 		} else if (ct == HD_CONTROLLER_TYPE_UAE) {
 			_stprintf(hdcs, _T("uae%d"), ci->controller_unit);
 		}
@@ -779,7 +774,7 @@ static void write_filesys_config (struct uae_prefs *p, struct zfile *f)
 				}
 			}
 		}
-		if (ci->controller_type_unit > 0 && ct != HD_CONTROLLER_TYPE_PCMCIA)
+		if (ci->controller_type_unit > 0)
 			_stprintf(hdcs + _tcslen(hdcs), _T("-%d"), ci->controller_type_unit + 1);
 
 		str1b = cfgfile_escape (str1, _T(":,"), true);
@@ -2307,14 +2302,6 @@ static void get_filesys_controller (const TCHAR *hdc, int *type, int *typenum, i
 		hdunit = hdc[3] - '0';
 		if (hdunit < 0 || hdunit >= 6)
 			hdunit = 0;
-	} else if (_tcslen (hdc) >= 6 && !_tcsncmp (hdc, _T("scsram"), 6)) {
-		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
-		hdunit = 0;
-		idx = 0;
-	} else if (_tcslen(hdc) >= 5 && !_tcsncmp(hdc, _T("scide"), 5)) {
-		hdcv = HD_CONTROLLER_TYPE_PCMCIA;
-		hdunit = 0;
-		idx = 1;
 	}
 	if (hdcv == HD_CONTROLLER_TYPE_UAE) {
 		hdunit = _tstol(hdc + 3);
@@ -4920,7 +4907,6 @@ int built_in_chipset_prefs (struct uae_prefs *p)
   		p->cs_ide = IDE_A4000;
 		  p->cs_ksmirror_a8 = 0;
 		  p->cs_ksmirror_e0 = 0;
-		  p->cs_ciaoverlay = 0;
 		  p->cs_z3autoconfig = true;
 		  p->cs_unmapped_space = 1;
 		  break;

@@ -518,8 +518,6 @@ bool EditFilesysHardfile(int unit_no)
   		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
   		if(hfd)
         hardfile_media_change (hfd, &ci, true, false);
-      else
-        hardfile_added(&ci);
     }
   }
 

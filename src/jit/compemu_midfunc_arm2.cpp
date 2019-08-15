@@ -365,13 +365,14 @@ MIDFUNC(2,jnf_ADDA_w,(RW4 d, RR2 s))
 	}
 	if (isconst(s)) {
     // no need to put virt. register s into a real host register via readreg()
+    uae_s16 tmp = (uae_s16)live.state[s].val;
 		d = rmw(d);
-		if(CHECK32((uae_s16)live.state[s].val)) {
-		  ADD_rri(d, d, (uae_s16)live.state[s].val);
-    } else if (CHECK32(-(uae_s16)live.state[s].val)) {
-		  SUB_rri(d, d, -(uae_s16)live.state[s].val);
+		if(CHECK32(tmp)) {
+		  ADD_rri(d, d, tmp);
+    } else if (CHECK32(-tmp)) {
+		  SUB_rri(d, d, -tmp);
 		} else {
-		  SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+		  SIGNED16_IMM_2_REG(REG_WORK1, tmp);
 		  ADD_rrr(d, d, REG_WORK1);
   	}
 		unlock2(d);
@@ -393,8 +394,9 @@ MIDFUNC(2,jnf_ADDA_l,(RW4 d, RR4 s))
 		return;
 	}
 	if (isconst(s) && CHECK32((uae_s32)live.state[s].val)) {
+	  uae_s32 tmp = (uae_s32)live.state[s].val;
 		d = rmw(d);
-    ADD_rri(d, d, (uae_s32)live.state[s].val);
+    ADD_rri(d, d, tmp);
 		unlock2(d);
 		return;
 	}
@@ -2198,8 +2200,9 @@ MENDFUNC(2,jff_CMP_l,(RR4 d, RR4 s))
 MIDFUNC(2,jff_CMPA_w,(RR2 d, RR2 s))
 {
   if (isconst(s)) {
+    uae_u16 tmp = (uae_u16)(live.state[s].val & 0xffff);
     d = readreg(d);
-    SIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val & 0xffff);
+    SIGNED16_IMM_2_REG(REG_WORK1, tmp);
     CMP_rr(d, REG_WORK1);
     unlock2(d);
   } else {
@@ -4268,8 +4271,9 @@ MENDFUNC(2,jff_MULS64,(RW4 d, RW4 s))
 MIDFUNC(2,jnf_MULU,(RW4 d, RR4 s))
 {
   if (isconst(s)) {
+    uae_u16 tmp = (uae_u16)live.state[s].val;
     d = rmw(d);
-    UNSIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    UNSIGNED16_IMM_2_REG(REG_WORK1, tmp);
     UNSIGNED16_REG_2_REG(d, d);
     MUL_rrr(d, d, REG_WORK1);
     unlock2(d);
@@ -4289,8 +4293,9 @@ MENDFUNC(2,jnf_MULU,(RW4 d, RR4 s))
 MIDFUNC(2,jff_MULU,(RW4 d, RR4 s))
 {
   if (isconst(s)) {
+    uae_u16 tmp = (uae_u16)live.state[s].val;
     d = rmw(d);
-    UNSIGNED16_IMM_2_REG(REG_WORK1, live.state[s].val);
+    UNSIGNED16_IMM_2_REG(REG_WORK1, tmp);
     UNSIGNED16_REG_2_REG(d, d);
   	MSR_CPSRf_i(0);
     MULS_rrr(d, d, REG_WORK1);
