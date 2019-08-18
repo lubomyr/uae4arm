@@ -14989,10 +14989,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4890_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_word_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 2;
@@ -15019,11 +15015,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48a0_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg) - 0;
 {	uae_u16 amask = mask & 0xff, dmask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		srca -= 2;
-		exception3_write(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 	while (amask) {
 		srca -= 2;
 		m68k_areg (regs, dstreg) = srca;
@@ -15052,10 +15043,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48a8_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg) + (uae_s32)(uae_s16)get_diword (4);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_word_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 2;
@@ -15083,10 +15070,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48b0_40)(uae_u32 opcode)
 	m68k_incpc (4);
 {	srca = get_disp_ea_020 (m68k_areg (regs, dstreg), 0);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 10 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_word_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 2;
@@ -15111,10 +15094,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48b8_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = (uae_s32)(uae_s16)get_diword (4);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 10 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_word_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 2;
@@ -15140,10 +15119,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48b9_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = get_dilong (4);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 11 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_word_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 2;
@@ -15185,10 +15160,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48d0_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_long_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 4;
@@ -15215,11 +15186,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48e0_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg) - 0;
 {	uae_u16 amask = mask & 0xff, dmask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		srca -= 2;
-		exception3_write(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 	while (amask) {
 		srca -= 4;
 		m68k_areg (regs, dstreg) = srca;
@@ -15248,10 +15214,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48e8_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg) + (uae_s32)(uae_s16)get_diword (4);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_long_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 4;
@@ -15279,10 +15241,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48f0_40)(uae_u32 opcode)
 	m68k_incpc (4);
 {	srca = get_disp_ea_020 (m68k_areg (regs, dstreg), 0);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 10 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_long_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 4;
@@ -15307,10 +15265,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48f8_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = (uae_s32)(uae_s16)get_diword (4);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 10 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_long_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 4;
@@ -15336,10 +15290,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_48f9_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = get_dilong (4);
 {	uae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
-	if ((amask || dmask) && (srca & 1)) {
-		exception3_write(opcode, srca);
-		return 11 * CYCLE_UNIT / 2;
-	}
 	while (dmask) {
 		put_long_jit (srca, m68k_dreg (regs, movem_index1[dmask]));
 		srca += 4;
@@ -16397,10 +16347,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4c90_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16428,10 +16374,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4c98_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16460,10 +16402,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4ca8_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg) + (uae_s32)(uae_s16)get_diword (4);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16492,10 +16430,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cb0_40)(uae_u32 opcode)
 {	uaecptr srca;
 	m68k_incpc (4);
 {	srca = get_disp_ea_020 (m68k_areg (regs, dstreg), 0);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16521,10 +16455,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cb8_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = (uae_s32)(uae_s16)get_diword (4);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16551,10 +16481,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cb9_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = get_dilong (4);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16583,11 +16509,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cba_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_getpc () + 4;
 	srca += (uae_s32)(uae_s16)get_diword (4);
-	if (srca & 1) {
-		opcode |= 0x01020000;
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16618,11 +16539,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cbb_40)(uae_u32 opcode)
 	m68k_incpc (4);
 {	tmppc = m68k_getpc ();
 	srca = get_disp_ea_020 (tmppc, 0);
-	if (srca & 1) {
-		opcode |= 0x01020000;
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = (uae_s32)(uae_s16)get_word_jit (srca);
 		srca += 2;
@@ -16649,10 +16565,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cd0_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16680,10 +16592,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cd8_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16712,10 +16620,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4ce8_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = m68k_areg (regs, dstreg) + (uae_s32)(uae_s16)get_diword (4);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16744,10 +16648,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cf0_40)(uae_u32 opcode)
 {	uaecptr srca;
 	m68k_incpc (4);
 {	srca = get_disp_ea_020 (m68k_areg (regs, dstreg), 0);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16773,10 +16673,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cf8_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = (uae_s32)(uae_s16)get_diword (4);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16803,10 +16699,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cf9_40)(uae_u32 opcode)
 	uae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;
 {	uaecptr srca;
 	srca = get_dilong (4);
-	if (srca & 1) {
-		exception3_read(opcode, srca);
-		return 16 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16835,11 +16727,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cfa_40)(uae_u32 opcode)
 {	uaecptr srca;
 	srca = m68k_getpc () + 4;
 	srca += (uae_s32)(uae_s16)get_diword (4);
-	if (srca & 1) {
-		opcode |= 0x01020000;
-		exception3_read(opcode, srca);
-		return 12 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -16870,11 +16757,6 @@ uae_u32 REGPARAM2 CPUFUNC(op_4cfb_40)(uae_u32 opcode)
 	m68k_incpc (4);
 {	tmppc = m68k_getpc ();
 	srca = get_disp_ea_020 (tmppc, 0);
-	if (srca & 1) {
-		opcode |= 0x01020000;
-		exception3_read(opcode, srca);
-		return 8 * CYCLE_UNIT / 2;
-	}
 {	while (dmask) {
 		m68k_dreg (regs, movem_index1[dmask]) = get_long_jit (srca);
 		srca += 4;
@@ -17109,9 +16991,9 @@ uae_u32 REGPARAM2 CPUFUNC(op_4e7a_40)(uae_u32 opcode)
 {{	uae_s16 src = get_diword (2);
 {	int regno = (src >> 12) & 15;
 	uae_u32 *regp = regs.regs + regno;
-	if (! m68k_movec2(src & 0xFFF, regp)) goto l_400898;
+	if (! m68k_movec2(src & 0xFFF, regp)) goto l_899;
 }}}}	m68k_incpc (4);
-l_400898: ;
+l_899: ;
 return 7 * CYCLE_UNIT / 2;
 }
 /* 4 0,0   */
@@ -17123,9 +17005,9 @@ uae_u32 REGPARAM2 CPUFUNC(op_4e7b_40)(uae_u32 opcode)
 {{	uae_s16 src = get_diword (2);
 {	int regno = (src >> 12) & 15;
 	uae_u32 *regp = regs.regs + regno;
-	if (! m68k_move2c(src & 0xFFF, regp)) goto l_400899;
+	if (! m68k_move2c(src & 0xFFF, regp)) goto l_900;
 }}}}	m68k_incpc (4);
-l_400899: ;
+l_900: ;
 return 13 * CYCLE_UNIT / 2;
 }
 /* 4 0,0   */

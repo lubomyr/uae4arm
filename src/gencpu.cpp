@@ -895,7 +895,7 @@ static void genamode2x (amodes mode, const char *reg, wordsizes size, const char
 		} else if (mode == Apdi) {
 			// 68000 decrements register first, then checks for address error
 			setapdiback = 1;
-		}
+    }
 
 		if (exception_pc_offset)
 			incpc("%d", exception_pc_offset);
@@ -1139,35 +1139,12 @@ static void genastore_fc (const char *from, amodes mode, const char *reg, wordsi
 	genastore_2 (from, mode, reg, size, to, 1, GF_FC);
 }
 
-static void movem_ex3(int write)
-{
-	if (write) {
-		// MOVEM write to memory won't generate address error
-		// exception if mask is zero and EA is odd.
-		printf("\tif ((amask || dmask) && (srca & 1)) {\n");
-		// MOVE.L EA,-(An) causing address error: stacked value is original An - 2, not An - 4.
-		if (g_instr->dmode == Apdi)
-			printf("\t\tsrca -= 2;\n");
-	} else {
-		// MOVEM from memory will generate address error
-		// exception if mask is zero and EA is odd.
-		printf("\tif (srca & 1) {\n");
-		if (g_instr->dmode == PC16 || g_instr->dmode == PC8r) {
-			printf("\t\topcode |= 0x01020000;\n");
-		}
-	}
-	printf("\t\texception3_%s(opcode, srca);\n", write ? "write" : "read");
-  returncycles_exception("", (count_read + 1 + count_write) * 4 + count_cycles);
-	printf("\t}\n");
-}
-
 static void genmovemel_ce (uae_u16 opcode)
 {
 	int size = table68k[opcode].size == sz_long ? 4 : 2;
 	printf ("\tuae_u16 mask = %s;\n", gen_nextiword (0));
 	printf ("\tuae_u32 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;\n");
-	genamode (NULL, table68k[opcode].dmode, "dstreg", table68k[opcode].size, "src", 2, -1, GF_AA | GF_MOVE);
-	movem_ex3(0);
+	genamode (NULL, table68k[opcode].dmode, "dstreg", table68k[opcode].size, "src", 2, 1, GF_AA | GF_MOVE);
 	if (table68k[opcode].dmode == Ad8r || table68k[opcode].dmode == PC8r)
 		addcycles000 (2);
 	start_brace ();
@@ -1228,7 +1205,6 @@ static void genmovemle_ce (uae_u16 opcode)
 	if (table68k[opcode].size == sz_long) {
 		if (table68k[opcode].dmode == Apdi) {
 			printf ("\tuae_u16 amask = mask & 0xff, dmask = (mask >> 8) & 0xff;\n");
-			movem_ex3(1);
 			printf ("\twhile (amask) {\n");
 			printf ("\t\tsrca -= %d;\n", size);
       if(cpu_level >= 2)
@@ -1254,7 +1230,6 @@ static void genmovemle_ce (uae_u16 opcode)
 			printf ("\tm68k_areg (regs, dstreg) = srca;\n");
 		} else {
 			printf ("\tuae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;\n");
-			movem_ex3(1);
 			printf ("\twhile (dmask) {\n");
 			if (using_prefetch) {
 		    printf ("\t\t%s (srca, m68k_dreg (regs, movem_index1[dmask]) >> 16);\n", dstw);
@@ -1279,7 +1254,6 @@ static void genmovemle_ce (uae_u16 opcode)
 	} else {
 		if (table68k[opcode].dmode == Apdi) {
 			printf ("\tuae_u16 amask = mask & 0xff, dmask = (mask >> 8) & 0xff;\n");
-			movem_ex3(1);
       printf ("\twhile (amask) {\n");
 			printf ("\t\tsrca -= %d;\n", size);
       if(cpu_level >= 2)
@@ -1297,7 +1271,6 @@ static void genmovemle_ce (uae_u16 opcode)
 			printf ("\tm68k_areg (regs, dstreg) = srca;\n");
 		} else {
 			printf ("\tuae_u16 dmask = mask & 0xff, amask = (mask >> 8) & 0xff;\n");
-			movem_ex3(1);
 			printf ("\twhile (dmask) {\n");
 			printf ("\t\t%s (srca, m68k_dreg (regs, movem_index1[dmask]));\n", dstw);
 			printf ("\t\tsrca += %d;\n", size);
@@ -2432,8 +2405,8 @@ static void gen_opcode (unsigned int opcode)
 			printf ("\t}\n");
 	    setpc ("newpc");
 		} else {
-	    int old_brace_level = n_braces;
-	    printf ("\tuae_u16 newsr; uae_u32 newpc;\n");
+		    int old_brace_level = n_braces;
+		    printf ("\tuae_u16 newsr; uae_u32 newpc;\n");
 			printf ("\tfor (;;) {\n");
 			printf ("\t\tuaecptr a = m68k_areg (regs, 7);\n");
 			printf ("\t\tuae_u16 sr = %s (a);\n", srcw);
@@ -2445,7 +2418,7 @@ static void gen_opcode (unsigned int opcode)
 			printf ("\t\tint frame = format >> 12;\n");
 			printf ("\t\tint offset = 8;\n");
 			printf ("\t\tnewsr = sr; newpc = pc;\n");
-	    printf ("\t\tif (frame == 0x0) { m68k_areg (regs, 7) += offset; break; }\n");
+		    printf ("\t\tif (frame == 0x0) { m68k_areg (regs, 7) += offset; break; }\n");
 			if (cpu_level >= 2) {
 				// 68020+
 		    printf ("\t\telse if (frame == 0x1) { m68k_areg (regs, 7) += offset; }\n");
@@ -2465,7 +2438,7 @@ static void gen_opcode (unsigned int opcode)
 		  }
 			if (cpu_level >= 4) {
 				// 68040+
-	    	printf ("\t\telse if (frame == 0x7) { m68k_areg (regs, 7) += offset + 52; break; }\n");
+		    	printf ("\t\telse if (frame == 0x7) { m68k_areg (regs, 7) += offset + 52; break; }\n");
 			}
 			if (cpu_level == 2 || cpu_level == 3) { 
 			  // 68020/68030 only
