@@ -388,15 +388,11 @@ bool HelpPanelCPU(std::vector<std::string> &helptext)
   helptext.push_back("If you select 68020, you can choose between 24-bit addressing (68EC020) or 32-bit addressing (68020).");
   helptext.push_back("The option \"More compatible\" is only available if 68000 or 68010 is selected and emulates simple prefetch of");
   helptext.push_back("the 68000. This may improve compatibility in few situations but is not required for most games and demos.");
-  helptext.push_back(" ");
   helptext.push_back("JIT enables the Just-in-time compiler. This may break compatibility in some games. With \"Cache\", you can select");
   helptext.push_back("the size of the memory for compiled code.");
-  helptext.push_back(" ");
   helptext.push_back("The available FPU models depending on the selected CPU.");
   helptext.push_back("The option \"More compatible\" activates more accurate rounding and compare of two floats.");
-  helptext.push_back(" ");
   helptext.push_back("With \"CPU Speed\" you can choose the clock rate of the Amiga.");
-  helptext.push_back(" ");
   helptext.push_back("In current version, you will not see a difference in the performance for 68020, 68030 and 68040 CPUs. The cpu");
   helptext.push_back("cycles for the opcodes are based on 68020. The different cycles for 68030 and 68040 may come in a later");
   helptext.push_back("version.");

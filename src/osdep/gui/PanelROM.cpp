@@ -354,7 +354,7 @@ bool HelpPanelROM(std::vector<std::string> &helptext)
   helptext.push_back(" ");
   helptext.push_back("In \"Cartridge ROM File\", you can select the CD32 FMV module to activate video playback in CD32.");
   helptext.push_back("There are also some Action Replay and Freezer cards and the built in HRTMon available.");
-  helptext.push_back("");
+  helptext.push_back(" ");
   helptext.push_back("In \"Advanced UAE expansion...\", you can select the built in UAE board.");
   return true;
 }

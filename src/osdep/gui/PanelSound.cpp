@@ -448,7 +448,7 @@ bool HelpPanelSound(std::vector<std::string> &helptext)
   helptext.push_back("With \"Stereo separation\" and \"Stereo delay\", you can adjust how the left and right audio channels of the Amiga");
   helptext.push_back("are mixed to the left and right channels of your device. A value of 70% for separation and no delay is a good");
   helptext.push_back("start.");
-  helptext.push_back("");
+  helptext.push_back(" ");
   helptext.push_back("The audio volume of the Amiga (not CD) can be adjusted with \"Paula Volume\".");
   return true;
 }

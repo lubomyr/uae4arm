@@ -351,7 +351,7 @@ bool HelpPanelRAM(std::vector<std::string> &helptext)
   helptext.push_back("\"Z3 Fast\" is real fast memory in 32 bit address space and only available if a 32 bit CPU is selected.");
   helptext.push_back("\"RTG board\" is the graphics memory used by Picasso96 and only available if a 32 bit CPU is selected. If you");
   helptext.push_back("select some memory for this type, the Z3 RTG board will be activated.");
-  helptext.push_back("");
+  helptext.push_back(" ");
   helptext.push_back("A4000 motherboard and processor board memory is only detected by the Amiga if you choose the correct");
   helptext.push_back("Kickstart ROM (A4000).");
   return true;
