@@ -1,6 +1,6 @@
-diff -Nru src_7f31/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
---- src_7f31/blkdev_cdimage.cpp	2019-08-15 21:03:53.000000000 +0300
-+++ src/blkdev_cdimage.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
+--- src_9942/blkdev_cdimage.cpp	2019-08-18 21:58:32.000000000 +0300
++++ src/blkdev_cdimage.cpp	2019-08-25 15:34:38.530070078 +0300
 @@ -13,7 +13,9 @@
  */
  #include "sysdeps.h"
@@ -45,9 +45,9 @@ diff -Nru src_7f31/blkdev_cdimage.cpp src/blkdev_cdimage.cpp
  			  if (idleframes >= 0 && diff < 0 && cdu->cdda_play > 0)
  				  sleep_millis(-diff);
  			  setstate (cdu, AUDIO_STATUS_IN_PROGRESS, cdda_pos);
-diff -Nru src_7f31/cfgfile.cpp src/cfgfile.cpp
---- src_7f31/cfgfile.cpp	2019-08-15 21:03:53.000000000 +0300
-+++ src/cfgfile.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/cfgfile.cpp src/cfgfile.cpp
+--- src_9942/cfgfile.cpp	2019-08-18 21:58:32.000000000 +0300
++++ src/cfgfile.cpp	2019-08-25 15:34:38.538069696 +0300
 @@ -147,7 +147,6 @@
  
  #define UNEXPANDED _T("$(FILE_PATH)")
@@ -82,9 +82,9 @@ diff -Nru src_7f31/cfgfile.cpp src/cfgfile.cpp
    p->gfx_resolution = RES_LORES;
  #endif
  	p->gfx_vresolution = VRES_NONDOUBLE;
-diff -Nru src_7f31/drawing.cpp src/drawing.cpp
---- src_7f31/drawing.cpp	2019-08-15 21:03:53.000000000 +0300
-+++ src/drawing.cpp	2019-08-15 21:13:16.000000000 +0300
+diff -Nru src_9942/drawing.cpp src/drawing.cpp
+--- src_9942/drawing.cpp	2019-08-18 21:58:33.000000000 +0300
++++ src/drawing.cpp	2019-08-25 15:34:38.566068361 +0300
 @@ -264,7 +264,7 @@
     PLAYFIELD_START and PLAYFIELD_END are in window coordinates.  */
  static int playfield_start, playfield_end;
@@ -217,9 +217,9 @@ diff -Nru src_7f31/drawing.cpp src/drawing.cpp
  }
  
  STATIC_INLINE void do_color_changes (line_draw_func worker_border, line_draw_func worker_pfield)
-diff -Nru src_7f31/fpp_native.cpp src/fpp_native.cpp
---- src_7f31/fpp_native.cpp	2019-08-10 13:54:46.000000000 +0300
-+++ src/fpp_native.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/fpp_native.cpp src/fpp_native.cpp
+--- src_9942/fpp_native.cpp	2019-08-18 21:57:48.000000000 +0300
++++ src/fpp_native.cpp	2019-08-25 15:34:38.578067789 +0300
 @@ -18,6 +18,9 @@
  #include <float.h>
  #include <fenv.h>
@@ -230,9 +230,9 @@ diff -Nru src_7f31/fpp_native.cpp src/fpp_native.cpp
  #define USE_HOST_ROUNDING 1
  
  static uae_u32 dhex_nan[]   ={0xffffffff, 0x7fffffff};
-diff -Nru src_7f31/fsusage.cpp src/fsusage.cpp
---- src_7f31/fsusage.cpp	2019-08-10 14:01:43.000000000 +0300
-+++ src/fsusage.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/fsusage.cpp src/fsusage.cpp
+--- src_9942/fsusage.cpp	2019-08-18 21:57:48.000000000 +0300
++++ src/fsusage.cpp	2019-08-25 15:34:38.578067789 +0300
 @@ -24,7 +24,7 @@
  #if HAVE_SYS_STATFS_H
  # include <sys/statfs.h>
@@ -258,9 +258,9 @@ diff -Nru src_7f31/fsusage.cpp src/fsusage.cpp
      return -1;
    /* f_frsize isn't guaranteed to be supported.  */
  
-diff -Nru src_7f31/include/options.h src/include/options.h
---- src_7f31/include/options.h	2019-08-10 14:01:43.000000000 +0300
-+++ src/include/options.h	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/include/options.h src/include/options.h
+--- src_9942/include/options.h	2019-08-18 21:57:49.000000000 +0300
++++ src/include/options.h	2019-08-25 15:34:38.622065691 +0300
 @@ -421,6 +421,41 @@
  	int input_mouse_speed;
    int input_tablet;
@@ -303,9 +303,9 @@ diff -Nru src_7f31/include/options.h src/include/options.h
  	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
  	struct uae_input_device mouse_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
  	struct uae_input_device keyboard_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
-diff -Nru src_7f31/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
---- src_7f31/jit/compemu_fpp.cpp	2019-08-15 21:03:53.000000000 +0300
-+++ src/jit/compemu_fpp.cpp	2019-08-15 21:39:26.000000000 +0300
+diff -Nru src_9942/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
+--- src_9942/jit/compemu_fpp.cpp	2019-08-18 21:58:33.000000000 +0300
++++ src/jit/compemu_fpp.cpp	2019-08-25 15:34:38.634065118 +0300
 @@ -25,6 +25,14 @@
  static const int sz1[8] = { 4, 4, 12, 12, 2, 8, 1, 0 };
  static const int sz2[8] = { 4, 4, 12, 12, 2, 8, 2, 0 };
@@ -337,9 +337,9 @@ diff -Nru src_7f31/jit/compemu_fpp.cpp src/jit/compemu_fpp.cpp
  		case 2: /* from <EA> to FPx */
  		  dont_care_fflags ();
  		  if ((extra & 0xfc00) == 0x5c00) { /* FMOVECR */
-diff -Nru src_7f31/osdep/aarch64_helper.s src/osdep/aarch64_helper.s
---- src_7f31/osdep/aarch64_helper.s	2019-08-10 18:10:35.000000000 +0300
-+++ src/osdep/aarch64_helper.s	2019-08-15 21:14:17.000000000 +0300
+diff -Nru src_9942/osdep/aarch64_helper.s src/osdep/aarch64_helper.s
+--- src_9942/osdep/aarch64_helper.s	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/aarch64_helper.s	2019-08-25 15:34:38.650064356 +0300
 @@ -7,14 +7,6 @@
  .global copy_screen_8bit
  .global copy_screen_16bit_swap
@@ -1267,9 +1267,9 @@ diff -Nru src_7f31/osdep/aarch64_helper.s src/osdep/aarch64_helper.s
 -  .long 0x00000100, 0x01000100, 0x00010100, 0x01010100
 -  .long 0x00000001, 0x01000001, 0x00010001, 0x01010001
 -  .long 0x00000101, 0x01000101, 0x00010101, 0x01010101
-diff -Nru src_7f31/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
---- src_7f31/osdep/caps/generic_caps.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/caps/generic_caps.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
+--- src_9942/osdep/caps/generic_caps.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/caps/generic_caps.cpp	2019-08-18 22:03:30.712130088 +0300
 @@ -66,7 +66,7 @@
  	if (init)
  		return 1;
@@ -1279,9 +1279,9 @@ diff -Nru src_7f31/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
  	UAE_DLHANDLE h = uae_dlopen(tmp);
  	if (!h) {
  		if (noticed)
-diff -Nru src_7f31/osdep/config.h src/osdep/config.h
---- src_7f31/osdep/config.h	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/config.h	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/osdep/config.h src/osdep/config.h
+--- src_9942/osdep/config.h	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/config.h	2019-08-25 15:34:38.650064356 +0300
 @@ -66,14 +66,20 @@
   */
  #define VK_ESCAPE SDLK_ESCAPE
@@ -1303,9 +1303,9 @@ diff -Nru src_7f31/osdep/config.h src/osdep/config.h
   */
  #define VK_R SDLK_RCTRL
 +
-diff -Nru src_7f31/osdep/generic_filesys.cpp src/osdep/generic_filesys.cpp
---- src_7f31/osdep/generic_filesys.cpp	2019-08-10 14:01:43.000000000 +0300
-+++ src/osdep/generic_filesys.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/osdep/generic_filesys.cpp src/osdep/generic_filesys.cpp
+--- src_9942/osdep/generic_filesys.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/generic_filesys.cpp	2019-08-25 15:34:38.650064356 +0300
 @@ -1,4 +1,6 @@
 +#ifdef HAVE_SYS_TIMEB_H
  #include <sys/timeb.h>
@@ -1313,9 +1313,9 @@ diff -Nru src_7f31/osdep/generic_filesys.cpp src/osdep/generic_filesys.cpp
  #include <fcntl.h>
  #include <unistd.h>
  #include "sysconfig.h"
-diff -Nru src_7f31/osdep/generic_mem.cpp src/osdep/generic_mem.cpp
---- src_7f31/osdep/generic_mem.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/generic_mem.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/osdep/generic_mem.cpp src/osdep/generic_mem.cpp
+--- src_9942/osdep/generic_mem.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/generic_mem.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -12,6 +12,9 @@
  #include "ar.h"
  #include <sys/mman.h>
@@ -1353,9 +1353,9 @@ diff -Nru src_7f31/osdep/generic_mem.cpp src/osdep/generic_mem.cpp
    munmap(regs.natmem_offset, natmem_size + BARRIER);
  #else
    free(regs.natmem_offset);
-diff -Nru src_7f31/osdep/generic_target.cpp src/osdep/generic_target.cpp
---- src_7f31/osdep/generic_target.cpp	2019-08-10 14:01:43.000000000 +0300
-+++ src/osdep/generic_target.cpp	2019-08-15 21:05:59.016154472 +0300
+diff -Nru src_9942/osdep/generic_target.cpp src/osdep/generic_target.cpp
+--- src_9942/osdep/generic_target.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/generic_target.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -13,7 +13,9 @@
  #include <asm/sigcontext.h>
  #include <signal.h>
@@ -1393,9 +1393,9 @@ diff -Nru src_7f31/osdep/generic_target.cpp src/osdep/generic_target.cpp
  	snprintf(rp9_path, MAX_DPATH - 1, "%s/rp9/", start_path_data);
  
  	snprintf(path, MAX_DPATH - 1, "%s/conf/adfdir.conf", start_path_data);
-diff -Nru src_7f31/osdep/gui/androidsdl_event.cpp src/osdep/gui/androidsdl_event.cpp
---- src_7f31/osdep/gui/androidsdl_event.cpp	1970-01-01 03:00:00.000000000 +0300
-+++ src/osdep/gui/androidsdl_event.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/androidsdl_event.cpp src/osdep/gui/androidsdl_event.cpp
+--- src_9942/osdep/gui/androidsdl_event.cpp	1970-01-01 03:00:00.000000000 +0300
++++ src/osdep/gui/androidsdl_event.cpp	2019-08-18 22:03:30.716128370 +0300
 @@ -0,0 +1,64 @@
 +#include <guichan/sdl.hpp>
 +
@@ -1461,15 +1461,15 @@ diff -Nru src_7f31/osdep/gui/androidsdl_event.cpp src/osdep/gui/androidsdl_event
 +            }
 +}
 +
-diff -Nru src_7f31/osdep/gui/androidsdl_event.h src/osdep/gui/androidsdl_event.h
---- src_7f31/osdep/gui/androidsdl_event.h	1970-01-01 03:00:00.000000000 +0300
-+++ src/osdep/gui/androidsdl_event.h	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/androidsdl_event.h src/osdep/gui/androidsdl_event.h
+--- src_9942/osdep/gui/androidsdl_event.h	1970-01-01 03:00:00.000000000 +0300
++++ src/osdep/gui/androidsdl_event.h	2019-08-18 22:03:30.716128370 +0300
 @@ -0,0 +1,2 @@
 +void androidsdl_event(SDL_Event event, gcn::SDLInput* gui_input);
 +
-diff -Nru src_7f31/osdep/gui/CreateFilesysHardfile.cpp src/osdep/gui/CreateFilesysHardfile.cpp
---- src_7f31/osdep/gui/CreateFilesysHardfile.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/CreateFilesysHardfile.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/CreateFilesysHardfile.cpp src/osdep/gui/CreateFilesysHardfile.cpp
+--- src_9942/osdep/gui/CreateFilesysHardfile.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/CreateFilesysHardfile.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -23,6 +23,9 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -1493,9 +1493,9 @@ diff -Nru src_7f31/osdep/gui/CreateFilesysHardfile.cpp src/osdep/gui/CreateFiles
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/EditFilesysHardfile.cpp src/osdep/gui/EditFilesysHardfile.cpp
---- src_7f31/osdep/gui/EditFilesysHardfile.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/EditFilesysHardfile.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/EditFilesysHardfile.cpp src/osdep/gui/EditFilesysHardfile.cpp
+--- src_9942/osdep/gui/EditFilesysHardfile.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/EditFilesysHardfile.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -25,6 +25,9 @@
  #include "gui_handling.h"
  #include "GenericListModel.h"
@@ -1519,9 +1519,9 @@ diff -Nru src_7f31/osdep/gui/EditFilesysHardfile.cpp src/osdep/gui/EditFilesysHa
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/EditFilesysVirtual.cpp src/osdep/gui/EditFilesysVirtual.cpp
---- src_7f31/osdep/gui/EditFilesysVirtual.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/EditFilesysVirtual.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/EditFilesysVirtual.cpp src/osdep/gui/EditFilesysVirtual.cpp
+--- src_9942/osdep/gui/EditFilesysVirtual.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/EditFilesysVirtual.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -23,10 +23,15 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -1563,9 +1563,21 @@ diff -Nru src_7f31/osdep/gui/EditFilesysVirtual.cpp src/osdep/gui/EditFilesysVir
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/gui_handling.h src/osdep/gui/gui_handling.h
---- src_7f31/osdep/gui/gui_handling.h	2019-08-10 13:54:46.000000000 +0300
-+++ src/osdep/gui/gui_handling.h	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/GenericListModel.cpp src/osdep/gui/GenericListModel.cpp
+--- src_9942/osdep/gui/GenericListModel.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/GenericListModel.cpp	2019-08-31 17:57:33.749847598 +0300
+@@ -43,7 +43,7 @@
+   std::string GenericListModel::getElementAt(int i)
+   {
+     if(i < 0 || i >= values.size())
+-      return "";
++      return " ";
+     return values[i];
+   }
+ 
+diff -Nru src_9942/osdep/gui/gui_handling.h src/osdep/gui/gui_handling.h
+--- src_9942/osdep/gui/gui_handling.h	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/gui_handling.h	2019-08-25 15:34:38.662063784 +0300
 @@ -114,6 +114,12 @@
  void ExitPanelSavestate(const struct _ConfigCategory& category);
  bool HelpPanelSavestate(std::vector<std::string> &helptext);
@@ -1579,9 +1591,9 @@ diff -Nru src_7f31/osdep/gui/gui_handling.h src/osdep/gui/gui_handling.h
  void RegisterRefreshFunc(void (*func)(void));
  
  void FocusBugWorkaround(gcn::Window *wnd);
-diff -Nru src_7f31/osdep/gui/main_window.cpp src/osdep/gui/main_window.cpp
---- src_7f31/osdep/gui/main_window.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/main_window.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/main_window.cpp src/osdep/gui/main_window.cpp
+--- src_9942/osdep/gui/main_window.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/main_window.cpp	2019-08-25 15:34:38.662063784 +0300
 @@ -20,6 +20,13 @@
  #include "include/memory-uae.h"
  #include "autoconf.h"
@@ -1763,9 +1775,9 @@ diff -Nru src_7f31/osdep/gui/main_window.cpp src/osdep/gui/main_window.cpp
      uae_quit();
    }
  
-diff -Nru src_7f31/osdep/gui/Navigation.cpp src/osdep/gui/Navigation.cpp
---- src_7f31/osdep/gui/Navigation.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/Navigation.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/Navigation.cpp src/osdep/gui/Navigation.cpp
+--- src_9942/osdep/gui/Navigation.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/Navigation.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -44,13 +44,22 @@
    { "Game ports",       "cboAutofire0",   "cboPort0",       "Sound",            "Input" },
    { "Input",            "cboDevice",      "cboDevice",      "Game ports",       "Miscellaneous" },
@@ -1812,9 +1824,9 @@ diff -Nru src_7f31/osdep/gui/Navigation.cpp src/osdep/gui/Navigation.cpp
  
  //  active            move left         move right        move up           move down
  // EditFilesysVirtual
-diff -Nru src_7f31/osdep/gui/PanelChipset.cpp src/osdep/gui/PanelChipset.cpp
---- src_7f31/osdep/gui/PanelChipset.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelChipset.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelChipset.cpp src/osdep/gui/PanelChipset.cpp
+--- src_9942/osdep/gui/PanelChipset.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelChipset.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -214,10 +214,18 @@
    chkNTSC->addActionListener(chipsetActionListener);
  
@@ -1900,9 +1912,9 @@ diff -Nru src_7f31/osdep/gui/PanelChipset.cpp src/osdep/gui/PanelChipset.cpp
    helptext.push_back("For \"Collision Level\", select \"Sprites and Sprites vs. Playfield\" which is fine for nearly all games.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelConfig.cpp src/osdep/gui/PanelConfig.cpp
---- src_7f31/osdep/gui/PanelConfig.cpp	2019-08-10 13:54:46.000000000 +0300
-+++ src/osdep/gui/PanelConfig.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelConfig.cpp src/osdep/gui/PanelConfig.cpp
+--- src_9942/osdep/gui/PanelConfig.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/PanelConfig.cpp	2019-08-25 15:34:38.654064165 +0300
 @@ -283,10 +283,10 @@
    helptext.clear();
    helptext.push_back("To load a configuration, select the entry in the list and then click on \"Load\". If you doubleclick on an entry in the");
@@ -1916,9 +1928,9 @@ diff -Nru src_7f31/osdep/gui/PanelConfig.cpp src/osdep/gui/PanelConfig.cpp
    helptext.push_back("\"Delete\" will delete the selected configuration.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
---- src_7f31/osdep/gui/PanelCPU.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelCPU.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
+--- src_9942/osdep/gui/PanelCPU.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelCPU.cpp	2019-08-28 21:09:42.713739117 +0300
 @@ -270,7 +270,11 @@
  	grpCPU->add(sldCachemem, 6, 290);
  	grpCPU->add(lblCachesize, 110, 290);
@@ -1943,23 +1955,19 @@ diff -Nru src_7f31/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
    grpCPUSpeed->setBaseColor(gui_baseCol);
  
    category.panel->add(grpCPUSpeed);
-@@ -380,18 +388,18 @@
+@@ -380,18 +388,14 @@
    helptext.push_back("If you select 68020, you can choose between 24-bit addressing (68EC020) or 32-bit addressing (68020).");
    helptext.push_back("The option \"More compatible\" is only available if 68000 or 68010 is selected and emulates simple prefetch of");
    helptext.push_back("the 68000. This may improve compatibility in few situations but is not required for most games and demos.");
 -  helptext.push_back("");
-+  helptext.push_back(" ");
    helptext.push_back("JIT enables the Just-in-time compiler. This may break compatibility in some games. With \"Cache\", you can select");
    helptext.push_back("the size of the memory for compiled code.");
 -  helptext.push_back("");
-+  helptext.push_back(" ");
    helptext.push_back("The available FPU models depending on the selected CPU.");
    helptext.push_back("The option \"More compatible\" activates more accurate rounding and compare of two floats.");
 -  helptext.push_back("");
-+  helptext.push_back(" ");
    helptext.push_back("With \"CPU Speed\" you can choose the clock rate of the Amiga.");
 -  helptext.push_back("");
-+  helptext.push_back(" ");
    helptext.push_back("In current version, you will not see a difference in the performance for 68020, 68030 and 68040 CPUs. The cpu");
    helptext.push_back("cycles for the opcodes are based on 68020. The different cycles for 68030 and 68040 may come in a later");
    helptext.push_back("version.");
@@ -1968,9 +1976,9 @@ diff -Nru src_7f31/osdep/gui/PanelCPU.cpp src/osdep/gui/PanelCPU.cpp
 -  
 \ No newline at end of file
 +  
-diff -Nru src_7f31/osdep/gui/PanelDisplay.cpp src/osdep/gui/PanelDisplay.cpp
---- src_7f31/osdep/gui/PanelDisplay.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelDisplay.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelDisplay.cpp src/osdep/gui/PanelDisplay.cpp
+--- src_9942/osdep/gui/PanelDisplay.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelDisplay.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -288,15 +288,15 @@
    helptext.push_back("Select the required width and height of the Amiga screen. If you select \"NTSC\" in chipset, a value greater than");
    helptext.push_back("240 for \"Height\" makes no sense. When the game, demo or workbench uses Hires mode and you selected a");
@@ -1991,9 +1999,9 @@ diff -Nru src_7f31/osdep/gui/PanelDisplay.cpp src/osdep/gui/PanelDisplay.cpp
    helptext.push_back("When you activate \"Frameskip\", only every second frame is drawn. This will improve performance and some");
    helptext.push_back("more games are playable.");
    return true;
-diff -Nru src_7f31/osdep/gui/PanelFloppy.cpp src/osdep/gui/PanelFloppy.cpp
---- src_7f31/osdep/gui/PanelFloppy.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelFloppy.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelFloppy.cpp src/osdep/gui/PanelFloppy.cpp
+--- src_9942/osdep/gui/PanelFloppy.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelFloppy.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -418,7 +418,11 @@
  	for(i = 0; i < 4; ++i) {
  	  posX = DISTANCE_BORDER;
@@ -2023,9 +2031,9 @@ diff -Nru src_7f31/osdep/gui/PanelFloppy.cpp src/osdep/gui/PanelFloppy.cpp
    helptext.push_back("With the buttons \"Create 3.5'' DD disk\" and \"Create 3.5'' HD disk\" you can create a new and empty disk.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelGamePortPandora.cpp src/osdep/gui/PanelGamePortPandora.cpp
---- src_7f31/osdep/gui/PanelGamePortPandora.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelGamePortPandora.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelGamePortPandora.cpp src/osdep/gui/PanelGamePortPandora.cpp
+--- src_9942/osdep/gui/PanelGamePortPandora.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelGamePortPandora.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -20,6 +20,9 @@
  #include "inputdevice.h"
  #include "GenericListModel.h"
@@ -2104,9 +2112,9 @@ diff -Nru src_7f31/osdep/gui/PanelGamePortPandora.cpp src/osdep/gui/PanelGamePor
    helptext.push_back("\"Tap Delay\" specifies the time between taping the screen and an emulated mouse button click.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelHD.cpp src/osdep/gui/PanelHD.cpp
---- src_7f31/osdep/gui/PanelHD.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelHD.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelHD.cpp src/osdep/gui/PanelHD.cpp
+--- src_9942/osdep/gui/PanelHD.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelHD.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -431,7 +431,11 @@
    cboCDFile->addActionListener(cdFileActionListener);
  
@@ -2139,9 +2147,9 @@ diff -Nru src_7f31/osdep/gui/PanelHD.cpp src/osdep/gui/PanelHD.cpp
    helptext.push_back("In current version, WAV, MP3 and FLAC is supported for audio tracks.");
    helptext.push_back("The audio volume of the CD can be adjusted with \"CD Volume\".");
    return true;
-diff -Nru src_7f31/osdep/gui/PanelInput.cpp src/osdep/gui/PanelInput.cpp
---- src_7f31/osdep/gui/PanelInput.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelInput.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelInput.cpp src/osdep/gui/PanelInput.cpp
+--- src_9942/osdep/gui/PanelInput.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelInput.cpp	2019-08-28 21:32:53.983892010 +0300
 @@ -278,7 +278,11 @@
    scrAreaList = new gcn::ScrollArea(lstWidget);
    scrAreaList->setFrameSize(1);
@@ -2163,9 +2171,9 @@ diff -Nru src_7f31/osdep/gui/PanelInput.cpp src/osdep/gui/PanelInput.cpp
    helptext.push_back("Choose the new target action in the dropdown control \"Target\" for the current selected entry.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelMisc.cpp src/osdep/gui/PanelMisc.cpp
---- src_7f31/osdep/gui/PanelMisc.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelMisc.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelMisc.cpp src/osdep/gui/PanelMisc.cpp
+--- src_9942/osdep/gui/PanelMisc.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelMisc.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -24,6 +24,10 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -2199,9 +2207,9 @@ diff -Nru src_7f31/osdep/gui/PanelMisc.cpp src/osdep/gui/PanelMisc.cpp
    helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelOnScreen.cpp src/osdep/gui/PanelOnScreen.cpp
---- src_7f31/osdep/gui/PanelOnScreen.cpp	1970-01-01 03:00:00.000000000 +0300
-+++ src/osdep/gui/PanelOnScreen.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelOnScreen.cpp src/osdep/gui/PanelOnScreen.cpp
+--- src_9942/osdep/gui/PanelOnScreen.cpp	1970-01-01 03:00:00.000000000 +0300
++++ src/osdep/gui/PanelOnScreen.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -0,0 +1,443 @@
 +#include <guichan.hpp>
 +#include <SDL/SDL_ttf.h>
@@ -2646,9 +2654,9 @@ diff -Nru src_7f31/osdep/gui/PanelOnScreen.cpp src/osdep/gui/PanelOnScreen.cpp
 +  helptext.push_back("onScreen Help");
 +  return true;
 +}
-diff -Nru src_7f31/osdep/gui/PanelPaths.cpp src/osdep/gui/PanelPaths.cpp
---- src_7f31/osdep/gui/PanelPaths.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/PanelPaths.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelPaths.cpp src/osdep/gui/PanelPaths.cpp
+--- src_9942/osdep/gui/PanelPaths.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/PanelPaths.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -149,7 +149,7 @@
    helptext.clear();
    helptext.push_back("Specify the location of your kickstart roms and the folder where the configuration files should be stored.");
@@ -2658,9 +2666,9 @@ diff -Nru src_7f31/osdep/gui/PanelPaths.cpp src/osdep/gui/PanelPaths.cpp
    helptext.push_back("After changing the location of the kickstart roms, click on \"Rescan ROMS\" to refresh the list of the available");
    helptext.push_back("ROMs.");
    return true;
-diff -Nru src_7f31/osdep/gui/PanelQuickstart.cpp src/osdep/gui/PanelQuickstart.cpp
---- src_7f31/osdep/gui/PanelQuickstart.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelQuickstart.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelQuickstart.cpp src/osdep/gui/PanelQuickstart.cpp
+--- src_9942/osdep/gui/PanelQuickstart.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelQuickstart.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -66,23 +66,38 @@
  	     "Basic non-expanded configuration",
  	     "2 MB Chip RAM expanded configuration",
@@ -2725,9 +2733,9 @@ diff -Nru src_7f31/osdep/gui/PanelQuickstart.cpp src/osdep/gui/PanelQuickstart.c
    helptext.push_back("When you activate \"Start in Quickstart mode\", the next time you run the emulator, it  will start with the quickstart");
    helptext.push_back("panel. Otherwise you start in configuraions panel.");
    return true;
-diff -Nru src_7f31/osdep/gui/PanelRAM.cpp src/osdep/gui/PanelRAM.cpp
---- src_7f31/osdep/gui/PanelRAM.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelRAM.cpp	2019-08-15 21:05:59.020154409 +0300
+diff -Nru src_9942/osdep/gui/PanelRAM.cpp src/osdep/gui/PanelRAM.cpp
+--- src_9942/osdep/gui/PanelRAM.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelRAM.cpp	2019-08-28 21:11:00.032990467 +0300
 @@ -177,12 +177,21 @@
  void InitPanelRAM(const struct _ConfigCategory& category)
  {
@@ -2837,9 +2845,18 @@ diff -Nru src_7f31/osdep/gui/PanelRAM.cpp src/osdep/gui/PanelRAM.cpp
    grpRAM->setBaseColor(gui_baseCol);
    
    category.panel->add(grpRAM);
-diff -Nru src_7f31/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
---- src_7f31/osdep/gui/PanelROM.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelROM.cpp	2019-08-15 21:05:59.024154346 +0300
+@@ -338,7 +351,7 @@
+   helptext.push_back("\"Z3 Fast\" is real fast memory in 32 bit address space and only available if a 32 bit CPU is selected.");
+   helptext.push_back("\"RTG board\" is the graphics memory used by Picasso96 and only available if a 32 bit CPU is selected. If you");
+   helptext.push_back("select some memory for this type, the Z3 RTG board will be activated.");
+-  helptext.push_back("");
++  helptext.push_back(" ");
+   helptext.push_back("A4000 motherboard and processor board memory is only detected by the Amiga if you choose the correct");
+   helptext.push_back("Kickstart ROM (A4000).");
+   return true;
+diff -Nru src_9942/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
+--- src_9942/osdep/gui/PanelROM.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelROM.cpp	2019-08-28 21:11:03.476961282 +0300
 @@ -78,7 +78,7 @@
        int currIdx = -1;
        if(ROMType & (ROMTYPE_ALL_EXT | ROMTYPE_ALL_CART))
@@ -2925,7 +2942,7 @@ diff -Nru src_7f31/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
    category.panel->add(lblCartROM, DISTANCE_BORDER, posY);
    posY += lblCartROM->getHeight() + 4;
    category.panel->add(cboCartROM, DISTANCE_BORDER, posY);
-@@ -342,9 +349,9 @@
+@@ -342,12 +349,12 @@
  {
    helptext.clear();
    helptext.push_back("Select the required kickstart ROM for the Amiga you want to emulate in \"Main ROM File\".");
@@ -2936,10 +2953,14 @@ diff -Nru src_7f31/osdep/gui/PanelROM.cpp src/osdep/gui/PanelROM.cpp
 +  helptext.push_back(" ");
    helptext.push_back("In \"Cartridge ROM File\", you can select the CD32 FMV module to activate video playback in CD32.");
    helptext.push_back("There are also some Action Replay and Freezer cards and the built in HRTMon available.");
-   helptext.push_back("");
-diff -Nru src_7f31/osdep/gui/PanelSavestate.cpp src/osdep/gui/PanelSavestate.cpp
---- src_7f31/osdep/gui/PanelSavestate.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelSavestate.cpp	2019-08-15 21:05:59.024154346 +0300
+-  helptext.push_back("");
++  helptext.push_back(" ");
+   helptext.push_back("In \"Advanced UAE expansion...\", you can select the built in UAE board.");
+   return true;
+ }
+diff -Nru src_9942/osdep/gui/PanelSavestate.cpp src/osdep/gui/PanelSavestate.cpp
+--- src_9942/osdep/gui/PanelSavestate.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelSavestate.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -257,11 +257,11 @@
    helptext.clear();
    helptext.push_back("Savestates are stored with the name of the disk in drive DF0 attached with the selected number.");
@@ -2954,9 +2975,9 @@ diff -Nru src_7f31/osdep/gui/PanelSavestate.cpp src/osdep/gui/PanelSavestate.cpp
    helptext.push_back("Note: Savestates with HDDs may not work.");
    return true;
  }
-diff -Nru src_7f31/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
---- src_7f31/osdep/gui/PanelSound.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/gui/PanelSound.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
+--- src_9942/osdep/gui/PanelSound.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/gui/PanelSound.cpp	2019-08-28 21:11:06.420936598 +0300
 @@ -279,11 +279,22 @@
  	grpSound->add(optSoundEmulated, 5, 70);
  	grpSound->add(optSoundEmulatedBest, 5, 100);
@@ -3034,7 +3055,7 @@ diff -Nru src_7f31/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
    lblPaulaVol->setAlignment(gcn::Graphics::RIGHT);
    sldPaulaVol = new gcn::Slider(0, 100);
    sldPaulaVol->setSize(160, SLIDER_HEIGHT);
-@@ -424,12 +439,12 @@
+@@ -424,16 +439,16 @@
  {
    helptext.clear();
    helptext.push_back("You can turn on sound emulation with different levels of accuracy and choose between mono and stereo.");
@@ -3050,9 +3071,14 @@ diff -Nru src_7f31/osdep/gui/PanelSound.cpp src/osdep/gui/PanelSound.cpp
    helptext.push_back("With \"Stereo separation\" and \"Stereo delay\", you can adjust how the left and right audio channels of the Amiga");
    helptext.push_back("are mixed to the left and right channels of your device. A value of 70% for separation and no delay is a good");
    helptext.push_back("start.");
-diff -Nru src_7f31/osdep/gui/SelectFile.cpp src/osdep/gui/SelectFile.cpp
---- src_7f31/osdep/gui/SelectFile.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/SelectFile.cpp	2019-08-15 21:05:59.024154346 +0300
+-  helptext.push_back("");
++  helptext.push_back(" ");
+   helptext.push_back("The audio volume of the Amiga (not CD) can be adjusted with \"Paula Volume\".");
+   return true;
+ }
+diff -Nru src_9942/osdep/gui/SelectFile.cpp src/osdep/gui/SelectFile.cpp
+--- src_9942/osdep/gui/SelectFile.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/SelectFile.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -22,6 +22,9 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -3132,9 +3158,9 @@ diff -Nru src_7f31/osdep/gui/SelectFile.cpp src/osdep/gui/SelectFile.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/SelectFolder.cpp src/osdep/gui/SelectFolder.cpp
---- src_7f31/osdep/gui/SelectFolder.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/SelectFolder.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/gui/SelectFolder.cpp src/osdep/gui/SelectFolder.cpp
+--- src_9942/osdep/gui/SelectFolder.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/SelectFolder.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -20,10 +20,14 @@
  #include "uae.h"
  #include "gui_handling.h"
@@ -3226,9 +3252,9 @@ diff -Nru src_7f31/osdep/gui/SelectFolder.cpp src/osdep/gui/SelectFolder.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/ShowHelp.cpp src/osdep/gui/ShowHelp.cpp
---- src_7f31/osdep/gui/ShowHelp.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/ShowHelp.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/gui/ShowHelp.cpp src/osdep/gui/ShowHelp.cpp
+--- src_9942/osdep/gui/ShowHelp.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/ShowHelp.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -21,6 +21,9 @@
  #include "gui_handling.h"
  #include "GenericListModel.h"
@@ -3252,9 +3278,9 @@ diff -Nru src_7f31/osdep/gui/ShowHelp.cpp src/osdep/gui/ShowHelp.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/ShowMessage.cpp src/osdep/gui/ShowMessage.cpp
---- src_7f31/osdep/gui/ShowMessage.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/ShowMessage.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/gui/ShowMessage.cpp src/osdep/gui/ShowMessage.cpp
+--- src_9942/osdep/gui/ShowMessage.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/ShowMessage.cpp	2019-08-25 15:34:38.658063975 +0300
 @@ -20,6 +20,9 @@
  #include "gui.h"
  #include "gui_handling.h"
@@ -3278,9 +3304,9 @@ diff -Nru src_7f31/osdep/gui/ShowMessage.cpp src/osdep/gui/ShowMessage.cpp
      }
  
      // Now we let the Gui object perform its logic.
-diff -Nru src_7f31/osdep/gui/UaeDropDown.cpp src/osdep/gui/UaeDropDown.cpp
---- src_7f31/osdep/gui/UaeDropDown.cpp	2019-01-03 19:49:41.000000000 +0200
-+++ src/osdep/gui/UaeDropDown.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/gui/UaeDropDown.cpp src/osdep/gui/UaeDropDown.cpp
+--- src_9942/osdep/gui/UaeDropDown.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/gui/UaeDropDown.cpp	2019-08-25 15:34:38.662063784 +0300
 @@ -60,8 +60,11 @@
      mPreferUp = false;
      mFoldedUpY = -1;
@@ -3294,9 +3320,9 @@ diff -Nru src_7f31/osdep/gui/UaeDropDown.cpp src/osdep/gui/UaeDropDown.cpp
    }
  
    UaeDropDown::~UaeDropDown()
-diff -Nru src_7f31/osdep/pandora.cpp src/osdep/pandora.cpp
---- src_7f31/osdep/pandora.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/pandora.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/pandora.cpp src/osdep/pandora.cpp
+--- src_9942/osdep/pandora.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/pandora.cpp	2019-08-25 15:34:38.662063784 +0300
 @@ -82,6 +82,39 @@
  
  	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
@@ -3596,9 +3622,9 @@ diff -Nru src_7f31/osdep/pandora.cpp src/osdep/pandora.cpp
  				  case SDLK_RCTRL:  // Right shoulder button
    					if(currprefs.input_tablet > TABLET_OFF) {
    					  // Release left or right shoulder button -> stylus does left mousebutton
-diff -Nru src_7f31/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
---- src_7f31/osdep/pandora_gfx.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/pandora_gfx.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
+--- src_9942/osdep/pandora_gfx.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/pandora_gfx.cpp	2019-08-25 15:34:38.662063784 +0300
 @@ -16,11 +16,13 @@
  #include <png.h>
  #include <SDL.h>
@@ -3749,9 +3775,9 @@ diff -Nru src_7f31/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
  {
  	int changed = 0;
  	
-diff -Nru src_7f31/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
---- src_7f31/osdep/sigsegv_handler.cpp	2019-08-15 21:03:54.000000000 +0300
-+++ src/osdep/sigsegv_handler.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
+--- src_9942/osdep/sigsegv_handler.cpp	2019-08-18 21:58:34.000000000 +0300
++++ src/osdep/sigsegv_handler.cpp	2019-08-25 15:34:38.666063593 +0300
 @@ -39,7 +39,13 @@
  #include <asm/sigcontext.h>
  #include <signal.h>
@@ -3766,9 +3792,9 @@ diff -Nru src_7f31/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
  #include <SDL.h>
  
  #ifdef JIT
-diff -Nru src_7f31/osdep/sysconfig.h src/osdep/sysconfig.h
---- src_7f31/osdep/sysconfig.h	2019-08-10 18:10:35.000000000 +0300
-+++ src/osdep/sysconfig.h	2019-08-15 21:33:23.000000000 +0300
+diff -Nru src_9942/osdep/sysconfig.h src/osdep/sysconfig.h
+--- src_9942/osdep/sysconfig.h	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/sysconfig.h	2019-08-25 15:34:38.666063593 +0300
 @@ -551,9 +551,18 @@
  #define _timezone           timezone
  #define _daylight           daylight
@@ -3790,9 +3816,9 @@ diff -Nru src_7f31/osdep/sysconfig.h src/osdep/sysconfig.h
 +#endif
 +
  #endif /* UAE_SYSCONFIG_H */
-diff -Nru src_7f31/osdep/writelog.cpp src/osdep/writelog.cpp
---- src_7f31/osdep/writelog.cpp	2019-08-10 13:54:46.000000000 +0300
-+++ src/osdep/writelog.cpp	2019-08-15 21:05:59.024154346 +0300
+diff -Nru src_9942/osdep/writelog.cpp src/osdep/writelog.cpp
+--- src_9942/osdep/writelog.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/writelog.cpp	2019-08-25 15:34:38.670063402 +0300
 @@ -20,7 +20,7 @@
      va_start (parms, format);
      vsnprintf (buffer, WRITE_LOG_BUF_SIZE-1, format, parms);
