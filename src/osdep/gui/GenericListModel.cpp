@@ -43,7 +43,7 @@ namespace gcn
   std::string GenericListModel::getElementAt(int i)
   {
     if(i < 0 || i >= values.size())
-      return "";
+      return " ";
     return values[i];
   }
 
