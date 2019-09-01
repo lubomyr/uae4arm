@@ -1281,19 +1281,14 @@ diff -Nru src_9942/osdep/caps/generic_caps.cpp src/osdep/caps/generic_caps.cpp
  		if (noticed)
 diff -Nru src_9942/osdep/config.h src/osdep/config.h
 --- src_9942/osdep/config.h	2019-08-18 21:57:50.000000000 +0300
-+++ src/osdep/config.h	2019-08-25 15:34:38.650064356 +0300
-@@ -66,14 +66,20 @@
-  */
- #define VK_ESCAPE SDLK_ESCAPE
- 
-+#ifdef ANDROIDSDL
-+#define VK_L SDLK_F13
-+#else
-+
- /*
++++ src/osdep/config.h	2019-09-01 18:33:55.209703702 +0300
+@@ -70,10 +70,15 @@
   * Virtual Key for (Left shoulder) button
   * default: RSHIFT (303)
   */
++#ifdef ANDROIDSDL
++#define VK_L SDLK_F13
++#else
  #define VK_L SDLK_RSHIFT
 +#endif
  
@@ -3775,6 +3770,21 @@ diff -Nru src_9942/osdep/pandora_gfx.cpp src/osdep/pandora_gfx.cpp
  {
  	int changed = 0;
  	
+diff -Nru src_9942/osdep/pandora_input.cpp src/osdep/pandora_input.cpp
+--- src_9942/osdep/pandora_input.cpp	2019-08-18 21:57:50.000000000 +0300
++++ src/osdep/pandora_input.cpp	2019-09-01 18:37:46.641988575 +0300
+@@ -162,7 +162,11 @@
+   		  break;
+   		case 4:
+   		  _tcscpy (tmp, _T("R shoulder"));
++#ifdef ANDROIDSDL
++  		  code = SDLK_F13;
++#else
+   		  code = SDLK_RSHIFT;
++#endif
+   		  break;
+   		case 5:
+   		  _tcscpy (tmp, _T("L shoulder"));
 diff -Nru src_9942/osdep/sigsegv_handler.cpp src/osdep/sigsegv_handler.cpp
 --- src_9942/osdep/sigsegv_handler.cpp	2019-08-18 21:58:34.000000000 +0300
 +++ src/osdep/sigsegv_handler.cpp	2019-08-25 15:34:38.666063593 +0300
