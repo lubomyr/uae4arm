@@ -162,7 +162,11 @@ static void init_joy_widgets(struct pidata *pid, int numaxles, int numbuttons)
   		  break;
   		case 4:
   		  _tcscpy (tmp, _T("R shoulder"));
+#ifdef ANDROIDSDL
+  		  code = SDLK_F13;
+#else
   		  code = SDLK_RSHIFT;
+#endif
   		  break;
   		case 5:
   		  _tcscpy (tmp, _T("L shoulder"));

@@ -66,14 +66,13 @@
  */
 #define VK_ESCAPE SDLK_ESCAPE
 
-#ifdef ANDROIDSDL
-#define VK_L SDLK_F13
-#else
-
 /*
  * Virtual Key for (Left shoulder) button
  * default: RSHIFT (303)
  */
+#ifdef ANDROIDSDL
+#define VK_L SDLK_F13
+#else
 #define VK_L SDLK_RSHIFT
 #endif
 
