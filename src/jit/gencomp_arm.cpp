@@ -122,10 +122,11 @@
 //#define DISABLE_I_FBCC
 //#define DISABLE_I_FSCC
 //#define DISABLE_I_MOVE16
-
 //#define DISABLE_I_DIVU
 //#define DISABLE_I_DIVS
 //#define DISABLE_I_DIVL
+
+//#define DISABLE_I_BFINS
 
 
 #define RETURN "return 0;"
@@ -1114,7 +1115,7 @@ static void genmovemle(uae_u16 opcode)
 
 
 	comprintf("\t\t}\n"
-			"\t}");
+			"\t}\n");
 	if (table68k[opcode].dmode == Apdi) {
 		comprintf("\t\t\tlea_l_brr(8+dstreg,srca,(uae_s32)offset);\n");
 	}
@@ -1241,7 +1242,7 @@ static void gen_and(uae_u32 opcode, struct instr *curi, char* ssize) {
 static void gen_andsr(uae_u32 opcode, struct instr *curi, char* ssize) {
 	(void) opcode;
 	(void) ssize;
-	genamode_new(curi->smode, "srcreg", curi->size, "src", 1, 0);
+	comprintf("\tint src = (uae_s32)(uae_s16)%s;\n", gen_nextiword());
 	if (!noflags) {
 		comprintf("\t make_flags_live();\n");
 		comprintf("\t jff_ANDSR(ARM_CCR_MAP[src & 0xF], (src & 0x10));\n");
@@ -1599,6 +1600,117 @@ static void gen_divl(uae_u32 opcode, struct instr *curi, char* ssize) {
 	}
 }
 
+static void gen_bfins(uae_u32 opcode, struct instr *curi, char* ssize)
+{
+  comprintf("\tdont_care_flags();\n");
+  comprintf("\tuae_u16 extra=%s;\n", gen_nextiword());
+  comprintf("\tint srcreg = (extra >> 12) & 7;\n");
+  comprintf("\tint offs, width;\n");
+  comprintf("\tif ((extra & 0x0800) == 0x0000)\n"); /* offset imm */
+  comprintf("\t  offs = (extra >> 6) & 0x1f;\n");
+  comprintf("\telse\n");
+  comprintf("\t  offs = (extra >> 6) & 0x07;\n");
+  comprintf("\tif ((extra & 0x0020) == 0x0000)\n"); /* width imm */
+  comprintf("\t  width = ((extra - 1) & 0x1f) + 1;\n");
+  comprintf("\telse\n");
+  comprintf("\t  width = (extra & 0x07);\n");
+  
+  if (curi->dmode == Aind) {
+    comprintf("\tint dsta=scratchie++;\n");
+    comprintf("\tmov_l_rr(dsta,dstreg+8);\n");
+  } else {
+    genamode_new(curi->dmode, "dstreg", curi->size, "dst", 2, 0);
+  }
+  if (curi->dmode != Dreg) {
+    comprintf("\tif ((extra & 0x0800) == 0x0800) {\n"); /* offset is reg */
+    comprintf("\t  arm_ADD_ldiv8(dsta,offs);\n");
+    comprintf("\t}\n");
+    comprintf("\tint dst=scratchie++;\n");
+    comprintf("\treadlong(dsta,dst);\n");
+
+    comprintf("\tint dsta2=scratchie++;\n");
+    comprintf("\tlea_l_brr(dsta2, dsta, 4);\n");
+    comprintf("\tint dst2=scratchie++;\n");
+    comprintf("\treadlong(dsta2,dst2);\n");
+  }
+
+  comprintf("\tif ((extra & 0x0820) == 0x0000) {\n"); /* offset and width imm */
+  if (curi->dmode == Dreg) {
+    if (!noflags) {
+      comprintf("\t  jff_BFINS_ii(dst, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t  jnf_BFINS_ii(dst, srcreg, offs, width);\n");
+    }
+  } else {
+    comprintf("\t  if(32 - offs - width >= 0) {\n");
+    if (!noflags) {
+      comprintf("\t    jff_BFINS_ii(dst, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t    jnf_BFINS_ii(dst, srcreg, offs, width);\n");
+    }
+    comprintf("\t  } else {\n");
+    if (!noflags) {
+      comprintf("\t    jff_BFINS2_ii(dst, dst2, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t    jnf_BFINS2_ii(dst, dst2, srcreg, offs, width);\n");
+    }
+    comprintf("\t  }\n");
+  }
+
+  if (curi->dmode == Dreg) {
+    comprintf("\t} else if ((extra & 0x0820) == 0x0800) { \n"); /* offset in reg, width imm */
+    if (!noflags) {
+      comprintf("\t  jff_BFINS_di(dst, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t  jnf_BFINS_di(dst, srcreg, offs, width);\n");
+    }
+
+    comprintf("\t} else if ((extra & 0x0820) == 0x0020) { \n"); /* offset imm, width in register */
+    if (!noflags) {
+      comprintf("\t  jff_BFINS_id(dst, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t  jnf_BFINS_id(dst, srcreg, offs, width);\n");
+    }
+
+    comprintf("\t} else { \n"); /* offset and width in register */
+    if (!noflags) {
+      comprintf("\t  jff_BFINS_dd(dst, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t  jnf_BFINS_dd(dst, srcreg, offs, width);\n");
+    }
+
+  } else { /* curi->dmode is <ea> */
+    comprintf("\t} else if ((extra & 0x0820) == 0x0800) { \n"); /* offset in reg, width imm */
+    if (!noflags) {
+      comprintf("\t    jff_BFINS2_di(dst, dst2, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t    jnf_BFINS2_di(dst, dst2, srcreg, offs, width);\n");
+    }
+
+    comprintf("\t} else if ((extra & 0x0820) == 0x0020) { \n");/* offset imm, width in register */
+    if (!noflags) {
+      comprintf("\t    jff_BFINS2_id(dst, dst2, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t    jnf_BFINS2_id(dst, dst2, srcreg, offs, width);\n");
+    }
+
+    comprintf("\t} else { \n"); /* offset and width in register */
+    if (!noflags) {
+      comprintf("\t    jff_BFINS2_dd(dst, dst2, srcreg, offs, width);\n");
+    } else {
+      comprintf("\t    jnf_BFINS2_dd(dst, dst2, srcreg, offs, width);\n");
+    }
+  }
+  comprintf("\t}\n");
+  if (!noflags)
+    comprintf("\tlive_flags();\n");
+
+  if (curi->dmode != Dreg)
+    comprintf("\twritelong(dsta2,dst2);\n");
+  genastore_new("dst", curi->dmode, curi->size, "dst");
+  genamode_post(curi->dmode, "dstreg", curi->size, "dst", 1, 0);
+}
+
 static void gen_eor(uae_u32 opcode, struct instr *curi, char* ssize) {
 	(void) opcode;
 	genamode_new(curi->smode, "srcreg", curi->size, "src", 1, 0);
@@ -1619,7 +1731,7 @@ static void gen_eor(uae_u32 opcode, struct instr *curi, char* ssize) {
 static void gen_eorsr(uae_u32 opcode, struct instr *curi, char* ssize) {
 	(void) opcode;
 	(void) ssize;
-	genamode_new(curi->smode, "srcreg", curi->size, "src", 1, 0);
+	comprintf("\tint src = (uae_s32)(uae_s16)%s;\n", gen_nextiword());
 	if (!noflags) {
 		comprintf("\t make_flags_live();\n");
 		comprintf("\t jff_EORSR(ARM_CCR_MAP[src & 0xF], ((src & 0x10) >> 4));\n");
@@ -1933,7 +2045,7 @@ static void gen_or(uae_u32 opcode, struct instr *curi, char* ssize) {
 static void gen_orsr(uae_u32 opcode, struct instr *curi, char* ssize) {
 	(void) opcode;
 	(void) ssize;
-	genamode_new(curi->smode, "srcreg", curi->size, "src", 1, 0);
+	comprintf("\tint src = (uae_s32)(uae_s16)%s;\n", gen_nextiword());
 	if (!noflags) {
 		comprintf("\t make_flags_live();\n");
 		comprintf("\t jff_ORSR(ARM_CCR_MAP[src & 0xF], ((src & 0x10) >> 4));\n");
@@ -2551,13 +2663,16 @@ static int gen_opcode(unsigned int opcode)
 #ifdef DISABLE_I_LINK
     failure;
 #endif
-		genamode_new(curi->smode, "srcreg", sz_long, "src", 1, 0);
+    comprintf("\tint dodgy=0;\n");
+    comprintf("\tif (srcreg==7) dodgy=1;\n");
+    genamode(curi->smode, "srcreg", sz_long, "src", 1, 0);
 		genamode_new(curi->dmode, "dstreg", curi->size, "offs", 1, 0);
-		comprintf("\tsub_l_ri(15,4);\n"
-				"\twritelong_clobber(15,src);\n"
-				"\tmov_l_rr(src,15);\n");
-		comprintf("\tarm_ADD_l(15,offs);\n");
-		genastore("src", curi->smode, "srcreg", sz_long, "src");
+    comprintf("\tsub_l_ri(15,4);\n"
+				"\twritelong_clobber(15,src);\n");
+    comprintf("\tif(!dodgy)\n");
+    comprintf("\t\tmov_l_rr(src,15);\n");
+    comprintf("\tarm_ADD_l(15,offs);\n");
+    genastore("src", curi->smode, "srcreg", sz_long, "src");
 		break;
 
 	case i_UNLK:
@@ -2565,9 +2680,13 @@ static int gen_opcode(unsigned int opcode)
     failure;
 #endif
 		genamode_new(curi->smode, "srcreg", curi->size, "src", 1, 0);
-		comprintf("\tmov_l_rr(15,src);\n"
-				"\treadlong(15,src);\n"
-				"\tarm_ADD_l_ri8(15,4);\n");
+    comprintf("\tif(src==15){\n");
+    comprintf("\t\treadlong(15,src);\n");
+    comprintf("\t} else {\n");
+    comprintf("\t\tmov_l_rr(15,src);\n");
+    comprintf("\t\treadlong(15,src);\n");
+    comprintf("\t\tarm_ADD_l_ri8(15,4);\n");
+    comprintf("\t}\n");
 		genastore("src", curi->smode, "srcreg", curi->size, "src");
 		break;
 
@@ -2963,9 +3082,15 @@ static int gen_opcode(unsigned int opcode)
 	case i_BFCLR:
 	case i_BFFFO:
 	case i_BFSET:
-	case i_BFINS:
 		failure;
 		break;
+
+  case i_BFINS:
+#ifdef DISABLE_I_BFINS
+    failure;
+#endif
+    gen_bfins(opcode, curi, ssize);
+    break;
 
 	case i_PACK:
 		failure;
@@ -3271,7 +3396,8 @@ static void generate_one_opcode(int rp, int noflags)
 	dmsk = 7;
 
 	next_cpu_level = -1;
-  if (table68k[opcode].mnemo == i_DIVU || table68k[opcode].mnemo == i_DIVS || table68k[opcode].mnemo == i_DIVL) {
+  if (table68k[opcode].mnemo == i_DIVU || table68k[opcode].mnemo == i_DIVS || table68k[opcode].mnemo == i_DIVL
+  || table68k[opcode].mnemo == i_BFINS) {
     comprintf("#if !defined(ARMV6T2) && !defined(CPU_AARCH64)\n");
     comprintf("  FAIL(1);\n");
     comprintf("  " RETURN "\n");
@@ -3350,7 +3476,8 @@ static void generate_one_opcode(int rp, int noflags)
 		if (global_fpu)	flags |= 32;
 
 	  comprintf ("return 0;\n");
-    if (table68k[opcode].mnemo == i_DIVU || table68k[opcode].mnemo == i_DIVS || table68k[opcode].mnemo == i_DIVL) {
+    if (table68k[opcode].mnemo == i_DIVU || table68k[opcode].mnemo == i_DIVS || table68k[opcode].mnemo == i_DIVL
+    || table68k[opcode].mnemo == i_BFINS) {
       comprintf("#endif\n");
     }
 
