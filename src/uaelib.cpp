@@ -302,18 +302,10 @@ static uae_u32 uaelib_demux_common(TrapContext *ctx, uae_u32 ARG0, uae_u32 ARG1,
    	  /* The next call brings bad luck */
     case 13: return emulib_ExitEmu ();
 		case 14: return emulib_GetDisk(ctx, ARG1, ARG2);
-    case 15: return 0;
-
-		case 68: return 0;
-		case 69: return 0;
-
-    case 70: return 0; /* RESERVED. Something uses this.. */
-
     case 80: 
       return 0xffffffff;
 		case 81: return cfgfile_uaelib(ctx, ARG1, ARG2, ARG3, ARG4);
 		case 82: return cfgfile_uaelib_modify(ctx, ARG1, ARG2, ARG3, ARG4, ARG5);
-    case 83: return 0;
 		case 85: return native_dos_op(ctx, ARG1, ARG2, ARG3, ARG4);
     case 86:
    	  if (valid_address(ARG1, 1)) {

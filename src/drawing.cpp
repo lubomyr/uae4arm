@@ -126,9 +126,7 @@ static struct spritepixelsbuf *spritepixels;
 static int sprite_first_x, sprite_last_x;
 
 /* AGA mode color lookup tables */
-#if !defined(ARMV6T2) && !defined(CPU_AARCH64)
 unsigned int xredcolors[256], xgreencolors[256], xbluecolors[256];
-#endif
 static int dblpf_ind1_aga[256], dblpf_ind2_aga[256];
 
 struct color_entry colors_for_drawing;
@@ -150,7 +148,7 @@ uae_u16 spixels[2 * MAX_SPR_PIXELS];
 
 struct sprite_stb spixstate;
 
-static uae_u16 ham_linebuf[MAX_PIXELS_PER_LINE * 2];
+static uae_u32 ham_linebuf[MAX_PIXELS_PER_LINE * 2];
 
 static uae_u8 *xlinebuffer;
 
@@ -203,7 +201,7 @@ static void clear_inhibit_frame (int bit)
   ad->inhibit_frame &= ~(1 << bit);
 }
 
-STATIC_INLINE void count_frame (void)
+static void count_frame (void)
 {
 	struct amigadisplay *ad = &adisplays;
   ad->framecnt++;
@@ -265,7 +263,7 @@ STATIC_INLINE int get_shdelay_add(void)
 static int playfield_start, playfield_end;
 static int real_playfield_start, real_playfield_end;
 static int playfield_diff;
-static int sprite_playfield_start;
+static int sprite_playfield_start, sprite_end;
 static int may_require_hard_way;
 static int native_ddf_left, native_ddf_right;
 
@@ -346,6 +344,7 @@ static void pfield_init_linetoscr (bool border)
 	real_playfield_start = playfield_start;
 	sprite_playfield_start = playfield_start;
 	real_playfield_end = playfield_end;
+	sprite_end = linetoscr_diw_end;
 
 	// Sprite hpos don't include DIW_DDF_OFFSET and can appear 1 lores pixel
 	// before first bitplane pixel appears.
@@ -391,19 +390,14 @@ static void pfield_init_linetoscr (bool border)
 			if (x > max)
 				max = x;
 		}
-		min = coord_hw_to_window_x (min >> sprite_buffer_res) + (DIW_DDF_OFFSET << lores_shift);
 		max = coord_hw_to_window_x (max >> sprite_buffer_res) + (DIW_DDF_OFFSET << lores_shift);
-
-		if (min < playfield_start)
-			playfield_start = min;
-		if (playfield_start < visible_left_border)
-			playfield_start = visible_left_border;
 		if (max > playfield_end)
 			playfield_end = max;
 		if (playfield_end > visible_right_border)
 			playfield_end = visible_right_border;
 		sprite_playfield_start = 0;
 		may_require_hard_way = 1;
+		sprite_end = max;
 	}
 
 	unpainted = visible_left_border < playfield_start ? 0 : visible_left_border - playfield_start;
@@ -533,21 +527,39 @@ STATIC_INLINE void fill_line_16 (uae_u8 *buf, int start, int stop, int blank)
 		b[stop] = (uae_u16)col;
 }
 
+STATIC_INLINE void fill_line_32 (uae_u8 *buf, int start, int stop, int blank)
+{
+	uae_u32 *b = (uae_u32 *)buf;
+	unsigned int i;
+	xcolnr col = getbgc (blank);
+	for (i = start; i < stop; i++)
+		b[i] = col;
+}
+
 static void pfield_do_fill_line (int start, int stop, int blank)
 {
+	struct vidbuf_description *vidinfo = &adisplays.gfxvidinfo;
 	if (stop <= start)
 		return;
-	fill_line_16 (xlinebuffer, start, stop, blank);
+	switch (vidinfo->drawbuffer.pixbytes) {
+	  case 2: fill_line_16 (xlinebuffer, start, stop, blank); break;
+	  case 4: fill_line_32 (xlinebuffer, start, stop, blank); break;
+	}
 }
 
 static void fill_line2 (int startpos, int len)
 {
+	struct vidbuf_description *vidinfo = &adisplays.gfxvidinfo;
 	int shift;
 	int nints, nrem;
 	int *start;
 	xcolnr val;
 
-	shift = 1;
+	shift = 0;
+	if (vidinfo->drawbuffer.pixbytes == 2)
+	  shift = 1;
+	if (vidinfo->drawbuffer.pixbytes == 4)
+		shift = 2;
 
 	nints = len >> (2 - shift);
 	nrem = nints & 7;
@@ -583,7 +595,7 @@ static void fill_line2 (int startpos, int len)
 	}
 }
 
-STATIC_INLINE void fill_line_border (int lineno)
+static void fill_line_border (int lineno)
 {
 	struct vidbuf_description *vidinfo = &adisplays.gfxvidinfo;
 	int lastpos = visible_left_border;
@@ -630,7 +642,7 @@ static uae_u8 render_sprites (int pos, int dualpf, uae_u8 apixel, int aga)
   plfmask = (plf_sprite_mask >> maskshift) >> maskshift;
   v &= ~plfmask;
 	/* Extra 1 sprite pixel at DDFSTRT is only possible if at least 1 plane is active */
-	if ((bplplanecnt > 0 || pos >= sprite_playfield_start) && (v != 0)) {
+	if ((bplplanecnt > 0 || pos >= sprite_playfield_start) && (pos < sprite_end) && (v != 0)) {
 		unsigned int vlo, vhi, col;
 		unsigned int v1 = v & 255;
 		/* OFFS determines the sprite pair with the highest priority that has
@@ -736,6 +748,62 @@ static int linetoscr_16_sh(int spix, int dpix, int stoppos)
 {
 	return linetoscr_16_sh_func(spix, dpix, stoppos, false);
 }
+static int NOINLINE linetoscr_32_sh_func(int spix, int dpix, int stoppos, int spr)
+{
+	uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+	while (dpix < stoppos) {
+		uae_u32 spix_val1, spix_val2;
+		uae_u16 v;
+		int off;
+		spix_val1 = pixdata.apixels[spix++];
+		spix_val2 = pixdata.apixels[spix++];
+		off = ((spix_val2 & 3) * 4) + (spix_val1 & 3) + ((spix_val1 | spix_val2) & 16);
+		v = (colors_for_drawing.color_regs_ecs[off] & 0xccc) << 0;
+		v |= v >> 2;
+		PUTBPIX(shsprite (dpix, spix_val1, xcolors[v], spr));
+		dpix++;
+		v = (colors_for_drawing.color_regs_ecs[off] & 0x333) << 2;
+		v |= v >> 2;
+		PUTBPIX(shsprite (dpix, spix_val2, xcolors[v], spr));
+		dpix++;
+	}
+	return spix;
+}
+static int linetoscr_32_sh_spr(int spix, int dpix, int stoppos)
+{
+	return linetoscr_32_sh_func(spix, dpix, stoppos, true);
+}
+static int linetoscr_32_sh(int spix, int dpix, int stoppos)
+{
+	return linetoscr_32_sh_func(spix, dpix, stoppos, false);
+}
+static int NOINLINE linetoscr_32_shrink1_sh_func(int spix, int dpix, int stoppos, int spr)
+{
+	uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+	while (dpix < stoppos) {
+		uae_u32 spix_val1, spix_val2;
+		uae_u16 v;
+		int off;
+		spix_val1 = pixdata.apixels[spix++];
+		spix_val2 = pixdata.apixels[spix++];
+		off = ((spix_val2 & 3) * 4) + (spix_val1 & 3) + ((spix_val1 | spix_val2) & 16);
+		v = (colors_for_drawing.color_regs_ecs[off] & 0xccc) << 0;
+		v |= v >> 2;
+		PUTBPIX(shsprite (dpix, spix_val1, xcolors[v], spr));
+		dpix++;
+	}
+	return spix;
+}
+static int linetoscr_32_shrink1_sh_spr(int spix, int dpix, int stoppos)
+{
+	return linetoscr_32_shrink1_sh_func(spix, dpix, stoppos, true);
+}
+static int linetoscr_32_shrink1_sh(int spix, int dpix, int stoppos)
+{
+	return linetoscr_32_shrink1_sh_func(spix, dpix, stoppos, false);
+}
 static int NOINLINE linetoscr_16_shrink1_sh_func(int spix, int dpix, int stoppos, int spr)
 {
 	uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -761,6 +829,33 @@ static int linetoscr_16_shrink1_sh_spr(int spix, int dpix, int stoppos)
 static int linetoscr_16_shrink1_sh(int spix, int dpix, int stoppos)
 {
 	return linetoscr_16_shrink1_sh_func(spix, dpix, stoppos, false);
+}
+static int NOINLINE linetoscr_32_shrink2_sh_func(int spix, int dpix, int stoppos, int spr)
+{
+	uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+	while (dpix < stoppos) {
+		uae_u32 spix_val1, spix_val2;
+		uae_u16 v;
+		int off;
+		spix_val1 = pixdata.apixels[spix++];
+		spix_val2 = pixdata.apixels[spix++];
+		off = ((spix_val2 & 3) * 4) + (spix_val1 & 3) + ((spix_val1 | spix_val2) & 16);
+		v = (colors_for_drawing.color_regs_ecs[off] & 0xccc) << 0;
+		v |= v >> 2;
+		PUTBPIX(shsprite (dpix, spix_val1, xcolors[v], spr));
+		spix+=2;
+		dpix++;
+	}
+	return spix;
+}
+static int linetoscr_32_shrink2_sh_spr(int spix, int dpix, int stoppos)
+{
+	return linetoscr_32_shrink2_sh_func(spix, dpix, stoppos, true);
+}
+static int linetoscr_32_shrink2_sh(int spix, int dpix, int stoppos)
+{
+	return linetoscr_32_shrink2_sh_func(spix, dpix, stoppos, false);
 }
 static int NOINLINE linetoscr_16_shrink2_sh_func(int spix, int dpix, int stoppos, int spr)
 {
@@ -860,6 +955,7 @@ static int pfield_do_linetoscr_sprite_shdelay(int spix, int dpix, int dpix_end)
 
 static void pfield_set_linetoscr (void)
 {
+	struct vidbuf_description *vidinfo = &adisplays.gfxvidinfo;
 	p_acolors = colors_for_drawing.acolors;
 	p_xcolors = xcolors;
 	bpland = 0xff;
@@ -871,22 +967,70 @@ static void pfield_set_linetoscr (void)
 
 	if (currprefs.chipset_mask & CSMASK_AGA) {
 		if (res_shift == 0) {
-				pfield_do_linetoscr_normal = linetoscr_16_aga;
-				pfield_do_linetoscr_sprite = linetoscr_16_aga_spr;
-				pfield_do_linetoscr_spriteonly = linetoscr_16_aga_spronly;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_16_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_16_aga_spronly;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_32_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_32_aga_spronly;
+				  break;
+			}
 		} else if (res_shift == 2) {
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_stretch2_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_16_stretch2_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_16_stretch2_aga_spronly;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_stretch2_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_32_stretch2_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_32_stretch2_aga_spronly;
+				  break;
+			}
 		} else if (res_shift == 1) {
-				pfield_do_linetoscr_normal = linetoscr_16_stretch1_aga;
-				pfield_do_linetoscr_sprite = linetoscr_16_stretch1_aga_spr;
-				pfield_do_linetoscr_spriteonly = linetoscr_16_stretch1_aga_spronly;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_stretch1_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_16_stretch1_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_16_stretch1_aga_spronly;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_stretch1_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_32_stretch1_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_32_stretch1_aga_spronly;
+				  break;
+			}
 		} else if (res_shift == -1) {
-				pfield_do_linetoscr_normal = linetoscr_16_shrink1_aga;
-				pfield_do_linetoscr_sprite = linetoscr_16_shrink1_aga_spr;
-				pfield_do_linetoscr_spriteonly = linetoscr_16_shrink1_aga_spronly;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_shrink1_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_16_shrink1_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_16_shrink1_aga_spronly;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_shrink1_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_32_shrink1_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_32_shrink1_aga_spronly;
+				  break;
+			}
 		} else if (res_shift == -2) {
-				pfield_do_linetoscr_normal = linetoscr_16_shrink2_aga;
-				pfield_do_linetoscr_sprite = linetoscr_16_shrink2_aga_spr;
-				pfield_do_linetoscr_spriteonly = linetoscr_16_shrink2_aga_spronly;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_shrink2_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_16_shrink2_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_16_shrink2_aga_spronly;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_shrink2_aga;
+				  pfield_do_linetoscr_sprite = linetoscr_32_shrink2_aga_spr;
+				  pfield_do_linetoscr_spriteonly = linetoscr_32_shrink2_aga_spronly;
+				  break;
+			}
 		}
 		if (get_shdelay_add()) {
 			pfield_do_linetoscr_shdelay_normal = pfield_do_linetoscr_normal;
@@ -897,27 +1041,85 @@ static void pfield_set_linetoscr (void)
 	}
 	if (!(currprefs.chipset_mask & CSMASK_AGA) && ecsshres) {
 		if (res_shift == 0) {
-				pfield_do_linetoscr_normal = linetoscr_16_sh;
-				pfield_do_linetoscr_sprite = linetoscr_16_sh_spr;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_sh;
+				  pfield_do_linetoscr_sprite = linetoscr_16_sh_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_sh;
+				  pfield_do_linetoscr_sprite = linetoscr_32_sh_spr;
+				  break;
+			}
 		} else if (res_shift == -1) {
-				pfield_do_linetoscr_normal = linetoscr_16_shrink1_sh;
-				pfield_do_linetoscr_sprite = linetoscr_16_shrink1_sh_spr;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_shrink1_sh;
+				  pfield_do_linetoscr_sprite = linetoscr_16_shrink1_sh_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_shrink1_sh;
+				  pfield_do_linetoscr_sprite = linetoscr_32_shrink1_sh_spr;
+				  break;
+			}
 		} else if (res_shift == -2) {
-				pfield_do_linetoscr_normal = linetoscr_16_shrink2_sh;
-				pfield_do_linetoscr_sprite = linetoscr_16_shrink2_sh_spr;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_shrink2_sh;
+				  pfield_do_linetoscr_sprite = linetoscr_16_shrink2_sh_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_shrink2_sh;
+				  pfield_do_linetoscr_sprite = linetoscr_32_shrink2_sh_spr;
+				  break;
+			}
 		}
 	}
 	if (!(currprefs.chipset_mask & CSMASK_AGA) && !ecsshres) {
 		if (res_shift == 0) {
-				pfield_do_linetoscr_normal = linetoscr_16;
-				pfield_do_linetoscr_sprite = linetoscr_16_spr;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16;
+				  pfield_do_linetoscr_sprite = linetoscr_16_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32;
+				  pfield_do_linetoscr_sprite = linetoscr_32_spr;
+				  break;
+			}
 		} else if (res_shift == 2) {
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_stretch2;
+				  pfield_do_linetoscr_sprite = linetoscr_16_stretch2_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_stretch2;
+				  pfield_do_linetoscr_sprite = linetoscr_32_stretch2_spr;
+				  break;
+			}
 		} else if (res_shift == 1) {
-				pfield_do_linetoscr_normal = linetoscr_16_stretch1;
-				pfield_do_linetoscr_sprite = linetoscr_16_stretch1_spr;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_stretch1;
+				  pfield_do_linetoscr_sprite = linetoscr_16_stretch1_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_stretch1;
+				  pfield_do_linetoscr_sprite = linetoscr_32_stretch1_spr;
+				  break;
+			}
 		} else if (res_shift == -1) {
-				pfield_do_linetoscr_normal = linetoscr_16_shrink1;
-				pfield_do_linetoscr_sprite = linetoscr_16_shrink1_spr;
+			switch (vidinfo->drawbuffer.pixbytes) {
+				case 2:
+				  pfield_do_linetoscr_normal = linetoscr_16_shrink1;
+				  pfield_do_linetoscr_sprite = linetoscr_16_shrink1_spr;
+				  break;
+				case 4:
+				  pfield_do_linetoscr_normal = linetoscr_32_shrink1;
+				  pfield_do_linetoscr_sprite = linetoscr_32_shrink1_spr;
+				  break;
+			}
 		}
 	}
 }
@@ -936,104 +1138,8 @@ static void dummy_worker (int start, int stop, int blank)
 {
 }
 
-#if defined(ARMV6T2)
-STATIC_INLINE int DECODE_HAM8_1(int col, int pv)
-{
-  __asm__ (
-    "ubfx    %[pv], %[pv], #3, #5      \n\t"
-    "bfi     %[col], %[pv], #0, #5     \n\t"
-    : [col] "+r" (col) , [pv] "+r" (pv) );
-  return col;
-}
-STATIC_INLINE int DECODE_HAM8_2(int col, int pv)
-{
-  __asm__ (
-    "ubfx    %[pv], %[pv], #3, #5      \n\t"
-    "bfi     %[col], %[pv], #11, #5    \n\t"
-    : [col] "+r" (col) , [pv] "+r" (pv) );
-  return col;
-}
-STATIC_INLINE int DECODE_HAM8_3(int col, int pv)
-{
-  __asm__ (
-    "ubfx    %[pv], %[pv], #2, #6      \n\t"
-    "bfi     %[col], %[pv], #5, #6     \n\t"
-    : [col] "+r" (col) , [pv] "+r" (pv) );
-  return col;
-}
-
-STATIC_INLINE int DECODE_HAM6_1(int col, int pv)
-{
-  __asm__ (
-    "bfi     %[col], %[pv], #1, #4     \n\t"
-    : [col] "+r" (col) : [pv] "r" (pv) );
-  return (col);
-}
-STATIC_INLINE int DECODE_HAM6_2(int col, int pv)
-{
-  __asm__ (
-    "bfi     %[col], %[pv], #12, #4     \n\t"
-    : [col] "+r" (col) : [pv] "r" (pv) );
-  return (col);
-}
-STATIC_INLINE int DECODE_HAM6_3(int col, int pv)
-{
-  __asm__ (
-    "bfi     %[col], %[pv], #7, #4     \n\t"
-    : [col] "+r" (col) : [pv] "r" (pv) );
-  return (col);
-}
-#elif defined(CPU_AARCH64)
-STATIC_INLINE int DECODE_HAM8_1(int col, int pv)
-{
-  __asm__ (
-    "ubfx    %w[pv], %w[pv], #3, #5      \n\t"
-    "bfi     %w[col], %w[pv], #0, #5     \n\t"
-    : [col] "+r" (col) , [pv] "+r" (pv) );
-  return col;
-}
-STATIC_INLINE int DECODE_HAM8_2(int col, int pv)
-{
-  __asm__ (
-    "ubfx    %w[pv], %w[pv], #3, #5      \n\t"
-    "bfi     %w[col], %w[pv], #11, #5    \n\t"
-    : [col] "+r" (col) , [pv] "+r" (pv) );
-  return col;
-}
-STATIC_INLINE int DECODE_HAM8_3(int col, int pv)
-{
-  __asm__ (
-    "ubfx    %w[pv], %w[pv], #2, #6      \n\t"
-    "bfi     %w[col], %w[pv], #5, #6     \n\t"
-    : [col] "+r" (col) , [pv] "+r" (pv) );
-  return col;
-}
-
-STATIC_INLINE int DECODE_HAM6_1(int col, int pv)
-{
-  __asm__ (
-    "bfi     %w[col], %w[pv], #1, #4     \n\t"
-    : [col] "+r" (col) : [pv] "r" (pv) );
-  return (col);
-}
-STATIC_INLINE int DECODE_HAM6_2(int col, int pv)
-{
-  __asm__ (
-    "bfi     %w[col], %w[pv], #12, #4     \n\t"
-    : [col] "+r" (col) : [pv] "r" (pv) );
-  return (col);
-}
-STATIC_INLINE int DECODE_HAM6_3(int col, int pv)
-{
-  __asm__ (
-    "bfi     %w[col], %w[pv], #7, #4     \n\t"
-    : [col] "+r" (col) : [pv] "r" (pv) );
-  return (col);
-}
-#endif
-
 static int ham_decode_pixel;
-static uae_u16 ham_lastcolor;
+static uae_u32 ham_lastcolor;
 
 /* Decode HAM in the invisible portion of the display (left of VISIBLE_LEFT_BORDER),
  * but don't draw anything in.  This is done to prepare HAM_LASTCOLOR for later,
@@ -1045,50 +1151,41 @@ static void init_ham_decoding (void)
   int unpainted_amiga = unpainted;
 
   ham_decode_pixel = src_pixel;
-	ham_lastcolor = colors_for_drawing.acolors[0];
+	ham_lastcolor = color_reg_get (&colors_for_drawing, 0);
 	
 	if (!bplham) {
 		if (unpainted_amiga > 0) {
 			int pv = pixdata.apixels[ham_decode_pixel + unpainted_amiga - 1];
 			if (aga_mode)
-				ham_lastcolor = colors_for_drawing.acolors[pv ^ bplxor];
+				ham_lastcolor = colors_for_drawing.color_regs_aga[pv ^ bplxor] & 0xffffff;
 			else
-				ham_lastcolor = colors_for_drawing.acolors[pv];
+				ham_lastcolor = colors_for_drawing.color_regs_ecs[pv] & 0xfff;
 		}
 	} else if (aga_mode) {
 		if (bplplanecnt >= 7) { /* AGA mode HAM8 */
 			while (unpainted_amiga-- > 0) {
-				int pv = pixdata.apixels[ham_decode_pixel++] ^ bplxor;
+				int pw = pixdata.apixels[ham_decode_pixel++];
+				int pv = pw ^ bplxor;
+				int pc = pv >> 2;
 				switch (pv & 0x3) 
         {
-					case 0x0: ham_lastcolor = colors_for_drawing.acolors[pv >> 2]; break;
-#if defined(ARMV6T2) || defined(CPU_AARCH64)
-					case 0x1: ham_lastcolor = DECODE_HAM8_1(ham_lastcolor, pv); break;
-					case 0x2: ham_lastcolor = DECODE_HAM8_2(ham_lastcolor, pv); break;
-					case 0x3: ham_lastcolor = DECODE_HAM8_3(ham_lastcolor, pv); break;
-#else
-				  case 0x1: ham_lastcolor &= 0xFFFF03; ham_lastcolor |= (pv & 0xFC); break;
-				  case 0x2: ham_lastcolor &= 0x03FFFF; ham_lastcolor |= (pv & 0xFC) << 16; break;
-				  case 0x3: ham_lastcolor &= 0xFF03FF; ham_lastcolor |= (pv & 0xFC) << 8; break;
-#endif
+				  case 0x0: ham_lastcolor = colors_for_drawing.color_regs_aga[pc] & 0xffffff; break;
+				  case 0x1: ham_lastcolor &= 0xFFFF03; ham_lastcolor |= (pw & 0xFC); break;
+				  case 0x2: ham_lastcolor &= 0x03FFFF; ham_lastcolor |= (pw & 0xFC) << 16; break;
+				  case 0x3: ham_lastcolor &= 0xFF03FF; ham_lastcolor |= (pw & 0xFC) << 8; break;
 				}
 			}
 		} else { /* AGA mode HAM6 */
 			while (unpainted_amiga-- > 0) {
-				int pv = pixdata.apixels[ham_decode_pixel++] ^ bplxor;
-				uae_u32 pc = ((pv & 0xf) << 0) | ((pv & 0xf) << 4);
+				int pw = pixdata.apixels[ham_decode_pixel++];
+				int pv = pw ^ bplxor;
+				uae_u32 pc = ((pw & 0xf) << 0) | ((pw & 0xf) << 4);
 				switch (pv & 0x30) 
         {
-					case 0x00: ham_lastcolor = colors_for_drawing.acolors[pv]; break;
-#if defined(ARMV6T2) || defined(CPU_AARCH64)
-					case 0x10: ham_lastcolor = DECODE_HAM8_1(ham_lastcolor, pc); break;
-					case 0x20: ham_lastcolor = DECODE_HAM8_2(ham_lastcolor, pc); break;
-					case 0x30: ham_lastcolor = DECODE_HAM8_3(ham_lastcolor, pc); break;
-#else
-				  case 0x10: ham_lastcolor &= 0xFFFF00; ham_lastcolor |= (pc & 0xF) << 4; break;
-				  case 0x20: ham_lastcolor &= 0x00FFFF; ham_lastcolor |= (pc & 0xF) << 20; break;
-				  case 0x30: ham_lastcolor &= 0xFF00FF; ham_lastcolor |= (pc & 0xF) << 12; break;
-#endif
+				  case 0x00: ham_lastcolor = colors_for_drawing.color_regs_aga[pv & 0x0f] & 0xffffff; break;
+				  case 0x10: ham_lastcolor &= 0xFFFF00; ham_lastcolor |= pc << 0; break;
+				  case 0x20: ham_lastcolor &= 0x00FFFF; ham_lastcolor |= pc << 16; break;
+				  case 0x30: ham_lastcolor &= 0xFF00FF; ham_lastcolor |= pc << 8; break;
 				}
 			}
 		}
@@ -1098,16 +1195,10 @@ static void init_ham_decoding (void)
 			int pv = pixdata.apixels[ham_decode_pixel++];
 			switch (pv & 0x30) 
       {
-				case 0x00: ham_lastcolor = colors_for_drawing.acolors[pv]; break;
-#if defined(ARMV6T2) || defined(CPU_AARCH64)
-				case 0x10: ham_lastcolor = DECODE_HAM6_1(ham_lastcolor, pv); break;
-				case 0x20: ham_lastcolor = DECODE_HAM6_2(ham_lastcolor, pv); break;
-				case 0x30: ham_lastcolor = DECODE_HAM6_3(ham_lastcolor, pv); break;
-#else
+			  case 0x00: ham_lastcolor = colors_for_drawing.color_regs_ecs[pv] & 0xfff; break;
 			  case 0x10: ham_lastcolor &= 0xFF0; ham_lastcolor |= (pv & 0xF); break;
 			  case 0x20: ham_lastcolor &= 0x0FF; ham_lastcolor |= (pv & 0xF) << 8; break;
 			  case 0x30: ham_lastcolor &= 0xF0F; ham_lastcolor |= (pv & 0xF) << 4; break;
-#endif
 			}
 		}
 	}
@@ -1121,47 +1212,38 @@ static void decode_ham (int pix, int stoppos, int blank)
 		while (todraw_amiga-- > 0) {
 			int pv = pixdata.apixels[ham_decode_pixel];
 			if (aga_mode)
-				ham_lastcolor = colors_for_drawing.acolors[pv ^ bplxor];
+				ham_lastcolor = colors_for_drawing.color_regs_aga[pv ^ bplxor] & 0xffffff;
 			else
-				ham_lastcolor = colors_for_drawing.acolors[pv];
+				ham_lastcolor = colors_for_drawing.color_regs_ecs[pv] & 0xfff;
 			
 			ham_linebuf[ham_decode_pixel++] = ham_lastcolor;
 		}
 	} else if (aga_mode) {
 		if (bplplanecnt >= 7) { /* AGA mode HAM8 */
 			while (todraw_amiga-- > 0) {
-				int pv = pixdata.apixels[ham_decode_pixel] ^ bplxor;
+				int pw = pixdata.apixels[ham_decode_pixel];
+				int pv = pw ^ bplxor;
+				int pc = pv >> 2;
 				switch (pv & 0x3) 
         {
-					case 0x0: ham_lastcolor = colors_for_drawing.acolors[pv >> 2]; break;
-#if defined(ARMV6T2) || defined(CPU_AARCH64)
-					case 0x1: ham_lastcolor = DECODE_HAM8_1(ham_lastcolor, pv); break;
-					case 0x2: ham_lastcolor = DECODE_HAM8_2(ham_lastcolor, pv); break;
-					case 0x3: ham_lastcolor = DECODE_HAM8_3(ham_lastcolor, pv); break;
-#else
-				  case 0x1: ham_lastcolor &= 0xFFFF03; ham_lastcolor |= (pv & 0xFC); break;
-				  case 0x2: ham_lastcolor &= 0x03FFFF; ham_lastcolor |= (pv & 0xFC) << 16; break;
-				  case 0x3: ham_lastcolor &= 0xFF03FF; ham_lastcolor |= (pv & 0xFC) << 8; break;
-#endif
+				  case 0x0: ham_lastcolor = colors_for_drawing.color_regs_aga[pc] & 0xffffff; break;
+				  case 0x1: ham_lastcolor &= 0xFFFF03; ham_lastcolor |= (pw & 0xFC); break;
+				  case 0x2: ham_lastcolor &= 0x03FFFF; ham_lastcolor |= (pw & 0xFC) << 16; break;
+				  case 0x3: ham_lastcolor &= 0xFF03FF; ham_lastcolor |= (pw & 0xFC) << 8; break;
 				}
 				ham_linebuf[ham_decode_pixel++] = ham_lastcolor;
 			}
 		} else { /* AGA mode HAM6 */
 			while (todraw_amiga-- > 0) {
-				int pv = pixdata.apixels[ham_decode_pixel] ^ bplxor;
-				uae_u32 pc = ((pv & 0xf) << 0) | ((pv & 0xf) << 4);
+				int pw = pixdata.apixels[ham_decode_pixel];
+				int pv = pw ^ bplxor;
+				uae_u32 pc = ((pw & 0xf) << 0) | ((pw & 0xf) << 4);
 				switch (pv & 0x30) 
         {
-					case 0x00: ham_lastcolor = colors_for_drawing.acolors[pv]; break;
-#if defined(ARMV6T2) || defined(CPU_AARCH64)
-					case 0x10: ham_lastcolor = DECODE_HAM8_1(ham_lastcolor, pc); break;
-					case 0x20: ham_lastcolor = DECODE_HAM8_2(ham_lastcolor, pc); break;
-					case 0x30: ham_lastcolor = DECODE_HAM8_3(ham_lastcolor, pc); break;
-#else
-				  case 0x10: ham_lastcolor &= 0xFFFF00; ham_lastcolor |= (pc & 0xF) << 4; break;
-				  case 0x20: ham_lastcolor &= 0x00FFFF; ham_lastcolor |= (pc & 0xF) << 20; break;
-				  case 0x30: ham_lastcolor &= 0xFF00FF; ham_lastcolor |= (pc & 0xF) << 12; break;
-#endif
+				  case 0x00: ham_lastcolor = colors_for_drawing.color_regs_aga[pv & 0x0f] & 0xffffff; break;
+				  case 0x10: ham_lastcolor &= 0xFFFF00; ham_lastcolor |= pc << 0; break;
+				  case 0x20: ham_lastcolor &= 0x00FFFF; ham_lastcolor |= pc << 16; break;
+				  case 0x30: ham_lastcolor &= 0xFF00FF; ham_lastcolor |= pc << 8; break;
 				}
 				ham_linebuf[ham_decode_pixel++] = ham_lastcolor;
 			}
@@ -1172,16 +1254,10 @@ static void decode_ham (int pix, int stoppos, int blank)
 			int pv = pixdata.apixels[ham_decode_pixel];
 			switch (pv & 0x30) 
       {
-				case 0x00: ham_lastcolor = colors_for_drawing.acolors[pv]; break;
-#if defined(ARMV6T2) || defined(CPU_AARCH64)
-				case 0x10: ham_lastcolor = DECODE_HAM6_1(ham_lastcolor, pv); break;
-				case 0x20: ham_lastcolor = DECODE_HAM6_2(ham_lastcolor, pv); break;
-				case 0x30: ham_lastcolor = DECODE_HAM6_3(ham_lastcolor, pv); break;
-#else
+  			case 0x00: ham_lastcolor = colors_for_drawing.color_regs_ecs[pv] & 0xfff; break;
 			  case 0x10: ham_lastcolor &= 0xFF0; ham_lastcolor |= (pv & 0xF); break;
 			  case 0x20: ham_lastcolor &= 0x0FF; ham_lastcolor |= (pv & 0xF) << 8; break;
 			  case 0x30: ham_lastcolor &= 0xF0F; ham_lastcolor |= (pv & 0xF) << 4; break;
-#endif
 			}
 			ham_linebuf[ham_decode_pixel++] = ham_lastcolor;
 		}
@@ -1236,7 +1312,7 @@ STATIC_INLINE void draw_sprites_1 (struct sprite_entry *e, const int dualpf, con
   stbuf -= epos;
 	stfmbuf -= epos;
 
-  spr_pos = epos + ((DIW_DDF_OFFSET - DISPLAY_LEFT_SHIFT) << sprite_buffer_res);
+	spr_pos = epos - ((DISPLAY_LEFT_SHIFT - DIW_DDF_OFFSET) << sprite_buffer_res);
 
 	if (spr_pos < sprite_first_x)
 		sprite_first_x = spr_pos;
@@ -1612,7 +1688,7 @@ static void pfield_expand_dp_bplcon (void)
 			bplehb = -1;
 	}
 	int oecsshres = ecsshres;
-	ecsshres = bplres == RES_SUPERHIRES && (currprefs.chipset_mask & CSMASK_ECS_DENISE) && !(currprefs.chipset_mask & CSMASK_AGA);
+	ecsshres = bplres == RES_SUPERHIRES && (currprefs.chipset_mask & CSMASK_ECS_DENISE) && !(currprefs.chipset_mask & CSMASK_AGA) && (dp_for_drawing->bplcon0 & 0x40);
 	pfield_mode_changed = oecsshres != ecsshres;
     
   plf1pri = dp_for_drawing->bplcon2 & 7;
@@ -1763,7 +1839,7 @@ static void playfield_hard_way(line_draw_func worker_pfield, int first, int last
 	ham_decode_pixel -= playfield_diff;
 }
 
-STATIC_INLINE void do_color_changes (line_draw_func worker_border, line_draw_func worker_pfield)
+static void do_color_changes (line_draw_func worker_border, line_draw_func worker_pfield)
 {
   int i;
   int lastpos = visible_left_border;
@@ -2032,7 +2108,7 @@ static void draw_status_line (int line, int statusy)
 
   xlinebuffer = row_map[line];
   buf = xlinebuffer;
-  draw_status_line_single (buf, statusy, vidinfo->drawbuffer.outwidth);
+  draw_status_line_single (buf, vidinfo->drawbuffer.pixbytes, statusy, vidinfo->drawbuffer.outwidth, xredcolors, xgreencolors, xbluecolors);
 }
 
 static void partial_draw_frame(void)
@@ -2161,7 +2237,7 @@ void vsync_handle_redraw (void)
 	if (ad->framecnt == 0) {
     if(render_tid) {
       while(render_thread_busy)
-        sleep_millis(1);
+        sleep_micros(10);
       write_comm_pipe_u32 (render_pipe, RENDER_SIGNAL_FRAME_DONE, 1);
       uae_sem_wait (&render_sem);
     }
@@ -2170,10 +2246,10 @@ void vsync_handle_redraw (void)
 	if (quit_program < 0) {
     if(render_tid) {
       while(render_thread_busy)
-        sleep_millis(1);
+        sleep_micros(1);
       write_comm_pipe_u32 (render_pipe, RENDER_SIGNAL_QUIT, 1);
       while(render_tid != 0) {
-        sleep_millis(10);
+        sleep_micros(10);
       }
       destroy_comm_pipe(render_pipe);
       xfree(render_pipe);
@@ -2190,8 +2266,9 @@ void vsync_handle_redraw (void)
 
 	count_frame ();
 
-	if (ad->framecnt == 0)
+	if (ad->framecnt == 0) {
 		init_drawing_frame ();
+  }
 
 	gui_flicker_led (-1, 0, 0);
 }
@@ -2267,10 +2344,17 @@ static int render_thread (void *unused)
     render_thread_busy = true;
     switch(signal) {
       case RENDER_SIGNAL_PARTIAL:
-        partial_draw_frame();
+#ifndef ANDROID
+        if(!flip_in_progess)
+#endif
+          partial_draw_frame();
         break;
 
       case RENDER_SIGNAL_FRAME_DONE:
+#ifndef ANDROID
+        while(flip_in_progess)
+          sleep_micros(1);
+#endif
         finish_drawing_frame();
         uae_sem_post (&render_sem);
         break;

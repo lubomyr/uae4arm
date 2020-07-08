@@ -61,6 +61,9 @@ struct PicassoResolution *DisplayModes;
 struct MultiDisplay Displays[MAX_DISPLAYS];
 
 int screen_is_picasso = 0;
+static int nativeScreenWidth = 1024;
+static int nativeScreenHeight = 800;
+static int nativeScreenDepth = 16;
 
 static SDL_Surface *current_screenshot = NULL;
 static char screenshot_filename_default[MAX_DPATH]={
@@ -781,6 +784,16 @@ bool target_graphics_buffer_update (void)
   return true;
 }
 
+void target_detect_displaysize(void)
+{
+	const SDL_VideoInfo *vid_info;
+
+	if ((vid_info = SDL_GetVideoInfo())) {
+    nativeScreenWidth = vid_info->current_w;
+    nativeScreenHeight = vid_info->current_h;
+		nativeScreenDepth = vid_info->vfmt->BitsPerPixel;
+  }
+}
 
 #ifdef PICASSO96
 
@@ -957,6 +970,11 @@ void gfx_unlock_picasso (bool dorender)
     render_screen(true);
     show_screen(0);
   }
+}
+
+void gfx_set_picasso_colors(RGBFTYPE rgbfmt)
+{
+	alloc_colors_picasso(red_bits, green_bits, blue_bits, red_shift, green_shift, blue_shift, rgbfmt, p96_rgbx16);
 }
 
 #endif // PICASSO96

@@ -41,7 +41,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "fdi2raw.h"
 #include "crc32.h"
 
-
 #define fdi_free xfree
 #define fdi_malloc xmalloc
 

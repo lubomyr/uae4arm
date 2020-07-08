@@ -67,7 +67,7 @@ static uae_u8 kbcode;
 static struct rtc_msm_data rtc_msm;
 static struct rtc_ricoh_data rtc_ricoh;
 
-STATIC_INLINE void setclr (unsigned int *p, unsigned int val)
+static void setclr (unsigned int *p, unsigned int val)
 {
   if (val & 0x80) {
   	*p |= val & 0x7F;
@@ -76,12 +76,12 @@ STATIC_INLINE void setclr (unsigned int *p, unsigned int val)
   }
 }
 
-STATIC_INLINE void ICR (uae_u32 data)
+static void ICR (uae_u32 data)
 {
 	safe_interrupt_set((data & 0x2000) != 0);
 }
 
-STATIC_INLINE void ICRA(uae_u32 dummy)
+static void ICRA(uae_u32 dummy)
 {
 	if (ciaaicr & 0x80)
   	ciaaicr |= 0x40;
@@ -89,7 +89,7 @@ STATIC_INLINE void ICRA(uae_u32 dummy)
 	ICR (0x0008);
 }
 
-STATIC_INLINE void ICRB(uae_u32 dummy)
+static void ICRB(uae_u32 dummy)
 {
 	if (ciabicr & 0x80)
 	  ciabicr |= 0x40;
@@ -97,7 +97,7 @@ STATIC_INLINE void ICRB(uae_u32 dummy)
 	ICR (0x2000);
 }
 
-STATIC_INLINE void RethinkICRA (void)
+static void RethinkICRA (void)
 {
   if (ciaaicr & ciaaimask) {
 		if (!(ciaaicr & 0x80)) {
@@ -107,7 +107,7 @@ STATIC_INLINE void RethinkICRA (void)
   }
 }
 
-STATIC_INLINE void RethinkICRB (void)
+static void RethinkICRB (void)
 {
   if (ciabicr & ciabimask) {
 		if (!(ciabicr & 0x80)) {
@@ -490,7 +490,7 @@ void CIAB_tod_handler (int hoffset)
 	}
 }
 
-STATIC_INLINE void check_keyboard(void)
+static void check_keyboard(void)
 {
   if ((keys_available() || kbstate < 3) && !kblostsynccnt) {
     switch (kbstate) 
@@ -559,7 +559,7 @@ void CIAA_tod_inc (int cycles)
 	event2_newevent_xx (-1, cycles + TOD_INC_DELAY, 0, CIAA_tod_handler);
 }
 
-STATIC_INLINE void check_led (void)
+static void check_led (void)
 {
   uae_u8 v = ciaapra;
 
@@ -874,6 +874,7 @@ static void WriteCIAA (uae_u16 addr,uae_u8 val)
 	  if ((val & 1) && !(ciaacra & 1))
 		  ciaastarta = CIASTARTCYCLESCRA;
 	  if ((val & 0x40) == 0 && (ciaacra & 0x40) != 0) {
+			// handshake end
 		  /* todo: check if low to high or high to low only */
 		  kblostsynccnt = 0;
 	  }
@@ -1063,13 +1064,6 @@ void CIA_reset (void)
 			map_overlay (oldovl ? 0 : 1);
 		}
   }
-#ifdef CD32
-	if (!isrestore ()) {
-		akiko_reset ();
-		if (!akiko_init ())
-			currprefs.cs_cd32cd = changed_prefs.cs_cd32cd = 0;
-	}
-#endif
 }
 
 /* CIA memory access */

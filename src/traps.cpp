@@ -567,6 +567,16 @@ uae_u32 trap_call_func(TrapContext *ctx, uaecptr func)
 	return v;
 }
 
+bool trap_valid_string(TrapContext *ctx, uaecptr addr, uae_u32 maxsize)
+{
+	for (int i = 0; i < maxsize; i++) {
+		if (!valid_address(addr + i, 1))
+			return false;
+		if (get_byte(addr + i) == 0)
+			return true;
+	}
+	return false;
+}
 
 bool trap_valid_address(TrapContext *ctx, uaecptr addr, uae_u32 size)
 {
@@ -825,4 +835,17 @@ void trap_multi(TrapContext *ctx, struct trapmd *data, int items)
 			data[md->trapmd_index].params[md->parm_num] = v;
 		}
 	}
+}
+
+void trap_memcpyha_safe(TrapContext *ctx, uaecptr dst, const uae_u8 *src, int size)
+{
+	if (size <= 0)
+		return;
+	memcpyha_safe(dst, src, size);
+}
+void trap_memcpyah_safe(TrapContext *ctx, uae_u8 *dst, uaecptr src, int size)
+{
+	if (size <= 0)
+		return;
+	memcpyah_safe(dst, src, size);
 }

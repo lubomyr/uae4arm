@@ -17,6 +17,7 @@ struct zdirectory;
 
 #define FS_DIRECTORY 0
 #define FS_ARCHIVE 1
+#define FS_CDFS 2
 
 struct fs_dirhandle
 {
@@ -24,6 +25,7 @@ struct fs_dirhandle
 	union {
 		struct zdirectory *zd;
 		struct my_opendir_s *od;
+		struct cd_opendir_s *isod;
 	};
 };
 struct fs_filehandle
@@ -32,6 +34,7 @@ struct fs_filehandle
 	union {
 		struct zfile *zf;
 		struct my_openfile_s *of;
+		struct cd_openfile_s *isof;
 	};
 };
 
@@ -74,7 +77,6 @@ extern struct zfile *zfile_gunzip (struct zfile *z);
 extern int zfile_is_diskimage (const TCHAR *name);
 extern int iszip (struct zfile *z);
 extern struct zfile *zuncompress (struct znode*, struct zfile *z, int dodefault, int mask, int *retcode, int index);
-extern void zfile_seterror (const TCHAR *format, ...);
 extern int zfile_truncate (struct zfile *z, uae_s64 size);
 
 #define ZFD_NONE 0

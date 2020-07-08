@@ -15,8 +15,8 @@
 #include "traps.h"
 
 #define UAEMAJOR 4
-#define UAEMINOR 2
-#define UAESUBREV 1
+#define UAEMINOR 3
+#define UAESUBREV 0
 
 typedef enum { KBD_LANG_US, KBD_LANG_DK, KBD_LANG_DE, KBD_LANG_SE, KBD_LANG_FR, KBD_LANG_IT, KBD_LANG_ES } KbdLang;
 
@@ -80,6 +80,7 @@ struct inputdevconfig {
 struct jport {
 	int id;
 	int mode; // 0=def,1=mouse,2=joy,3=anajoy
+	int submode;
 	int autofire;
 	struct inputdevconfig idc;
 	bool nokeyboardoverride;
@@ -130,9 +131,6 @@ struct wh {
 
 #define HD_LEVEL_SCSI_1 0
 #define HD_LEVEL_SCSI_2 1
-#define HD_LEVEL_SASI 2
-#define HD_LEVEL_SASI_ENHANCED 2
-#define HD_LEVEL_SASI_CHS 3
 
 #define HD_LEVEL_ATA_1 0
 #define HD_LEVEL_ATA_2 1
@@ -162,7 +160,6 @@ struct uaedev_config_info {
 	int controller_type;
 	int controller_type_unit;
 	int controller_unit;
-	int controller_media_type; // 1 = CF IDE, 0 = normal
 	int unit_feature_level;
 	int unit_special_flags;
 	int pcyls, pheads, psecs;
@@ -185,7 +182,6 @@ struct uaedev_config_data
 {
 	struct uaedev_config_info ci;
 	int configoffset; // HD config entry index
-	int unitnum; // scsi unit number (if tape currently)
 };
 
 enum { CP_GENERIC = 1, CP_CD32, CP_A500, CP_A500P, CP_A600,
@@ -230,6 +226,7 @@ struct romconfig
 	TCHAR romfile[MAX_DPATH];
 	TCHAR romident[256];
 	uae_u32 board_ram_size;
+	bool inserted;
 	struct boardromconfig *back;
 };
 #define MAX_BOARD_ROMS 2
@@ -302,6 +299,7 @@ struct uae_prefs {
 	struct apmode gfx_apmode[2];
   int gfx_resolution;
  	int gfx_vresolution;
+	int color_mode;
 
   bool immediate_blits;
 	int waiting_blits;
@@ -312,6 +310,7 @@ struct uae_prefs {
   int collision_level;
   int leds_on_screen;
 	int leds_on_screen_mask[2];
+	int scsi;
   int fast_copper;
   int floppy_speed;
   int floppy_write_length;
@@ -485,6 +484,7 @@ extern struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int i
 extern void uci_set_defaults (struct uaedev_config_info *uci, bool rdb);
 
 extern void error_log (const TCHAR*, ...);
+
 extern void default_prefs (struct uae_prefs *, bool, int);
 extern void discard_prefs (struct uae_prefs *, int);
 extern void copy_prefs(struct uae_prefs *src, struct uae_prefs *dst);
@@ -529,7 +529,6 @@ extern void fixup_prefs_dimensions (struct uae_prefs *prefs);
 extern void fixup_prefs (struct uae_prefs *prefs, bool userconfig);
 extern void fixup_cpu (struct uae_prefs *prefs);
 extern void cfgfile_compatibility_romtype(struct uae_prefs *p);
-extern void cfgfile_compatibility_rtg(struct uae_prefs *p);
 extern bool cfgfile_createconfigstore(struct uae_prefs *p);
 
 extern void check_prefs_changed_custom (void);

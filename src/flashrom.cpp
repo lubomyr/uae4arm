@@ -185,7 +185,6 @@ int eeprom_i2c_set(void *fdv, int line, int level)
 		    } else {
 		      i2c->memory[i2c->eeprom_addr] = i2c->buffer;
 		      i2c->eeprom_addr = (i2c->eeprom_addr & ~(NVRAM_PAGE_SIZE - 1)) | (i2c->eeprom_addr + 1) & (NVRAM_PAGE_SIZE - 1);
-		      gui_flicker_led (LED_MD, 0, 2);
   			}
       }
       if (i2c->current_addr & 1) {
@@ -205,7 +204,6 @@ int eeprom_i2c_set(void *fdv, int line, int level)
   		//i2c->buffer = i2c_recv(i2c->bus);
 	    i2c->eeprom_addr++;
 	    i2c->eeprom_addr &= i2c->size - 1;
-	    gui_flicker_led (LED_MD, 0, 1);
       /* Fall through... */
     case RECEIVING_BIT6:
     case RECEIVING_BIT5:

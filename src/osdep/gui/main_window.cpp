@@ -530,6 +530,8 @@ namespace sdl
         refreshFuncAfterDraw = NULL;
         currFunc();
       }
+      
+      sleep_millis(10);
     }
   }
 }

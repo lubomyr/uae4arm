@@ -177,21 +177,38 @@ static void getchsgeometry (uae_u64 size, int *pcyl, int *phead, int *psectorspe
 	getchsgeometry2 (size, pcyl, phead, psectorspertrack, 0);
 }
 
+// partition hdf default
+void gethdfgeometry(uae_u64 size, struct uaedev_config_info *ci)
+{
+	int head = 1;
+	int sectorspertrack = 32;
+	if (size >= 1048576000) { // >=1000M
+		head = 16;
+		while ((size / 512) / ((uae_u64)head * sectorspertrack) >= 32768 && sectorspertrack < 32768) {
+			sectorspertrack *= 2;
+		}
+	}
+	ci->surfaces = head;
+	ci->sectors = sectorspertrack;
+	ci->reserved = 2;
+	ci->blocksize = 512;
+}
+
 static void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry)
 {
 	uae_u64 blocks = total / 512;
 
-	if (blocks > 16515072) {
-		/* >8G, CHS=16383/16/63 */
-		*pcyl = 16383;
-		*phead = 16;
-		*psectorspertrack = 63;
-		return;
-	}
 	if (idegeometry) {
 		*phead = 16;
 		*psectorspertrack = 63;
 		*pcyl = blocks / ((*psectorspertrack) * (*phead));
+	  if (blocks > 16515072) {
+		  /* >8G, CHS=16383/16/63 */
+		  *pcyl = 16383;
+		  *phead = 16;
+		  *psectorspertrack = 63;
+		  return;
+	  }
 		return;
 	}
 	getchsgeometry (total, pcyl, phead, psectorspertrack);
@@ -739,43 +756,10 @@ static void setdrivestring(const TCHAR *s, uae_u8 *d, int start, int length)
 	xfree (ss);
 }
 
-static const uae_u8 sasi_commands[] =
-{
-	0x00, 0x01, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x12,
-	0xe0, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7,
-	0xff
-};
-static const uae_u8 sasi_commands2[] =
-{
-	0x12,
-	0xff
-};
-
 static uae_u64 get_scsi_6_offset(struct hardfiledata *hfd, struct hd_hardfiledata *hdhfd, uae_u8 *cmdbuf, uae_u64 *lba)
 {
-	bool chs = hfd->ci.unit_feature_level == HD_LEVEL_SASI_CHS;
 	uae_u64 offset;
-	if (chs) {
-		int cyl, cylsec, head, tracksec;
-		if (hdhfd) {
-			cyl = hdhfd->cyls;
-			head = hdhfd->heads;
-			tracksec = hdhfd->secspertrack;
-			cylsec = 0;
-		} else {
-			getchsx(hfd, &cyl, &cylsec, &head, &tracksec);
-		}
-		int d_head = cmdbuf[1] & 31;
-		int d_cyl = cmdbuf[3] | ((cmdbuf[2] >> 6) << 8) | ((cmdbuf[1] >> 7) << 10);
-		int d_sec = cmdbuf[2] & 63;
-
-		*lba = ((cmdbuf[1] & (0x1f | 0x80 | 0x40)) << 16) | (cmdbuf[2] << 8) || cmdbuf[3];
-		if (d_cyl >= cyl || d_head >= head || d_sec >= tracksec)
-			return ~0;
-		offset = d_cyl * head * tracksec + d_head * tracksec + d_sec;
-	} else {
-		offset = ((cmdbuf[1] & 31) << 16) | (cmdbuf[2] << 8) | cmdbuf[3];
-	}
+	offset = ((cmdbuf[1] & 31) << 16) | (cmdbuf[2] << 8) | cmdbuf[3];
 	return offset;
 }
 
@@ -793,10 +777,6 @@ int scsi_hd_emulate (struct hardfiledata *hfd, struct hd_hardfiledata *hdhfd, ua
 	int status = 0;
 	int lun;
 	uae_u8 cmd;
-	bool sasi = hfd->ci.unit_feature_level >= HD_LEVEL_SASI && hfd->ci.unit_feature_level <= HD_LEVEL_SASI_ENHANCED;
-	bool sasie = hfd->ci.unit_feature_level == HD_LEVEL_SASI_ENHANCED;
-	bool omti = hfd->ci.unit_feature_level == HD_LEVEL_SASI_CHS;
-	uae_u8 sasi_sense = 0;
 	uae_u64 current_lba = ~0;
 
 	cmd = cmdbuf[0];
@@ -808,11 +788,6 @@ int scsi_hd_emulate (struct hardfiledata *hfd, struct hd_hardfiledata *hdhfd, ua
 
 	*reply_len = *sense_len = 0;
 	lun = cmdbuf[1] >> 5;
-	if (sasi || omti) {
-		lun = lun & 1;
-		if (lun)
-			goto nodisk;
-	}
 	if (cmd != 0x03 && cmd != 0x12 && lun) {
 		status = 2; /* CHECK CONDITION */
 		s[0] = 0x70;
@@ -821,87 +796,6 @@ int scsi_hd_emulate (struct hardfiledata *hfd, struct hd_hardfiledata *hdhfd, ua
 		ls = 0x12;
 		write_log (_T("UAEHF: CMD=%02X LUN=%d ignored\n"), cmdbuf[0], lun);
 		goto scsi_done;
-	}
-
-	if (sasi || omti) {
-		int i;
-		for (i = 0; sasi_commands[i] != 0xff; i++) {
-			if (sasi_commands[i] == cmdbuf[0])
-				break;
-		}
-		if (sasi_commands[i] == 0xff) {
-			if (sasie) {
-				for (i = 0; sasi_commands2[i] != 0xff; i++) {
-					if (sasi_commands2[i] == cmdbuf[0])
-						break;
-				}
-				if (sasi_commands2[i] == 0xff)
-					goto errreq;
-			} else {
-				goto errreq;
-			}
-		}
-		switch (cmdbuf[0])
-		{
-			case 0x05: /* READ VERIFY */
-			if (nodisk(hfd))
-				goto nodisk;
-			offset = get_scsi_6_offset(hfd, hdhfd, cmdbuf, &current_lba);
-			if (offset == ~0) {
-				chkerr = 1;
-				goto checkfail;
-			}
-			current_lba = offset;
-			offset *= hfd->ci.blocksize;
-			chkerr = checkbounds(hfd, offset, hfd->ci.blocksize, 1);
-			if (chkerr) {
-				current_lba = offset;
-				goto checkfail;
-			}
-			scsi_len = 0;
-			goto scsi_done;
-			case 0x0c: /* INITIALIZE DRIVE CHARACTERISTICS */
-			scsi_len = 8;
-			write_log(_T("INITIALIZE DRIVE CHARACTERISTICS: "));
-			write_log(_T("Heads: %d Cyls: %d Secs: %d\n"),
-				(scsi_data[1] >> 4) | ((scsi_data[0] & 0xc0) << 4),
-				((scsi_data[1] & 15) << 8) | (scsi_data[2]),
-				scsi_data[5]);
-			for (int i = 0; i < 8; i++) {
-				write_log(_T("%02X "), scsi_data[i]);
-			}
-			write_log(_T("\n"));
-			goto scsi_done;
-			case 0x11: // ASSIGN ALTERNATE TRACK
-			if (nodisk(hfd))
-				goto nodisk;
-			// do nothing, swallow data
-			scsi_len = 4;
-			goto scsi_done;
-			case 0x12: /* INQUIRY */
-			{
-				int cyl, cylsec, head, tracksec;
-				int alen = cmdbuf[4];
-				if (nodisk(hfd))
-					goto nodisk;
-				if (hdhfd) {
-					cyl = hdhfd->cyls;
-					head = hdhfd->heads;
-					tracksec = hdhfd->secspertrack;
-					cylsec = 0;
-				} else {
-					getchsx(hfd, &cyl, &cylsec, &head, &tracksec);
-				}
-				r[0] = 0;
-				r[1] = 11;
-				r[9] = cyl >> 8;
-				r[10] = cyl;
-				r[11] = head;
-				scsi_len = lr = alen > 12 ? 12 : alen;
-				goto scsi_done;
-			}
-			break;
-		}
 	}
 
 	switch (cmdbuf[0])
@@ -983,6 +877,7 @@ int scsi_hd_emulate (struct hardfiledata *hfd, struct hd_hardfiledata *hdhfd, ua
 			goto nodisk;
 		if (is_writeprotected(hfd))
 			goto readprot;
+		// do nothing
 		scsi_len = 0;
 		break;
 	case 0x09: /* READ VERIFY */
@@ -1432,7 +1327,6 @@ readprot:
 		s[2] = 7; /* DATA PROTECT */
 		s[12] = 0x27; /* WRITE PROTECTED */
 		ls = 0x12;
-		sasi_sense = 0x03; // write fault
 		break;
 nodisk:
 		status = 2; /* CHECK CONDITION */
@@ -1440,7 +1334,6 @@ nodisk:
 		s[2] = 2; /* NOT READY */
 		s[12] = 0x3A; /* MEDIUM NOT PRESENT */
 		ls = 0x12;
-		sasi_sense = 0x04; // drive not ready
 		break;
 
 	default:
@@ -1452,7 +1345,6 @@ errreq:
 		s[2] = 5; /* ILLEGAL REQUEST */
 		s[12] = 0x24; /* ILLEGAL FIELD IN CDB */
 		ls = 0x12;
-		sasi_sense = 0x22; // invalid parameter
 		break;
 checkfail:
 		status = 2; /* CHECK CONDITION */
@@ -1460,16 +1352,13 @@ checkfail:
 		if (chkerr < 0) {
 			s[2] = 5; /* ILLEGAL REQUEST */
 			s[12] = 0x21; /* LOGICAL BLOCK OUT OF RANGE */
-			sasi_sense = 0x21; // illegal disk address
 		} else {
 			s[2] = 3; /* MEDIUM ERROR */
 			if (chkerr == 1) {
 				s[12] = 0x11; /* Unrecovered Read Error */
-				sasi_sense = 0x11; // uncorrectable data error
 			}
 			if (chkerr == 2) {
 				s[12] = 0x0c; /* Write Error */
-				sasi_sense = 0x03; // write fault
 			}
 		}
 		ls = 0x12;
@@ -1480,7 +1369,6 @@ miscompare:
 		s[2] = 5; /* ILLEGAL REQUEST */
 		s[12] = 0x1d; /* MISCOMPARE DURING VERIFY OPERATION */
 		ls = 0x12;
-		sasi_sense = 0x11; // uncorrectable data error
 		break;
 	}
 scsi_done:
@@ -1491,27 +1379,11 @@ scsi_done:
 	*data_len = scsi_len;
 	*reply_len = lr;
 	if (ls > 0) {
-		if (omti || sasi) {
-			if (sasi_sense != 0) {
-				bool islba = (s[0] & 0x80) != 0;
-				ls = 4;
-				s[0] = sasi_sense | (islba ? 0x80 : 0x00);
-				s[1] = (lun & 1) << 5;
-				s[2] = 0;
-				s[3] = 0;
-				if (islba) {
-					s[1] |= (current_lba >> 16) & 31;
-					s[2] = (current_lba >> 8) & 255;
-					s[3] = (current_lba >> 0) & 255;
-				}
-			}
-		} else {
-			if (s[0] & 0x80) {
-				s[3] = (current_lba >> 24) & 255;
-				s[4] = (current_lba >> 16) & 255;
-				s[5] = (current_lba >>  8) & 255;
-				s[6] = (current_lba >>  0) & 255;
-			}
+		if (s[0] & 0x80) {
+			s[3] = (current_lba >> 24) & 255;
+			s[4] = (current_lba >> 16) & 255;
+			s[5] = (current_lba >>  8) & 255;
+			s[6] = (current_lba >>  0) & 255;
 		}
 		memset (hfd->scsi_sense, 0, MAX_SCSI_SENSE);
 		memcpy (hfd->scsi_sense, s, ls);

@@ -71,7 +71,6 @@ static uae_u32 REGPARAM2 rtarea_bget (uaecptr addr)
 
   if (addr == RTAREA_INTREQ + 0) {
 		rtarea_bank.baseaddr[addr] = atomic_bit_test_and_reset(&uae_int_requested, 0);
-		//write_log(rtarea_bank.baseaddr[addr] ? _T("+") : _T("-"));
 	} else if (addr == RTAREA_INTREQ + 1) {
 		rtarea_bank.baseaddr[addr] = 0;
 	} else if (addr == RTAREA_INTREQ + 2) {
@@ -250,6 +249,7 @@ static uae_u32 REGPARAM2 getchipmemsize (TrapContext *ctx)
 
 static void rtarea_init_mem (void)
 {
+  need_uae_boot_rom(&currprefs);
 	rtarea_bank.reserved_size = RTAREA_SIZE;
 	rtarea_bank.start = rtarea_base;
 	if (!mapped_malloc (&rtarea_bank)) {
@@ -267,7 +267,6 @@ void rtarea_free(void)
 void rtarea_init (void)
 {
   uae_u32 a;
-  TCHAR uaever[100];
 
   rt_straddr = 0xFF00 - 2;
   rt_addr = 0;
@@ -277,12 +276,8 @@ void rtarea_init (void)
   rtarea_init_mem ();
 	memset (rtarea_bank.baseaddr, 0, RTAREA_SIZE);
 
-  _stprintf (uaever, _T("uae-%d.%d.%d"), UAEMAJOR, UAEMINOR, UAESUBREV);
-
-  ds (uaever);
   EXPANSION_explibname = ds (_T("expansion.library"));
   EXPANSION_doslibname = ds (_T("dos.library"));
-  ds (_T("uae.device"));
 
   dw (0);
   dw (0);
@@ -359,3 +354,4 @@ uaecptr makedatatable (uaecptr resid, uaecptr resname, uae_u8 type, uae_s8 prior
   dw (0x0000);		/* end of table */
   return datatable;
 }
+

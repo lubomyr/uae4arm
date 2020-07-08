@@ -109,6 +109,7 @@ OBJS =	\
 	src-$(arch)/hrtmon.rom.o \
 	src-$(arch)/ide.o \
 	src-$(arch)/inputdevice.o \
+	src-$(arch)/isofs.o \
 	src-$(arch)/keybuf.o \
 	src-$(arch)/main.o \
 	src-$(arch)/memory.o \
@@ -117,6 +118,7 @@ OBJS =	\
 	src-$(arch)/rtc.o \
 	src-$(arch)/savestate.o \
 	src-$(arch)/scsi.o \
+	src-$(arch)/scsiemul.o \
 	src-$(arch)/statusline.o \
 	src-$(arch)/traps.o \
 	src-$(arch)/uaelib.o \

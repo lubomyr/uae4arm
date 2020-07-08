@@ -376,6 +376,9 @@ void execute_exception(uae_u32 cycles);
 
 typedef fptype fpu_register;
 
+/* Flags for Bernie during development/debugging. Should go away eventually */
+#define DISTRUST_CONSISTENT_MEM 0
+
 void jit_abort(const TCHAR *format,...);
 
 #endif /* COMPEMU_H */

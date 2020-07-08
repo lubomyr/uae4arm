@@ -32,10 +32,16 @@ static uae_sem_t display_sem = 0;
 static bool volatile display_thread_busy = false;
 static int display_width;
 static int display_height;
-
+bool volatile flip_in_progess = false;
 
 /* SDL surface variable for output of emulation */
 SDL_Surface *prSDLScreen = NULL;
+
+static int nativeScreenWidth = 1024;
+static int nativeScreenHeight = 800;
+static int nativeScreenDepth = 16;
+static int red_bits, green_bits, blue_bits;
+static int red_shift, green_shift, blue_shift;
 
 uae_u32 time_per_frame = 20000; // Default for PAL (50 Hz): 20000 microsecs
 static uae_u32 last_synctime;
@@ -174,6 +180,7 @@ static int display_thread (void *unused)
 		(DISPMANX_FLAGS_ALPHA_T)(DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS), 
 		255 /*alpha 0->255*/ , 	0
 	};
+	VC_IMAGE_TYPE_T vc_image_format = nativeScreenDepth <= 16 ? VC_IMAGE_RGB565 : VC_IMAGE_ARGB8888;
 	uint32_t vc_image_ptr;
 	SDL_Surface *Dummy_prSDLScreen;
 	int width, height;
@@ -220,20 +227,19 @@ static int display_thread (void *unused)
 			case DISPLAY_SIGNAL_OPEN:
 				width = display_width;
 				height = display_height;
-				
-				Dummy_prSDLScreen = SDL_SetVideoMode(width, height, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
-				prSDLScreen = SDL_CreateRGBSurface(SDL_HWSURFACE, width, height, 16,
+
+				Dummy_prSDLScreen = SDL_SetVideoMode(width, height, nativeScreenDepth, SDL_SWSURFACE | SDL_FULLSCREEN);
+				prSDLScreen = SDL_CreateRGBSurface(SDL_HWSURFACE, width, height, nativeScreenDepth,
 					Dummy_prSDLScreen->format->Rmask,	Dummy_prSDLScreen->format->Gmask, Dummy_prSDLScreen->format->Bmask, Dummy_prSDLScreen->format->Amask);
 				SDL_FreeSurface(Dummy_prSDLScreen);
 			
 				vc_dispmanx_display_get_info(dispmanxdisplay, &dispmanxdinfo);
 			
-				dispmanxresource_amigafb_1 = vc_dispmanx_resource_create(VC_IMAGE_RGB565, width, height, &vc_image_ptr);
-				dispmanxresource_amigafb_2 = vc_dispmanx_resource_create(VC_IMAGE_RGB565, width, height, &vc_image_ptr);
-			
-				vc_dispmanx_rect_set(&blit_rect, 0, 0, width, height);
-				vc_dispmanx_resource_write_data(dispmanxresource_amigafb_1, VC_IMAGE_RGB565, prSDLScreen->pitch, prSDLScreen->pixels, &blit_rect);
-				vc_dispmanx_rect_set(&src_rect, 0, 0, width << 16, height << 16);
+        dispmanxresource_amigafb_1 = vc_dispmanx_resource_create(vc_image_format, width, height, &vc_image_ptr);
+			  dispmanxresource_amigafb_2 = vc_dispmanx_resource_create(vc_image_format, width, height, &vc_image_ptr);
+			  vc_dispmanx_rect_set(&blit_rect, 0, 0, width, height);
+			  vc_dispmanx_resource_write_data(dispmanxresource_amigafb_1, vc_image_format, prSDLScreen->pitch, prSDLScreen->pixels, &blit_rect);
+			  vc_dispmanx_rect_set(&src_rect, 0, 0, width << 16, height << 16);
 			
 				// 16/9 to 4/3 ratio adaptation.
 				if (currprefs.gfx_correct_aspect == 0 || screen_is_picasso) {
@@ -264,18 +270,19 @@ static int display_thread (void *unused)
 			case DISPLAY_SIGNAL_SHOW:
 				if (current_resource_amigafb == 1) {
 					current_resource_amigafb = 0;
-				  vc_dispmanx_resource_write_data(dispmanxresource_amigafb_1, VC_IMAGE_RGB565,
+				  vc_dispmanx_resource_write_data(dispmanxresource_amigafb_1, vc_image_format,
 					  adisplays.gfxvidinfo.drawbuffer.rowbytes, adisplays.gfxvidinfo.drawbuffer.bufmem, &blit_rect);
 				  dispmanxupdate = vc_dispmanx_update_start(0);
 				  vc_dispmanx_element_change_source(dispmanxupdate, dispmanxelement, dispmanxresource_amigafb_1);
 				} else {
 					current_resource_amigafb = 1;
-					vc_dispmanx_resource_write_data(dispmanxresource_amigafb_2,	VC_IMAGE_RGB565,
+					vc_dispmanx_resource_write_data(dispmanxresource_amigafb_2,	vc_image_format,
 						adisplays.gfxvidinfo.drawbuffer.rowbytes,	adisplays.gfxvidinfo.drawbuffer.bufmem,	&blit_rect);
 					dispmanxupdate = vc_dispmanx_update_start(0);
 					vc_dispmanx_element_change_source(dispmanxupdate, dispmanxelement, dispmanxresource_amigafb_2);
 				}
 			  vc_dispmanx_update_submit(dispmanxupdate, NULL, NULL);
+			  flip_in_progess = false;
 				break;
 								
       case DISPLAY_SIGNAL_QUIT:
@@ -393,7 +400,11 @@ static void InitAmigaVidMode(struct uae_prefs *p)
 {
   /* Initialize structure for Amiga video modes */
 	struct amigadisplay *ad = &adisplays;
-	ad->gfxvidinfo.drawbuffer.pixbytes = 2;
+	ad->gfxvidinfo.drawbuffer.pixbytes = nativeScreenDepth / 8;
+	if(nativeScreenDepth <= 16)
+	  p->color_mode = 2;
+	else
+	  p->color_mode = 5;
 	ad->gfxvidinfo.drawbuffer.bufmem = (uae_u8 *)prSDLScreen->pixels;
 	ad->gfxvidinfo.drawbuffer.outwidth = p->gfx_monitor.gfx_size.width;
 	ad->gfxvidinfo.drawbuffer.outheight = p->gfx_monitor.gfx_size.height << p->gfx_vresolution;
@@ -605,6 +616,7 @@ void show_screen(int mode)
     next_amiga_frame_ends += time_per_frame;
     
 	wait_for_display_thread();
+  flip_in_progess = true;
 	write_comm_pipe_u32(display_pipe, DISPLAY_SIGNAL_SHOW, 1);
 
   idletime += last_synctime - start;
@@ -640,9 +652,6 @@ static void graphics_subinit(void)
 
 static int init_colors(void)
 {
-	int red_bits, green_bits, blue_bits;
-	int red_shift, green_shift, blue_shift;
-
 	/* Truecolor: */
 	red_bits = bits_in_mask(prSDLScreen->format->Rmask);
 	green_bits = bits_in_mask(prSDLScreen->format->Gmask);
@@ -723,7 +732,7 @@ static int save_png(SDL_Surface* surface, char *path)
 	int w = surface->w;
 	int h = surface->h;
 	unsigned char * pix = (unsigned char *)surface->pixels;
-	unsigned char writeBuffer[1024 * 3];
+	unsigned char writeBuffer[1920 * 3];
 	FILE *f  = fopen(path, "wb");
 	if (!f) return 0;
 	png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -751,18 +760,34 @@ static int save_png(SDL_Surface* surface, char *path)
 	int y;
 	int x;
 
-	unsigned short *p = (unsigned short *)pix;
-	for (y = 0; y < sizeY; y++) {
-		for (x = 0; x < sizeX; x++) {
-			unsigned short v = p[x];
-  
-			*b++ = ((v & systemRedMask) >> systemRedShift) << 3; // R
-			*b++ = ((v & systemGreenMask) >> systemGreenShift) << 2; // G 
-			*b++ = ((v & systemBlueMask) >> systemBlueShift) << 3; // B
-		}
-		p += surface->pitch / 2;
-		png_write_row(png_ptr, writeBuffer);
-		b = writeBuffer;
+  if(nativeScreenDepth <= 16) {
+	  unsigned short *p = (unsigned short *)pix;
+	  for (y = 0; y < sizeY; y++) {
+		  for (x = 0; x < sizeX; x++) {
+			  unsigned short v = p[x];
+    
+			  *b++ = ((v & systemRedMask) >> systemRedShift) << 3; // R
+			  *b++ = ((v & systemGreenMask) >> systemGreenShift) << 2; // G 
+			  *b++ = ((v & systemBlueMask) >> systemBlueShift) << 3; // B
+		  }
+		  p += surface->pitch / 2;
+		  png_write_row(png_ptr, writeBuffer);
+		  b = writeBuffer;
+  	}
+	} else {
+  	unsigned int *p = (unsigned int *)pix;
+  	for (y = 0; y < sizeY; y++) {
+  		for (x = 0; x < sizeX; x++) {
+  			unsigned int v = p[x];
+    
+  			*b++ = ((v & systemRedMask) >> systemRedShift); // R
+  			*b++ = ((v & systemGreenMask) >> systemGreenShift); // G 
+  			*b++ = ((v & systemBlueMask) >> systemBlueShift); // B
+  		}
+  		p += surface->pitch / 4;
+  		png_write_row(png_ptr, writeBuffer);
+  		b = writeBuffer;
+  	}
 	}
 
 	png_write_end(png_ptr, info_ptr);
@@ -868,6 +893,19 @@ bool target_graphics_buffer_update(void)
 	return true;
 }
 
+
+void target_detect_displaysize(void)
+{
+	const SDL_VideoInfo *vid_info;
+
+	if ((vid_info = SDL_GetVideoInfo())) {
+    nativeScreenWidth = vid_info->current_w;
+    nativeScreenHeight = vid_info->current_h;
+		nativeScreenDepth = vid_info->vfmt->BitsPerPixel;
+  }
+}
+
+
 #ifdef PICASSO96
 
 
@@ -967,7 +1005,7 @@ void picasso_InitResolutions(void)
 			int pixelFormat = 1 << rgbFormat;
 			pixelFormat |= RGBFF_CHUNKY;
       
-			if (SDL_VideoModeOK (x_size_table[i], y_size_table[i], 16, SDL_HWSURFACE)) {
+			if (SDL_VideoModeOK (x_size_table[i], y_size_table[i], nativeScreenDepth, SDL_HWSURFACE)) {
 				DisplayModes[count].res.width = x_size_table[i];
 				DisplayModes[count].res.height = y_size_table[i];
 				DisplayModes[count].depth = bit_unit >> 3;
@@ -1012,15 +1050,20 @@ void gfx_set_picasso_modeinfo(uae_u32 w, uae_u32 h, uae_u32 depth, RGBFTYPE rgbf
 	picasso_vidinfo.selected_rgbformat = rgbfmt;
 	picasso_vidinfo.width = w;
 	picasso_vidinfo.height = h;
-	picasso_vidinfo.depth = 2; // Native depth
+	picasso_vidinfo.depth = nativeScreenDepth;
 	picasso_vidinfo.extra_mem = 1;
 
-	picasso_vidinfo.pixbytes = 2; // Native bytes
+	picasso_vidinfo.pixbytes = nativeScreenDepth / 8;
 	if (screen_is_picasso) {
 		open_screen(&currprefs);
   	if(prSDLScreen != NULL)
   		picasso_vidinfo.rowbytes	= prSDLScreen->pitch;
-		picasso_vidinfo.rgbformat = RGBFB_R5G6B5;
+  	if(nativeScreenDepth <= 16)
+		  picasso_vidinfo.rgbformat = RGBFB_R5G6B5;
+		else if(nativeScreenDepth <= 24)
+		  picasso_vidinfo.rgbformat = RGBFB_B8G8R8;
+    else
+		  picasso_vidinfo.rgbformat = RGBFB_R8G8B8A8;
 	}
 }
 
@@ -1040,6 +1083,11 @@ void gfx_unlock_picasso(bool dorender)
     render_screen(true);
     show_screen(0);
   }
+}
+
+void gfx_set_picasso_colors(RGBFTYPE rgbfmt)
+{
+	alloc_colors_picasso(red_bits, green_bits, blue_bits, red_shift, green_shift, blue_shift, rgbfmt, p96_rgbx16);
 }
 
 #endif // PICASSO96

@@ -14,6 +14,7 @@
 #include "rommgr.h"
 #include "custom.h"
 #include "cd32_fmv.h"
+#include "devices.h"
 
 #include "cda_play.h"
 #include "archivers/mp2/kjmp2.h"
@@ -315,7 +316,7 @@ static addrbank fmv_ram_bank = {
 MEMORY_FUNCTIONS(fmv_rom);
 MEMORY_FUNCTIONS(fmv_ram);
 
-void rethink_cd32fmv(void)
+static void rethink_cd32fmv(void)
 {
 	if (!fmv_ram_bank.baseaddr)
 		return;
@@ -397,7 +398,6 @@ static int l64111_get_frame(uae_u8 *data, int remaining)
 		audio_frame_size = 0;
 		audio_frame_cnt = 0;
 		l64111_set_status(2, NEW_FRAME_S);
-		//write_log(_T("Audio frame %d (%d %d)\n"), offset, l64111_regs[A_CB_STATUS], bytes);
 		offset++;
 		l64111_regs[A_CB_WRITE] = offset & l64111_cb_mask;
 		l64111_regs[A_CB_STATUS]++;
@@ -511,7 +511,6 @@ static uae_u8 *parse_audio_header(uae_u8 *p)
 
 	p += 4;
 	psize = (p[0] << 8) | p[1];
-	//write_log(_T("audio stream header size %d\n"), psize);
 	p += 2;
 	if (audio_head_detect < 3) {
 		audio_head_detect++;
@@ -553,7 +552,6 @@ static uae_u8 *parse_audio_header(uae_u8 *p)
 				l64111_regs[A_PRESENT3] = pts >> 16;
 				l64111_regs[A_PRESENT4] = pts >> 24;
 				l64111_regs[A_PRESENT5] = pts >> 32;
-				//write_log(_T("audio PTS %09llx SCR %09llx\n"), pts, (uae_u64)cl450_scr);
 				l64111_set_status(2, PTS_AVAILABLE);
 			}
 		}
@@ -608,14 +606,12 @@ static void l64111_parse(void)
 					else
 						p += 4;
 				} else if (marker == 0xba) {
-					//write_log(_T("L64111: Pack header\n"));
 					p += 12;
 				} else if (marker == 0xbb) {
 					write_log(_T("L64111: System header, size %d\n"), size);
 					p += 6;
 					audio_skip_size = size;
 				} else if (marker == 0xbe) {
-					//write_log(_T("L64111: Padding packet size %d\n"), size);
 					p += 6;
 					audio_skip_size = size;
 				} else {
@@ -770,7 +766,6 @@ static void cl450_parse_frame(void)
 					bufsize -= size;
 					if (np->length > 0)
 						break;
-					//write_log(_T("CL450: NewPacket %d done\n"), cl450_newpacket_offset_read);
 					cl450_newpacket_offset_read++;
 					cl450_newpacket_offset_read &= CL450_NEWPACKET_BUFFER_SIZE - 1;
 				}
@@ -783,7 +778,7 @@ static void cl450_parse_frame(void)
 			}
 			break;
 			case STATE_SEQUENCE:
-				cl450_frame_pixbytes = 2;
+				cl450_frame_pixbytes = currprefs.color_mode != 5 ? 2 : 4;
 				mpeg2_convert(mpeg_decoder, cl450_frame_pixbytes == 2 ? mpeg2convert_rgb16 : mpeg2convert_rgb32, NULL);
 				cl450_set_status(CL_INT_SEQ_V);
 				cl450_frame_rate = mpeg_info->sequence->frame_period ? 27000000 / mpeg_info->sequence->frame_period : 0;
@@ -809,7 +804,6 @@ static void cl450_parse_frame(void)
 					cl450_videoram_write++;
 					cl450_videoram_write &= CL450_VIDEO_BUFFERS - 1;
 					cl450_videoram_cnt++;
-					//write_log(_T("%d\n"), cl450_videoram_cnt);
 				}
 				return;
 			default:
@@ -1080,15 +1074,12 @@ static void cl450_wput(uaecptr addr, uae_u16 v)
 		break;
 	case HOST_control:
 		cl450_regs[HOST_control] = v;
-		//write_log(_T("CL450 HOST_control %04x\n"), v);
 		break;
 	case HOST_raddr:
 		cl450_regs[HOST_raddr] = v & 15;
-		//write_log(_T("CL450 HOST_raddr %04x\n"), v);
 		break;
 	case HOST_rdata:
 		cl450_hmem[cl450_regs[HOST_raddr]] = v;
-		//write_log(_T("CL450 HOST_rdata %d %04x\n"), cl450_regs[HOST_raddr], v);
 		cl450_regs[HOST_raddr]++;
 		cl450_regs[HOST_raddr] &= CL450_HMEM_WORDS - 1;
 		break;
@@ -1337,7 +1328,7 @@ static void cd32_fmv_audio_handler(void)
 	l64111_regs[A_CB_STATUS] -= PCM_SECTORS;
 }
 
-void cd32_fmv_hsync_handler(void)
+static void cd32_fmv_hsync_handler(void)
 {
 	if (!fmv_ram_bank.baseaddr)
 		return;
@@ -1388,14 +1379,14 @@ void cd32_fmv_hsync_handler(void)
 }
 
 
-static void cd32_fmv_reset(void)
+static void cd32_fmv_reset(int hardreset)
 {
 	if (fmv_ram_bank.baseaddr)
 		memset(fmv_ram_bank.baseaddr, 0, fmv_ram_bank.allocated_size);
 	cd32_fmv_state(0);
 }
 
-void cd32_fmv_free(void)
+static void cd32_fmv_free(void)
 {
 	mapped_free(&fmv_rom_bank);
 	mapped_free(&fmv_ram_bank);
@@ -1420,6 +1411,7 @@ void cd32_fmv_free(void)
 
 addrbank *cd32_fmv_init (struct autoconfig_info *aci)
 {
+	device_add_reset_imm(cd32_fmv_reset);
 	cd32_fmv_free();
 	write_log (_T("CD32 FMV mapped @$%x\n"), expamem_board_pointer);
 	if (expamem_board_pointer != fmv_start) {
@@ -1460,6 +1452,11 @@ addrbank *cd32_fmv_init (struct autoconfig_info *aci)
 	map_banks(&fmv_rom_bank, (fmv_start + ROM_BASE) >> 16, fmv_rom_size >> 16, 0);
 	map_banks(&fmv_ram_bank, (fmv_start + RAM_BASE) >> 16, fmv_ram_size >> 16, 0);
 	map_banks(&fmv_bank, (fmv_start + IO_BASE) >> 16, (RAM_BASE - IO_BASE) >> 16, 0);
-	cd32_fmv_reset();
+	cd32_fmv_reset(1);
+
+	device_add_hsync(cd32_fmv_hsync_handler);
+	device_add_exit(cd32_fmv_free);
+	device_add_rethink(rethink_cd32fmv);
+
 	return &fmv_rom_bank;
 }

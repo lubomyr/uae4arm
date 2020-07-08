@@ -33,9 +33,8 @@ extern void gui_display (int shortcut);
 #define LED_FPS 7
 #define LED_CPU 8
 #define LED_SND 9
-#define LED_MD 10
-#define LED_NET 11
-#define LED_MAX 12
+#define LED_NET 10
+#define LED_MAX 11
 
 struct gui_info
 {

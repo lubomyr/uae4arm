@@ -46,14 +46,11 @@ extern void action_replay_memory_reset (void);
 extern void action_replay_init (int);
 extern void action_replay_cleanup (void);
 
-static void action_replay_version (void);
-
 extern int hrtmon_flag;
 
 extern void hrtmon_enter (void);
 extern void hrtmon_hide (void);
 extern int hrtmon_load (void);
-static void hrtmon_map_banks (void);
 
 extern uae_u32 hrtmem_start, hrtmem_size;
 

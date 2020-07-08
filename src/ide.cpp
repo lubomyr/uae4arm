@@ -40,7 +40,7 @@
 
 #define ATAPI_MAX_TRANSFER 32768
 
-void ata_parse_identity(uae_u8 *out, struct uaedev_config_info *uci, bool *lba, bool *lba48, int *max_multiple)
+static void ata_parse_identity(uae_u8 *out, struct uaedev_config_info *uci, bool *lba, bool *lba48, int *max_multiple)
 {
 	struct uaedev_config_info uci2;
 	uae_u16 v;
@@ -309,12 +309,14 @@ static void ide_identity_buffer(struct ide_hdf *ide)
 {
 	TCHAR tmp[100];
 	bool atapi = ide->atapi;
-	bool cf = ide->media_type > 0;
+	int device_type = 0;
 	int v;
 
 	memset(ide->secbuf, 0, 512);
+	if (!device_type)
+		device_type = 5; // CD
 
-	pw (ide, 0, atapi ? 0x85c0 : (cf ? 0x848a : (1 << 6)));
+	pw(ide, 0, atapi ? 0x80c0 | (device_type << 8) : (1 << 6));
 	pw (ide, 1, ide->hdhfd.cyls_def);
 	pw (ide, 2, 0xc837);
 	pw (ide, 3, ide->hdhfd.heads_def);
@@ -375,9 +377,7 @@ static void ide_identity_buffer(struct ide_hdf *ide)
 
 	v = ide->multiple_mode;
 	pwor(ide, 59, v > 0 ? 0x100 : 0);
-	if (!atapi && cf) {
-		pw(ide, 0, 0x848a);
-	} else if (!atapi && !cf) {
+	if (!atapi) {
 		pwand(ide, 0, 0x8000);
 	}
 }
@@ -1328,6 +1328,7 @@ void alloc_ide_mem (struct ide_hdf **idetable, int max, struct ide_thread_state 
 		struct ide_hdf *ide;
 		if (!idetable[i]) {
 			ide = idetable[i] = xcalloc (struct ide_hdf, 1);
+			ide->cd_unit_num = -1;
 		}
 		ide = idetable[i];
 		ide_grow_buffer(ide, 1024);
@@ -1375,9 +1376,9 @@ struct ide_hdf *add_ide_unit (struct ide_hdf **idetable, int max, int ch, struct
 		ide->lba = true;
 		ide->uae_unitnum = ci->uae_unitnum;
 		gui_flicker_led (LED_HD, ide->uae_unitnum, -1);
-		ide->media_type = ci->controller_media_type;
+		ide->cd_unit_num = -1;
 		ide->ata_level = ci->unit_feature_level;
-		if (!ide->ata_level && (ide->hdhfd.size >= 4 * (uae_u64)0x40000000 || ide->media_type))
+		if (!ide->ata_level && (ide->hdhfd.size >= 4 * (uae_u64)0x40000000))
 			ide->ata_level = 1;
 		ide_identity_buffer(ide);
 

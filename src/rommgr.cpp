@@ -91,7 +91,7 @@ struct romdata *getromdatabypath (const TCHAR *path)
   return NULL;
 }
 
-#define NEXT_ROM_ID 255
+#define NEXT_ROM_ID 257
 
 #define ALTROM(id,grp,num,size,flags,crc32,a,b,c,d,e) \
 { _T("X"), 0, 0, 0, 0, 0, size, id, 0, 0, flags, (grp << 16) | num, 0, NULL, crc32, a, b, c, d, e },
@@ -802,17 +802,6 @@ void getromname	(const struct romdata *rd, TCHAR *name)
 		_stprintf (name + _tcslen (name), _T(" [%s]"), rd->partnumber);
 }
 
-static struct romlist *getromlistbyids (const int *ids, const TCHAR *romname);
-
-struct romlist *getromlistbyromdata (const struct romdata *rd)
-{
-  int ids[2];
-  
-  ids[0] = rd->id;
-	ids[1] = -1;
-	return getromlistbyids(ids, NULL);
-}
-
 static struct romlist *getromlistbyromtype(uae_u32 romtype, const TCHAR *romname)
 {
 	int i = 0;
@@ -867,6 +856,15 @@ static struct romlist *getromlistbyids (const int *ids, const TCHAR *romname)
   	i++;
   }
   return NULL;
+}
+
+struct romlist *getromlistbyromdata (const struct romdata *rd)
+{
+  int ids[2];
+  
+  ids[0] = rd->id;
+	ids[1] = -1;
+	return getromlistbyids(ids, NULL);
 }
 
 static void romwarning (const int *ids)
@@ -1336,10 +1334,8 @@ static void device_rom_defaults(struct uae_prefs *p, struct boardromconfig *brc,
 		if (p->z3fastmem[i].device_order > order)
 			order = p->z3fastmem[i].device_order;
 	}
-	for (int i = 0; i < MAX_RTG_BOARDS; i++) {
-		if (p->rtgboards[i].device_order > order)
-			order = p->rtgboards[i].device_order;
-	}
+	if (p->rtgboards[0].device_order > order)
+		order = p->rtgboards[0].device_order;
 	brc->device_order = order + 1;
 }
 

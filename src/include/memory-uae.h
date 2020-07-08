@@ -28,11 +28,7 @@ void free_shm (void);
 #define AUTOCONFIG_Z2_MEM 0x00200000
 #define AUTOCONFIG_Z3 0xff000000
 
-#ifdef ADDRESS_SPACE_24BIT
-#define MEMORY_BANKS 256
-#else
 #define MEMORY_BANKS 65536
-#endif
 
 typedef uae_u32 (REGPARAM3 *mem_get_func)(uaecptr) REGPARAM;
 typedef void (REGPARAM3 *mem_put_func)(uaecptr, uae_u32) REGPARAM;
@@ -334,7 +330,7 @@ extern addrbank custmem2_bank;
 extern void rtarea_init (void);
 extern void rtarea_free(void);
 extern void rtarea_setup (void);
-extern void expamem_reset (void);
+extern void expamem_reset(int);
 extern void set_expamem_z3_hack_mode(int);
 extern uaecptr expamem_board_pointer;
 extern uae_u32 expamem_board_size;
@@ -377,7 +373,6 @@ extern void map_banks_cond (addrbank *bank, int first, int count, int realsize);
 extern void map_overlay (int chip);
 extern void memory_hardreset (int);
 extern void memory_clear (void);
-extern void free_fastmemory (int);
 extern bool read_kickstart_version(struct uae_prefs *p);
 
 #define memory_get_long(addr) (call_mem_get_func(get_mem_bank(addr).lget, addr))
@@ -648,5 +643,6 @@ extern void mapped_free (addrbank*);
 extern uaecptr strcpyha_safe (uaecptr dst, const uae_char *src);
 extern void memcpyha_safe (uaecptr dst, const uae_u8 *src, int size);
 extern void memcpyha (uaecptr dst, const uae_u8 *src, int size);
+extern void memcpyah_safe (uae_u8 *dst, uaecptr src, int size);
 
 #endif /* UAE_MEMORY_H */

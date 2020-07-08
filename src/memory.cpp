@@ -708,53 +708,6 @@ static bool load_kickstart_replacement (void)
 	return true;
 }
 
-/* disable incompatible drivers */
-static int patch_residents (uae_u8 *kickmemory, int size)
-{
-  int i, j, patched = 0;
-  const uae_char *residents[] = { "NCR scsi.device", NULL };
-  // "scsi.device", "carddisk.device", "card.resource" };
-  uaecptr base = size == ROM_SIZE_512 ? 0xf80000 : 0xfc0000;
-
-  for (i = 0; i < size - 100; i++) {
-  	if (kickmemory[i] == 0x4a && kickmemory[i + 1] == 0xfc) {
-      uaecptr addr;
-      addr = (kickmemory[i + 2] << 24) | (kickmemory[i + 3] << 16) | (kickmemory[i + 4] << 8) | (kickmemory[i + 5] << 0);
-      if (addr != i + base)
-    		continue;
-      addr = (kickmemory[i + 14] << 24) | (kickmemory[i + 15] << 16) | (kickmemory[i + 16] << 8) | (kickmemory[i + 17] << 0);
-      if (addr >= base && addr < base + size) {
-    		j = 0;
-    		while (residents[j]) {
-  		    if (!memcmp (residents[j], kickmemory + addr - base, strlen (residents[j]) + 1)) {
-					  TCHAR *s = au (residents[j]);
-					  write_log (_T("KSPatcher: '%s' at %08X disabled\n"), s, i + base);
-					  xfree (s);
-      			kickmemory[i] = 0x4b; /* destroy RTC_MATCHWORD */
-      			patched++;
-      			break;
-  		    }
-  		    j++;
-    		}
-      }	
-  	}
-  }
-  return patched;
-}
-
-static void patch_kick(void)
-{
-  int patched = 0;
-  patched += patch_residents (kickmem_bank.baseaddr, kickmem_bank.allocated_size);
-  if (extendedkickmem_bank.baseaddr) {
-    patched += patch_residents (extendedkickmem_bank.baseaddr, extendedkickmem_bank.allocated_size);
-    if (patched)
-      kickstart_fix_checksum (extendedkickmem_bank.baseaddr, extendedkickmem_bank.allocated_size);
-  }
-  if (patched)
-  	kickstart_fix_checksum (kickmem_bank.baseaddr, kickmem_bank.allocated_size);
-}
-
 static struct zfile *get_kickstart_filehandle(struct uae_prefs *p)
 {
   struct zfile *f;
@@ -883,9 +836,6 @@ static void allocate_memory (void)
   if (chipmem_bank.reserved_size != currprefs.chipmem_size) {
     int memsize;
 		mapped_free (&chipmem_bank);
-	  if (currprefs.chipmem_size > 2 * 1024 * 1024) {
-	    free_fastmemory (0);
-		}
 
 	  memsize = chipmem_bank.reserved_size = currprefs.chipmem_size;
   	chipmem_full_mask = chipmem_bank.mask = chipmem_bank.reserved_size - 1;
@@ -970,6 +920,8 @@ static void allocate_memory (void)
 
   if (savestate_state == STATE_RESTORE) {
     if (bootrom_filepos) {
+			if (currprefs.uaeboard < 0)
+				currprefs.uaeboard = 0;
 			protect_roms (false);
 			restore_ram (bootrom_filepos, rtarea_bank.baseaddr);
 			protect_roms (true);
@@ -1089,7 +1041,6 @@ static void restore_roms(void)
 			write_log (_T("Unknown ROM '%s' loaded\n"), currprefs.romfile);
     }
   }
-  patch_kick ();
 	write_log (_T("ROM loader end\n"));
 	protect_roms (true);
 }
@@ -1191,7 +1142,6 @@ void memory_reset (void)
 			map_banks (&gayle_bank, 0xD8, 6, 0);
 			map_banks (&gayle2_bank, 0xDD, 2, 0);
 		}
-		gayle_map_pcmcia ();
 		if (currprefs.cs_ide == IDE_A4000)
 			map_banks (&gayle_bank, 0xDD, 1, 0);
 		if (currprefs.cs_ide < 0 && !currprefs.cs_pcmcia)
@@ -1394,19 +1344,14 @@ static void map_banks2 (addrbank *bank, int start, int size, int realsize)
 	    size, realsize, start);
   }
 
-#ifndef ADDRESS_SPACE_24BIT
   if (start >= 0x100) {
     for (bnr = start; bnr < start + size; bnr++) {
       mem_banks[bnr] = bank;
     }
     return;
   }
-#endif
   if (last_address_space_24)
 	  endhioffs = 0x10000;
-#ifdef ADDRESS_SPACE_24BIT
-  endhioffs = 0x100;
-#endif
   for (hioffs = 0; hioffs < endhioffs; hioffs += 0x100) {
     for (bnr = start; bnr < start + size; bnr++) {
       mem_banks[bnr + hioffs] = bank;
@@ -1708,6 +1653,13 @@ void memcpyha (uaecptr dst, const uae_u8 *src, int size)
 {
     while (size--)
 	put_byte (dst++, *src++);
+}
+void memcpyah_safe(uae_u8 *dst, uaecptr src, int size)
+{
+	if (!addr_valid (_T("memcpyah"), src, size))
+		return;
+	while (size--)
+		*dst++ = get_byte (src++);
 }
 uaecptr strcpyha_safe (uaecptr dst, const uae_char *src)
 {

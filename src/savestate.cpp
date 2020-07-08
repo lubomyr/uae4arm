@@ -74,6 +74,10 @@ static void state_incompatible_warn(void)
 	if (currprefs.socket_emu)
 		dowarn = 1;
 #endif
+#ifdef SCSIEMU
+	if (currprefs.scsi)
+		dowarn = 1;
+#endif
 #ifdef FILESYS
   for(i = 0; i < currprefs.mountitems; i++) {
     struct mountedinfo mi;
@@ -87,6 +91,9 @@ static void state_incompatible_warn(void)
   	notify_user (NUMSG_STATEHD);
   }
 }
+
+/* functions for reading/writing bytes, shorts and longs in big-endian
+* format independent of host machine's endianness */
 
 void save_u32_func (uae_u8 **dstp, uae_u32 v)
 {
@@ -208,8 +215,6 @@ static TCHAR *state_resolve_path(TCHAR *s, int type, bool newmode)
 	if (s[0] == 0)
 		return s;
 	if (!newmode && state_path_exists(s, type))
-		return s;
-	if (type == SAVESTATE_PATH_HD)
 		return s;
 	if (newmode) {
 		_tcscpy(tmp, s);
@@ -637,6 +642,8 @@ void restore_state (const TCHAR *filename)
 		else if (!_tcscmp (name, _T("CD32")))
 			end = restore_akiko (chunk);
 #endif
+		else if (!_tcscmp (name, _T("SCSD")))
+			end = restore_scsidev (chunk);
 		else if (!_tcscmp (name, _T("GAYL")))
 			end = restore_gayle (chunk);
 		else if (!_tcscmp (name, _T("IDE ")))
@@ -672,10 +679,15 @@ error:
   	zfile_fclose (f);
 }
 
-void savestate_restore_finish (void)
+void savestate_restore_final(void)
+{
+	restore_akiko_final();
+}
+
+bool savestate_restore_finish (void)
 {
 	if (!isrestore ())
-  	return;
+		return false;
   zfile_fclose (savestate_file);
   savestate_file = 0;
   restore_cpu_finish();
@@ -694,6 +706,7 @@ void savestate_restore_finish (void)
 	savestate_state = 0;
 	init_hz_normal();
 	audio_activate ();
+	return true;
 }
 
 /* 1=compressed,2=not compressed */
@@ -881,6 +894,11 @@ static int save_state_internal (struct zfile *f, const TCHAR *description, int c
 	save_chunk (f, dst, len, _T("CD32"), 0);
 	xfree (dst);
 #endif
+	for (i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
+		dst = save_scsidev (i, &len, NULL);
+		save_chunk (f, dst, len, _T("SCSD"), 0);
+		xfree (dst);
+	}
 #ifdef ACTION_REPLAY
 	dst = save_action_replay (&len, NULL);
 	save_chunk (f, dst, len, _T("ACTR"), comp);

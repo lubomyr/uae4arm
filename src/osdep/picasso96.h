@@ -513,6 +513,8 @@ struct Line {
 #define BIB_NOMASKBLITS		22	/* perform blits without taking care of mask */
 #define BIB_NOC2PBLITS		23	/* use CPU for planar to chunky conversions */
 #define BIB_NOBLITTER		24	/* disable all blitter functions */
+#define BIB_SYSTEM2SCREENBLITS	25	/* allow data to be written to screen memory for cpu as blitter source */
+#define BIB_GRANTDIRECTACCESS	26	/* all data on the board can be accessed at any time without bi->SetMemoryMode() */
 #define BIB_OVERCLOCK		31	/* enable overclocking for some boards */
 
 #define BIB_IGNOREMASK	BIB_NOMASKBLITS
@@ -538,6 +540,8 @@ struct Line {
 #define BIF_NOMASKBLITS		(1<<BIB_NOMASKBLITS)
 #define BIF_NOC2PBLITS		(1<<BIB_NOC2PBLITS)
 #define BIF_NOBLITTER		(1<<BIB_NOBLITTER)
+#define BIF_SYSTEM2SCREENBLITS	(1 << BIB_SYSTEM2SCREENBLITS)
+#define BIF_GRANTDIRECTACCESS	(1 << BIB_GRANTDIRECTACCESS)
 #define BIF_OVERCLOCK		(1 << BIB_OVERCLOCK)
 
 #define BIF_IGNOREMASK	BIF_NOMASKBLITS
@@ -579,7 +583,6 @@ extern struct picasso96_state_struct picasso96_state;
 extern void picasso_enablescreen (int on);
 extern void picasso_refresh (void);
 extern void picasso_handle_vsync (void);
-extern void picasso_reset (void);
 extern int picasso_palette (struct MyCLUTEntry *CLUT, uae_u32 *clut);
 
 /* This structure describes the UAE-side framebuffer for the Picasso
@@ -602,6 +605,7 @@ struct picasso_vidbuf_description {
 extern struct picasso_vidbuf_description picasso_vidinfo;
 
 extern void gfx_set_picasso_modeinfo (uae_u32 w, uae_u32 h, uae_u32 d, RGBFTYPE rgbfmt);
+extern void gfx_set_picasso_colors(RGBFTYPE rgbfmt);
 extern void gfx_set_picasso_state (int on);
 extern uae_u8 *gfx_lock_picasso (void);
 extern void gfx_unlock_picasso (bool);
@@ -628,9 +632,12 @@ extern void gfx_unlock_picasso (bool);
 #ifdef __cplusplus
   extern "C" {
 #endif
-  void copy_screen_8bit(uae_u8 *dst, uae_u8 *src, int bytes, uae_u32 *clut);
+  void copy_screen_8bit_to_16bit(uae_u8 *dst, uae_u8 *src, int bytes, uae_u32 *clut);
+  void copy_screen_8bit_to_32bit(uae_u8 *dst, uae_u8 *src, int bytes, uae_u32 *clut);
   void copy_screen_16bit_swap(uae_u8 *dst, uae_u8 *src, int bytes);
+  void copy_screen_16bit_to_32bit(uae_u8 *dst, uae_u8 *src, int bytes);
   void copy_screen_32bit_to_16bit(uae_u8 *dst, uae_u8 *src, int bytes);
+  void copy_screen_32bit_to_32bit(uae_u8 *dst, uae_u8 *src, int bytes);
 #ifdef __cplusplus
   }
 #endif

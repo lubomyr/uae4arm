@@ -171,7 +171,7 @@ static bool fpu_mmu_fixup;
 #define FPSR_AE_INEX    0x00000008
 
 static struct {
-	// 6888x and 68060
+	// 6888x
 	uae_u32 ccr;
 	uae_u32 eo[3];
 	// 68040
@@ -562,7 +562,7 @@ static void fp_unimp_instruction(uae_u16 opcode, uae_u16 extra, uae_u32 ea, uaec
 		extra |= 1;
 
 	// data for fsave stack frame
-	regs.fpu_exp_state = 1; // 68060 IDLE frame, 68040 UNIMP frame
+	regs.fpu_exp_state = 1; // 68040 UNIMP frame
 
 	if(currprefs.cpu_model == 68040) {
 		// fsave data for 68040
@@ -603,7 +603,7 @@ static void fp_unimp_datatype(uae_u16 opcode, uae_u16 extra, uae_u32 ea, uaecptr
 
 	// data for fsave stack frame
 	reset_fsave_data();
-	regs.fpu_exp_state = 2; // 68060 EXCP frame, 68040 BUSY frame
+	regs.fpu_exp_state = 2; // 68040 BUSY frame
 
 	if (currprefs.cpu_model == 68040) {
 		// fsave data for 68040
@@ -692,7 +692,7 @@ static bool fault_if_unimplemented_680x0 (uae_u16 opcode, uae_u16 extra, uaecptr
 			return true;
 		}
 		uae_u16 v = extra & 0x7f;
-		/* 68040/68060 only variants. 6888x = F-line exception. */
+		/* 68040 only variants. 6888x = F-line exception. */
 		switch (v)
 		{
 			case 0x00: /* FMOVE */
@@ -920,7 +920,7 @@ static int get_fp_value (uae_u32 opcode, uae_u16 extra, fpdata *src, uaecptr old
 			ad = m68k_areg (regs, reg) + (uae_s32) (uae_s16) x_cp_next_iword ();
 			break;
 		case 6: // (d8,An,Xn)+
-			ad = x_cp_get_disp_ea_020 (m68k_areg (regs, reg), 0);
+			ad = x_cp_get_disp_ea_020 (m68k_areg (regs, reg));
 			break;
 		case 7:
 			switch (reg)
@@ -936,7 +936,7 @@ static int get_fp_value (uae_u32 opcode, uae_u16 extra, fpdata *src, uaecptr old
 					ad += (uae_s32) (uae_s16) x_cp_next_iword ();
 					break;
 				case 3: // (d8,PC,Xn)+
-					ad = x_cp_get_disp_ea_020 (m68k_getpc (), 0);
+					ad = x_cp_get_disp_ea_020 (m68k_getpc ());
 					break;
 				case 4: // #imm
 					doext = 1;
@@ -1090,7 +1090,7 @@ static int put_fp_value (fpdata *value, uae_u32 opcode, uae_u16 extra, uaecptr o
 			ad = m68k_areg (regs, reg) + (uae_s32) (uae_s16) x_cp_next_iword ();
 			break;
 		case 6: // (d8,An,Xn)+
-			ad = x_cp_get_disp_ea_020 (m68k_areg (regs, reg), 0);
+			ad = x_cp_get_disp_ea_020 (m68k_areg (regs, reg));
 			break;
 		case 7:
 			switch (reg)
@@ -1196,7 +1196,7 @@ static int get_fp_ad (uae_u32 opcode, uae_u32 * ad)
 			*ad = m68k_areg (regs, reg) + (uae_s32) (uae_s16) x_cp_next_iword ();
 			break;
 		case 6: // (d8,An,Xn)+
-			*ad = x_cp_get_disp_ea_020 (m68k_areg (regs, reg), 0);
+			*ad = x_cp_get_disp_ea_020 (m68k_areg (regs, reg));
 			break;
 		case 7:
 			switch (reg)
@@ -1212,7 +1212,7 @@ static int get_fp_ad (uae_u32 opcode, uae_u32 * ad)
 					*ad += (uae_s32) (uae_s16) x_cp_next_iword ();
 					break;
 				case 3: // (d8,PC,Xn)+
-					*ad = x_cp_get_disp_ea_020 (m68k_getpc (), 0);
+					*ad = x_cp_get_disp_ea_020 (m68k_getpc ());
 					break;
 				default:
 					return 0;
@@ -1322,6 +1322,12 @@ static void maybe_idle_state (void)
 		regs.fpu_state = 1;
 }
 
+static void trace_t0_68040(void)
+{
+	if (regs.t0 && currprefs.cpu_model == 68040)
+		check_t0_trace();
+}
+
 void fpuop_dbcc (uae_u32 opcode, uae_u16 extra)
 {
 	uaecptr pc = m68k_getpc ();
@@ -1355,6 +1361,8 @@ void fpuop_dbcc (uae_u32 opcode, uae_u16 extra)
 			regs.fp_branch = true;
 		}
 	}
+	// 68040 FDBCC: T0 always
+	trace_t0_68040();
 }
 
 void fpuop_scc (uae_u32 opcode, uae_u16 extra)
@@ -1539,6 +1547,8 @@ void fpuop_save (uae_u32 opcode)
 			x_cp_put_long(ad, fsave_data.et[2]); // ETM
 			ad += 4;
 		}
+		// 68040 FSAVE: T0 always
+		trace_t0_68040();
 	} else { /* 68881/68882 */
 		uae_u32 biu_flags = 0x540effff;
 		int frame_size = currprefs.fpu_model == 68882 ? 0x3c : 0x1c;
@@ -2086,7 +2096,6 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 				// Only FPIAR can be moved to/from address register
 				// All bits unset = FPIAR
 				uae_u16 bits = extra & (0x1000 | 0x0800 | 0x0400);
-				// 68060, An and all bits unset: f-line
 				if (bits && bits != 0x0400) {
 					fpu_noinst(opcode, pc);
 					return;
@@ -2163,6 +2172,7 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 					m68k_areg (regs, opcode & 7) = ad;
 				if ((opcode & 0x38) == 0x20)
 					m68k_areg (regs, opcode & 7) = ad;
+				trace_t0_68040();
 			} else {
 				/* FMOVEM Memory->Control Register */
 				uae_u32 ad;
@@ -2252,6 +2262,7 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 				if (extra & 0x2000) {
 					/* FMOVEM FPP->Memory */
 					ad = fmovem2mem (ad, list, incr, regdir);
+					trace_t0_68040();
 				} else {
 					/* FMOVEM Memory->FPP */
 					ad = fmovem2fpp (ad, list, incr, regdir);

@@ -101,6 +101,7 @@ struct mnemolookup lookuptab[] = {
 	{ i_CAS2, _T("CAS2") },
 	{ i_MULL, _T("MULL") },
 	{ i_DIVL, _T("DIVL") },
+
 	{ i_BFTST, _T("BFTST") },
 	{ i_BFEXTU, _T("BFEXTU") },
 	{ i_BFCHG, _T("BFCHG") },
@@ -109,6 +110,7 @@ struct mnemolookup lookuptab[] = {
 	{ i_BFFFO, _T("BFFFO") },
 	{ i_BFSET, _T("BFSET") },
 	{ i_BFINS, _T("BFINS") },
+
 	{ i_PACK, _T("PACK") },
 	{ i_UNPK, _T("UNPK") },
 	{ i_TAS, _T("TAS") },
@@ -117,6 +119,7 @@ struct mnemolookup lookuptab[] = {
 	{ i_RTM, _T("RTM") },
 	{ i_TRAPcc, _T("TRAPcc") },
 	{ i_MOVES, _T("MOVES") },
+
 	{ i_FPP, _T("FPP") },
 	{ i_FDBcc, _T("FDBcc") },
 	{ i_FScc, _T("FScc") },

@@ -11,6 +11,9 @@
 
 #include "uae/types.h"
 
+/* functions to save byte,word or long word
+ * independent of CPU's endianness */
+
 extern void save_u64_func (uae_u8 **, uae_u64);
 extern void save_u32_func (uae_u8 **, uae_u32);
 extern void save_u16_func (uae_u8 **, uae_u16);
@@ -28,7 +31,6 @@ extern TCHAR *restore_string_func (uae_u8 **);
 #define SAVESTATE_PATH_FLOPPY 1
 #define SAVESTATE_PATH_VDIR 2
 #define SAVESTATE_PATH_HDF 3
-#define SAVESTATE_PATH_HD 4
 #define SAVESTATE_PATH_CD 5
 
 extern void save_path_func (uae_u8 **, const TCHAR*, int type);
@@ -115,6 +117,10 @@ extern uae_u8 *save_keyboard (int *,uae_u8*);
 extern uae_u8 *restore_akiko (uae_u8 *src);
 extern uae_u8 *save_akiko (int *len, uae_u8*);
 extern void restore_akiko_finish (void);
+extern void restore_akiko_final(void);
+
+extern uae_u8 *save_scsidev (int num, int *len, uae_u8 *dstptr);
+extern uae_u8 *restore_scsidev (uae_u8 *src);
 
 extern uae_u8 *restore_filesys (uae_u8 *src);
 extern uae_u8 *save_filesys (int num, int *len);
@@ -171,7 +177,8 @@ extern void restore_ar_finish (void);
 extern void savestate_initsave (const TCHAR *filename);
 extern int save_state (const TCHAR *filename, const TCHAR *description);
 extern void restore_state (const TCHAR *filename);
-extern void savestate_restore_finish (void);
+extern bool savestate_restore_finish(void);
+extern void savestate_restore_final(void);
 
 extern void custom_prepare_savestate (void);
 

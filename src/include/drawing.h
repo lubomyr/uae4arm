@@ -87,64 +87,8 @@ struct color_entry {
 };
 
 /* convert 24 bit AGA Amiga RGB to native color */
-#if defined(ARMV6T2)
-STATIC_INLINE uae_u32 CONVERT_RGB(uae_u32 c)
-{
-  uae_u32 ret;
-  __asm__ (
-			"ubfx    r1, %[c], #19, #5 \n\t"
-			"ubfx    r2, %[c], #10, #6 \n\t"
-			"ubfx    %[v], %[c], #3, #5 \n\t"
-			"orr     %[v], %[v], r1, lsl #11 \n\t"
-			"orr     %[v], %[v], r2, lsl #5 \n\t"
-			"pkhbt   %[v], %[v], %[v], lsl #16 \n\t"
-           : [v] "=r" (ret) : [c] "r" (c) : "r1", "r2" );
-  return ret;
-}
-STATIC_INLINE uae_u16 CONVERT_RGB_16(uae_u32 c)
-{
-  uae_u16 ret;
-  __asm__ (
-			"ubfx    r1, %[c], #19, #5 \n\t"
-			"ubfx    r2, %[c], #10, #6 \n\t"
-			"ubfx    %[v], %[c], #3, #5 \n\t"
-			"orr     %[v], %[v], r1, lsl #11 \n\t"
-			"orr     %[v], %[v], r2, lsl #5 \n\t"
-           : [v] "=r" (ret) : [c] "r" (c) : "r1", "r2" );
-  return ret;
-}
-#elif defined(CPU_AARCH64)
-STATIC_INLINE uae_u32 CONVERT_RGB(uae_u32 c)
-{
-  uae_u32 ret;
-  __asm__ (
-			"ubfx    w1, %w[c], #19, #5 \n\t"
-			"ubfx    w2, %w[c], #10, #6 \n\t"
-			"ubfx    %w[v], %w[c], #3, #5 \n\t"
-			"orr     %w[v], %w[v], w1, lsl #11 \n\t"
-			"orr     %w[v], %w[v], w2, lsl #5 \n\t"
-			"bfi     %w[v], %w[v], #16, #16  \n\t"
-           : [v] "=r" (ret) : [c] "r" (c) : "w1", "w2" );
-  return ret;
-}
-STATIC_INLINE uae_u16 CONVERT_RGB_16(uae_u32 c)
-{
-  uae_u16 ret;
-  __asm__ (
-			"ubfx    w1, %w[c], #19, #5 \n\t"
-			"ubfx    w2, %w[c], #10, #6 \n\t"
-			"ubfx    %w[v], %w[c], #3, #5 \n\t"
-			"orr     %w[v], %w[v], w1, lsl #11 \n\t"
-			"orr     %w[v], %w[v], w2, lsl #5 \n\t"
-           : [v] "=r" (ret) : [c] "r" (c) : "w1", "w2" );
-  return ret;
-}
-#else
 #define CONVERT_RGB(c) \
     ( xbluecolors[((uae_u8*)(&c))[0]] | xgreencolors[((uae_u8*)(&c))[1]] | xredcolors[((uae_u8*)(&c))[2]] )
-#define CONVERT_RGB_16(c) \
-    ( xbluecolors[((uae_u8*)(&c))[0]] | xgreencolors[((uae_u8*)(&c))[1]] | xredcolors[((uae_u8*)(&c))[2]] )
-#endif
 
 STATIC_INLINE xcolnr getxcolor (int c)
 {
@@ -155,6 +99,13 @@ STATIC_INLINE xcolnr getxcolor (int c)
 }
 
 /* functions for reading, writing, copying and comparing struct color_entry */
+STATIC_INLINE int color_reg_get (struct color_entry *ce, int c)
+{
+	if (aga_mode)
+		return ce->color_regs_aga[c];
+	else
+		return ce->color_regs_ecs[c];
+}
 STATIC_INLINE void color_reg_set (struct color_entry *ce, int c, int v)
 {
 	if (aga_mode)
@@ -200,9 +151,9 @@ struct color_change {
 
 struct sprite_entry
 {
-  unsigned short pos;
-  unsigned short max;
-  unsigned int first_pixel;
+  uae_u16 pos;
+  uae_u16 max;
+  uae_u32 first_pixel;
   bool has_attached;
 };
 

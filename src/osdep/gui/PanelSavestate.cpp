@@ -98,7 +98,7 @@ static void RefreshPanelSavestate(void)
 		}
   }
   
-  bool enabled = 1; // nr_units () == 0;
+  bool enabled = 1;
   optState0->setEnabled(enabled);
   optState1->setEnabled(enabled);
   optState2->setEnabled(enabled);

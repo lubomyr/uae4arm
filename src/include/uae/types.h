@@ -9,9 +9,6 @@
 #ifndef UAE_TYPES_H
 #define UAE_TYPES_H
 
-/* This file is intended to be included by external libraries as well,
- * so don't pull in too much UAE-specific stuff. */
-
 /* Define uae_ integer types. Prefer long long int for uae_x64 since we can
  * then use the %lld format specifier for both 32-bit and 64-bit instead of
  * the ugly PRIx64 macros. */

@@ -78,7 +78,6 @@ int fsdb_fill_file_attrs (a_inode *base, a_inode *aino)
   if (stat (aino->nname, &statbuf) == -1)
   	return 0;
   aino->dir = S_ISDIR (statbuf.st_mode) ? 1 : 0;
-  
   aino->amigaos_mode = ((S_IXUSR & statbuf.st_mode ? 0 : A_FIBF_EXECUTE)
 		  | (S_IWUSR & statbuf.st_mode ? 0 : A_FIBF_WRITE)
 		  | (S_IRUSR & statbuf.st_mode ? 0 : A_FIBF_READ));

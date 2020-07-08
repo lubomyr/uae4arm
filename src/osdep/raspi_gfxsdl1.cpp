@@ -22,7 +22,6 @@
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 
-
 #define DISPLAY_SIGNAL_SETUP 				1
 #define DISPLAY_SIGNAL_SUBSHUTDOWN 	2
 #define DISPLAY_SIGNAL_OPEN 				3
@@ -36,9 +35,16 @@ static int display_width;
 static int display_height;
 static uae_thread_id vsync_tid = 0;
 static bool volatile vsync_term = false;
+bool volatile flip_in_progess = false;
 
 /* SDL surface variable for output of emulation */
 SDL_Surface *prSDLScreen = NULL;
+
+static int nativeScreenWidth = 1024;
+static int nativeScreenHeight = 800;
+static int nativeScreenDepth = 16;
+static int red_bits, green_bits, blue_bits;
+static int red_shift, green_shift, blue_shift;
 
 uae_u32 time_per_frame = 20000; // Default for PAL (50 Hz): 20000 microsecs
 static uae_u32 last_synctime;
@@ -48,7 +54,7 @@ static int currVSyncRate = 0;
 /* Possible screen modes (x and y resolutions) */
 #define MAX_SCREEN_MODES 14
 static int x_size_table[MAX_SCREEN_MODES] = {640, 640, 720, 800, 800, 960, 1024, 1280, 1280, 1280, 1360, 1366, 1680, 1920};
-static int y_size_table[MAX_SCREEN_MODES] = {400, 480, 400, 480, 600, 540, 768, 720, 800, 1024, 768, 768, 1050, 1080};
+static int y_size_table[MAX_SCREEN_MODES] = {400, 480, 400, 480, 600, 540,  768,  720,  800, 1024,  768,  768, 1050, 1080};
 
 struct PicassoResolution *DisplayModes;
 struct MultiDisplay Displays[MAX_DISPLAYS];
@@ -158,7 +164,7 @@ void reset_sync(void)
 }
 
 
-static void *vsync_thread (void *unused)
+static int vsync_thread (void *unused)
 {
 	int fbdev_sync = open("/dev/fb0", O_RDWR);
 	if (fbdev_sync == -1) {
@@ -177,7 +183,7 @@ static void *vsync_thread (void *unused)
   }
   close(fbdev_sync);
   vsync_tid = 0;
-  return NULL;
+  return 0;
 }
 
 
@@ -206,13 +212,14 @@ static int display_thread (void *unused)
 				width = display_width;
 				height = display_height;
 				
-				prSDLScreen = SDL_SetVideoMode(width, height, 16, SDL_HWSURFACE | SDL_FULLSCREEN);
+				prSDLScreen = SDL_SetVideoMode(width, height, nativeScreenDepth, SDL_HWSURFACE | SDL_FULLSCREEN);
 			
         uae_sem_post (&display_sem);
         break;
 
 			case DISPLAY_SIGNAL_SHOW:
 			  SDL_Flip(prSDLScreen);
+			  flip_in_progess = false;
 				break;
 								
       case DISPLAY_SIGNAL_QUIT:
@@ -311,7 +318,11 @@ static void InitAmigaVidMode(struct uae_prefs *p)
 {
   /* Initialize structure for Amiga video modes */
 	struct amigadisplay *ad = &adisplays;
-	ad->gfxvidinfo.drawbuffer.pixbytes = 2;
+	ad->gfxvidinfo.drawbuffer.pixbytes = nativeScreenDepth / 8;
+	if(nativeScreenDepth <= 16)
+	  p->color_mode = 2;
+	else
+	  p->color_mode = 5;
 	ad->gfxvidinfo.drawbuffer.bufmem = (uae_u8 *)prSDLScreen->pixels;
 	ad->gfxvidinfo.drawbuffer.outwidth = p->gfx_monitor.gfx_size.width;
 	ad->gfxvidinfo.drawbuffer.outheight = p->gfx_monitor.gfx_size.height << p->gfx_vresolution;
@@ -525,6 +536,7 @@ void show_screen(int mode)
     next_amiga_frame_ends += time_per_frame;
     
 	wait_for_display_thread();
+  flip_in_progess = true;
 	write_comm_pipe_u32(display_pipe, DISPLAY_SIGNAL_SHOW, 1);
 
   idletime += last_synctime - start;
@@ -560,9 +572,6 @@ static void graphics_subinit(void)
 
 static int init_colors(void)
 {
-	int red_bits, green_bits, blue_bits;
-	int red_shift, green_shift, blue_shift;
-
 	/* Truecolor: */
 	red_bits = bits_in_mask(prSDLScreen->format->Rmask);
 	green_bits = bits_in_mask(prSDLScreen->format->Gmask);
@@ -643,7 +652,7 @@ static int save_png(SDL_Surface* surface, char *path)
 	int w = surface->w;
 	int h = surface->h;
 	unsigned char * pix = (unsigned char *)surface->pixels;
-	unsigned char writeBuffer[1024 * 3];
+	unsigned char writeBuffer[1920 * 3];
 	FILE *f  = fopen(path, "wb");
 	if (!f) return 0;
 	png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -671,18 +680,34 @@ static int save_png(SDL_Surface* surface, char *path)
 	int y;
 	int x;
 
-	unsigned short *p = (unsigned short *)pix;
-	for (y = 0; y < sizeY; y++) {
-		for (x = 0; x < sizeX; x++) {
-			unsigned short v = p[x];
-  
-			*b++ = ((v & systemRedMask) >> systemRedShift) << 3; // R
-			*b++ = ((v & systemGreenMask) >> systemGreenShift) << 2; // G 
-			*b++ = ((v & systemBlueMask) >> systemBlueShift) << 3; // B
-		}
-		p += surface->pitch / 2;
-		png_write_row(png_ptr, writeBuffer);
-		b = writeBuffer;
+  if(nativeScreenDepth <= 16) {
+  	unsigned short *p = (unsigned short *)pix;
+  	for (y = 0; y < sizeY; y++) {
+  		for (x = 0; x < sizeX; x++) {
+  			unsigned short v = p[x];
+    
+  			*b++ = ((v & systemRedMask) >> systemRedShift) << 3; // R
+  			*b++ = ((v & systemGreenMask) >> systemGreenShift) << 2; // G 
+  			*b++ = ((v & systemBlueMask) >> systemBlueShift) << 3; // B
+  		}
+  		p += surface->pitch / 2;
+  		png_write_row(png_ptr, writeBuffer);
+  		b = writeBuffer;
+  	}
+	} else {
+  	unsigned int *p = (unsigned int *)pix;
+  	for (y = 0; y < sizeY; y++) {
+  		for (x = 0; x < sizeX; x++) {
+  			unsigned int v = p[x];
+    
+  			*b++ = ((v & systemRedMask) >> systemRedShift); // R
+  			*b++ = ((v & systemGreenMask) >> systemGreenShift); // G 
+  			*b++ = ((v & systemBlueMask) >> systemBlueShift); // B
+  		}
+  		p += surface->pitch / 4;
+  		png_write_row(png_ptr, writeBuffer);
+  		b = writeBuffer;
+  	}
 	}
 
 	png_write_end(png_ptr, info_ptr);
@@ -788,6 +813,19 @@ bool target_graphics_buffer_update(void)
 	return true;
 }
 
+
+void target_detect_displaysize(void)
+{
+	const SDL_VideoInfo *vid_info;
+
+	if ((vid_info = SDL_GetVideoInfo())) {
+    nativeScreenWidth = vid_info->current_w;
+    nativeScreenHeight = vid_info->current_h;
+		nativeScreenDepth = vid_info->vfmt->BitsPerPixel;
+  }
+}
+
+
 #ifdef PICASSO96
 
 
@@ -887,7 +925,7 @@ void picasso_InitResolutions(void)
 			int pixelFormat = 1 << rgbFormat;
 			pixelFormat |= RGBFF_CHUNKY;
       
-			if (SDL_VideoModeOK (x_size_table[i], y_size_table[i], 16, SDL_HWSURFACE)) {
+			if (SDL_VideoModeOK (x_size_table[i], y_size_table[i], nativeScreenDepth, SDL_HWSURFACE)) {
 				DisplayModes[count].res.width = x_size_table[i];
 				DisplayModes[count].res.height = y_size_table[i];
 				DisplayModes[count].depth = bit_unit >> 3;
@@ -932,15 +970,20 @@ void gfx_set_picasso_modeinfo(uae_u32 w, uae_u32 h, uae_u32 depth, RGBFTYPE rgbf
 	picasso_vidinfo.selected_rgbformat = rgbfmt;
 	picasso_vidinfo.width = w;
 	picasso_vidinfo.height = h;
-	picasso_vidinfo.depth = 2; // Native depth
+	picasso_vidinfo.depth = nativeScreenDepth;
 	picasso_vidinfo.extra_mem = 1;
 
-	picasso_vidinfo.pixbytes = 2; // Native bytes
+	picasso_vidinfo.pixbytes = nativeScreenDepth / 8;
 	if (screen_is_picasso) {
 		open_screen(&currprefs);
   	if(prSDLScreen != NULL)
   		picasso_vidinfo.rowbytes	= prSDLScreen->pitch;
-		picasso_vidinfo.rgbformat = RGBFB_R5G6B5;
+  	if(nativeScreenDepth <= 16)
+		  picasso_vidinfo.rgbformat = RGBFB_R5G6B5;
+		else if(nativeScreenDepth <= 24)
+		  picasso_vidinfo.rgbformat = RGBFB_B8G8R8;
+    else
+		  picasso_vidinfo.rgbformat = RGBFB_R8G8B8A8;
 	}
 }
 
@@ -960,6 +1003,11 @@ void gfx_unlock_picasso(bool dorender)
     render_screen(true);
     show_screen(0);
   }
+}
+
+void gfx_set_picasso_colors(RGBFTYPE rgbfmt)
+{
+	alloc_colors_picasso(red_bits, green_bits, blue_bits, red_shift, green_shift, blue_shift, rgbfmt, p96_rgbx16);
 }
 
 #endif // PICASSO96

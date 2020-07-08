@@ -23,8 +23,7 @@
 
 #define STATUSLINE_CHIPSET 1
 #define STATUSLINE_RTG 2
-#define STATUSLINE_TARGET 0x80
 
-extern void draw_status_line_single (uae_u8 *buf, int y, int totalwidth);
+extern void draw_status_line_single (uae_u8 *buf, int bpp, int y, int totalwidth, uae_u32 *rc, uae_u32 *gc, uae_u32 *bc);
 
 #endif /* UAE_STATUSLINE_H */

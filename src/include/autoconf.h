@@ -82,6 +82,9 @@ struct mountedinfo
 {
   uae_s64 size;
   bool ismounted;
+  bool ismedia;
+	int error;
+	TCHAR rootdir[MAX_DPATH];
 };
 
 extern int get_filesys_unitconfig (struct uae_prefs *p, int index, struct mountedinfo*);
@@ -89,6 +92,7 @@ extern int kill_filesys_unitconfig (struct uae_prefs *p, int nr);
 extern TCHAR *validatedevicename (TCHAR *s, const TCHAR *def);
 extern TCHAR *validatevolumename (TCHAR *s, const TCHAR *def);
 
+int filesys_eject(int nr);
 int filesys_media_change (const TCHAR *rootdir, int inserted, struct uaedev_config_data *uci);
 
 extern TCHAR *filesys_createvolname (const TCHAR *volname, const TCHAR *rootdir, struct zvolume *zv, const TCHAR *def);
@@ -112,7 +116,7 @@ extern void expansion_cleanup (void);
 extern void expansion_clear (void);
 extern void expansion_scan_autoconfig(struct uae_prefs*, bool);
 extern void expansion_generate_autoconfig_info(struct uae_prefs *p);
-extern struct autoconfig_info *expansion_get_autoconfig_by_address(struct uae_prefs *p, uaecptr addr);
+extern struct autoconfig_info *expansion_get_autoconfig_by_address(struct uae_prefs *p, uaecptr addr, int index);
 extern void expansion_map(void);
 
 extern void uaegfx_install_code (uaecptr);
@@ -136,6 +140,5 @@ struct expansionromtype
 	int deviceflags;
 };
 extern const struct expansionromtype expansionroms[];
-
 
 #endif /* UAE_AUTOCONF_H */

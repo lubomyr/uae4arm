@@ -140,10 +140,8 @@ extern uae_u32 timeframes;
  * needs to be larger for superhires support */
 #define MAX_WORDS_PER_LINE 100
 
-#if !defined(ARMV6T2) && !defined(CPU_AARCH64)
 /* AGA mode color lookup tables */
 extern unsigned int xredcolors[256], xgreencolors[256], xbluecolors[256];
-#endif
 
 #define RES_LORES 0
 #define RES_HIRES 1

@@ -50,6 +50,9 @@ void reset_sync(void);
 uae_u32 target_lastsynctime(void);
 extern int screen_is_picasso;
 
+void target_detect_displaysize(void);
+extern bool volatile flip_in_progess;
+
 void saveAdfDir(void);
 void update_display(struct uae_prefs *);
 void black_screen_now(void);

@@ -503,7 +503,6 @@ bool EditFilesysHardfile(int unit_no)
     ci.controller_type = controller[cboController->getSelected()].type;
     ci.controller_type_unit = 0;
     ci.controller_unit = cboUnit->getSelected();
-    ci.controller_media_type = 0;
     ci.unit_feature_level = 1;
     ci.unit_special_flags = 0;
     ci.readonly = !chkReadWrite->isSelected();

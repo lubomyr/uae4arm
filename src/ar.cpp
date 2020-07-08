@@ -255,6 +255,8 @@ static int triggered_once;
 static bool action_replay_hardreset;
 
 static void hrtmon_unmap_banks (void);
+static void hrtmon_map_banks(void);
+static void action_replay_version(void);
 
 static int stored_picasso_on = -1;
 
@@ -940,7 +942,6 @@ static void hrtmon_go (void)
 		old = get_long ((uaecptr)(regs.vbr + 0x7c));
 		put_long ((uaecptr)(regs.vbr + 0x7c), hrtmem_start + 8 + 4);
 		NMI ();
-		//put_long ((uaecptr)(regs.vbr + 0x7c), old);
 	}
 }
 
@@ -1046,9 +1047,9 @@ void action_replay_cia_access(bool write)
 	if (action_replay_flag == ACTION_REPLAY_INACTIVE)
 		return;
 	if ((armode_write & ARMODE_ACTIVATE_BFE001) && !write) {
-		event2_newevent_xx(-1, 1, write, action_replay_cia_access_delay);
+		event2_newevent_xx(-1, 0, write, action_replay_cia_access_delay);
 	} else if ((armode_write & ARMODE_ACTIVATE_BFD100) && write) {
-		event2_newevent_xx(-1, 1, write, action_replay_cia_access_delay);
+		event2_newevent_xx(-1, 0, write, action_replay_cia_access_delay);
 	}
 }
 
@@ -1073,7 +1074,6 @@ int action_replay_freeze (void)
 
 static void action_replay_chipwrite (void)
 {
-	//write_log (_T("AR CW\n"));
 	if (armodel == 2 || armodel == 3) {
 		action_replay_flag = ACTION_REPLAY_DORESET;
 		set_special (SPCFLAG_ACTION_REPLAY);
@@ -1114,7 +1114,6 @@ void hrtmon_hide(void)
 	cartridge_exit();
 	hrtmon_flag = ACTION_REPLAY_IDLE;
 	unset_special (SPCFLAG_ACTION_REPLAY);
-	//write_log (_T("HRTMON: Exit\n"));
 }
 
 /* Disabling copperlist processing:
@@ -1639,13 +1638,6 @@ void action_replay_cleanup()
 	hrtmem_end = 0;
 	hrtmem2_end = 0;
 }
-
-#ifndef FALSE
-#define FALSE 0
-#endif
-#ifndef TRUE
-#define TRUE 1
-#endif
 
 static void hrtmon_configure(void)
 {

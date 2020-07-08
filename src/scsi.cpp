@@ -99,19 +99,13 @@ bool scsi_emulate_analyze (struct scsi_data *sd)
 		sd->data_len = 0;
 		return true;
 	case 0x0c: // INITIALIZE DRIVE CHARACTERICS (SASI)
-		if (sd->hfd && sd->hfd->ci.unit_feature_level < HD_LEVEL_SASI)
 			goto nocmd;
-		data_len = 8;
-	break;
 	case 0x08: // READ(6)
 		data_len2 = (sd->cmd[4] == 0 ? 256 : sd->cmd[4]) * sd->blocksize;
 		scsi_grow_buffer(sd, data_len2);
 	break;
 	case 0x11: // ASSIGN ALTERNATE TRACK (SASI)
-		if (sd->hfd && sd->hfd->ci.unit_feature_level < HD_LEVEL_SASI)
 			goto nocmd;
-		data_len = 4;
-	break;
 	case 0x28: // READ(10)
 		data_len2 = ((sd->cmd[7] << 8) | (sd->cmd[8] << 0)) * (uae_s64)sd->blocksize;
 		scsi_grow_buffer(sd, data_len2);
@@ -140,8 +134,7 @@ bool scsi_emulate_analyze (struct scsi_data *sd)
 	case 0xb9: // READ CD MSF
 	case 0xd8: // READ CD-DA
 	case 0xd9: // READ CD-DA MSF
-		goto nocmd;
-	break;
+	  goto nocmd;
 	case 0x2f: // VERIFY
 		if (sd->cmd[1] & 2) {
 			sd->data_len = ((sd->cmd[7] << 8) | (sd->cmd[8] << 0)) * (uae_s64)sd->blocksize;
@@ -182,14 +175,13 @@ static void scsi_clear_sense(struct scsi_data *sd)
 }
 static void copysense(struct scsi_data *sd)
 {
-	bool sasi = sd->hfd && (sd->hfd->ci.unit_feature_level >= HD_LEVEL_SASI && sd->hfd->ci.unit_feature_level <= HD_LEVEL_SASI_ENHANCED);
 	int len = sd->cmd[4];
-	if (len == 0 || sasi)
+	if (len == 0)
 		len = 4;
 	memset(sd->buffer, 0, len);
 	int tlen = sd->sense_len > len ? len : sd->sense_len;
 	memcpy(sd->buffer, sd->sense, tlen);
-	if (!sasi && sd->sense_len == 0) {
+	if (sd->sense_len == 0) {
 		// at least 0x12 bytes if SCSI and no sense
 		tlen = len > 0x12 ? 0x12 : len;
 		sd->buffer[0] = 0x70;

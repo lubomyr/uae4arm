@@ -89,6 +89,10 @@ void init_extended_traps(void);
 /* New trap system */
 
 bool trap_valid_address(TrapContext *ctx, uaecptr addr, uae_u32 size);
+bool trap_valid_string(TrapContext *ctx, uaecptr addr, uae_u32 maxsize);
+
+void trap_memcpyha_safe(TrapContext *ctx, uaecptr dst, const uae_u8 *src, int size);
+void trap_memcpyah_safe(TrapContext *ctx, uae_u8 *dst, uaecptr src, int size);
 
 uae_u32 trap_get_dreg(TrapContext *ctx, int reg);
 uae_u32 trap_get_areg(TrapContext *ctx, int reg);

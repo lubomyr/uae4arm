@@ -101,7 +101,7 @@ startjmp:
 	dc.l bcplwrapper-start        ;  7 40
 	dc.l afterdos-start 	        ;  8 44
 	dc.l hwtrap_install-start     ;  9 48
-	dc.l hwtrap_entry-start   	  ; 10 52
+	dc.l 0   	  ; 10 52
 	dc.l 0 ; keymaphack-start		  ; 11 56
 	dc.l 0 ; fpu060disable-start	; 12 60
 
@@ -1490,6 +1490,12 @@ addfsonthefly ; d1 = fs index
 	jsr FreeMem(a6)
 .nomem	move.l a4,a1
 	jsr -414(a6) ; CloseLibrary
+	; reply done
+	moveq #4,d1
+	move.w #$FF48,d0
+	bsr.w getrtbaselocal
+	move.l d6,d0
+	jsr (a0)
 	movem.l (sp)+,d2-d7/a2-a6
 	rts
 
@@ -1643,8 +1649,24 @@ FSML_loop:
 	bclr #1,173(a3)
 .nodebug
 	; disk change notification from native code
+	tst.b 172(a3)
+	beq.s .nodc
+	; call filesys_media_change_reply (pre)
+	move.w #$ff58,d0 ; fsmisc_helper
+	bsr.w getrtbaselocal
+	moveq #1,d0 ; filesys_media_change_reply
+	jsr (a0)
+	tst.l d0
+	beq.s .nodc2
+	bsr.w diskchange
+.nodc2
 	clr.b 172(a3)
-
+	; call filesys_media_change_reply (post)
+	move.w #$ff58,d0 ; fsmisc_helper
+	bsr.w getrtbaselocal
+	moveq #2,d0 ; filesys_media_change_reply
+	jsr (a0)
+.nodc
 	move.l a4,d0
 	beq.s nonnotif
 
@@ -2758,114 +2780,6 @@ hwtrap_install:
 .notrap
 
 	movem.l (sp)+,d2/a2/a6
-	rts
-
-hwtrap_entry:
-	movem.l d0-d1/a0-a1,-(sp)
-.retry
-	move.l #TRAP_STATUS,d0
-	bsr.w getrtbase
-	move.l a0,a1
-	move.l #TRAP_DATA,d0
-	bsr.w getrtbase
-	moveq #TRAP_DATA_NUM-1,d0
-.nexttrap
-	tst.w TRAP_STATUS_LOCK_WORD(a1)
-	beq.s .foundfree
-.nexttrap2
-	add.w #TRAP_DATA_SLOT_SIZE,a0
-	add.w #TRAP_STATUS_SLOT_SIZE,a1
-	dbf d0,.nexttrap
-	bra.s .retry
-.foundfree
-
-	; store registers
-	movem.l d2-d7,TRAP_DATA_DATA+2*4(a0)
-	movem.l a2-a6,TRAP_DATA_DATA+8*4+2*4(a0)
-	move.l 0*4(sp),TRAP_DATA_DATA(a0) ;D0
-	move.l 1*4(sp),TRAP_DATA_DATA+1*4(a0) ;D1
-	move.l 2*4(sp),TRAP_DATA_DATA+8*4(a0) ;A0
-	move.l 3*4(sp),TRAP_DATA_DATA+8*4+1*4(a0) ;A1
-
-	move.l a0,a2 ; data
-	move.l a1,a3 ; status
-
-	move.l 4.w,a6
-	clr.l TRAP_DATA_TASKWAIT(a2)
-	tst.b (a3)
-	beq.s .nowait
-	sub.l a1,a1
-	jsr -$126(a6) ; FindTask
-	move.l d0,TRAP_DATA_TASKWAIT(a2)
-.nowait
-	
-	; trap number, this triggers the trap
-	move.w 4*4(sp),(a3)
-
-	move.l #$80000000,d5
-	move.w #10000,d4
-
-.waittrap
-	tst.b TRAP_STATUS_STATUS2(a3)
-	bne.s .triggered
-	cmp.b #$fe,TRAP_STATUS_SECOND+TRAP_STATUS_STATUS(a3)
-	bne.s .waittrap1
-	move.b #4,TRAP_STATUS_SECOND+TRAP_STATUS_STATUS(a3)
-	move.l a2,a0
-	move.l a3,a1
-	moveq #1,d0
-	bsr.w hwtrap_command
-	move.b #3,TRAP_STATUS_SECOND+TRAP_STATUS_STATUS(a3)
-	bra.s .waittrap
-.waittrap1
-	tst.l TRAP_DATA_TASKWAIT(a2)
-	bne.s .waittrap2
-	cmp.l #$80000000,d5
-	bne.s .waittrap
-	subq.w #1,d4
-	bpl.s .waittrap
-	; lower priority after some busy wait rounds
-	sub.l a1,a1
-	jsr -$126(a6) ; FindTask
-	move.l d0,a1
-	moveq #-120,d0
-	jsr -$12c(a6) ; SetTaskPri
-	move.l d0,d5
-	bra.s .waittrap
-.waittrap2
-	move.l #$100,d0
-	jsr -$13e(a6) ; Wait
-	bra.s .waittrap
-.triggered
-	cmp.l #$80000000,d5
-	beq.s .triggered1
-	; restore original priority
-	sub.l a1,a1
-	jsr -$126(a6) ; FindTask
-	move.l d0,a1
-	move.l d5,d0
-	jsr -$12c(a6) ; SetTaskPri
-.triggered1
-	move.b #1,TRAP_STATUS_STATUS2(a3)
-
-	move.l a2,a0
-	move.l a3,a1
-
-	; restore registers
-	movem.l TRAP_DATA_DATA(a0),d0-d7
-	movem.l TRAP_DATA_DATA+8*4+2*4(a0),a2-a6
-	move.l TRAP_DATA_DATA+8*4(a0),-(sp) ;A0
-	move.l TRAP_DATA_DATA+8*4+1*4(a0),-(sp) ;A1
-
-	clr.l TRAP_DATA_TASKWAIT(a0)
-
-	; free trap data entry
-	clr.w TRAP_STATUS_LOCK_WORD(a1)
-
-	move.l (sp)+,a1
-	move.l (sp)+,a0
-	; pop trap number and d0-d1/a0-a1
-	lea 4*4+2(sp),sp
 	rts
 
 hwtrap_interrupt:

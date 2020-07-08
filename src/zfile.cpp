@@ -482,7 +482,6 @@ static struct zfile *extadf (struct zfile *z, int index, int *retcode)
 			if (index == 0) {
     		r = isamigatrack (amigamfmbuffer, (uae_u8*)mfm, len, outbuf, writebuffer_ok, i, &outsize);
     	  if (r < 0 && i == 0) {
-					zfile_seterror (_T("'%s' is not AmigaDOS formatted"), zo->name);
   		    goto end;
     	  }
 				if (i == 0)
@@ -490,7 +489,6 @@ static struct zfile *extadf (struct zfile *z, int index, int *retcode)
 	    } else {
     		r = ispctrack (amigamfmbuffer, (uae_u8*)mfm, len, outbuf, writebuffer_ok, i, &outsize);
     		if (r < 0 && i == 0) {
-					zfile_seterror (_T("'%s' is not PC formatted"), zo->name);
   		    goto end;
     	  }
 				if (i == 0)
@@ -611,14 +609,12 @@ static struct zfile *fdi (struct zfile *z, int index, int *retcode)
 		if (index == 0) {
 			r = isamigatrack (amigamfmbuffer, p, len, outbuf, writebuffer_ok, i, &outsize);
 			if (r < 0 && i == 0) {
-				zfile_seterror (_T("'%s' is not AmigaDOS formatted"), orgname);
 				goto end;
 			}
 			zfile_fwrite (outbuf, outsize, 1, zo);
 		} else if (index == 1) {
 			r = ispctrack (amigamfmbuffer, p, len, outbuf, writebuffer_ok, i, &outsize);
 			if (r < 0 && i == 0) {
-				zfile_seterror (_T("'%s' is not PC formatted"), orgname);
 				goto end;
 			}
 			zfile_fwrite (outbuf, outsize, 1, zo);
@@ -747,14 +743,12 @@ static struct zfile *ipf (struct zfile *z, int index, int *retcode)
 		if (index == 0) {
 			r = isamigatrack (amigamfmbuffer, p, len, outbuf, writebuffer_ok, i, &outsize);
 			if (r < 0 && i == 0) {
-				zfile_seterror (_T("'%s' is not AmigaDOS formatted"), orgname);
 				goto end;
 			}
 			zfile_fwrite (outbuf, 1, outsize, zo);
 		} else if (index == 1) {
 			r = ispctrack (amigamfmbuffer, p, len, outbuf, writebuffer_ok, i, &outsize);
 			if (r < 0 && i == 0) {
-				zfile_seterror (_T("'%s' is not PC formatted"), orgname);
 				goto end;
 			}
 			zfile_fwrite (outbuf, outsize, 1, zo);
@@ -2922,24 +2916,3 @@ int zfile_exists_archive (const TCHAR *path, const TCHAR *rel)
   zn = get_znode (zv, tmp, TRUE);
   return zn ? 1 : 0;
 }
-
-#ifdef _CONSOLE
-static TCHAR *zerror;
-#define WRITE_LOG_BUF_SIZE 4096
-void zfile_seterror (const TCHAR *format, ...)
-{
-	int count;
-	if (!zerror) {
-		TCHAR buffer[WRITE_LOG_BUF_SIZE];
-		va_list parms;
-		va_start (parms, format);
-		count = _vsntprintf (buffer, WRITE_LOG_BUF_SIZE - 1, format, parms);
-		zerror = my_strdup (buffer);
-		va_end (parms);
-	}
-}
-#else
-void zfile_seterror (const TCHAR *format, ...)
-{
-}
-#endif

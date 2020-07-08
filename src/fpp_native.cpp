@@ -79,7 +79,6 @@ static void fpp_set_mode(uae_u32 mode_control)
 	fpu_mode_control = mode_control;
 }
 
-
 /* Functions for detecting float type */
 static bool fpp_is_nan (fpdata *fpd)
 {
@@ -810,8 +809,3 @@ static void fpp_to_pack (fpdata *fpd, uae_u32 *wrd, int dummy)
 	fpp_from_native(d, fpd);
 }
 
-
-double softfloat_tan(double v)
-{
-	return tanl(v);
-}

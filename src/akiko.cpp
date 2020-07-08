@@ -158,6 +158,7 @@
 #include "uae.h"
 #include "custom.h"
 #include "flashrom.h"
+#include "devices.h"
 
 // 43 48 49 4E 4F 4E 20 20 4F 2D 36 35 38 2D 32 20 32 34
 #define FIRMWAREVERSION "CHINON  O-658-2 24"
@@ -452,7 +453,7 @@ static void set_status (uae_u32 status)
 	cdrom_led ^= LED_CD_ACTIVE2;
 }
 
-void rethink_akiko (void)
+static void rethink_akiko(void)
 {
 	checkint ();
 }
@@ -532,7 +533,7 @@ static int statusfunc_imm(int status, int playpos)
 	if (status == -3 || status > AUDIO_STATUS_IN_PROGRESS)
 		uae_sem_post(&cda_sem);
 	if (status < 0)
-		return 1;
+		return 0;
 	return statusfunc(status, playpos);
 }
 
@@ -1254,7 +1255,7 @@ static void akiko_internal (void)
 	}
 }
 
-void AKIKO_hsync_handler (void)
+static void AKIKO_hsync_handler (void)
 {
 	bool framesync = false;
 
@@ -1829,7 +1830,30 @@ static void akiko_cdrom_free (void)
 	sector_buffer_info_2 = 0;
 }
 
-void akiko_reset (void)
+static int akiko_thread_do(int start)
+{
+	if (!start) {
+	  if (akiko_thread_running > 0) {
+		  cdaudiostop ();
+		  akiko_thread_running = 0;
+		  while(akiko_thread_running == 0)
+			  sleep_millis (10);
+		  akiko_thread_running = 0;
+	    destroy_comm_pipe(&requests);
+			return 1;
+	  }
+	} else {
+		if (!akiko_thread_running) {
+			akiko_thread_running = 1;
+			init_comm_pipe(&requests, 100, 1);
+			uae_start_thread(_T("akiko"), akiko_thread, 0, NULL);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void akiko_reset(int hardreset)
 {
 	cdaudiostop_do ();
 	nvram_read ();
@@ -1846,28 +1870,18 @@ void akiko_reset (void)
 		cdrom_intreq = CDINTERRUPT_SUBCODE;
 		cdrom_subcodeoffset = 0xc2;
 		cdrom_intena = 0;
+		cdrom_flags = 0;
 	}
 	cdrom_led = 0;
 	cdrom_receive_length = 0;
 	cdrom_receive_offset = 0;
 	cd_initialized = 0;
-
-	if (akiko_thread_running > 0) {
-		cdaudiostop ();
-		akiko_thread_running = 0;
-		while(akiko_thread_running == 0)
-			sleep_millis (10);
-	  destroy_comm_pipe(&requests);
-		akiko_thread_running = 0;
-	}
-	akiko_cdrom_free ();
 	mediacheckcounter = 0;
-	akiko_inited = false;
 }
 
-void akiko_free (void)
+static void akiko_free(void)
 {
-	akiko_reset ();
+	akiko_thread_do(0);
 	akiko_cdrom_free ();
 	if(akiko_sem != 0)
 	  uae_sem_destroy(&akiko_sem);
@@ -1878,12 +1892,15 @@ void akiko_free (void)
 	if(cda_sem != 0)
 	  uae_sem_destroy(&cda_sem);
 	cda_sem = 0;
+	mediacheckcounter = 0;
+	akiko_inited = false;
 }
 
 int akiko_init (void)
 {
 	if (!currprefs.cs_cd32cd)
 		return 0;
+	device_add_reset_imm(akiko_reset);
 	akiko_free ();
 	akiko_precalculate ();
 	unitnum = -1;
@@ -1911,13 +1928,14 @@ int akiko_init (void)
 		cdrom_data_offset = -1;
 	}
 	patchrom ();
-	if (!akiko_thread_running) {
-		akiko_thread_running = 1;
-		init_comm_pipe (&requests, 100, 1);
-		uae_start_thread (_T("akiko"), akiko_thread, 0, NULL);
-	}
+	akiko_thread_do(1);
 	gui_flicker_led (LED_HD, 0, -1);
 	akiko_inited = true;
+
+	device_add_hsync(AKIKO_hsync_handler);
+	device_add_exit(akiko_free);
+	device_add_rethink(rethink_akiko);
+
 	return 1;
 }
 
@@ -1974,7 +1992,6 @@ uae_u8 *save_akiko (int *len, uae_u8 *dstptr)
 	save_u8 (cdrom_speed);
 	save_u8 (cdrom_current_sector);
 
-	save_u32 (0);
 	save_u8 (cdrom_toc_cd_buffer.points);
 	save_u32 (cdrom_toc_cd_buffer.lastaddress);
 
@@ -2043,7 +2060,6 @@ uae_u8 *restore_akiko (uae_u8 *src)
 	cdrom_speed = restore_u8 ();
 	cdrom_current_sector = (uae_s8)restore_u8 ();
 
-	restore_u32 ();
 	restore_u8 ();
 	restore_u32 ();
 
@@ -2058,6 +2074,12 @@ void restore_akiko_finish (void)
 	akiko_init ();
 	akiko_c2p_do ();
 	get_cdrom_toc ();
+}
+
+void restore_akiko_final(void)
+{
+	if (!currprefs.cs_cd32cd)
+		return;
 	write_comm_pipe_u32 (&requests, 0x0102, 1); // pause
 	write_comm_pipe_u32 (&requests, 0x0104, 1); // stop
 	write_comm_pipe_u32 (&requests, 0x0103, 1); // unpause

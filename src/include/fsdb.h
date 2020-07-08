@@ -161,6 +161,7 @@ extern bool my_issamepath(const TCHAR *path1, const TCHAR *path2);
 #define MYVOLUMEINFO_READONLY 1
 #define MYVOLUMEINFO_ARCHIVE 4
 #define MYVOLUMEINFO_REUSABLE 8
+#define MYVOLUMEINFO_CDFS 16
 
 extern int my_getvolumeinfo (const TCHAR *root);
 

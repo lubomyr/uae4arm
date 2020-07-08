@@ -336,14 +336,14 @@ bool CreateFilesysHardfile(void)
 	  ci.controller_type = 0;
 	  ci.controller_type_unit = 0;
 	  ci.controller_unit = 0;
-	  ci.controller_media_type = 0;
    	ci.unit_feature_level = 1;
 	  ci.readonly = 0;
     
     uci = add_filesys_config(&workprefs, -1, &ci);
     if (uci) {
   		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
-      hardfile_media_change (hfd, &ci, true, false);
+  		if(hfd)
+        hardfile_media_change (hfd, &ci, true, false);
     }
   }
 

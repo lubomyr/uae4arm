@@ -280,6 +280,111 @@ static int NOINLINE linetoscr_16_stretch1 (int spix, int dpix, int dpix_end)
   return spix;
 }
 
+static int NOINLINE linetoscr_16_stretch2(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
 static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -489,6 +594,240 @@ static int NOINLINE linetoscr_16_shrink1 (int spix, int dpix, int dpix_end)
   }
 
   return spix;
+}
+
+static int NOINLINE linetoscr_16_shrink2(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        int rem;
+        if (((uintptr_t)&buf[dpix]) & 2) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+        if (dpix >= dpix_end)
+            return spix;
+        rem = (((uintptr_t)&buf[dpix_end]) & 2);
+        if (rem)
+            dpix_end--;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = (out_val & 0xFFFF) | (dpix_val << 16);
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+        if (rem) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        int rem;
+        if (((uintptr_t)&buf[dpix]) & 2) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+        if (dpix >= dpix_end)
+            return spix;
+        rem = (((uintptr_t)&buf[dpix_end]) & 2);
+        if (rem)
+            dpix_end--;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix += 4;
+            out_val = (out_val & 0xFFFF) | (dpix_val << 16);
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+        if (rem) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        int rem;
+        if (((uintptr_t)&buf[dpix]) & 2) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+        if (dpix >= dpix_end)
+            return spix;
+        rem = (((uintptr_t)&buf[dpix_end]) & 2);
+        if (rem)
+            dpix_end--;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            out_val = dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            out_val = (out_val & 0xFFFF) | (dpix_val << 16);
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+        if (rem) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        int rem;
+        if (((uintptr_t)&buf[dpix]) & 2) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+        if (dpix >= dpix_end)
+            return spix;
+        rem = (((uintptr_t)&buf[dpix_end]) & 2);
+        if (rem)
+            dpix_end--;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            out_val = dpix_val;
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            out_val = (out_val & 0xFFFF) | (dpix_val << 16);
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+        if (rem) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        int rem;
+        if (((uintptr_t)&buf[dpix]) & 2) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+        if (dpix >= dpix_end)
+            return spix;
+        rem = (((uintptr_t)&buf[dpix_end]) & 2);
+        if (rem)
+            dpix_end--;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            out_val = dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            out_val = (out_val & 0xFFFF) | (dpix_val << 16);
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+        if (rem) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            buf[dpix++] = dpix_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
 }
 
 static int NOINLINE linetoscr_16_spr(int spix, int dpix, int dpix_end)
@@ -745,6 +1084,157 @@ static int NOINLINE linetoscr_16_stretch1_spr(int spix, int dpix, int dpix_end)
   return spix;
 }
 
+static int NOINLINE linetoscr_16_stretch2_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
 static int NOINLINE linetoscr_16_shrink1_spr(int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -870,7 +1360,142 @@ static int NOINLINE linetoscr_16_shrink1_spr(int spix, int dpix, int dpix_end)
   return spix;
 }
 
-#ifdef AGA
+static int NOINLINE linetoscr_16_shrink2_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
 static int NOINLINE linetoscr_16_aga_spronly(int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -892,9 +1517,7 @@ static int NOINLINE linetoscr_16_aga_spronly(int spix, int dpix, int dpix_end)
 
     return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_stretch1_aga_spronly(int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -927,9 +1550,60 @@ static int NOINLINE linetoscr_16_stretch1_aga_spronly(int spix, int dpix, int dp
 
     return spix;
 }
-#endif
 
-#ifdef AGA
+static int NOINLINE linetoscr_16_stretch2_aga_spronly(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    if (1) {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = 0;
+            spix++;
+            out_val = p_acolors[0];
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+
+    return spix;
+}
+
 static int NOINLINE linetoscr_16_shrink1_aga_spronly(int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -951,9 +1625,7 @@ static int NOINLINE linetoscr_16_shrink1_aga_spronly(int spix, int dpix, int dpi
 
     return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_shrink2_aga_spronly(int spix, int dpix, int dpix_end)
 {
     uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -975,9 +1647,7 @@ static int NOINLINE linetoscr_16_shrink2_aga_spronly(int spix, int dpix, int dpi
 
     return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_aga (int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1111,7 +1781,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix++;
@@ -1130,14 +1800,14 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                out_val = CONVERT_RGB_16 (c);
+                out_val = CONVERT_RGB (c);
             } else
                 out_val = p_acolors[spix_val];
             spix++;
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix++;
@@ -1150,7 +1820,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix++;
@@ -1162,9 +1832,7 @@ static int NOINLINE linetoscr_16_aga (int spix, int dpix, int dpix_end)
 
   return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1238,9 +1906,104 @@ static int NOINLINE linetoscr_16_stretch1_aga (int spix, int dpix, int dpix_end)
 
   return spix;
 }
-#endif
 
-#ifdef AGA
+static int NOINLINE linetoscr_16_stretch2_aga(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+            *((uae_u32 *)&buf[dpix]) = out_val;
+            dpix += 2;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
 static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1382,7 +2145,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix += 2;
@@ -1401,14 +2164,14 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                out_val = CONVERT_RGB_16 (c);
+                out_val = CONVERT_RGB (c);
             } else
                 out_val = p_acolors[spix_val];
             spix += 2;
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix += 2;
@@ -1421,7 +2184,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix += 2;
@@ -1433,9 +2196,7 @@ static int NOINLINE linetoscr_16_shrink1_aga (int spix, int dpix, int dpix_end)
 
   return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_shrink2_aga (int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1577,7 +2338,7 @@ static int NOINLINE linetoscr_16_shrink2_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix += 4;
@@ -1596,14 +2357,14 @@ static int NOINLINE linetoscr_16_shrink2_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                out_val = CONVERT_RGB_16 (c);
+                out_val = CONVERT_RGB (c);
             } else
                 out_val = p_acolors[spix_val];
             spix += 4;
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix += 4;
@@ -1616,7 +2377,7 @@ static int NOINLINE linetoscr_16_shrink2_aga (int spix, int dpix, int dpix_end)
             spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
             if (pixdata.apixels[spix] & 0x20) {
                 unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
-                dpix_val = CONVERT_RGB_16 (c);
+                dpix_val = CONVERT_RGB (c);
             } else
                 dpix_val = p_acolors[spix_val];
             spix += 4;
@@ -1628,9 +2389,7 @@ static int NOINLINE linetoscr_16_shrink2_aga (int spix, int dpix, int dpix_end)
 
   return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_aga_spr(int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1735,9 +2494,7 @@ static int NOINLINE linetoscr_16_aga_spr(int spix, int dpix, int dpix_end)
 
   return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_stretch1_aga_spr(int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1888,9 +2645,233 @@ static int NOINLINE linetoscr_16_stretch1_aga_spr(int spix, int dpix, int dpix_e
 
   return spix;
 }
-#endif
 
-#ifdef AGA
+static int NOINLINE linetoscr_16_stretch2_aga_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u16 *buf = (uae_u16 *) xlinebuffer;
+    uae_u8 sprcol;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
 static int NOINLINE linetoscr_16_shrink1_aga_spr(int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -1996,9 +2977,7 @@ static int NOINLINE linetoscr_16_shrink1_aga_spr(int spix, int dpix, int dpix_en
 
   return spix;
 }
-#endif
 
-#ifdef AGA
 static int NOINLINE linetoscr_16_shrink2_aga_spr(int spix, int dpix, int dpix_end)
 {
   uae_u16 *buf = (uae_u16 *) xlinebuffer;
@@ -2104,4 +3083,2525 @@ static int NOINLINE linetoscr_16_shrink2_aga_spr(int spix, int dpix, int dpix_en
 
   return spix;
 }
-#endif
+
+static int NOINLINE linetoscr_32(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch1(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch2(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink1(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink2(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch1_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch2_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink1_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink2_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = p_xcolors[spix_val];
+            sprpix_val = pixdata.apixels[spix];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup = bpldualpfpri ? dblpf_ind2 : dblpf_ind1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[lookup[spix_val]];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 1, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            if (spix_val <= 31)
+                dpix_val = p_acolors[spix_val];
+            else
+                dpix_val = p_xcolors[(colors_for_drawing.color_regs_ecs[spix_val - 32] >> 1) & 0x777];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB_ECS_KILLEHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            dpix_val = p_acolors[spix_val & 31];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix, 0, sprpix_val, 0);
+                if (sprcol) {
+                    uae_u32 spcol = p_acolors[sprcol];
+                    out_val = spcol;
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_aga_spronly(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    if (1) {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = 0;
+            spix++;
+            out_val = p_acolors[0];
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch1_aga_spronly(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    if (1) {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = 0;
+            spix++;
+            out_val = p_acolors[0];
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            }
+        }
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch2_aga_spronly(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    if (1) {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = 0;
+            spix++;
+            out_val = p_acolors[0];
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink1_aga_spronly(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    if (1) {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = 0;
+            spix++;
+            out_val = p_acolors[0];
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink2_aga_spronly(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+
+    if (1) {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = 0;
+            spix++;
+            out_val = p_acolors[0];
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_aga(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch1_aga(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch2_aga(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink1_aga(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink2_aga(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_aga_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch1_aga_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            }
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            }
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            }
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            }
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_stretch2_aga_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix++;
+            out_val = dpix_val;
+            {
+            uae_u32 out_val1 = out_val;
+            uae_u32 out_val2 = out_val;
+            uae_u32 out_val3 = out_val;
+            uae_u32 out_val4 = out_val;
+            if (spritepixels[dpix + 0].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val1 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 1].data) {
+                sprcol = render_sprites (dpix + 1, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val2 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 2].data) {
+                sprcol = render_sprites (dpix + 2, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val3 = p_acolors[sprcol];
+                }
+            }
+            if (spritepixels[dpix + 3].data) {
+                sprcol = render_sprites (dpix + 3, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val4 = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val1;
+            buf[dpix++] = out_val2;
+            buf[dpix++] = out_val3;
+            buf[dpix++] = out_val4;
+            }
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink1_aga_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix += 2;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+
+static int NOINLINE linetoscr_32_shrink2_aga_spr(int spix, int dpix, int dpix_end)
+{
+    uae_u32 *buf = (uae_u32 *) xlinebuffer;
+    uae_u8 sprcol;
+    uae_u8 xor_val = bplxor;
+    uae_u8 and_val = bpland;
+
+    switch(bplmode)
+    {
+    case CMODE_NORMAL:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_HAM:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = ham_linebuf[spix];
+            dpix_val = CONVERT_RGB (spix_val);
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_DUALPF:
+    {
+        int *lookup    = bpldualpfpri ? dblpf_ind2_aga : dblpf_ind1_aga;
+        int *lookup_no = bpldualpfpri ? dblpf_2nd2     : dblpf_2nd1;
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            spix_val = pixdata.apixels[spix];
+            sprpix_val = spix_val;
+            {
+                uae_u8 val = lookup[spix_val];
+                if (lookup_no[spix_val])
+                    val += dblpfofs[bpldualpf2of];
+                val ^= xor_val;
+                dpix_val = p_acolors[val];
+            }
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 1, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    case CMODE_EXTRAHB:
+    {
+        while (dpix < dpix_end) {
+            uae_u32 sprpix_val;
+            uae_u32 spix_val;
+            uae_u32 dpix_val;
+            uae_u32 out_val;
+        
+            sprpix_val = pixdata.apixels[spix];
+            spix_val = (pixdata.apixels[spix] ^ xor_val) & and_val;
+            if (pixdata.apixels[spix] & 0x20) {
+                unsigned int c = (colors_for_drawing.color_regs_aga[spix_val & 0x1f] >> 1) & 0x7F7F7F;
+                dpix_val = CONVERT_RGB (c);
+            } else
+                dpix_val = p_acolors[spix_val];
+            spix += 4;
+            out_val = dpix_val;
+            if (spritepixels[dpix].data) {
+                sprcol = render_sprites (dpix + 0, 0, sprpix_val, 1);
+                if (sprcol) {
+                    out_val = p_acolors[sprcol];
+                }
+            }
+            buf[dpix++] = out_val;
+        }
+    }
+    break;
+    }
+
+    return spix;
+}
+

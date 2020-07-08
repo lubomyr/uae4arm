@@ -12,6 +12,7 @@
 #include "uae/types.h"
 
 extern void real_main (int, TCHAR **);
+extern void sleep_micros (int ms);
 extern void sleep_millis (int ms);
 extern void sleep_millis_main(int ms);
 

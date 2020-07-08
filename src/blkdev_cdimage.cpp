@@ -1185,13 +1185,16 @@ typedef struct {
 
 #pragma pack()
 
-static int parsemds (struct cdunit *cdu, struct zfile *zmds, const TCHAR *img)
+static int parsemds (struct cdunit *cdu, struct zfile *zmds, const TCHAR *img, const TCHAR *curdir, const TCHAR *occurdir)
 {
 	MDS_Header *head;
 	struct cdtoc *t;
 	uae_u8 *mds = NULL;
 	uae_u64 size;
 	MDS_SessionBlock *sb;
+
+	if (curdir)
+		my_setcurrentdir(occurdir, NULL);
   
 	write_log (_T("MDS TOC: '%s'\n"), img);
 	size = zfile_size (zmds);
@@ -1276,7 +1279,7 @@ end:
 	return cdu->tracks;
 }
 
-static int parseccd (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img)
+static int parseccd (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img, const TCHAR *curdir, const TCHAR *ocurdir)
 {
 	int mode;
 	int num, tracknum, trackmode;
@@ -1304,6 +1307,9 @@ static int parseccd (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img)
 	zsub = zfile_fopen (fname, _T("rb"), ZFD_NORMAL);
 	if (zsub)
 		write_log (_T("CCD: '%s' detected\n"), fname);
+
+	if (curdir)
+		my_setcurrentdir(ocurdir, NULL);
 
 	num = -1;
 	mode = -1;
@@ -1407,7 +1413,7 @@ static int parseccd (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img)
 	return cdu->tracks;
 }
 
-static int parsecue (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img)
+static int parsecue (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img, const TCHAR *curdir, const TCHAR *ocurdir)
 {
 	int tracknum, pregap, postgap, lastpregap, lastpostgap;
 	int newfile, secoffset;
@@ -1672,7 +1678,7 @@ static int parsecue (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img)
 	return cdu->tracks;
 }
 
-static int parsenrg(struct cdunit *cdu, struct zfile *znrg, const TCHAR *img)
+static int parsenrg(struct cdunit *cdu, struct zfile *znrg, const TCHAR *img, const TCHAR *curdir, const TCHAR *ocurdir)
 {
 	uae_s64 size;
 	uae_s64 offset;
@@ -1681,6 +1687,9 @@ static int parsenrg(struct cdunit *cdu, struct zfile *znrg, const TCHAR *img)
 	int tracknum = 0;
 	uae_u32 lastlba = 0;
 	bool gotsession = false;
+
+	if (curdir)
+		my_setcurrentdir(ocurdir, NULL);
 
 	size = zfile_size(znrg);
 	zfile_fseek(znrg, size - 12, SEEK_SET);
@@ -1860,6 +1869,7 @@ static int parse_image (struct cdunit *cdu, const TCHAR *img)
 	if (ext) {
 		TCHAR curdir[MAX_DPATH];
 		TCHAR oldcurdir[MAX_DPATH], *p;
+		TCHAR *pcurdir = NULL;
 
 		ext++;
 		oldcurdir[0] = 0;
@@ -1871,17 +1881,19 @@ static int parse_image (struct cdunit *cdu, const TCHAR *img)
 			p--;
 		}
 		*p = 0;
-		if (p > curdir)
-			my_setcurrentdir (curdir, oldcurdir);
+		if (p > curdir) {
+			pcurdir = curdir;
+			my_setcurrentdir(pcurdir, oldcurdir);
+		}
 
 		if (!_tcsicmp (ext, _T("cue"))) {
-			parsecue (cdu, zcue, img);
+			parsecue(cdu, zcue, img, pcurdir, oldcurdir);
 		} else if (!_tcsicmp (ext, _T("ccd"))) {
-			parseccd (cdu, zcue, img);
+			parseccd(cdu, zcue, img, pcurdir, oldcurdir);
 		} else if (!_tcsicmp (ext, _T("mds"))) {
-			parsemds (cdu, zcue, img);
+			parsemds(cdu, zcue, img, pcurdir, oldcurdir);
 		} else if (!_tcsicmp(ext, _T("nrg"))) {
-			parsenrg(cdu, zcue, img);
+			parsenrg(cdu, zcue, img, pcurdir, oldcurdir);
 		}
 
 		if (oldcurdir[0])
@@ -1966,8 +1978,16 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	if (!cdu->enabled)
 		return NULL;
 	di->open = cdu->open;
+	di->removable = 1;
+	di->bus = unitnum;
+	di->target = 0;
+	di->lun = 0;
 	di->media_inserted = 0;
+	di->bytespersector = 2048;
 	di->mediapath[0] = 0;
+	di->cylinders = 1;
+	di->trackspercylinder = 1;
+	di->sectorspertrack = (int)(cdu->cdsize / di->bytespersector);
 	if (ismedia (unitnum, 1)) {
 		di->media_inserted = 1;
 		_tcscpy (di->mediapath, cdu->imgname_out);
@@ -1975,6 +1995,7 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	}
 	memset (&di->toc, 0, sizeof (struct cd_toc_head));
 	command_toc (unitnum, &di->toc);
+	di->write_protected = 1;
 	di->type = INQ_ROMD;
 	di->unitnum = unitnum + 1;
 	if (di->mediapath[0]) {
@@ -1983,6 +2004,10 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	} else {
 		_tcscpy (di->label, _T("IMG:<EMPTY>"));
 	}
+	_tcscpy (di->vendorid, _T("UAE"));
+	_stprintf (di->productid, _T("SCSICD%d"), unitnum);
+	_tcscpy (di->revision, _T("1.0"));
+	di->backend = _T("IMAGE");
 	return di;
 }
 
@@ -2086,7 +2111,8 @@ static int open_bus (int flags)
 struct device_functions devicefunc_cdimage = {
 	_T("IMAGE"),
 	open_bus, close_bus, open_device, close_device, info_device,
+	0, 0, 0,
 	command_pause, command_stop, command_play, command_volume, command_qcode,
-	command_toc, command_read, command_rawread,
-	ismedia
+	command_toc, command_read, command_rawread, 0,
+	0, ismedia
 };
