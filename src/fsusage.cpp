@@ -24,7 +24,7 @@
 #if HAVE_SYS_STATFS_H
 # include <sys/statfs.h>
 #endif
-#if defined(STAT_STATVFS) && !defined(__ANDROID__)
+#if defined(STAT_STATVFS)
 #include <sys/statvfs.h>
 #endif
 

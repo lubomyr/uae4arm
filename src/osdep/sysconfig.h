@@ -177,7 +177,7 @@ typedef int32_t uae_atomic;
 /* #undef STAT_STATFS4 */
 
 /* Define if there is a function named statvfs.  [SVR4]  */
-#define STAT_STATVFS
+#define STAT_STATVFS 1
 
 /* Define if the block counts reported by statfs may be truncated to 2GB
    and the correct values may be stored in the f_spare array.
@@ -491,7 +491,7 @@ typedef char TCHAR;
 #define _timezone           timezone
 #define _daylight           daylight
 #define _ftime(x)           ftime(x)
-#ifdef ANDROID
+#if __ANDROID_API__ < 24
  #define _ftelli64(x)        ftello(x)
  #define _fseeki64(x,y,z)    fseeko(x,y,z)
 #else
@@ -500,9 +500,5 @@ typedef char TCHAR;
 #endif
 #define _wunlink(x)         unlink(x)
 #define _istalnum(x)        isalnum(x)
-
-#if defined(ANDROID) && !defined(CPU_AARCH64)
-#define log2l(x)            (log(x)/log(2))
-#endif
 
 #endif /* UAE_SYSCONFIG_H */

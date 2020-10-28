@@ -19,6 +19,7 @@ LOCAL_CPP_EXTENSION := .cpp
 LOCAL_SRC_FILES := $(foreach F, $(APP_SUBDIRS), $(addprefix $(F)/,$(notdir $(wildcard $(LOCAL_PATH)/$(F)/*.cpp))))
 LOCAL_SRC_FILES += $(foreach F, $(APP_SUBDIRS), $(addprefix $(F)/,$(notdir $(wildcard $(LOCAL_PATH)/$(F)/*.c))))
 
-LOCAL_SHARED_LIBRARIES := 
+LOCAL_SHARED_LIBRARIES :=
+APP_STL := c++_shared
 
 include $(BUILD_SHARED_LIBRARY)

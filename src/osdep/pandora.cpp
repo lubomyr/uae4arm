@@ -1,3 +1,4 @@
+#include <SDL/SDL_main.h>
 #include "sysconfig.h"
 #include "sysdeps.h"
 #include "config.h"
