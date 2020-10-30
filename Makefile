@@ -1,3 +1,4 @@
+DEFS += -DANDROID
 ifeq ($(arch),armeabi-v7a)
 	CPU_FLAGS += -mfpu=vfp
 	DEFS += -DANDROIDSDL -DUSE_SDL -DPANDORA
@@ -39,7 +40,7 @@ MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fuse-ld=gold -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
 
-LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan_sdl -lguichan -lxml2 -L/opt/vc/lib 
+LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
 #LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
