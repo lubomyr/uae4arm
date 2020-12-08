@@ -19,9 +19,7 @@ SDK Tools (tab)
 - Android SDK Platform-Tools
 - Android SDK Tools
 
-Download ndk ver r17b (newer (higher) versions not supported)
-https://dl.google.com/android/repository/android-ndk-r17b-linux-x86_64.zip
-unzip it into ~/Android directory
+Download latest version android NDK via android studio
 
 copy path from Android SDK Location field
 
@@ -30,7 +28,7 @@ copy path from Android SDK Location field
 #!/bin/sh
 
 export ANDROID_HOME=~/Android/Sdk
-export ANDROID_NDK_HOME=~/Android/android-ndk-r17b
+export ANDROID_NDK_HOME=~/Android/Sdk/ndk-bundle
 export PATH=$ANDROID_NDK_HOME:$ANDROID_HOME/tools:$PATH
 ----------------------------------------------------------
 now you can run android build environment via console
@@ -41,8 +39,6 @@ now you can run android build environment via console
 cd ~
 git clone git://github.com/pelya/commandergenius androidsdl
 cd androidsdl
-git checkout aa7919811
-git submodule update --init project/jni/iconv/src
 
 
 7. download uae4arm sources
