@@ -477,44 +477,39 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 			  FAIL (1);
 		  return;
 		case 4: /* FMOVE.L  <EA>, ControlReg */
-		  if (!(opcode & 0x30)) { /* Dn or An */
-			  if (extra & 0x1000) { /* FPCR */
-				  mov_l_mr ((uintptr)&regs.fpcr, opcode & 15);
-				  return;
-			  }
-			  if (extra & 0x0800) { /* FPSR */
+			if ((opcode & 0x38) == 0) {
+				// Dn
+				// Only single selected control register is allowed
+				// All control register bits unset = FPIAR
+				uae_u16 bits = extra & (0x1000 | 0x0800 | 0x0400);
+				if (bits && bits != 0x1000 && bits != 0x0800 && bits != 0x400) {
+					FAIL(1);
+					return;
+				}
+				if (extra & 0x1000) { /* FPCR */
 				  FAIL (1);
-				  return;
-				  // set_fpsr(m68k_dreg (regs, opcode & 15));
-			  }
-			  if (extra & 0x0400) { /* FPIAR */
-				  mov_l_mr ((uintptr)&regs.fpiar, opcode & 15); 
-				  return;
-			  }
-		  }
+				}
+				if (extra & 0x0800) { /* FPSR */
+				  FAIL (1);
+				}
+				if ((extra & 0x0400) || !bits) /* FPIAR */
+				  mov_l_mr ((uintptr)&regs.fpiar, opcode & 15);
+				return;
+			} else if ((opcode & 0x38) == 0x08) {
+				// An
+				// Only FPIAR can be moved to/from address register
+				// All bits unset = FPIAR
+				uae_u16 bits = extra & (0x1000 | 0x0800 | 0x0400);
+				if (bits && bits != 0x0400) {
+					FAIL(1);
+					return;
+				}
+			  mov_l_mr ((uintptr)&regs.fpiar, opcode & 15);
+				return;
+      }
 		  else if ((opcode & 0x3f) == 0x3c) {
 			  if (extra & 0x1000) { /* FPCR */
-				  uae_u32 val = comp_get_ilong ((m68k_pc_offset += 4) - 4);
-				  mov_l_mi ((uintptr)&regs.fpcr, val);
-	        switch(val & 0x30) {
-	          case 0x00:
-	            // round to nearest
-	            roundingmode(0x00000000);
-	            break;
-	          case 0x10:
-	            // round toward minus infinity
-	            roundingmode(0x00800000);
-	            break;
-	          case 0x01:
-	            // round toward plus infinity
-	            roundingmode(0x00400000);
-	            break;
-	          case 0x11:
-	          default:
-	            // round towards zero
-	            roundingmode(0x00c00000);
-	            break;
-	        }
+          FAIL(1);
 				  return;
 			  }
 			  if (extra & 0x0800) { /* FPSR */
@@ -530,21 +525,37 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 		  FAIL (1);
 		  return;
 		case 5: /* FMOVE.L  ControlReg, <EA> */
-		  if (!(opcode & 0x30)) { /* Dn or An */
-			  if (extra & 0x1000) { /* FPCR */
-				  mov_l_rm (opcode & 15, (uintptr)&regs.fpcr); return;
-			  }
-			  if (extra & 0x0800) { /* FPSR */
+			if ((opcode & 0x38) == 0) {
+				// Dn
+				// Only single selected control register is allowed
+				// All control register bits unset = FPIAR
+				uae_u16 bits = extra & (0x1000 | 0x0800 | 0x0400);
+				if (bits && bits != 0x1000 && bits != 0x0800 && bits != 0x400) {
+					FAIL(1);
+					return;
+				}
+				if (extra & 0x1000) /* FPCR */
+				  mov_l_rm (opcode & 15, (uintptr)&regs.fpcr);
+				if (extra & 0x0800) { /* FPSR */
 				  FAIL (1);
-				  return;
-			  }
-			  if (extra & 0x0400) { /* FPIAR */
-				  mov_l_rm (opcode & 15, (uintptr)&regs.fpiar); return;
-			  }
-		  }
+				}
+				if ((extra & 0x0400) || !bits) /* FPIAR */
+				  mov_l_rm (opcode & 15, (uintptr)&regs.fpiar);
+				return;
+			} else if ((opcode & 0x38) == 0x08) {
+				// An
+				// Only FPIAR can be moved to/from address register
+				// All bits unset = FPIAR
+				uae_u16 bits = extra & (0x1000 | 0x0800 | 0x0400);
+				if (bits && bits != 0x0400) {
+					FAIL(1);
+					return;
+				}
+			  mov_l_rm (opcode & 15, (uintptr)&regs.fpiar);
+				return;
+      }
 		  FAIL (1);
 		  return;
-#ifndef ANDROID
 		case 6:
 		case 7:
 		{
@@ -662,7 +673,6 @@ void comp_fpp_opp (uae_u32 opcode, uae_u16 extra)
 			}
 		}
     return;
-#endif
 		case 2: /* from <EA> to FPx */
 		  dont_care_fflags ();
 		  if ((extra & 0xfc00) == 0x5c00) { /* FMOVECR */
