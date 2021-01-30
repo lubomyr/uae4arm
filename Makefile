@@ -33,19 +33,20 @@ all: $(PROG)
 #GEN_PROFILE=1
 #USE_PROFILE=1
 
-SDL_CFLAGS = `sdl-config --cflags`
+#SDL_CFLAGS = `sdl-config --cflags`
 
 MORE_CFLAGS += -Isrc-$(arch)/osdep -Isrc -Isrc-$(arch)/include -Isrc-$(arch)/archivers
 MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
-MORE_CFLAGS += -fuse-ld=gold -fdiagnostics-color=auto
+MORE_CFLAGS += -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
+#MORE_CFLAGS += -fuse-ld=gold
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
 #LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
 MORE_CFLAGS += -O2 -ffast-math -pipe
-MORE_CFLAGS += -frename-registers
+#MORE_CFLAGS += -frename-registers
 #MORE_CFLAGS += -ftracer
 # flags -Ofast and -funroll-loops caused crash on android
 else
@@ -64,8 +65,10 @@ endif
 
 ASFLAGS += $(CPU_FLAGS)
 
-CXXFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
-CFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
+#CXXFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
+#CFLAGS += $(SDL_CFLAGS) $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
+CXXFLAGS += $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
+CFLAGS += $(CPU_FLAGS) $(DEFS) $(MORE_CFLAGS)
 
 MY_CFLAGS  = $(CFLAGS)
 
