@@ -19,27 +19,24 @@ SDK Tools (tab)
 - Android SDK Platform-Tools
 - Android SDK Tools
 
-Download latest version android NDK via android studio
+Download android NDK version r21d and unzip it into ~/Android directory
+https://developer.android.com/ndk/downloads
 
 copy path from Android SDK Location field
 
-5. create script setenv-android.sh (use correct path for android sdk location)
-----------------------------------------------------------
-#!/bin/sh
+setup environment
 
+export JAVA_HOME=/usr/lib/jvm/default-java
 export ANDROID_HOME=~/Android/Sdk
-export ANDROID_NDK_HOME=~/Android/Sdk/ndk-bundle
+export ANDROID_NDK_HOME=~/Android/android-ndk-r21d
 export PATH=$ANDROID_NDK_HOME:$ANDROID_HOME/tools:$PATH
-----------------------------------------------------------
-now you can run android build environment via console
-. setenv-android.sh
-
 
 6. Install pelya's libSDL-environment
 cd ~
 git clone git://github.com/pelya/commandergenius androidsdl
 cd androidsdl
 
+git checkout c937f769c69c40857aa00fa3d8200d10c7c304df
 
 7. download uae4arm sources
 cd ~/androidsdl/project/jni/application
