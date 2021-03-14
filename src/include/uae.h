@@ -14,7 +14,7 @@
 extern void real_main (int, TCHAR **);
 extern void sleep_micros (int ms);
 extern void sleep_millis (int ms);
-extern void sleep_millis_main(int ms);
+extern int sleep_millis_main(int ms);
 
 #define UAE_QUIT 1
 #define UAE_RESET 2
@@ -30,6 +30,7 @@ extern void target_run (void);
 extern void target_quit (void);
 extern void target_restart (void);
 extern void target_getdate(int *y, int *m, int *d);
+extern bool get_plugin_path (TCHAR *out, int size, const TCHAR *path);
 extern void target_startup_msg(const TCHAR *title, const TCHAR *msg);
 extern void fixtrailing (TCHAR *p);
 extern void getpathpart (TCHAR *outpath, int size, const TCHAR *inpath);
@@ -59,6 +60,13 @@ struct bstring {
 extern void fetch_saveimagepath (TCHAR*, int, int);
 extern void fetch_datapath (TCHAR *out, int size);
 extern void fetch_rompath (TCHAR *out, int size);
-#define uaerand() ((uae_u32)rand())
+STATIC_INLINE uae_u32 uaerand(void)
+{
+  return rand();
+}
+
+/* the following prototypes should probably be moved somewhere else */
+
+int get_guid_target (uae_u8 *out);
 
 #endif /* UAE_UAE_H */

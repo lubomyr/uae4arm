@@ -585,6 +585,8 @@ extern void picasso_refresh (void);
 extern void picasso_handle_vsync (void);
 extern int picasso_palette (struct MyCLUTEntry *CLUT, uae_u32 *clut);
 
+extern bool rtg_render (void);
+
 /* This structure describes the UAE-side framebuffer for the Picasso
  * screen.  */
 struct picasso_vidbuf_description {

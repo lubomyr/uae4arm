@@ -39,6 +39,7 @@ MORE_CFLAGS += -Isrc-$(arch)/osdep -Isrc -Isrc-$(arch)/include -Isrc-$(arch)/arc
 MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
+MORE_CFLAGS += -DFAST_COPPER_DEFAULT_ON
 #MORE_CFLAGS += -fuse-ld=gold
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
@@ -97,6 +98,7 @@ OBJS =	\
 	src-$(arch)/diskutil.o \
 	src-$(arch)/dlopen.o \
 	src-$(arch)/drawing.o \
+	src-$(arch)/driveclick.o \
 	src-$(arch)/events.o \
 	src-$(arch)/expansion.o \
 	src-$(arch)/fdi2raw.o \
@@ -125,6 +127,7 @@ OBJS =	\
 	src-$(arch)/scsiemul.o \
 	src-$(arch)/statusline.o \
 	src-$(arch)/traps.o \
+	src-$(arch)/tinyxml2.o \
 	src-$(arch)/uaelib.o \
 	src-$(arch)/uaeresource.o \
 	src-$(arch)/zfile.o \
@@ -188,6 +191,7 @@ OBJS =	\
 	src-$(arch)/osdep/generic_filesys.o \
 	src-$(arch)/osdep/generic_gui.o \
 	src-$(arch)/osdep/generic_rp9.o \
+	src-$(arch)/osdep/generic_serial.o \
 	src-$(arch)/osdep/generic_mem.o \
 	src-$(arch)/osdep/sigsegv_handler.o \
 	src-$(arch)/osdep/gui/GenericListModel.o \
@@ -198,6 +202,7 @@ OBJS =	\
 	src-$(arch)/osdep/gui/SelectorEntry.o \
 	src-$(arch)/osdep/gui/ShowHelp.o \
 	src-$(arch)/osdep/gui/ShowMessage.o \
+	src-$(arch)/osdep/gui/ShowDiskInfo.o \
 	src-$(arch)/osdep/gui/SelectFolder.o \
 	src-$(arch)/osdep/gui/SelectFile.o \
 	src-$(arch)/osdep/gui/CreateFilesysHardfile.o \
@@ -212,6 +217,7 @@ OBJS =	\
 	src-$(arch)/osdep/gui/PanelRAM.o \
 	src-$(arch)/osdep/gui/PanelFloppy.o \
 	src-$(arch)/osdep/gui/PanelHD.o \
+	src-$(arch)/osdep/gui/PanelHWInfo.o \
 	src-$(arch)/osdep/gui/PanelInput.o \
 	src-$(arch)/osdep/gui/PanelDisplay.o \
 	src-$(arch)/osdep/gui/PanelSound.o \
@@ -250,6 +256,7 @@ OBJS += src-$(arch)/cpustbl.o
 OBJS += src-$(arch)/cpuemu_0.o
 OBJS += src-$(arch)/cpuemu_4.o
 OBJS += src-$(arch)/cpuemu_11.o
+OBJS += src-$(arch)/cpuemu_13.o
 OBJS += src-$(arch)/cpuemu_40.o
 OBJS += src-$(arch)/cpuemu_44.o
 OBJS += src-$(arch)/jit/compemu.o

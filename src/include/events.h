@@ -19,12 +19,16 @@
 extern frame_time_t vsyncmintime;
 extern int vsynctimebase, syncbase;
 extern void reset_frame_rate_hack (void);
+extern uae_u32 start_cycles;
 extern int speedup_timelimit;
 
 extern void compute_vsynctime (void);
 extern void init_eventtab (void);
+extern void do_cycles_ce (uae_u32 cycles);
 extern void events_schedule (void);
 extern void events_reset_syncline(void);
+
+extern bool is_cycle_ce(uaecptr);
 
 extern uae_u32 currcycle, nextevent;
 extern int is_syncline;
@@ -114,6 +118,7 @@ STATIC_INLINE bool cycles_in_range (uae_u32 endcycles)
 
 extern void MISC_handler(void);
 extern void event2_newevent_xx (int no, evt t, uae_u32 data, evfunc2 func);
+extern void event2_newevent_x_replace(evt t, uae_u32 data, evfunc2 func);
 
 STATIC_INLINE void event2_newevent_x (int no, evt t, uae_u32 data, evfunc2 func)
 {

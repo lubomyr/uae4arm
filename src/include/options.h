@@ -15,7 +15,7 @@
 #include "traps.h"
 
 #define UAEMAJOR 4
-#define UAEMINOR 3
+#define UAEMINOR 5
 #define UAESUBREV 0
 
 typedef enum { KBD_LANG_US, KBD_LANG_DK, KBD_LANG_DE, KBD_LANG_SE, KBD_LANG_FR, KBD_LANG_IT, KBD_LANG_ES } KbdLang;
@@ -80,7 +80,6 @@ struct inputdevconfig {
 struct jport {
 	int id;
 	int mode; // 0=def,1=mouse,2=joy,3=anajoy
-	int submode;
 	int autofire;
 	struct inputdevconfig idc;
 	bool nokeyboardoverride;
@@ -117,6 +116,7 @@ struct floppyslot
 {
 	TCHAR df[MAX_DPATH];
 	int dfxtype;
+	int dfxclick;
 	bool forcedwriteprotect;
 };
 
@@ -148,7 +148,6 @@ struct uaedev_config_info {
   bool readonly;
 	bool lock;
   int bootpri;
-  TCHAR filesys[MAX_DPATH];
 	int lowcyl;
 	int highcyl; // zero if detected from size
 	int cyls; // calculated/corrected highcyl
@@ -190,22 +189,14 @@ enum { CP_GENERIC = 1, CP_CD32, CP_A500, CP_A500P, CP_A600,
 #define IDE_A600A1200 1
 #define IDE_A4000 2
 
-#define MAX_CHIPSET_REFRESH 1
-#define MAX_CHIPSET_REFRESH_TOTAL (MAX_CHIPSET_REFRESH + 2)
-#define CHIPSET_REFRESH_PAL (MAX_CHIPSET_REFRESH + 0)
-#define CHIPSET_REFRESH_NTSC (MAX_CHIPSET_REFRESH + 1)
+#define MAX_CHIPSET_REFRESH_TOTAL (2)
+#define CHIPSET_REFRESH_PAL (0)
+#define CHIPSET_REFRESH_NTSC (1)
 struct chipset_refresh
 {
-	bool inuse;
 	int index;
-	bool rtg;
-	int horiz;
-	int vert;
-	int lace;
-	int resolution;
 	int ntsc;
 	double rate;
-	TCHAR label[16];
 };
 
 #define APMODE_NATIVE 0
@@ -306,17 +297,21 @@ struct uae_prefs {
   unsigned int chipset_mask;
   bool ntscmode;
   double chipset_refreshrate;
-	struct chipset_refresh cr[MAX_CHIPSET_REFRESH + 2];
+	struct chipset_refresh cr[MAX_CHIPSET_REFRESH_TOTAL];
   int collision_level;
   int leds_on_screen;
 	int leds_on_screen_mask[2];
 	int scsi;
+	bool cpu_cycle_exact;
+	bool blitter_cycle_exact;
+  bool cpu_memory_cycle_exact;
   int fast_copper;
   int floppy_speed;
   int floppy_write_length;
 	int floppy_auto_ext2;
 	int cd_speed;
 	int boot_rom;
+	int turbo_emulation;
 	int filesys_limit;
 	int filesys_max_name;
 
@@ -338,7 +333,6 @@ struct uae_prefs {
 	bool cs_df0idhw;
 	bool cs_ciatodbug;
 	bool cs_z3autoconfig;
-	bool cs_bytecustomwritebug;
 	int cs_unmapped_space;
 	int cs_ciatype[2];
 
@@ -370,10 +364,10 @@ struct uae_prefs {
 	uae_u32 z3autoconfig_start;
 	struct ramboard z3fastmem[MAX_RAM_BOARDS];
 	struct ramboard fastmem[MAX_RAM_BOARDS];
-  uae_u32 chipmem_size;
-  uae_u32 bogomem_size;
-	uae_u32 mbresmem_low_size;
-	uae_u32 mbresmem_high_size;
+  struct ramboard chipmem;
+  struct ramboard bogomem;
+	struct ramboard mbresmem_low;
+	struct ramboard mbresmem_high;
 	struct rtgboardconfig rtgboards[MAX_RTG_BOARDS];
 	uae_u32 custom_memory_addrs[MAX_CUSTOM_MEMORY_ADDRS];
 	uae_u32 custom_memory_sizes[MAX_CUSTOM_MEMORY_ADDRS];
@@ -390,6 +384,8 @@ struct uae_prefs {
   struct floppyslot floppyslots[4];
 	bool floppy_read_only;
 	bool harddrive_read_only;
+	int dfxclickvolume_disk[4];
+	int dfxclickvolume_empty[4];
 
   /* Target specific options */
   
@@ -481,7 +477,7 @@ extern void cfgfile_target_write_str (struct zfile *f, const TCHAR *option, cons
 extern void cfgfile_target_dwrite_str (struct zfile *f, const TCHAR *option, const TCHAR *value);
 
 extern struct uaedev_config_data *add_filesys_config (struct uae_prefs *p, int index, struct uaedev_config_info*);
-extern void uci_set_defaults (struct uaedev_config_info *uci, bool rdb);
+extern void uci_set_defaults (struct uaedev_config_info *uci);
 
 extern void error_log (const TCHAR*, ...);
 
@@ -540,5 +536,32 @@ extern struct uae_prefs currprefs, changed_prefs;
 
 extern int machdep_init (void);
 extern void machdep_free (void);
+
+struct fsvdlg_vals
+{
+	struct uaedev_config_info ci;
+	int rdb;
+};
+
+struct hfdlg_vals
+{
+	struct uaedev_config_info ci;
+	bool original;
+	uae_u64 size;
+	uae_u32 dostype;
+	int forcedcylinders;
+	bool rdb;
+};
+extern struct fsvdlg_vals current_fsvdlg;
+extern struct hfdlg_vals current_hfdlg;
+
+extern void hardfile_testrdb (struct hfdlg_vals *hdf);
+extern void default_fsvdlg (struct fsvdlg_vals *f);
+extern void default_hfdlg (struct hfdlg_vals *f);
+STATIC_INLINE bool is_hdf_rdb (void)
+{
+	return current_hfdlg.ci.sectors == 0 && current_hfdlg.ci.surfaces == 0 && current_hfdlg.ci.reserved == 0;
+}
+extern void updatehdfinfo (bool force, bool defaults);
 
 #endif /* UAE_OPTIONS_H */

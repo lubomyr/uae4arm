@@ -65,7 +65,6 @@ struct ide_hdf
 
 	bool atapi;
 	bool atapi_drdy;
-	int cd_unit_num;
 	int packet_state;
 	int packet_data_size;
 	int packet_data_offset;

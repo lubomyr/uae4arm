@@ -200,6 +200,7 @@ static void flac_get_size (struct cdtoc *t)
 	FLAC__StreamDecoder *decoder = FLAC__stream_decoder_new ();
 	if (decoder) {
 		FLAC__stream_decoder_set_md5_checking (decoder, false);
+		FLAC__stream_decoder_set_metadata_respond(decoder, FLAC__METADATA_TYPE_CUESHEET);
 		int init_status = FLAC__stream_decoder_init_stream (decoder,
 			&file_read_callback, &file_seek_callback, &file_tell_callback,
 			&file_len_callback, &file_eof_callback,
@@ -1205,7 +1206,7 @@ static int parsemds (struct cdunit *cdu, struct zfile *zmds, const TCHAR *img, c
 		goto end;
 
 	head = (MDS_Header*)mds;
-	if (!memcmp (head->signature, MEDIA_DESCRIPTOR, strlen (MEDIA_DESCRIPTOR)))
+	if (!memcmp (head->signature, MEDIA_DESCRIPTOR, sizeof(MEDIA_DESCRIPTOR)))
 		goto end;
 	if (head->version[0] != 1) {
 		write_log (_T("unsupported MDS version %d, only v.1 supported\n"), head->version[0]);
@@ -1453,15 +1454,19 @@ static int parsecue (struct cdunit *cdu, struct zfile *zcue, const TCHAR *img, c
 			fname = my_strdup (nextstring (&p));
 			fnametype = nextstring (&p);
 			fnametypeid = AUDENC_NONE;
+			TCHAR *ext = _tcsrchr(fname, '.');
+			if (ext) {
+				ext++;
+			}
 			if (!fnametype)
 				break;
 			if (_tcsicmp (fnametype, _T("BINARY")) && _tcsicmp (fnametype, _T("WAVE")) && _tcsicmp (fnametype, _T("MP3")) && _tcsicmp (fnametype, _T("FLAC"))) {
 				write_log (_T("CUE: unknown file type '%s' ('%s')\n"), fnametype, fname);
 			}
 			fnametypeid = AUDENC_PCM;
-			if (!_tcsicmp (fnametype, _T("MP3")))
+			if (!_tcsicmp (fnametype, _T("MP3")) || (ext && !_tcsicmp(ext, _T("MP3"))))
 				fnametypeid = AUDENC_MP3;
-			else if (!_tcsicmp (fnametype, _T("FLAC")))
+			else if (!_tcsicmp (fnametype, _T("FLAC")) || (ext && !_tcsicmp(ext, _T("FLAC"))))
 				fnametypeid = AUDENC_FLAC;
 			fileoffset = 0;
 			newfile = 1;
@@ -1995,7 +2000,6 @@ static struct device_info *info_device (int unitnum, struct device_info *di, int
 	}
 	memset (&di->toc, 0, sizeof (struct cd_toc_head));
 	command_toc (unitnum, &di->toc);
-	di->write_protected = 1;
 	di->type = INQ_ROMD;
 	di->unitnum = unitnum + 1;
 	if (di->mediapath[0]) {
@@ -2111,8 +2115,7 @@ static int open_bus (int flags)
 struct device_functions devicefunc_cdimage = {
 	_T("IMAGE"),
 	open_bus, close_bus, open_device, close_device, info_device,
-	0, 0, 0,
 	command_pause, command_stop, command_play, command_volume, command_qcode,
-	command_toc, command_read, command_rawread, 0,
-	0, ismedia
+	command_toc, command_read, command_rawread,
+	ismedia
 };

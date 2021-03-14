@@ -117,15 +117,8 @@ void target_default_options (struct uae_prefs *p, int type)
 #endif
 	
 	p->cr[0].index = 0;
-	p->cr[0].horiz = -1;
-	p->cr[0].vert = -1;
-	p->cr[0].lace = -1;
-	p->cr[0].resolution = 0;
 	p->cr[0].rate = 60.0;
 	p->cr[0].ntsc = 1;
-	p->cr[0].rtg = true;
-	p->cr[0].inuse = true;
-	_tcscpy (p->cr[0].label, _T("RTG"));
 }
 
 

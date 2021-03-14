@@ -62,10 +62,24 @@ class FilesysVirtualActionListener : public gcn::ActionListener
         wndEditFilesysVirtual->releaseModalFocus();
         if(SelectFolder("Select folder", tmp)) {
           txtPath->setText(tmp);
-          txtVolume->setText(volName);
+          txtVolume->setText(volName); // lubomyr
+          default_fsvdlg(&current_fsvdlg);
+          CreateDefaultDevicename(current_fsvdlg.ci.devname);
+          _tcscpy (current_fsvdlg.ci.volname, current_fsvdlg.ci.devname);
+          _tcscpy (current_fsvdlg.ci.rootdir, tmp);
 	    }
         wndEditFilesysVirtual->requestModalFocus();
         cmdPath->requestFocus();
+
+      } else if (actionEvent.getSource() == chkAutoboot) {
+        char tmp[32];
+        if (chkAutoboot->isSelected()) {
+  				current_fsvdlg.ci.bootpri = 0;
+        } else {
+  				current_fsvdlg.ci.bootpri = BOOTPRI_NOAUTOBOOT;
+        }
+      	snprintf(tmp, sizeof (tmp) - 1, "%d", current_fsvdlg.ci.bootpri);
+        txtBootPri->setText(tmp);
 
       } else {
         if (actionEvent.getSource() == cmdOK) {
@@ -142,6 +156,7 @@ static void InitEditFilesysVirtual(void)
 
 	chkAutoboot = new gcn::UaeCheckBox("Bootable", true);
   chkAutoboot->setId("virtAutoboot");
+  chkAutoboot->addActionListener(filesysVirtualActionListener);
 
   lblBootPri = new gcn::Label("Boot priority:");
   lblBootPri->setSize(84, LABEL_HEIGHT);
@@ -304,47 +319,38 @@ bool EditFilesysVirtual(int unit_no)
     struct uaedev_config_info *ci;
 
     uci = &workprefs.mountconfig[unit_no];
-    ci = &uci->ci;
     get_filesys_unitconfig(&workprefs, unit_no, &mi);
-
-    strdevname.assign(ci->devname);
-    txtDevice->setText(strdevname);
-    strvolname.assign(ci->volname);
-    txtVolume->setText(strvolname);
-    strroot.assign(ci->rootdir);
-    txtPath->setText(strroot);
-    chkReadWrite->setSelected(!ci->readonly);
-    chkAutoboot->setSelected(ci->bootpri != BOOTPRI_NOAUTOBOOT);
-		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
-    txtBootPri->setText(tmp);
+		memcpy (&current_fsvdlg.ci, uci, sizeof (struct uaedev_config_info));
   }
   else
   {
-    CreateDefaultDevicename(tmp);
-    txtDevice->setText(tmp);
-    txtVolume->setText(tmp);
-    strroot.assign(currentDir);
-    txtPath->setText(strroot);
-    chkReadWrite->setSelected(true);
-    txtBootPri->setText("0");
+		default_fsvdlg (&current_fsvdlg);
+    CreateDefaultDevicename(current_fsvdlg.ci.devname);
+    _tcscpy (current_fsvdlg.ci.volname, current_fsvdlg.ci.devname);
   }
+  strdevname.assign(current_fsvdlg.ci.devname);
+  txtDevice->setText(strdevname);
+  strvolname.assign(current_fsvdlg.ci.volname);
+  txtVolume->setText(strvolname);
+  strroot.assign(current_fsvdlg.ci.rootdir);
+  txtPath->setText(strroot);
+  chkReadWrite->setSelected(!current_fsvdlg.ci.readonly);
+  chkAutoboot->setSelected(current_fsvdlg.ci.bootpri != BOOTPRI_NOAUTOBOOT);
+	snprintf(tmp, sizeof (tmp) - 1, "%d", current_fsvdlg.ci.bootpri >= -127 ? current_fsvdlg.ci.bootpri : -127);
+  txtBootPri->setText(tmp);
 
   EditFilesysVirtualLoop();
   
   if(dialogResult)
   {
     struct uaedev_config_info ci;
-    int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
-    extractPath((char *) txtPath->getText().c_str(), currentDir);
-    
-    uci_set_defaults(&ci, false);
-    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
-    strncpy(ci.volname, (char *) txtVolume->getText().c_str(), MAX_DPATH - 1);
-    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH - 1);
-    ci.type = UAEDEV_DIR;
-    ci.readonly = !chkReadWrite->isSelected();
-    ci.bootpri = bp;
-    
+
+    strncpy(current_fsvdlg.ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
+    strncpy(current_fsvdlg.ci.volname, (char *) txtVolume->getText().c_str(), MAX_DPATH - 1);
+    current_fsvdlg.ci.readonly = !chkReadWrite->isSelected();
+    current_fsvdlg.ci.bootpri = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
+
+   	memcpy (&ci, &current_fsvdlg.ci, sizeof (struct uaedev_config_info));
     uci = add_filesys_config(&workprefs, unit_no, &ci);
     if (uci) {
   		if (uci->ci.rootdir[0])
@@ -352,6 +358,8 @@ bool EditFilesysVirtual(int unit_no)
   		else if (uci->configoffset >= 0)
   			filesys_eject (uci->configoffset);
     }
+
+    extractPath((char *) txtPath->getText().c_str(), currentDir);
   }
 
   ExitEditFilesysVirtual();

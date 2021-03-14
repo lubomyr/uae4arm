@@ -460,21 +460,21 @@ static addrbank hrtmem_bank = {
 	hrtmem_lget, hrtmem_wget, hrtmem_bget,
 	hrtmem_lput, hrtmem_wput, hrtmem_bput,
 	hrtmem_xlate, hrtmem_check, NULL, NULL, _T("Cartridge Bank"),
-	hrtmem_wget,
+	hrtmem_lget, hrtmem_wget,
 	ABFLAG_RAM, S_READ, S_WRITE
 };
 static addrbank hrtmem2_bank = {
 	hrtmem2_lget, hrtmem2_wget, hrtmem2_bget,
 	hrtmem2_lput, hrtmem2_wput, hrtmem2_bput,
 	hrtmem2_xlate, hrtmem2_check, NULL, NULL, _T("Cartridge Bank 2"),
-	hrtmem2_wget,
+	hrtmem2_lget, hrtmem2_wget,
 	ABFLAG_RAM, S_READ, S_WRITE
 };
 static addrbank hrtmem3_bank = {
 	hrtmem3_lget, hrtmem3_wget, hrtmem3_bget,
 	hrtmem3_lput, hrtmem3_wput, hrtmem3_bput,
 	hrtmem3_xlate, hrtmem3_check, NULL, NULL, _T("Cartridge Bank 3"),
-	hrtmem3_wget,
+	hrtmem3_lget, hrtmem3_wget,
 	ABFLAG_RAM, S_READ, S_WRITE
 };
 
@@ -627,7 +627,6 @@ static void REGPARAM2 chipmem_wput_actionreplay23 (uaecptr addr, uae_u32 w)
 	if (action_replay_flag == ACTION_REPLAY_WAITRESET)
 		action_replay_chipwrite();
 }
-
 
 static uae_u32 ar_null(int size)
 {
@@ -792,14 +791,14 @@ static addrbank arrom_bank = {
 	arrom_lget, arrom_wget, arrom_bget,
 	arrom_lput, arrom_wput, arrom_bput,
 	arrom_xlate, arrom_check, NULL, NULL, _T("Action Replay ROM"),
-	arrom_wget,
+	arrom_lget, arrom_wget,
 	ABFLAG_ROM, S_READ, S_WRITE
 };
 static addrbank arram_bank = {
 	arram_lget, arram_wget, arram_bget,
 	arram_lput, arram_wput, arram_bput,
 	arram_xlate, arram_check, NULL, NULL, _T("Action Replay RAM"),
-	arram_wget,
+	arram_lget, arram_wget,
 	ABFLAG_RAM, S_READ, S_WRITE
 };
 
@@ -1046,10 +1045,11 @@ void action_replay_cia_access(bool write)
 		return;
 	if (action_replay_flag == ACTION_REPLAY_INACTIVE)
 		return;
+	int delay = currprefs.cpu_cycle_exact ? 1 : 0;
 	if ((armode_write & ARMODE_ACTIVATE_BFE001) && !write) {
-		event2_newevent_xx(-1, 0, write, action_replay_cia_access_delay);
+		event2_newevent_xx(-1, delay, write, action_replay_cia_access_delay);
 	} else if ((armode_write & ARMODE_ACTIVATE_BFD100) && write) {
-		event2_newevent_xx(-1, 0, write, action_replay_cia_access_delay);
+		event2_newevent_xx(-1, delay, write, action_replay_cia_access_delay);
 	}
 }
 
@@ -1406,7 +1406,7 @@ int action_replay_unload (int in_memory_reset)
 
 static int superiv_init (struct romdata *rd, struct zfile *f)
 {
-	uae_u32 chip = currprefs.chipmem_size - 0x10000;
+	uae_u32 chip = currprefs.chipmem.size - 0x10000;
 	int flags = rd->type & ROMTYPE_MASK;
 	const TCHAR *memname1, *memname2, *memname3;
 
@@ -1653,7 +1653,7 @@ static void hrtmon_configure(void)
 	cfg->hexmode = TRUE;
 	cfg->entered = 0;
 	cfg->keyboard = 0;
-	do_put_mem_long (&cfg->max_chip, currprefs.chipmem_size);
+	do_put_mem_long (&cfg->max_chip, currprefs.chipmem.size);
 	do_put_mem_long (&cfg->mon_size, 0x800000);
 	cfg->ide = currprefs.cs_ide ? 1 : 0;
 	cfg->a1200 = currprefs.cs_ide == IDE_A600A1200 ? 1 : 0; /* type of IDE interface, not Amiga model */

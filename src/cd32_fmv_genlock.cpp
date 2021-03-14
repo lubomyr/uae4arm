@@ -65,9 +65,9 @@ static void genlock_32(struct vidbuffer *vbin, struct vidbuffer *vbout, int w, i
 {
 	for (int hh = 0, sh = -voffset; hh < h; sh++, hh += mult) {
 		for (int h2 = 0; h2 < mult; h2++) {
-			uae_u8 *d8 = vbout->bufmem + vbout->rowbytes * (hh + h2 + voffset);
+			uae_u8 *d8 = vbout->bufmem + vbout->rowbytes * (hh + h2);
 			uae_u32 *d32 = (uae_u32*)d8;
-			uae_u8 *s8 = vbin->bufmem + vbin->rowbytes * (hh + h2 + voffset) ;
+			uae_u8 *s8 = vbin->bufmem + vbin->rowbytes * (hh + h2);
 			uae_u32 *srcp = NULL;
 			if (sh >= 0 && sh < mpeg_height)
 				srcp = (uae_u32*)(mpeg_out_buffer + sh * mpeg_width * MPEG_PIXBYTES_32);
@@ -94,9 +94,9 @@ static void genlock_16(struct vidbuffer *vbin, struct vidbuffer *vbout, int w, i
 {
 	for (int hh = 0, sh = -voffset; hh < h; sh++, hh += mult) {
 		for (int h2 = 0; h2 < mult; h2++) {
-			uae_u8 *d8 = vbout->bufmem + vbout->rowbytes * (hh + h2 + voffset);
+			uae_u8 *d8 = vbout->bufmem + vbout->rowbytes * (hh + h2);
 			uae_u16 *d16 = (uae_u16*)d8;
-			uae_u8 *s8 = vbin->bufmem + vbin->rowbytes * (hh + h2 + voffset) ;
+			uae_u8 *s8 = vbin->bufmem + vbin->rowbytes * (hh + h2);
 			uae_u16 *srcp = NULL;
 			if (sh >= 0 && sh < mpeg_height)
 				srcp = (uae_u16*)(mpeg_out_buffer + sh * mpeg_width * MPEG_PIXBYTES_16);
@@ -122,9 +122,9 @@ static void genlock_16(struct vidbuffer *vbin, struct vidbuffer *vbout, int w, i
 static void genlock_16_nomult(struct vidbuffer *vbin, struct vidbuffer *vbout, int w, int h, int d, int hoffset, int voffset)
 {
 	for (int hh = 0, sh = -voffset; hh < h; sh++, hh++) {
-		uae_u8 *d8 = vbout->bufmem + vbout->rowbytes * (hh + voffset);
+		uae_u8 *d8 = vbout->bufmem + vbout->rowbytes * (hh);
 		uae_u16 *d16 = (uae_u16*)d8;
-		uae_u8 *s8 = vbin->bufmem + vbin->rowbytes * (hh + voffset) ;
+		uae_u8 *s8 = vbin->bufmem + vbin->rowbytes * (hh);
 		uae_u16 *srcp = NULL;
 		if (sh >= 0 && sh < mpeg_height)
 			srcp = (uae_u16*)(mpeg_out_buffer + sh * mpeg_width * MPEG_PIXBYTES_16);

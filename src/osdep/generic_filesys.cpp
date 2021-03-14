@@ -216,3 +216,17 @@ int target_get_volume_name(struct uaedev_mount_info *mtinf, struct uaedev_config
 	sprintf(ci->volname, "DH_%c", ci->rootdir[0]);
   return 2;
 }
+
+
+const TCHAR *my_getfilepart(const TCHAR *filename)
+{
+	const TCHAR *p;
+
+	p = _tcsrchr(filename, '\\');
+	if (p)
+		return p + 1;
+	p = _tcsrchr(filename, '/');
+	if (p)
+		return p + 1;
+	return filename;
+}

@@ -47,6 +47,14 @@ struct hardfileprivdata {
 	bool directorydrive;
 };
 
+#define HFD_VHD_DYNAMIC 3
+#define HFD_VHD_FIXED 2
+
+STATIC_INLINE uae_u32 gl (uae_u8 *p)
+{
+	return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | (p[3] << 0);
+}
+
 static uae_sem_t change_sem = 0;
 
 static struct hardfileprivdata hardfpd[MAX_FILESYSTEM_UNITS];
@@ -194,7 +202,7 @@ void gethdfgeometry(uae_u64 size, struct uaedev_config_info *ci)
 	ci->blocksize = 512;
 }
 
-static void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry)
+void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry)
 {
 	uae_u64 blocks = total / 512;
 
@@ -242,54 +250,6 @@ static void rdb_crc (uae_u8 *p)
 	pl (p, 2, sum);
 }
 
-static uae_u32 get_filesys_version(uae_u8 *fs, int size)
-{
-	int ver = -1, rev = -1;
-	for (int i = 0; i < size - 6; i++) {
-		uae_u8 *p = fs + i;
-		if (p[0] == 'V' && p[1] == 'E' && p[2] == 'R' && p[3] == ':' && p[4] == ' ') {
-			uae_u8 *p2;
-			p += 5;
-			p2 = p;
-			while (*p2 && p2 - fs < size)
-				p2++;
-			if (p2[0] == 0) {
-				while (*p && (ver < 0 || rev < 0)) {
-					if (*p == ' ') {
-						p++;
-						ver = atol((char*)p);
-						if (ver < 0)
-							ver = 0;
-						while (*p) {
-							if (*p == ' ')
-								break;
-							if (*p == '.') {
-								p++;
-								rev = atol((char*)p);
-								if (rev < 0)
-									rev = 0;
-							}
-							else {
-								p++;
-							}
-						}
-						break;
-					}
-					else {
-						p++;
-					}
-				}
-			}
-			break;
-		}
-	}
-	if (ver < 0)
-		return 0xffffffff;
-	if (rev < 0)
-		rev = 0;
-	return (ver << 16) | rev;
-}
-
 // hardware block size is always 256 or 512
 // filesystem block size can be 256, 512 or larger
 static void create_virtual_rdb (struct hardfiledata *hfd)
@@ -307,23 +267,6 @@ static void create_virtual_rdb (struct hardfiledata *hfd)
 
 	write_log(_T("Creating virtual RDB (RDB size=%d, %d blocks). H=%d S=%d HBS=%d FSBS=%d)\n"),
 		size, size / hardblocksize, hfd->ci.surfaces, hfd->ci.sectors, hardblocksize, fsblocksize);
-
-	if (hfd->ci.filesys[0]) {
-		struct zfile *f = NULL;
-		TCHAR fspath[MAX_DPATH];
-		cfgfile_resolve_path_out_load(hfd->ci.filesys, fspath, MAX_DPATH, PATH_HDF);
-		filesys = zfile_load_file(fspath, &filesyslen);
-		if (filesys) {
-			fsver = get_filesys_version(filesys, filesyslen);
-			if (fsver == 0xffffffff)
-				fsver = (99 << 16) | 99;
-			if (filesyslen & 3) {
-				xfree(filesys);
-				filesys = NULL;
-				filesyslen = 0;
-			}
-		}
-	}
 
 	int filesysblocks = (filesyslen + hardblocksize - 5 * 4 - 1) / (hardblocksize - 5 * 4);
 
@@ -389,7 +332,6 @@ static void create_virtual_rdb (struct hardfiledata *hfd)
 	pl(part, 8, 0); // devflags
 	part[9 * 4] = _tcslen (hfd->ci.devname);
 	ua_copy ((char*)part + 9 * 4 + 1, 30, hfd->ci.devname);
-
 	denv = part + 128;
 	pl(denv, 0, 16);
 	pl(denv, 1, fsblocksize / 4);
@@ -498,6 +440,20 @@ int hdf_hd_open (struct hd_hardfiledata *hfd)
 	return 1;
 }
 
+static uae_u32 vhd_checksum (uae_u8 *p, int offset)
+{
+	int i;
+	uae_u32 sum;
+
+	sum = 0;
+	for (i = 0; i < 512; i++) {
+		if (offset >= 0 && i >= offset && i < offset + 4)
+			continue;
+		sum += p[i];
+	}
+	return ~sum;
+}
+
 static int hdf_write2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
 static int hdf_read2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
 
@@ -514,11 +470,14 @@ static int hdf_cache_write (struct hardfiledata *hfd, void *buffer, uae_u64 offs
 int hdf_open (struct hardfiledata *hfd, const TCHAR *pname)
 {
 	int ret;
+	uae_u8 tmp[512], tmp2[512];
+	uae_u32 v;
 	TCHAR filepath[MAX_DPATH];
 
 	if ((!pname || pname[0] == 0) && hfd->ci.rootdir[0] == 0)
 		return 0;
 	hfd->byteswap = 0;
+	hfd->hfd_type = 0;
 	hfd->virtual_size = 0;
 	hfd->virtual_rdb = NULL;
 	if (!pname)
@@ -527,7 +486,63 @@ int hdf_open (struct hardfiledata *hfd, const TCHAR *pname)
 	ret = hdf_open_target (hfd, filepath);
 	if (ret <= 0)
 		return ret;
+	if (hdf_read_target (hfd, tmp, 0, 512) != 512)
+		goto nonvhd;
+	v = gl (tmp + 8); // features
+	if ((v & 3) != 2)
+		goto nonvhd;
+	v = gl (tmp + 8 + 4); // version
+	if ((v >> 16) != 1)
+		goto nonvhd;
+	hfd->hfd_type = gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 8 + 8 + 4);
+	if (hfd->hfd_type != HFD_VHD_FIXED && hfd->hfd_type != HFD_VHD_DYNAMIC)
+		goto nonvhd;
+	v = gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 4);
+	if (v == 0)
+		goto nonvhd;
+	if (vhd_checksum (tmp, 8 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 4) != v)
+		goto nonvhd;
+	if (hdf_read_target (hfd, tmp2, hfd->physsize - sizeof tmp2, 512) != 512)
+		goto end;
+	if (memcmp (tmp, tmp2, sizeof tmp))
+		goto nonvhd;
+	hfd->vhd_footerblock = hfd->physsize - 512;
+	hfd->virtsize = (uae_u64)(gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 +4 + 4 + 8)) << 32;
+	hfd->virtsize |= gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 +4 + 4 + 8 + 4);
+	if (hfd->hfd_type == HFD_VHD_DYNAMIC) {
+		uae_u32 size;
+		hfd->vhd_bamoffset = gl (tmp + 8 + 4 + 4 + 4);
+		if (hfd->vhd_bamoffset == 0 || hfd->vhd_bamoffset >= hfd->physsize)
+			goto end;
+		if (hdf_read_target (hfd, tmp, hfd->vhd_bamoffset, 512) != 512)
+			goto end;
+		v = gl (tmp + 8 + 8 + 8 + 4 + 4 + 4);
+		if (vhd_checksum (tmp, 8 + 8 + 8 + 4 + 4 + 4) != v)
+			goto end;
+		v = gl (tmp + 8 + 8 + 8);
+		if ((v >> 16) != 1)
+			goto end;
+		hfd->vhd_blocksize = gl (tmp + 8 + 8 + 8 + 4 + 4);
+		hfd->vhd_bamoffset = gl (tmp + 8 + 8 + 4);
+		hfd->vhd_bamsize = (((hfd->virtsize + hfd->vhd_blocksize - 1) / hfd->vhd_blocksize) * 4 + 511) & ~511;
+		size = hfd->vhd_bamoffset + hfd->vhd_bamsize;
+		hfd->vhd_header = xmalloc (uae_u8, size);
+		if (hdf_read_target (hfd, hfd->vhd_header, 0, size) != size)
+			goto end;
+		hfd->vhd_sectormap = xmalloc (uae_u8, 512);
+		hfd->vhd_sectormapblock = -1;
+		hfd->vhd_bitmapsize = ((hfd->vhd_blocksize / (8 * 512)) + 511) & ~511;
+	}
+	write_log (_T("HDF is VHD %s image, virtual size=%lldK (%llx %lld)\n"),
+		hfd->hfd_type == HFD_VHD_FIXED ? _T("fixed") : _T("dynamic"),
+		hfd->virtsize / 1024, hfd->virtsize, hfd->virtsize);
 	return 1;
+nonvhd:
+	hfd->hfd_type = 0;
+	return 1;
+end:
+	hdf_close_target (hfd);
+	return 0;
 }
 int hdf_open (struct hardfiledata *hfd)
 {
@@ -538,6 +553,291 @@ int hdf_open (struct hardfiledata *hfd)
 void hdf_close (struct hardfiledata *hfd)
 {
 	hdf_close_target (hfd);
+	hfd->hfd_type = 0;
+	xfree (hfd->vhd_header);
+	hfd->vhd_header = NULL;
+	xfree (hfd->vhd_sectormap);
+	hfd->vhd_sectormap = NULL;
+}
+
+static uae_u64 vhd_read (struct hardfiledata *hfd, void *v, uae_u64 offset, uae_u64 len)
+{
+	uae_u64 read;
+	uae_u8 *dataptr = (uae_u8*)v;
+
+	read = 0;
+	if (offset & 511)
+		return read;
+	if (len & 511)
+		return read;
+	while (len > 0) {
+		uae_u32 bamoffset = (offset / hfd->vhd_blocksize) * 4 + hfd->vhd_bamoffset;
+		uae_u32 sectoroffset = gl (hfd->vhd_header + bamoffset);
+		if (sectoroffset == 0xffffffff) {
+			memset (dataptr, 0, 512);
+			read += 512;
+		} else {
+			int bitmapoffsetbits;
+			int bitmapoffsetbytes;
+			uae_u64 sectormapblock;
+
+			bitmapoffsetbits = (offset / 512) % (hfd->vhd_blocksize / 512);
+			bitmapoffsetbytes = bitmapoffsetbits / 8;
+			sectormapblock = sectoroffset * (uae_u64)512 + (bitmapoffsetbytes & ~511);
+			if (hfd->vhd_sectormapblock != sectormapblock) {
+				// read sector bitmap
+				if (hdf_read_target (hfd, hfd->vhd_sectormap, sectormapblock, 512) != 512) {
+					write_log (_T("vhd_read: bitmap read error\n"));
+					return read;
+				}
+				hfd->vhd_sectormapblock = sectormapblock;
+			}
+			// block allocated in bitmap?
+			if (hfd->vhd_sectormap[bitmapoffsetbytes & 511] & (1 << (7 - (bitmapoffsetbits & 7)))) {
+				// read data block
+				uae_u64 block = sectoroffset * (uae_u64)512 + hfd->vhd_bitmapsize + bitmapoffsetbits * 512;
+				if (hdf_read_target (hfd, dataptr, block, 512) != 512) {
+					write_log (_T("vhd_read: data read error\n"));
+					return read;
+				}
+			} else {
+				memset (dataptr, 0, 512);
+			}
+			read += 512;
+		}
+		len -= 512;
+		dataptr += 512;
+		offset += 512;
+	}
+	return read;
+}
+
+static int vhd_write_enlarge (struct hardfiledata *hfd, uae_u32 bamoffset)
+{
+	uae_u8 *buf, *p;
+	int len;
+	uae_u32 block;
+	int v;
+
+	len = hfd->vhd_blocksize + hfd->vhd_bitmapsize + 512;
+	buf = xcalloc (uae_u8, len);
+	if (!hdf_resize_target (hfd, hfd->physsize + len - 512)) {
+		write_log (_T("vhd_enlarge: failure\n"));
+		return 0;
+	}
+	// add footer (same as 512 byte header)
+	memcpy (buf + len - 512, hfd->vhd_header, 512);
+	v = hdf_write_target (hfd, buf, hfd->vhd_footerblock, len);
+	xfree (buf);
+	if (v != len) {
+		write_log (_T("vhd_enlarge: footer write error\n"));
+		return 0;
+	}
+	// write new offset to BAM
+	p = hfd->vhd_header + bamoffset;
+	block = hfd->vhd_footerblock / 512;
+	p[0] = block >> 24;
+	p[1] = block >> 16;
+	p[2] = block >>  8;
+	p[3] = block >>  0;
+	// write to disk
+	if (hdf_write_target (hfd, hfd->vhd_header + hfd->vhd_bamoffset, hfd->vhd_bamoffset, hfd->vhd_bamsize) != hfd->vhd_bamsize) {
+		write_log (_T("vhd_enlarge: bam write error\n"));
+		return 0;
+	}
+	hfd->vhd_footerblock += len - 512;
+	return 1;
+}
+
+static uae_u64 vhd_write (struct hardfiledata *hfd, void *v, uae_u64 offset, uae_u64 len)
+{
+	uae_u64 written;
+	uae_u8 *dataptr = (uae_u8*)v;
+
+	written = 0;
+	if (offset & 511)
+		return written;
+	if (len & 511)
+		return written;
+	while (len > 0) {
+		uae_u32 bamoffset = (offset / hfd->vhd_blocksize) * 4 + hfd->vhd_bamoffset;
+		uae_u32 sectoroffset = gl (hfd->vhd_header + bamoffset);
+		if (sectoroffset == 0xffffffff) {
+			if (!vhd_write_enlarge (hfd, bamoffset))
+				return written;
+			continue;
+		} else {
+			int bitmapoffsetbits;
+			int bitmapoffsetbytes;
+
+			bitmapoffsetbits = (offset / 512) % (hfd->vhd_blocksize / 512);
+			bitmapoffsetbytes = bitmapoffsetbits / 8;
+			uae_u64 sectormapblock = sectoroffset * (uae_u64)512 + (bitmapoffsetbytes & ~511);
+			if (hfd->vhd_sectormapblock != sectormapblock) {
+				// read sector bitmap
+				if (hdf_read_target (hfd, hfd->vhd_sectormap, sectormapblock, 512) != 512) {
+					write_log (_T("vhd_write: bitmap read error\n"));
+					return written;
+				}
+				hfd->vhd_sectormapblock = sectormapblock;
+			}
+			// write data
+			if (hdf_write_target (hfd, dataptr, sectoroffset * (uae_u64)512 + hfd->vhd_bitmapsize + bitmapoffsetbits * 512, 512) != 512) {
+				write_log (_T("vhd_write: data write error\n"));
+				return written;
+			}
+			// block already allocated in bitmap?
+			if (!(hfd->vhd_sectormap[bitmapoffsetbytes & 511] & (1 << (7 - (bitmapoffsetbits & 7))))) {
+				// no, we need to mark it allocated and write the modified bitmap back to the disk
+				hfd->vhd_sectormap[bitmapoffsetbytes & 511] |= (1 << (7 - (bitmapoffsetbits & 7)));
+				if (hdf_write_target (hfd, hfd->vhd_sectormap, sectormapblock, 512) != 512) {
+					write_log (_T("vhd_write: bam write error\n"));
+					return written;
+				}
+			}
+			written += 512;
+		}
+		len -= 512;
+		dataptr += 512;
+		offset += 512;
+	}
+	return written;
+}
+
+
+int vhd_create (const TCHAR *name, uae_u64 size, uae_u32 dostype)
+{
+	struct hardfiledata hfd;
+	struct zfile *zf;
+	uae_u8 *b;
+	int cyl, cylsec, head, tracksec;
+	uae_u32 crc, blocksize, batsize, batentrysize;
+	int ret, i;
+	time_t tm;
+
+	if (size >= (uae_u64)10 * 1024 * 1024 * 1024)
+		blocksize = 2 * 1024 * 1024;
+	else
+		blocksize = 512 * 1024;
+	batsize = (size + blocksize - 1) / blocksize;
+	batentrysize = batsize;
+	batsize *= 4;
+	batsize += 511;
+	batsize &= ~511;
+	ret = 0;
+	b = NULL;
+	zf = zfile_fopen (name, _T("wb"), 0);
+	if (!zf)
+		goto end;
+	b = xcalloc (uae_u8, 512 + 1024 + batsize + 512);
+	if (zfile_fwrite (b, 512 + 1024 + batsize + 512, 1, zf) != 1)
+		goto end;
+
+	memset (&hfd, 0, sizeof hfd);
+	hfd.virtsize = hfd.physsize = size;
+	hfd.ci.blocksize = 512;
+	strcpy ((char*)b, "conectix"); // cookie
+	b[0x0b] = 2; // features
+	b[0x0d] = 1; // version
+	b[0x10 + 6] = 2; // data offset
+	// time stamp
+	tm = time (NULL) - 946684800;
+	b[0x18] = tm >> 24;
+	b[0x19] = tm >> 16;
+	b[0x1a] = tm >>  8;
+	b[0x1b] = tm >>  0;
+	strcpy ((char*)b + 0x1c, "vpc "); // creator application
+	b[0x21] = 5; // creator version
+	strcpy ((char*)b + 0x24, "Wi2k"); // creator host os
+	// original and current size
+	b[0x28] = b[0x30] = size >> 56;
+	b[0x29] = b[0x31] = size >> 48;
+	b[0x2a] = b[0x32] = size >> 40;
+	b[0x2b] = b[0x33] = size >> 32;
+	b[0x2c] = b[0x34] = size >> 24;
+	b[0x2d] = b[0x35] = size >> 16;
+	b[0x2e] = b[0x36] = size >>  8;
+	b[0x2f] = b[0x37] = size >>  0;
+	getchs2 (&hfd, &cyl, &cylsec, &head, &tracksec);
+	// cylinders
+	b[0x38] = cyl >> 8;
+	b[0x39] = cyl;
+	// heads
+	b[0x3a] = head;
+	// sectors per track
+	b[0x3b] = tracksec;
+	// disk type
+	b[0x3c + 3] = HFD_VHD_DYNAMIC;
+	get_guid_target (b + 0x44);
+	crc = vhd_checksum (b, -1);
+	b[0x40] = crc >> 24;
+	b[0x41] = crc >> 16;
+	b[0x42] = crc >>  8;
+	b[0x43] = crc >>  0;
+
+	// write header
+	zfile_fseek (zf, 0, SEEK_SET);
+	zfile_fwrite (b, 512, 1, zf);
+	// write footer
+	zfile_fseek (zf, 512 + 1024 + batsize, SEEK_SET);
+	zfile_fwrite (b, 512, 1, zf);
+
+	// dynamic disk header
+	memset (b, 0, 1024);
+	// cookie
+	strcpy ((char*)b, "cxsparse");
+	// data offset
+	for (i = 0; i < 8; i++)
+		b[0x08 + i] = 0xff;
+	// table offset (bat)
+	b[0x10 + 6] = 0x06;
+	// version
+	b[0x19] = 1;
+	// max table entries
+	b[0x1c] = batentrysize >> 24;
+	b[0x1d] = batentrysize >> 16;
+	b[0x1e] = batentrysize >>  8;
+	b[0x1f] = batentrysize >>  0;
+	b[0x20] = blocksize >> 24;
+	b[0x21] = blocksize >> 16;
+	b[0x22] = blocksize >>  8;
+	b[0x23] = blocksize >>  0;
+	crc = vhd_checksum (b, -1);
+	b[0x24] = crc >> 24;
+	b[0x25] = crc >> 16;
+	b[0x26] = crc >>  8;
+	b[0x27] = crc >>  0;
+
+	// write dynamic header
+	zfile_fseek (zf, 512, SEEK_SET);
+	zfile_fwrite (b, 1024, 1, zf);
+
+	// bat
+	memset (b, 0, batsize);
+	memset (b, 0xff, batentrysize * 4);
+	zfile_fwrite (b, batsize, 1, zf);
+
+	zfile_fclose (zf);
+	zf = NULL;
+
+	if (dostype) {
+		uae_u8 bootblock[512] = { 0 };
+		bootblock[0] = dostype >> 24;
+		bootblock[1] = dostype >> 16;
+		bootblock[2] = dostype >>  8;
+		bootblock[3] = dostype >>  0;
+		if (hdf_open (&hfd, name) > 0) {
+			vhd_write (&hfd, bootblock, 0, 512);
+			hdf_close (&hfd);
+		}
+	}
+
+	ret = 1;
+
+end:
+	xfree (b);
+	zfile_fclose (zf);
+	return ret;
 }
 
 static int hdf_read2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len)
@@ -557,7 +857,12 @@ static int hdf_read2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, in
 	}
 	offset -= hfd->virtual_size;
 
-  ret = hdf_read_target (hfd, buffer, offset, len);
+	if (hfd->hfd_type == HFD_VHD_DYNAMIC)
+		ret = vhd_read (hfd, buffer, offset, len);
+	else if (hfd->hfd_type == HFD_VHD_FIXED)
+		ret = hdf_read_target (hfd, buffer, offset + 512, len);
+	else
+    ret = hdf_read_target (hfd, buffer, offset, len);
 
 	if (ret <= 0)
 		return ret;
@@ -580,7 +885,12 @@ static int hdf_write2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, i
 	}
 	offset -= hfd->virtual_size;
 
-	ret = hdf_write_target (hfd, buffer, offset, len);
+	if (hfd->hfd_type == HFD_VHD_DYNAMIC)
+		ret = vhd_write (hfd, buffer, offset, len);
+	else if (hfd->hfd_type == HFD_VHD_FIXED)
+		ret = hdf_write_target (hfd, buffer, offset + 512, len);
+	else
+	  ret = hdf_write_target (hfd, buffer, offset, len);
 
 	if (ret <= 0)
 		return ret;

@@ -18,13 +18,6 @@ void scsidev_install (void);
 void scsidev_reset (void);
 void scsidev_start_threads (void);
 int scsi_do_disk_change (int unitnum, int insert, int *pollmode);
-int scsi_do_disk_device_change (void);
-uae_u32 scsi_get_cd_drive_mask (void);
 uae_u32 scsi_get_cd_drive_media_mask (void);
-
-#ifdef _WIN32
-#define UAESCSI_CDEMU 0
-#define UAESCSI_LAST 0
-#endif
 
 #endif /* UAE_SCSIDEV_H */

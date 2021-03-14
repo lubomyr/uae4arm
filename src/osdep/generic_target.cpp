@@ -30,11 +30,21 @@
 #include <SDL.h>
 #include "generic_rp9.h"
 #include "machdep/rpt.h"
+#include "blkdev.h"
+#include "sounddep/sound.h"
+#include "gui.h"
+#include "xwin.h"
+#include "drawing.h"
+#include "picasso96.h"
+#include "driveclick.h"
+#include "fsdb.h"
 
 
 #ifdef WITH_LOGGING
 extern FILE *debugfile;
 #endif
+
+int pause_emulation = 0;
 
 int quickstart_start = 1;
 int quickstart_model = 0;
@@ -72,11 +82,60 @@ void sleep_millis (int ms)
   usleep(ms * 1000);
 }
 
-void sleep_millis_main (int ms)
+bool resumepaused(int priority)
 {
-	uae_u32 start = read_processor_time ();
-  usleep(ms * 1000);
-  idletime += read_processor_time () - start;
+	if (pause_emulation > priority)
+		return false;
+	if (!pause_emulation)
+		return false;
+  blkdev_exitgui();
+  resume_sound();
+	pause_emulation = 0;
+	return true;
+}
+bool setpaused(int priority)
+{
+	if (pause_emulation > priority)
+		return false;
+	pause_emulation = priority;
+	blkdev_entergui();
+	pause_sound();
+	return true;
+}
+
+
+bool handle_events (void)
+{
+	static int was_paused = 0;
+
+	if (pause_emulation) {
+		if (was_paused == 0) {
+			setpaused (pause_emulation);
+			was_paused = pause_emulation;
+      gui_data.fps = 0;
+      gui_data.idle = 0;
+    	struct amigadisplay *ad = &adisplays;
+    	if (ad->picasso_on)
+        rtg_render();
+      else
+        redraw_frame();
+			return 1;
+		}
+    while(handle_msgpump()) {
+      usleep(10);
+    }
+		inputdevicefunc_keyboard.read ();
+		inputdevicefunc_mouse.read ();
+		inputdevicefunc_joystick.read ();
+		inputdevice_handle_inputcode ();
+  }
+	if (was_paused && (!pause_emulation || quit_program)) {
+		pause_emulation = was_paused;
+		resumepaused (was_paused);
+		was_paused = 0;
+		reset_sync();
+	}
+	return pause_emulation != 0;
 }
 
 
@@ -260,6 +319,14 @@ void fetch_screenshotpath(char *out, int size)
   strncat(out, "/screenshots/", size - 1);
 }
 
+bool get_plugin_path (TCHAR *out, int len, const TCHAR *path)
+{
+	strncpy(out, start_path_data, len - 1);
+	strncat(out, "/", len - 1);
+	strncat(out, path, len - 1);
+	strncat(out, "/", len - 1);
+	return my_existsfile(out);
+}
 
 int target_cfgfile_load (struct uae_prefs *p, const char *filename, int type, int isdefault)
 {
@@ -571,6 +638,51 @@ static void target_shutdown(void)
 bool target_isrelativemode(void)
 {
 	return true;
+}
+
+
+int driveclick_loadresource (struct drvsample *sp, int drivetype)
+{
+  for (int type = 0; type < DS_END; type++) {
+    char name[MAX_DPATH];
+    fetch_datapath(name, MAX_DPATH  -1);
+    switch (type) {
+      case 0:
+        strncat(name, "data/drive_click.wav", MAX_DPATH  -1);
+        break;
+      case 1:
+        strncat(name, "data/drive_spin.wav", MAX_DPATH  -1);
+        break;
+      case 2:
+        strncat(name, "data/drive_spinnd.wav", MAX_DPATH  -1);
+        break;
+      case 3:
+        strncat(name, "data/drive_startup.wav", MAX_DPATH  -1);
+        break;
+      case 4:
+        strncat(name, "data/drive_snatch.wav", MAX_DPATH  -1);
+        break;
+      default:
+        continue;
+    }
+    
+    struct zfile *fh;
+    fh = zfile_fopen (name, _T("r"), ZFD_NORMAL);
+    if (fh) {
+      int size = zfile_size(fh);
+      uae_u8 *data = xmalloc (uae_u8, size);
+      zfile_fread (data, size, 1, fh);
+      
+      struct drvsample* s = sp + type;
+      int len = size;
+      s->p = decodewav(data, &len);
+      s->len = len;
+      xfree(data);
+
+      zfile_fclose (fh);
+    }
+  }
+  return 1;
 }
 
 

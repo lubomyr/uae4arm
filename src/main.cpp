@@ -105,7 +105,7 @@ void fixup_cpu(struct uae_prefs *p)
 		error_log (_T("24-bit address space is not supported with 68040/060 configurations."));
 		p->address_space_24 = 0;
 	}
-	if (p->cpu_model < 68020 && p->fpu_model && p->cpu_compatible) {
+	if (p->cpu_model < 68020 && p->fpu_model && (p->cpu_compatible || p->cpu_memory_cycle_exact)) {
 		error_log (_T("FPU is not supported with 68000/010 configurations."));
 		p->fpu_model = 0;
 	}
@@ -130,6 +130,16 @@ void fixup_cpu(struct uae_prefs *p)
     	break;
   }
 
+	if (!p->cpu_memory_cycle_exact && p->cpu_cycle_exact)
+		p->cpu_memory_cycle_exact = true;
+
+  if (p->cpu_model >= 68020 && p->cpu_memory_cycle_exact)
+    p->cpu_memory_cycle_exact = false;
+
+  if (p->cachesize && p->cpu_memory_cycle_exact) {
+		error_log (_T("JIT and cycle-exact can't be enabled simultaneously."));
+		p->cachesize = 0;
+	}
 	if (p->cachesize && p->fpu_no_unimplemented) {
 		error_log (_T("JIT is not compatible with unimplemented FPU instruction emulation."));
 		p->fpu_no_unimplemented = false;
@@ -144,6 +154,18 @@ void fixup_cpu(struct uae_prefs *p)
 		error_log (_T("Immediate blitter and waiting blits can't be enabled simultaneously.\n"));
 		p->waiting_blits = 0;
   }
+	if (p->cpu_memory_cycle_exact)
+		p->cpu_compatible = true;
+
+	if (p->cpu_memory_cycle_exact && p->produce_sound == 0) {
+		p->produce_sound = 1;
+		error_log(_T("Cycle-exact mode requires at least Disabled but emulated sound setting."));
+	}
+	
+	if (p->cpu_memory_cycle_exact && p->fast_copper != 0) {
+    p->fast_copper = 0;
+    error_log(_T("Cycle-exact mode not compatible with fast copper."));
+	}
 }
 
 void fixup_prefs (struct uae_prefs *p, bool userconfig)
@@ -156,23 +178,21 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 
 	read_kickstart_version(p);
 
-  if (((p->chipmem_size & (p->chipmem_size - 1)) != 0 && p->chipmem_size != 0x180000)
-	|| p->chipmem_size < 0x20000
-	|| p->chipmem_size > 0x800000)
+  if (((p->chipmem.size & (p->chipmem.size - 1)) != 0 && p->chipmem.size != 0x180000)
+	|| p->chipmem.size < 0x20000
+	|| p->chipmem.size > 0x800000)
   {
-		error_log (_T("Unsupported chipmem size %d (0x%x)."), p->chipmem_size, p->chipmem_size);
-	  p->chipmem_size = 0x200000;
+		error_log (_T("Unsupported chipmem size %d (0x%x)."), p->chipmem.size, p->chipmem.size);
+	  p->chipmem.size = 0x200000;
 	  err = 1;
   }
 
-	for (int i = 0; i < MAX_RAM_BOARDS; i++) {
-    if ((p->fastmem[i].size & (p->fastmem[i].size - 1)) != 0
-	  || (p->fastmem[i].size != 0 && (p->fastmem[i].size < 0x10000 || p->fastmem[i].size > 0x800000)))
-    {
-		  error_log (_T("Unsupported fastmem size %d (0x%x)."), p->fastmem[i].size, p->fastmem[i].size);
-		  p->fastmem[i].size = 0;
-	    err = 1;
-    }
+  if ((p->fastmem[0].size & (p->fastmem[0].size - 1)) != 0
+  || (p->fastmem[0].size != 0 && (p->fastmem[0].size < 0x10000 || p->fastmem[0].size > 0x800000)))
+  {
+	  error_log (_T("Unsupported fastmem size %d (0x%x)."), p->fastmem[0].size, p->fastmem[0].size);
+	  p->fastmem[0].size = 0;
+    err = 1;
   }
 
 	struct rtgboardconfig *rbc = &p->rtgboards[0];
@@ -183,20 +203,18 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
   }
   if ((rbc->rtgmem_size & (rbc->rtgmem_size - 1)) != 0 || (rbc->rtgmem_size != 0 && (rbc->rtgmem_size < 0x100000))) {
     error_log (_T("Unsupported graphics card memory size %d (0x%x)."), rbc->rtgmem_size, rbc->rtgmem_size);
-	  if (rbc->rtgmem_size > 0x1000000)
-		  rbc->rtgmem_size = 0x1000000;
+	  if (rbc->rtgmem_size > max_z3fastmem)
+		  rbc->rtgmem_size = max_z3fastmem;
     else
       rbc->rtgmem_size = 0;
     err = 1;
   }
   
-	for (int i = 0; i < MAX_RAM_BOARDS; i++) {
-    if ((p->z3fastmem[i].size & (p->z3fastmem[i].size - 1)) != 0 || (p->z3fastmem[i].size != 0 && p->z3fastmem[i].size < 0x100000))
-    {
-		  error_log (_T("Unsupported Zorro III fastmem size %d (0x%x)."), p->z3fastmem[i].size, p->z3fastmem[i].size);
-      p->z3fastmem[i].size = 0;
-	    err = 1;
-    }
+  if ((p->z3fastmem[0].size & (p->z3fastmem[0].size - 1)) != 0 || (p->z3fastmem[0].size != 0 && p->z3fastmem[0].size < 0x100000))
+  {
+	  error_log (_T("Unsupported Zorro III fastmem size %d (0x%x)."), p->z3fastmem[0].size, p->z3fastmem[0].size);
+    p->z3fastmem[0].size = 0;
+    err = 1;
   }
 
   p->z3autoconfig_start &= ~0xffff;
@@ -205,37 +223,37 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
     
   if (p->address_space_24 && p->z3fastmem[0].size != 0) {
   	p->z3fastmem[0].size = 0;
-  	error_log (_T("Can't use 32-bit memory when using a 24 bit address space."));
+		error_log (_T("Can't use a Z3 graphics card or 32-bit memory when using a 24 bit address space."));
   }
 
-  if (p->bogomem_size != 0 && p->bogomem_size != 0x80000 && p->bogomem_size != 0x100000 && p->bogomem_size != 0x180000 && p->bogomem_size != 0x1c0000) {
-		error_log (_T("Unsupported bogomem size %d (0x%x)"), p->bogomem_size, p->bogomem_size);
-	  p->bogomem_size = 0;
+  if (p->bogomem.size != 0 && p->bogomem.size != 0x80000 && p->bogomem.size != 0x100000 && p->bogomem.size != 0x180000 && p->bogomem.size != 0x1c0000) {
+		error_log (_T("Unsupported bogomem size %d (0x%x)"), p->bogomem.size, p->bogomem.size);
+	  p->bogomem.size = 0;
 	  err = 1;
   }
 
-	if (p->bogomem_size > 0x180000 && (p->cs_fatgaryrev >= 0 || p->cs_ide || p->cs_ramseyrev >= 0)) {
-	  p->bogomem_size = 0x180000;
+	if (p->bogomem.size > 0x180000 && (p->cs_fatgaryrev >= 0 || p->cs_ide || p->cs_ramseyrev >= 0)) {
+	  p->bogomem.size = 0x180000;
 		error_log (_T("Possible Gayle bogomem conflict fixed."));
   }
-	if (p->chipmem_size > 0x200000 && p->fastmem[0].size > 262144) {
+	if (p->chipmem.size > 0x200000 && p->fastmem[0].size > 262144) {
 		error_log (_T("You can't use fastmem and more than 2MB chip at the same time."));
-		p->chipmem_size = 0x200000;
+		p->chipmem.size = 0x200000;
 	  err = 1;
   }
-	if (p->mbresmem_low_size > 0x04000000 || (p->mbresmem_low_size & 0xfffff)) {
-		p->mbresmem_low_size = 0;
+	if (p->mbresmem_low.size > 0x04000000 || (p->mbresmem_low.size & 0xfffff)) {
+		p->mbresmem_low.size = 0;
 		error_log (_T("Unsupported Mainboard RAM size"));
 	}
-	if (p->mbresmem_high_size > 0x08000000 || (p->mbresmem_high_size & 0xfffff)) {
-		p->mbresmem_high_size = 0;
+	if (p->mbresmem_high.size > 0x08000000 || (p->mbresmem_high.size & 0xfffff)) {
+		p->mbresmem_high.size = 0;
 		error_log (_T("Unsupported CPU Board RAM size."));
 	}
 
 	rbc = &p->rtgboards[0];
-	if (p->chipmem_size > 0x200000 && rbc->rtgmem_size && gfxboard_get_configtype(rbc) == 2) {
+	if (p->chipmem.size > 0x200000 && rbc->rtgmem_size && gfxboard_get_configtype(rbc) == 2) {
 		error_log(_T("You can't use Zorro II RTG and more than 2MB chip at the same time."));
-		p->chipmem_size = 0x200000;
+		p->chipmem.size = 0x200000;
 		err = 1;
 	}
   if (p->address_space_24 && rbc->rtgmem_size && rbc->rtgmem_type == GFXBOARD_UAE_Z3) {
@@ -318,6 +336,13 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 	p->cpu_model = 68000;
 	p->fpu_model = 0;
 #endif
+#if !defined (CPUEMU_11) && !defined (CPUEMU_13)
+	p->cpu_compatible = 0;
+	p->address_space_24 = 0;
+#endif
+#if !defined (CPUEMU_13)
+	p->cpu_cycle_exact = p->blitter_cycle_exact = 0;
+#endif
 #ifndef AUTOCONFIG
 	p->z3fastmem[0].size = 0;
 	p->fastmem[0].size = 0;
@@ -328,6 +353,18 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
 #endif
 #if !defined (SCSIEMU)
 	p->scsi = 0;
+#endif
+#if defined (CPUEMU_13)
+	if (p->cpu_memory_cycle_exact) {
+		if (p->gfx_framerate > 0) {
+			error_log (_T("Cycle-exact requires disabled frameskip."));
+			p->gfx_framerate = 0;
+		}
+		if (p->cachesize) {
+			error_log (_T("Cycle-exact and JIT can't be active simultaneously."));
+			p->cachesize = 0;
+		}
+	}
 #endif
 
   built_in_chipset_prefs (p);
@@ -668,7 +705,6 @@ static int real_main2 (int argc, TCHAR **argv)
   gui_update ();
 
   if (graphics_init (true)) {
-
     if(!init_audio ()) {
   	  if (sound_available && currprefs.produce_sound > 1) {
 				write_log (_T("Sound driver unavailable: Sound output disabled\n"));

@@ -622,7 +622,7 @@ static void process_rw_command (struct ide_hdf *ide)
 static void process_packet_command (struct ide_hdf *ide)
 {
 	setbsy (ide);
-	write_comm_pipe_u32 (&ide->its->requests, ide->num | 0x100, 1);
+	write_comm_pipe_u32 (&ide->its->requests, ide->num | 0x8000, 1);
 }
 
 static void atapi_data_done (struct ide_hdf *ide)
@@ -1269,8 +1269,8 @@ static int ide_thread (void *idedata)
 		struct ide_hdf *ide;
 		if (its->state == 0 || unit == 0xfffffff)
 			break;
-		ide = its->idetable[unit & 0xff];
-		if (unit & 0x100)
+		ide = its->idetable[unit & 0x7fff];
+		if (unit & 0x8000)
 			do_process_packet_command (ide);
 		else
 			do_process_rw_command (ide);
@@ -1328,7 +1328,6 @@ void alloc_ide_mem (struct ide_hdf **idetable, int max, struct ide_thread_state 
 		struct ide_hdf *ide;
 		if (!idetable[i]) {
 			ide = idetable[i] = xcalloc (struct ide_hdf, 1);
-			ide->cd_unit_num = -1;
 		}
 		ide = idetable[i];
 		ide_grow_buffer(ide, 1024);
@@ -1376,7 +1375,6 @@ struct ide_hdf *add_ide_unit (struct ide_hdf **idetable, int max, int ch, struct
 		ide->lba = true;
 		ide->uae_unitnum = ci->uae_unitnum;
 		gui_flicker_led (LED_HD, ide->uae_unitnum, -1);
-		ide->cd_unit_num = -1;
 		ide->ata_level = ci->unit_feature_level;
 		if (!ide->ata_level && (ide->hdhfd.size >= 4 * (uae_u64)0x40000000))
 			ide->ata_level = 1;

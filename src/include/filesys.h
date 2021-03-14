@@ -36,6 +36,16 @@ struct hardfiledata {
   uae_u64 virtual_size;
   int unitnum;
   int byteswap;
+  int hfd_type;
+
+  uae_u8 *vhd_header;
+  uae_u32 vhd_bamoffset;
+  uae_u32 vhd_bamsize;
+  uae_u32 vhd_blocksize;
+  uae_u8 *vhd_sectormap;
+  uae_u64 vhd_sectormapblock;
+  uae_u32 vhd_bitmapsize;
+  uae_u64 vhd_footerblock;
 
   int drive_empty;
   TCHAR *emptyname;
@@ -70,9 +80,6 @@ struct hd_hardfiledata {
 #define HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST (HD_CONTROLLER_TYPE_IDE_FIRST + 1)
 #define HD_CONTROLLER_TYPE_IDE_LAST (HD_CONTROLLER_TYPE_IDE_EXPANSION_FIRST + HD_CONTROLLER_EXPANSION_MAX - 1)
 
-#define HD_CONTROLLER_TYPE_CUSTOM_FIRST (HD_CONTROLLER_TYPE_IDE_LAST + 1)
-#define HD_CONTROLLER_TYPE_CUSTOM_LAST (HD_CONTROLLER_TYPE_CUSTOM_FIRST + HD_CONTROLLER_EXPANSION_MAX - 1)
-
 #define FILESYS_VIRTUAL 0
 #define FILESYS_HARDFILE 1
 #define FILESYS_HARDFILE_RDB 2
@@ -82,7 +89,7 @@ struct hd_hardfiledata {
 
 extern struct hardfiledata *get_hardfile_data (int nr);
 extern struct hardfiledata *get_hardfile_data_controller(int nr);
-#define FILESYS_MAX_BLOCKSIZE 2048
+#define FILESYS_MAX_BLOCKSIZE 8192
 extern int hdf_open (struct hardfiledata *hfd);
 extern int hdf_open (struct hardfiledata *hfd, const TCHAR *altname);
 extern void hdf_close (struct hardfiledata *hfd);
@@ -97,9 +104,15 @@ extern int hardfile_media_change (struct hardfiledata *hfd, struct uaedev_config
 void hdf_hd_close(struct hd_hardfiledata *hfd);
 int hdf_hd_open(struct hd_hardfiledata *hfd);
 
+extern int vhd_create (const TCHAR *name, uae_u64 size, uae_u32);
+
 extern int hdf_open_target (struct hardfiledata *hfd, const TCHAR *name);
 extern void hdf_close_target (struct hardfiledata *hfd);
 extern int hdf_read_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
 extern int hdf_write_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int len);
+extern int hdf_resize_target (struct hardfiledata *hfd, uae_u64 newsize);
+
+extern void getchspgeometry (uae_u64 total, int *pcyl, int *phead, int *psectorspertrack, bool idegeometry);
+extern void gethdfgeometry(uae_u64 size, struct uaedev_config_info*);
 
 #endif /* UAE_FILESYS_H */

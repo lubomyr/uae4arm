@@ -385,6 +385,9 @@ static struct map_x11_to_event map_x11_to_event[] {
 	{ "f12",        INPUTEVENT_SPC_ENTERGUI },
   { "prior",      INPUTEVENT_SPC_FREEZEBUTTON },
   
+	{ "f11",        INPUTEVENT_SPC_WARP },
+	{ "pause",      INPUTEVENT_SPC_PAUSE },
+
   { "" }
 };
 

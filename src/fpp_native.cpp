@@ -1,7 +1,7 @@
 /*
 * UAE - The Un*x Amiga Emulator
 *
-* MC68881/68882/68040/68060 FPU emulation
+* MC68881/68882/68040 FPU emulation
 *
 * Copyright 1996 Herman ten Brugge
 * Modified 2005 Peter Keunecke
@@ -13,10 +13,6 @@
 */
 
 #define __USE_ISOC9X  /* We might be able to pick up a NaN */
-
-#include <math.h>
-#include <float.h>
-#include <fenv.h>
 
 #include "sysconfig.h"
 #include "sysdeps.h"

@@ -32,7 +32,7 @@
 #define DIALOG_WIDTH 620
 #define DIALOG_HEIGHT 272
 
-static const char *harddisk_filter[] = { ".hdf", "\0" };
+static const char *harddisk_filter[] = { ".hdf", ".vhd", "\0" };
 
 struct controller_map {
   int type;
@@ -74,19 +74,107 @@ static gcn::UaeDropDown* cboController;
 static gcn::UaeDropDown* cboUnit;
 
 
-static void check_rdb(const TCHAR *filename)
+static void sethd(void)
 {
-  bool isrdb = hardfile_testrdb(filename);
-  if(isrdb) {
-		txtSectors->setText("0");
-		txtSurfaces->setText("0");
-		txtReserved->setText("0");
-		txtBootPri->setText("0");
+	bool rdb = is_hdf_rdb ();
+	bool enablegeo = (!rdb);
+  txtSectors->setEnabled(enablegeo);
+	txtSurfaces->setEnabled(enablegeo);
+	txtReserved->setEnabled(enablegeo);
+  txtBlocksize->setEnabled(enablegeo);
+}
+
+static void sethardfile (void)
+{
+  std::string strdevname, strroot;
+  char tmp[32];
+	bool ide = current_hfdlg.ci.controller_type >= HD_CONTROLLER_TYPE_IDE_FIRST && current_hfdlg.ci.controller_type <= HD_CONTROLLER_TYPE_IDE_LAST;
+	bool rdb = is_hdf_rdb ();
+	bool disables = !rdb || (rdb && current_hfdlg.ci.controller_type == HD_CONTROLLER_TYPE_UAE);
+
+	sethd();
+	if (!disables)
+		current_hfdlg.ci.bootpri = 0;
+	strroot.assign(current_hfdlg.ci.rootdir);
+  txtPath->setText(strroot);
+  strdevname.assign(current_hfdlg.ci.devname);
+  txtDevice->setText(strdevname);
+	snprintf(tmp, sizeof (tmp) - 1, "%d", rdb ? current_hfdlg.ci.psecs : current_hfdlg.ci.sectors);
+  txtSectors->setText(tmp);
+	snprintf(tmp, sizeof (tmp) - 1, "%d", rdb ? current_hfdlg.ci.pheads : current_hfdlg.ci.surfaces);
+  txtSurfaces->setText(tmp);
+	snprintf(tmp, sizeof (tmp) - 1, "%d", rdb ? current_hfdlg.ci.pcyls : current_hfdlg.ci.reserved);
+  txtReserved->setText(tmp);
+	snprintf(tmp, sizeof (tmp) - 1, "%d", current_hfdlg.ci.blocksize);
+  txtBlocksize->setText(tmp);
+	snprintf(tmp, sizeof (tmp) - 1, "%d", current_hfdlg.ci.bootpri);
+  txtBootPri->setText(tmp);
+  chkReadWrite->setSelected(!current_hfdlg.ci.readonly);
+  chkAutoboot->setSelected(ISAUTOBOOT(&current_hfdlg.ci));
+  chkAutoboot->setEnabled(disables);
+
+  int selIndex = 0;
+  for(int i = 0; i < 2; ++i) {
+    if(controller[i].type == current_hfdlg.ci.controller_type)
+      selIndex = i;
   }
-  txtSectors->setEnabled(!isrdb);
-	txtSurfaces->setEnabled(!isrdb);
-	txtReserved->setEnabled(!isrdb);
-	txtBootPri->setEnabled(!isrdb);
+  cboController->setSelected(selIndex);
+  cboUnit->setSelected(current_hfdlg.ci.controller_unit);
+}
+
+void updatehdfinfo (bool force, bool defaults)
+{
+	uae_u8 id[512] = { 0 };
+	uae_u64 bsize;
+	uae_u32 i;
+
+	bsize = 0;
+	if (force) {
+		bool gotrdb = false;
+		int blocksize = 512;
+		struct hardfiledata hfd;
+		memset (id, 0, sizeof id);
+		memset (&hfd, 0, sizeof hfd);
+		hfd.ci.readonly = true;
+		hfd.ci.blocksize = blocksize;
+		current_hfdlg.size = 0;
+		current_hfdlg.dostype = 0;
+		if (hdf_open (&hfd, current_hfdlg.ci.rootdir) > 0) {
+			for (i = 0; i < 16; i++) {
+				hdf_read (&hfd, id, i * 512, 512);
+				bsize = hfd.virtsize;
+				current_hfdlg.size = hfd.virtsize;
+				if (!memcmp (id, "RDSK", 4) || !memcmp (id, "CDSK", 4)) {
+					blocksize = (id[16] << 24)  | (id[17] << 16) | (id[18] << 8) | (id[19] << 0);
+					gotrdb = true;
+					break;
+				}
+			}
+			if (i == 16) {
+				hdf_read (&hfd, id, 0, 512);
+				current_hfdlg.dostype = (id[0] << 24) | (id[1] << 16) | (id[2] << 8) | (id[3] << 0);
+			}
+		}
+		if (defaults) {
+			if (blocksize > 512) {
+				hfd.ci.blocksize = blocksize;
+			}
+		}
+		if (current_hfdlg.ci.controller_type >= HD_CONTROLLER_TYPE_IDE_FIRST && current_hfdlg.ci.controller_type <= HD_CONTROLLER_TYPE_IDE_LAST) {
+			getchspgeometry (bsize, &current_hfdlg.ci.pcyls, &current_hfdlg.ci.pheads, &current_hfdlg.ci.psecs, true);
+		} else {
+			getchspgeometry (bsize, &current_hfdlg.ci.pcyls, &current_hfdlg.ci.pheads, &current_hfdlg.ci.psecs, false);
+		}
+		if (defaults && !gotrdb) {
+			gethdfgeometry(bsize, &current_hfdlg.ci);
+		}
+		hdf_close (&hfd);
+	}
+
+	if (current_hfdlg.ci.controller_type >= HD_CONTROLLER_TYPE_IDE_FIRST && current_hfdlg.ci.controller_type <= HD_CONTROLLER_TYPE_IDE_LAST) {
+		if (current_hfdlg.ci.unit_feature_level == HD_LEVEL_ATA_1 && bsize >= 4 * (uae_u64)0x40000000)
+			current_hfdlg.ci.unit_feature_level = HD_LEVEL_ATA_2;
+	}
 }
 
 
@@ -106,7 +194,17 @@ class FilesysHardfileActionListener : public gcn::ActionListener
         if(SelectFile("Select harddisk file", tmp, harddisk_filter)) {
           txtPath->setText(tmp);
           fileSelected = true;
-          check_rdb(tmp);
+          default_hfdlg (&current_hfdlg);
+          CreateDefaultDevicename(current_hfdlg.ci.devname);
+          _tcscpy (current_hfdlg.ci.rootdir, tmp);
+      		// Set RDB mode if IDE or SCSI
+      		if (current_hfdlg.ci.controller_type > 0) {
+      			current_hfdlg.ci.sectors = current_hfdlg.ci.reserved = current_hfdlg.ci.surfaces = 0;
+      		}
+        	hardfile_testrdb (&current_hfdlg);
+        	updatehdfinfo (true, true);
+        	updatehdfinfo (false, false);
+        	sethardfile ();
         }
         wndEditFilesysHardfile->requestModalFocus();
         cmdPath->requestFocus();
@@ -121,7 +219,25 @@ class FilesysHardfileActionListener : public gcn::ActionListener
             cboUnit->setEnabled(true);
             break;
         }
+        current_hfdlg.ci.controller_type = controller[cboController->getSelected()].type;
+        sethardfile();
 
+      } else if(actionEvent.getSource() == cboUnit) {
+        current_hfdlg.ci.controller_unit = cboUnit->getSelected();
+
+      } else if (actionEvent.getSource() == chkReadWrite) {
+        current_hfdlg.ci.readonly = !chkReadWrite->isSelected();
+
+      } else if (actionEvent.getSource() == chkAutoboot) {
+        char tmp[32];
+        if (chkAutoboot->isSelected()) {
+  				current_hfdlg.ci.bootpri = 0;
+        } else {
+  				current_hfdlg.ci.bootpri = BOOTPRI_NOAUTOBOOT;
+        }
+      	snprintf(tmp, sizeof (tmp) - 1, "%d", current_hfdlg.ci.bootpri);
+        txtBootPri->setText(tmp);
+        
       } else {
         if (actionEvent.getSource() == cmdOK) {
           if(txtDevice->getText().length() <= 0) {
@@ -139,6 +255,62 @@ class FilesysHardfileActionListener : public gcn::ActionListener
     }
 };
 static FilesysHardfileActionListener* filesysHardfileActionListener;
+
+
+class FilesysHardfileFocusListener : public gcn::FocusListener
+{
+  public:
+    void focusGained(const gcn::Event& event) 
+    { 
+    }
+    
+    void focusLost(const gcn::Event& event) 
+    { 
+      int v;
+    	int *p;
+      if(event.getSource() == txtDevice) {
+        strncpy(current_hfdlg.ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
+    
+      } else if (event.getSource() == txtBootPri) {
+  			current_hfdlg.ci.bootpri = atoi(txtBootPri->getText().c_str());
+  			if (current_hfdlg.ci.bootpri < -127)
+  				current_hfdlg.ci.bootpri = -127;
+  			if (current_hfdlg.ci.bootpri > 127)
+  				current_hfdlg.ci.bootpri = 127;
+
+      } else if (event.getSource() == txtSurfaces) {
+  			p = &current_hfdlg.ci.surfaces;
+  			v = *p;
+        *p = atoi(txtSurfaces->getText().c_str());
+  			if (v != *p) {
+  				updatehdfinfo (true, false);
+  			}
+
+      } else if (event.getSource() == txtReserved) {
+  			p = &current_hfdlg.ci.reserved;
+  			v = *p;
+        *p = atoi(txtReserved->getText().c_str());
+  			if (v != *p) {
+  				updatehdfinfo (true, false);
+  			}
+
+      } else if (event.getSource() == txtSectors) {
+  			p = &current_hfdlg.ci.sectors;
+  			v = *p;
+        *p = atoi(txtSectors->getText().c_str());
+  			if (v != *p) {
+  				updatehdfinfo (true, false);
+  			}
+
+      } else if (event.getSource() == txtBlocksize) {
+  			v = current_hfdlg.ci.blocksize;
+  			current_hfdlg.ci.blocksize = atoi(txtBlocksize->getText().c_str());
+  			if (v != current_hfdlg.ci.blocksize)
+  				updatehdfinfo (true, false);
+      }
+    } 
+};
+static FilesysHardfileFocusListener* filesysHardfileFocusListener;
 
 
 static void InitEditFilesysHardfile(void)
@@ -172,6 +344,7 @@ static void InitEditFilesysHardfile(void)
   wndEditFilesysHardfile->setTitleBarHeight(TITLEBAR_HEIGHT);
   
   filesysHardfileActionListener = new FilesysHardfileActionListener();
+  filesysHardfileFocusListener = new FilesysHardfileFocusListener();
   
 	cmdOK = new gcn::Button("Ok");
 	cmdOK->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
@@ -193,48 +366,56 @@ static void InitEditFilesysHardfile(void)
   txtDevice = new gcn::TextField();
   txtDevice->setSize(80, TEXTFIELD_HEIGHT);
   txtDevice->setId("hdfDev");
-
+  txtDevice->addFocusListener(filesysHardfileFocusListener);
+  
 	chkReadWrite = new gcn::UaeCheckBox("Read/Write", true);
   chkReadWrite->setId("hdfRW");
-
+  chkReadWrite->addActionListener(filesysHardfileActionListener);
+  
 	chkAutoboot = new gcn::UaeCheckBox("Bootable", true);
   chkAutoboot->setId("hdfAutoboot");
-
+  chkAutoboot->addActionListener(filesysHardfileActionListener);
+  
   lblBootPri = new gcn::Label("Boot priority:");
   lblBootPri->setSize(100, LABEL_HEIGHT);
   lblBootPri->setAlignment(gcn::Graphics::RIGHT);
   txtBootPri = new gcn::TextField();
   txtBootPri->setSize(40, TEXTFIELD_HEIGHT);
   txtBootPri->setId("hdfBootPri");
-
+  txtBootPri->addFocusListener(filesysHardfileFocusListener);
+  
   lblSurfaces = new gcn::Label("Surfaces:");
   lblSurfaces->setSize(100, LABEL_HEIGHT);
   lblSurfaces->setAlignment(gcn::Graphics::RIGHT);
   txtSurfaces = new gcn::TextField();
   txtSurfaces->setSize(40, TEXTFIELD_HEIGHT);
   txtSurfaces->setId("hdfSurface");
-
+  txtSurfaces->addFocusListener(filesysHardfileFocusListener);
+  
   lblReserved = new gcn::Label("Reserved:");
   lblReserved->setSize(100, LABEL_HEIGHT);
   lblReserved->setAlignment(gcn::Graphics::RIGHT);
   txtReserved = new gcn::TextField();
   txtReserved->setSize(40, TEXTFIELD_HEIGHT);
   txtReserved->setId("hdfReserved");
-
+  txtReserved->addFocusListener(filesysHardfileFocusListener);
+  
   lblSectors = new gcn::Label("Sectors:");
   lblSectors->setSize(100, LABEL_HEIGHT);
   lblSectors->setAlignment(gcn::Graphics::RIGHT);
   txtSectors = new gcn::TextField();
   txtSectors->setSize(40, TEXTFIELD_HEIGHT);
   txtSectors->setId("hdfSectors");
-
+  txtSectors->addFocusListener(filesysHardfileFocusListener);
+  
   lblBlocksize = new gcn::Label("Blocksize:");
   lblBlocksize->setSize(100, LABEL_HEIGHT);
   lblBlocksize->setAlignment(gcn::Graphics::RIGHT);
   txtBlocksize = new gcn::TextField();
   txtBlocksize->setSize(40, TEXTFIELD_HEIGHT);
   txtBlocksize->setId("hdfBlocksize");
-
+  txtBlocksize->addFocusListener(filesysHardfileFocusListener);
+  
   lblPath = new gcn::Label("Path:");
   lblPath->setSize(100, LABEL_HEIGHT);
   lblPath->setAlignment(gcn::Graphics::RIGHT);
@@ -259,7 +440,8 @@ static void InitEditFilesysHardfile(void)
   cboUnit->setSize(60, DROPDOWN_HEIGHT);
   cboUnit->setBaseColor(gui_baseCol);
   cboUnit->setId("hdfUnit");
-
+  cboUnit->addActionListener(filesysHardfileActionListener);
+  
   int posY = DISTANCE_BORDER;
 	int posX = DISTANCE_BORDER;
 
@@ -341,6 +523,7 @@ static void ExitEditFilesysHardfile(void)
   delete cmdOK;
   delete cmdCancel;
   delete filesysHardfileActionListener;
+  delete filesysHardfileFocusListener;
   
   delete wndEditFilesysHardfile;
 }
@@ -352,6 +535,9 @@ static void EditFilesysHardfileLoop(void)
   FocusBugWorkaround(wndEditFilesysHardfile);  
 #endif
 
+  char lastActiveWidget[128];
+  strcpy(lastActiveWidget, "");
+  
   while(!dialogFinished)
   {
     SDL_Event event;
@@ -409,7 +595,7 @@ static void EditFilesysHardfileLoop(void)
     // Now we let the Gui object perform its logic.
     uae_gui->logic();
     // Now we let the Gui object draw itself.
-    uae_gui->draw();
+    uae_gui->draw();    
     // Finally we update the screen.
     wait_for_vsync();
 #ifdef USE_SDL2
@@ -436,88 +622,36 @@ bool EditFilesysHardfile(int unit_no)
 
   if(unit_no >= 0)
   {
-    struct uaedev_config_info *ci;
-
     uci = &workprefs.mountconfig[unit_no];
-    ci = &uci->ci;
     get_filesys_unitconfig(&workprefs, unit_no, &mi);
-
-    strdevname.assign(ci->devname);
-    txtDevice->setText(strdevname);
-    strroot.assign(ci->rootdir);
-    txtPath->setText(strroot);
+    current_hfdlg.forcedcylinders = uci->ci.highcyl;
+    memcpy (&current_hfdlg.ci, uci, sizeof (struct uaedev_config_info));
     fileSelected = true;
-
-    chkReadWrite->setSelected(!ci->readonly);
-    chkAutoboot->setSelected(ci->bootpri != BOOTPRI_NOAUTOBOOT);
-		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->bootpri >= -127 ? ci->bootpri : -127);
-    txtBootPri->setText(tmp);
-		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->surfaces);
-    txtSurfaces->setText(tmp);
-		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->reserved);
-    txtReserved->setText(tmp);
-		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->sectors);
-    txtSectors->setText(tmp);
-		snprintf(tmp, sizeof (tmp) - 1, "%d", ci->blocksize);
-    txtBlocksize->setText(tmp);
-    int selIndex = 0;
-    for(i = 0; i < 2; ++i) {
-      if(controller[i].type == ci->controller_type)
-        selIndex = i;
-    }
-    cboController->setSelected(selIndex);
-    cboUnit->setSelected(ci->controller_unit);
-    
-    check_rdb(strroot.c_str());
   }
   else
   {
-    CreateDefaultDevicename(tmp);
-    txtDevice->setText(tmp);
-    strroot.assign(currentDir);
-    txtPath->setText(strroot);
+    default_hfdlg (&current_hfdlg);
+    CreateDefaultDevicename(current_hfdlg.ci.devname);
     fileSelected = false;
-    
-    chkReadWrite->setSelected(true);
-    txtBootPri->setText("0");
-    txtSurfaces->setText("1");
-    txtReserved->setText("2");
-    txtSectors->setText("32");
-    txtBlocksize->setText("512");
-    cboController->setSelected(0);
-    cboUnit->setSelected(0);
   }
-
+    
+	updatehdfinfo (true, false);
+  sethardfile();
+    
   EditFilesysHardfileLoop();
   
   if(dialogResult)
   {
-    struct uaedev_config_info ci;
-    int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), chkAutoboot->isSelected() ? 1 : 0, 0);
     extractPath((char *) txtPath->getText().c_str(), currentDir);
 
-    uci_set_defaults(&ci, false);
-    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
-    strncpy(ci.rootdir, (char *) txtPath->getText().c_str(), MAX_DPATH - 1);
-    ci.type = UAEDEV_HDF;
-    ci.controller_type = controller[cboController->getSelected()].type;
-    ci.controller_type_unit = 0;
-    ci.controller_unit = cboUnit->getSelected();
-    ci.unit_feature_level = 1;
-    ci.unit_special_flags = 0;
-    ci.readonly = !chkReadWrite->isSelected();
-    ci.sectors = atoi(txtSectors->getText().c_str());
-    ci.surfaces = atoi(txtSurfaces->getText().c_str());
-    ci.reserved = atoi(txtReserved->getText().c_str());
-    ci.blocksize = atoi(txtBlocksize->getText().c_str());
-    ci.bootpri = bp;
-    
-    uci = add_filesys_config(&workprefs, unit_no, &ci);
-    if (uci) {
+  	struct uaedev_config_info ci;
+	  memcpy (&ci, &current_hfdlg.ci, sizeof (struct uaedev_config_info));
+	  uci = add_filesys_config (&workprefs, unit_no, &ci);
+  	if (uci) {
   		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
-  		if(hfd)
-        hardfile_media_change (hfd, &ci, true, false);
-    }
+  		if (hfd)
+  			hardfile_media_change (hfd, &ci, true, false);
+  	}
   }
 
   ExitEditFilesysHardfile();

@@ -27,6 +27,8 @@
 #define MAXVPOS_LINES_OCS 512
 #define HPOS_SHIFT 3
 
+#define BLIT_NASTY_CPU_STEAL_CYCLE_COUNT 4
+
 extern void set_speedup_values(void);
 extern int custom_init (void);
 extern void custom_prepare (void);
@@ -34,6 +36,7 @@ extern void custom_reset (bool hardreset, bool keyboardreset);
 extern int intlev (void);
 
 extern void do_copper (void);
+extern void check_copperlist_write(uaecptr addr);
 
 extern void notice_new_xcolors (void);
 extern void init_row_map (void);
@@ -73,10 +76,7 @@ extern uae_u16 adkcon;
 extern void INTREQ (uae_u16);
 extern bool INTREQ_0 (uae_u16);
 extern void INTREQ_f (uae_u16);
-STATIC_INLINE void send_interrupt (int num)
-{
-	INTREQ_0 (0x8000 | (1 << num));
-}
+extern void send_interrupt(int num, int delay);
 extern void rethink_uae_int(void);
 STATIC_INLINE uae_u16 INTREQR (void)
 {
@@ -86,7 +86,7 @@ STATIC_INLINE uae_u16 INTREQR (void)
 STATIC_INLINE void safe_interrupt_set(bool i6)
 {
   uae_u16 v = i6 ? 0x2000 : 0x0008;
-  if (!(intreq & v)) {
+	if (currprefs.cpu_cycle_exact || (!(intreq & v) && !currprefs.cpu_cycle_exact)) {
     INTREQ_0(0x8000 | v);
   }
 }
@@ -115,7 +115,8 @@ STATIC_INLINE void safe_interrupt_set(bool i6)
 #define EQU_ENDLINE_PAL 8
 #define EQU_ENDLINE_NTSC 10
 
-const int maxhpos = MAXHPOS_PAL; // MAXHPOS_NTSC has same value and programmed mode not supported.
+extern int maxhpos;
+static const int maxhpos_short = MAXHPOS_PAL;
 extern int maxvpos, maxvpos_nom, maxvpos_display;
 extern int minfirstline;
 extern float vblank_hz;
@@ -132,6 +133,18 @@ extern float hblank_hz;
 #define DMA_BITPLANE  0x0100
 #define DMA_MASTER    0x0200
 #define DMA_BLITPRI   0x0400
+
+#define CYCLE_REFRESH	1
+#define CYCLE_STROBE	2
+#define CYCLE_MISC		3
+#define CYCLE_SPRITE	4
+#define CYCLE_COPPER	5
+#define CYCLE_BLITTER	6
+#define CYCLE_CPU		7
+#define CYCLE_CPUNASTY	8
+#define CYCLE_COPPER_SPECIAL 0x10
+
+#define CYCLE_MASK 0x0f
 
 extern uae_u32 timeframes;
 
@@ -179,7 +192,9 @@ STATIC_INLINE int GET_PLANES(uae_u16 bplcon0)
 extern void fpscounter_reset (void);
 extern uae_u32 idletime;
 
+extern void alloc_cycle_blitter (int hpos, uaecptr *ptr, int);
 extern int current_maxvpos (void);
+int is_bitplane_dma (int hpos);
 void custom_cpuchange(void);
 
 #endif /* UAE_CUSTOM_H */

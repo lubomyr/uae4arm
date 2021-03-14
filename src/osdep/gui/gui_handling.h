@@ -38,6 +38,15 @@ extern gcn::Container* gui_top;
 extern gcn::Color gui_baseCol;
 extern gcn::SDLInput* gui_input;
 extern SDL_Surface* gui_screen;
+#ifdef USE_SDL2
+extern gcn::SDLTrueTypeFont* gui_fontsmall;
+extern gcn::SDLTrueTypeFont* gui_fixedfont;
+extern gcn::SDLTrueTypeFont* gui_fixedfontsmall;
+#else
+extern gcn::contrib::SDLTrueTypeFont* gui_fontsmall;
+extern gcn::contrib::SDLTrueTypeFont* gui_fixedfont;
+extern gcn::contrib::SDLTrueTypeFont* gui_fixedfontsmall;
+#endif
 
 extern char currentDir[MAX_DPATH];
 extern char last_loaded_config[MAX_DPATH];
@@ -90,6 +99,10 @@ void InitPanelHD(const struct _ConfigCategory& category);
 void ExitPanelHD(const struct _ConfigCategory& category);
 bool HelpPanelHD(std::vector<std::string> &helptext);
   
+void InitPanelHWInfo(const struct _ConfigCategory& category);
+void ExitPanelHWInfo(const struct _ConfigCategory& category);
+bool HelpPanelHWInfo(std::vector<std::string> &helptext);
+
 void InitPanelDisplay(const struct _ConfigCategory& category);
 void ExitPanelDisplay(const struct _ConfigCategory& category);
 bool HelpPanelDisplay(std::vector<std::string> &helptext);
@@ -133,7 +146,8 @@ bool EditFilesysVirtual(int unit_no);
 bool EditFilesysHardfile(int unit_no);
 bool CreateFilesysHardfile(void);
 void ShowHelp(const char *title, const std::vector<std::string>& text);
-  
+void ShowDiskInfo(const char *title, const std::vector<std::string>& text);
+
 ConfigFileInfo* SearchConfigInList(const char *name);
 
 extern void ReadDirectory(const char *path, std::vector<std::string> *dirs, std::vector<std::string> *files);
@@ -145,7 +159,7 @@ bool HandleNavigation(int direction);
 #define MAX_HD_DEVICES 5
 extern void CreateDefaultDevicename(char *name);
 extern int tweakbootpri (int bp, int ab, int dnm);
-  
+
 extern char *screenshot_filename;
 extern int currentStateNum;
 extern int delay_savestate_frame;

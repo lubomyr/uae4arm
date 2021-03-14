@@ -125,7 +125,6 @@
 //#define DISABLE_I_DIVU
 //#define DISABLE_I_DIVS
 //#define DISABLE_I_DIVL
-
 //#define DISABLE_I_BFINS
 
 
@@ -3560,8 +3559,7 @@ static void generate_func(int noflags)
 
 int main(int argc, char *argv[])
 {
-	read_table68k();
-	do_merges();
+  init_table68k();
 
   opcode_map = xmalloc (int, nr_cpuop_funcs);
   opcode_last_postfix = xmalloc (int, nr_cpuop_funcs);

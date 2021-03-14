@@ -380,27 +380,6 @@ static int command_read(TrapContext *ctx, struct devstruct *dev, uaecptr data, u
 	return 0;
 }
 
-static int command_write(TrapContext *ctx, struct devstruct *dev, uaecptr data, uae_u64 offset, uae_u32 length, uae_u32 *io_actual)
-{
-	uae_u32 blocksize = dev->di.bytespersector;
-	length /= blocksize;
-	offset /= blocksize;
-	while (length > 0) {
-		uae_u8 buffer[4096];
-		int err;
-		trap_memcpyah_safe(ctx, buffer, data, blocksize);
-		err = sys_command_write (dev->unitnum, buffer, offset, 1);
-		if (!err)
-			return 20;
-		if (err < 0)
-			return 28; // write protected
-		data += blocksize;
-		offset++;
-		length--;
-	}
-	return 0;
-}
-
 static int command_cd_read(TrapContext *ctx, struct devstruct *dev, uaecptr data, uae_u64 offset, uae_u32 length, uae_u32 *io_actual)
 {
 	uae_u32 len, sector, startoffset;
@@ -487,7 +466,6 @@ static int dev_do_io_other(TrapContext *ctx, struct devstruct *dev, uae_u8 *iobu
 	return 0;
 }
 
-
 static int dev_do_io_cd (TrapContext *ctx, struct devstruct *dev, uae_u8 *iobuf, uaecptr request)
 {
 	uae_u32 command;
@@ -538,59 +516,27 @@ static int dev_do_io_cd (TrapContext *ctx, struct devstruct *dev, uae_u8 *iobuf,
 	case CMD_WRITE:
 		if (dev->di.media_inserted <= 0)
 			goto no_media;
-		if (dev->di.write_protected || dev->drivetype == INQ_ROMD) {
-			io_error = 28; /* writeprotect */
-		} else if ((io_offset & bmask) || bmask == 0 || io_data == 0) {
-			goto bad_command;
-		} else if ((io_length & bmask) || io_length == 0) {
-			goto bad_len;
-		} else {
-			io_error = command_write(ctx, dev, io_data, io_offset, io_length, &io_actual);
-		}
+		io_error = 28; /* writeprotect */
 		break;
 	case TD_WRITE64:
 	case NSCMD_TD_WRITE64:
 		if (dev->di.media_inserted <= 0)
 			goto no_media;
 		io_offset64 = get_long_host(iobuf + 44) | ((uae_u64)get_long_host(iobuf + 32) << 32);
-		if (dev->di.write_protected || dev->drivetype == INQ_ROMD) {
-			io_error = 28; /* writeprotect */
-		} else if ((io_offset64 & bmask) || bmask == 0 || io_data == 0) {
-			goto bad_command;
-		} else if ((io_length & bmask) || io_length == 0) {
-			goto bad_len;
-		} else {
-			io_error = command_write(ctx, dev, io_data, io_offset64, io_length, &io_actual);
-		}
+		io_error = 28; /* writeprotect */
 		break;
 
 	case CMD_FORMAT:
 		if (dev->di.media_inserted <= 0)
 			goto no_media;
-		if (dev->di.write_protected || dev->drivetype == INQ_ROMD) {
-			io_error = 28; /* writeprotect */
-		} else if ((io_offset & bmask) || bmask == 0 || io_data == 0) {
-			goto bad_command;
-		} else if ((io_length & bmask) || io_length == 0) {
-			goto bad_len;
-		} else {
-			io_error = command_write(ctx, dev, io_data, io_offset, io_length, &io_actual);
-		}
+		io_error = 28; /* writeprotect */
 		break;
 	case TD_FORMAT64:
 	case NSCMD_TD_FORMAT64:
 		if (dev->di.media_inserted <= 0)
 			goto no_media;
 		io_offset64 = get_long_host(iobuf + 44) | ((uae_u64)get_long_host(iobuf + 32) << 32);
-		if (dev->di.write_protected || dev->drivetype == INQ_ROMD) {
-			io_error = 28; /* writeprotect */
-		} else if ((io_offset64 & bmask) || bmask == 0 || io_data == 0) {
-			goto bad_command;
-		} else if ((io_length & bmask) || io_length == 0) {
-			goto bad_len;
-		} else {
-			io_error = command_write(ctx, dev, io_data, io_offset64, io_length, &io_actual);
-		}
+		io_error = 28; /* writeprotect */
 		break;
 
 	case CMD_UPDATE:
@@ -616,7 +562,7 @@ static int dev_do_io_cd (TrapContext *ctx, struct devstruct *dev, uae_u8 *iobuf,
 		}
 		break;
 	case CMD_PROTSTATUS:
-		io_actual = devinfo (dev, &dev->di)->write_protected ? -1 : 0;
+		io_actual = -1;
 		break;
 	case CMD_GETDRIVETYPE:
 		io_actual = dev->drivetype;
@@ -1031,16 +977,6 @@ static uae_u32 REGPARAM2 dev_abortio (TrapContext *ctx)
 
 #define BTL2UNIT(bus, target, lun) (2 * (bus) + (target) / 8) * 100 + (lun) * 10 + (target % 8)
 
-uae_u32 scsi_get_cd_drive_mask (void)
-{
-	uae_u32 mask = 0;
-	for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
-		struct devstruct *dev = &devst[i];
-		if (dev->iscd)
-			mask |= 1 << i;
-	}
-	return mask;
-}
 uae_u32 scsi_get_cd_drive_media_mask (void)
 {
 	uae_u32 mask = 0;
@@ -1116,7 +1052,7 @@ static void dev_reset (void)
 				dev->aunit = unitnum;
 				unitnum++;
 			}
-			write_log (_T("%s:%d = %s:'%s'\n"), UAEDEV_SCSI, dev->aunit, dev->di.backend, dev->di.label);
+			write_log (_T("%s:%d = %s:'%s',%d\n"), UAEDEV_SCSI, dev->aunit, dev->di.backend, dev->di.label, dev->di.type);
 		}
 		dev->di.label[0] = 0;
 	}

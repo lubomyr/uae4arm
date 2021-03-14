@@ -12,6 +12,7 @@
 #include "inputdevice.h"
 #include "savestate.h"
 #include "picasso96.h"
+#include "statusline.h"
 
 #include <png.h>
 #include <SDL.h>
@@ -89,6 +90,7 @@ static uae_u32 time_for_host_hz_frames = 1000000;
 static uae_u32 time_per_host_frame = 1000000 / 50;
 
 static volatile uae_atomic host_frame = 0;
+static volatile uae_atomic total_host_frames = 0;
 static uae_u32 host_frame_timestamp = 0;
 static int amiga_frame = 0;
 static bool sync_was_bogus = true;
@@ -100,6 +102,7 @@ extern void sound_adjust(float factor);
 static void vsync_callback(unsigned int a, void* b)
 {
   atomic_inc(&host_frame);
+  atomic_inc(&total_host_frames);
 
   uae_u32 currsync = read_processor_time();
   if(host_frame_timestamp == 0) {
@@ -347,54 +350,53 @@ static void wait_for_display_thread(void)
 }
 
 
-#ifdef WITH_LOGGING
-
 SDL_Surface *liveInfo = NULL;
 TTF_Font *liveFont = NULL;
 int liveInfoCounter = 0;
-void ShowLiveInfo(char *msg)
+void 	statusline_updated(void)
 {
   if(liveFont == NULL) {
     TTF_Init();
-    liveFont = TTF_OpenFont("data/FreeSans.ttf", 12);
+    liveFont = TTF_OpenFont("data/Hack-Regular.ttf", 10);
   }
   if(liveInfo != NULL) {
     SDL_FreeSurface(liveInfo);
     liveInfo = NULL;
   }
+  const TCHAR *text = statusline_fetch();
+  if(!text || text[0] == 0) {
+    liveInfoCounter = 0;
+    return;
+  }
   SDL_Color col;
-  col.r = 0xbf;
-  col.g = 0xbf;
-  col.b = 0xbf;
-  liveInfo = TTF_RenderText_Solid(liveFont, msg, col);
+  col.r = 0xdf;
+  col.g = 0xdf;
+  col.b = 0xdf;
+  liveInfo = TTF_RenderText_Solid(liveFont, text, col);
   liveInfoCounter = 50 * 5;
 }
 
 void RefreshLiveInfo()
 {
-  if(liveInfoCounter > 0)
+  if(liveInfoCounter > 0 && liveInfo != NULL)
   {
     SDL_Rect dst, src;
     
     dst.x = 0;
-    dst.y = 2;
+    dst.y = prSDLScreen->h - liveInfo->h;
     src.w = liveInfo->w;
     src.h = liveInfo->h;
     src.x = 0;
     src.y = 0;
-    if(liveInfo != NULL)
-      SDL_BlitSurface(liveInfo, &src, prSDLScreen, &dst);
+    SDL_BlitSurface(liveInfo, &src, prSDLScreen, &dst);
     liveInfoCounter--;
     if(liveInfoCounter == 0) {
-      if(liveInfo != NULL) {
-        SDL_FreeSurface(liveInfo);
-        liveInfo = NULL;
-      }
+      SDL_FreeSurface(liveInfo);
+      liveInfo = NULL;
     }
   }
 }
 
-#endif
 
 static void InitAmigaVidMode(struct uae_prefs *p)
 {
@@ -544,7 +546,7 @@ void unlockscr(void)
   SDL_UnlockSurface(prSDLScreen);
 }
 
-bool render_screen (bool immediate)
+bool render_screen (void)
 {
 	if (savestate_state == STATE_DOSAVE) {
 		if (delay_savestate_frame > 0)
@@ -556,9 +558,7 @@ bool render_screen (bool immediate)
 		}
 	}
 
-#ifdef WITH_LOGGING
   RefreshLiveInfo();
-#endif
   
 	return true;
 }
@@ -567,58 +567,64 @@ void show_screen(int mode)
 {
   uae_u32 start = read_processor_time();
 
-  last_synctime = start;
-  while(last_synctime < next_amiga_frame_ends && last_synctime < start + time_per_frame) {
-    usleep(10);
-    last_synctime = read_processor_time();
-  }
-  amiga_frame = amiga_frame + 1 + currprefs.gfx_framerate;
-
-  if(amiga_frame == currVSyncRate) {
-    bool do_check = true;
-    if(host_frame < host_hz) {
-      // we are here before relevant vsync occured
-      wait_for_vsync();
-      if(sync_was_bogus)
-        do_check = false;
+  if (!currprefs.turbo_emulation) {
+    if (config_changed)
+      reset_sync();
+      
+    last_synctime = start;
+    while(last_synctime < next_amiga_frame_ends && last_synctime < start + time_per_frame) {
+      usleep(10);
+      last_synctime = read_processor_time();
     }
-    if(do_check && host_frame == host_hz) {
-      // Check time difference between Amiga and host sync.
-      // If difference is too big, slightly ajust time per frame.
-      uae_s32 diff;
-      static uae_s32 last_diff = 0;
-      if(next_amiga_frame_ends > host_frame_timestamp) {
-        diff = next_amiga_frame_ends - host_frame_timestamp;
-        if(diff > 50 && last_diff != 0 && diff > last_diff)
-          time_per_frame--;
-        last_diff = diff;
-      } else {
-        diff = host_frame_timestamp - next_amiga_frame_ends;
-        if(diff > time_per_frame / 2) {
-          next_amiga_frame_ends += time_per_frame;
-          diff = -diff;
-          last_diff = 0;
-        } else {
-          diff = -diff;
-          if(diff < -50 && last_diff != 0 && diff < last_diff)
-            time_per_frame++;
-          last_diff = diff;
-        }
+    amiga_frame = amiga_frame + 1;
+  
+    if(amiga_frame == currVSyncRate) {
+      bool do_check = true;
+      if(host_frame < host_hz) {
+        // we are here before relevant vsync occured
+        wait_for_vsync();
+        if(sync_was_bogus)
+          do_check = false;
       }
-      write_log("Diff Amiga frame to host: %6d, time_per_frame = %6d\n", diff, time_per_frame);
+      if(do_check && host_frame == host_hz) {
+        // Check time difference between Amiga and host sync.
+        // If difference is too big, slightly ajust time per frame.
+        uae_s32 diff;
+        static uae_s32 last_diff = 0;
+        if(next_amiga_frame_ends > host_frame_timestamp) {
+          diff = next_amiga_frame_ends - host_frame_timestamp;
+          if(diff > 50 && last_diff != 0 && diff > last_diff)
+            time_per_frame--;
+          last_diff = diff;
+        } else {
+          diff = host_frame_timestamp - next_amiga_frame_ends;
+          if(diff > time_per_frame / 2) {
+            next_amiga_frame_ends += time_per_frame;
+            diff = -diff;
+            last_diff = 0;
+          } else {
+            diff = -diff;
+            if(diff < -50 && last_diff != 0 && diff < last_diff)
+              time_per_frame++;
+            last_diff = diff;
+          }
+        }
+        write_log("Diff Amiga frame to host: %6d, time_per_frame = %6d\n", diff, time_per_frame);
+      }
+      host_frame = 0;
+      amiga_frame = 0;
     }
-    host_frame = 0;
-    amiga_frame = 0;
+    
+    next_amiga_frame_ends += time_per_frame;
+      
+  	wait_for_display_thread();
   }
   
-  next_amiga_frame_ends += time_per_frame;
-  if(currprefs.gfx_framerate)
-    next_amiga_frame_ends += time_per_frame;
-    
-	wait_for_display_thread();
-  flip_in_progess = true;
-	write_comm_pipe_u32(display_pipe, DISPLAY_SIGNAL_SHOW, 1);
-
+  if(!flip_in_progess) {
+    flip_in_progess = true;
+  	write_comm_pipe_u32(display_pipe, DISPLAY_SIGNAL_SHOW, 1);
+  }
+  
   idletime += last_synctime - start;
 }
 
@@ -632,11 +638,28 @@ void black_screen_now(void)
 {
   if(prSDLScreen != NULL) {	
     SDL_FillRect(prSDLScreen, NULL, 0);
-    render_screen(true);
+    render_screen();
 	  show_screen(0);
   }
 }
 
+int sleep_millis_main (int ms)
+{
+	int ret = 0;
+	uae_u32 start = read_processor_time ();
+	uae_u32 frame = total_host_frames;
+	int wait = ms * 1000;
+	while (wait > 0) {
+    usleep(50);
+    if (frame != total_host_frames) {
+      ret = -1;
+      break;
+    }
+    wait -= 50;
+  }
+  idletime += read_processor_time () - start;
+  return ret;
+}
 
 static void graphics_subinit(void)
 {
@@ -694,8 +717,8 @@ int GetSurfacePixelFormat(void)
 	return (unit == 8 ? RGBFB_CHUNKY
 		  : depth == 15 && unit == 16 ? RGBFB_R5G5B5
 		  : depth == 16 && unit == 16 ? RGBFB_R5G6B5
-		  : unit == 24 ? RGBFB_B8G8R8
-		  : unit == 32 ? RGBFB_R8G8B8A8
+		  : unit == 24 ? RGBFB_R8G8B8
+		  : unit == 32 ? RGBFB_A8R8G8B8
 		  : RGBFB_NONE);
 }
 
@@ -1001,7 +1024,7 @@ void picasso_InitResolutions(void)
 		for (bit_idx = 0; bit_idx < 3; ++bit_idx) {
 			int bitdepth = bits[bit_idx];
 			int bit_unit = (bitdepth + 1) & 0xF8;
-			int rgbFormat = (bitdepth == 8 ? RGBFB_CLUT : (bitdepth == 16 ? RGBFB_R5G6B5 : RGBFB_R8G8B8A8));
+			int rgbFormat = (bitdepth == 8 ? RGBFB_CLUT : (bitdepth == 16 ? RGBFB_R5G6B5 : RGBFB_A8R8G8B8));
 			int pixelFormat = 1 << rgbFormat;
 			pixelFormat |= RGBFF_CHUNKY;
       
@@ -1061,9 +1084,9 @@ void gfx_set_picasso_modeinfo(uae_u32 w, uae_u32 h, uae_u32 depth, RGBFTYPE rgbf
   	if(nativeScreenDepth <= 16)
 		  picasso_vidinfo.rgbformat = RGBFB_R5G6B5;
 		else if(nativeScreenDepth <= 24)
-		  picasso_vidinfo.rgbformat = RGBFB_B8G8R8;
+		  picasso_vidinfo.rgbformat = RGBFB_R8G8B8;
     else
-		  picasso_vidinfo.rgbformat = RGBFB_R8G8B8A8;
+		  picasso_vidinfo.rgbformat = RGBFB_A8R8G8B8;
 	}
 }
 
@@ -1080,7 +1103,7 @@ void gfx_unlock_picasso(bool dorender)
 {
   SDL_UnlockSurface(prSDLScreen);
   if(dorender) {
-    render_screen(true);
+    render_screen();
     show_screen(0);
   }
 }

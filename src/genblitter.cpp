@@ -36,14 +36,10 @@ static void generate_include(void)
 static void generate_func(void)
 {
   unsigned int i;
-  printf("#include \"sysconfig.h\"\n");
   printf("#include \"sysdeps.h\"\n");
   printf("#include \"options.h\"\n");
   printf("#include \"include/memory-uae.h\"\n");
-  printf("#include \"custom.h\"\n");
-  printf("#include \"savestate.h\"\n");
   printf("#include \"blitter.h\"\n");
-  printf("#include \"blitfunc.h\"\n\n");
 
   for (i = 0; i < sizeof(blttbl); i++) {
     int active = blitops[blttbl[i]].used;
@@ -66,7 +62,7 @@ static void generate_func(void)
     if (a_is_on) printf("\t\tbltadat &= blit_masktable[i];\n");
 	  if (a_is_on) printf("\t\tsrca = (((uae_u32)b->bltaold << 16) | bltadat) >> b->blitashift;\n");
 	  if (a_is_on) printf("\t\tb->bltaold = bltadat;\n");
-    printf("\t\tif (dstp)\n\t\t\tchipmem_wput_indirect (dstp, dstd);\n");
+    printf("\t\tif (dstp)chipmem_wput_indirect (dstp, dstd);\n");
     printf("\t\tdstd = (%s);\n", blitops[blttbl[i]].s);
     printf("\t\ttotald |= dstd;\n");
     printf("\t\tif (ptd) { dstp = ptd; ptd += 2; }\n");
@@ -78,7 +74,7 @@ static void generate_func(void)
     printf("}\n");
     if (b_is_on) printf("b->bltbhold = srcb;\n");
     if (c_is_on) printf("b->bltcdat = srcc;\n");
-    printf("\t\tif (dstp)\n\t\t\tchipmem_wput_indirect (dstp, dstd);\n");
+    printf("\t\tif (dstp)chipmem_wput_indirect (dstp, dstd);\n");
     printf("if ((totald<<16) != 0) b->blitzero = 0;\n");
     printf("}\n");
 
@@ -100,7 +96,7 @@ static void generate_func(void)
     if (a_is_on) printf("\t\tbltadat &= blit_masktable[i];\n");
 	  if (a_is_on) printf("\t\tsrca = (((uae_u32)bltadat << 16) | b->bltaold) >> b->blitdownashift;\n");
 	  if (a_is_on) printf("\t\tb->bltaold = bltadat;\n");
-    printf("\t\tif (dstp)\n\t\t\tchipmem_wput_indirect (dstp, dstd);\n");
+    printf("\t\tif (dstp)chipmem_wput_indirect (dstp, dstd);\n");
     printf("\t\tdstd = (%s);\n", blitops[blttbl[i]].s);
     printf("\t\ttotald |= dstd;\n");
     printf("\t\tif (ptd) { dstp = ptd; ptd -= 2; }\n");
@@ -112,7 +108,7 @@ static void generate_func(void)
     printf("}\n");
     if (b_is_on) printf("b->bltbhold = srcb;\n");
     if (c_is_on) printf("b->bltcdat = srcc;\n");
-    printf("\t\tif (dstp)\n\t\t\tchipmem_wput_indirect (dstp, dstd);\n");
+    printf("\t\tif (dstp)chipmem_wput_indirect (dstp, dstd);\n");
     printf("if ((totald<<16) != 0) b->blitzero = 0;\n");
     printf("}\n");
   }
@@ -122,12 +118,9 @@ static void generate_table(void)
 {
   unsigned int index = 0;
   unsigned int i;
-  printf("#include \"sysconfig.h\"\n");
   printf("#include \"sysdeps.h\"\n");
   printf("#include \"options.h\"\n");
   printf("#include \"include/memory-uae.h\"\n");
-  printf("#include \"custom.h\"\n");
-  printf("#include \"savestate.h\"\n");
   printf("#include \"blitter.h\"\n");
   printf("#include \"blitfunc.h\"\n\n");
   printf("blitter_func * const blitfunc_dofast[256] = {\n");

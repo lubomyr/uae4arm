@@ -116,6 +116,7 @@ extern void expansion_cleanup (void);
 extern void expansion_clear (void);
 extern void expansion_scan_autoconfig(struct uae_prefs*, bool);
 extern void expansion_generate_autoconfig_info(struct uae_prefs *p);
+extern struct autoconfig_info *expansion_get_autoconfig_data(struct uae_prefs *p, int index);
 extern struct autoconfig_info *expansion_get_autoconfig_by_address(struct uae_prefs *p, uaecptr addr, int index);
 extern void expansion_map(void);
 
@@ -138,6 +139,7 @@ struct expansionromtype
 	uae_u32 romtype;
 	int zorro;
 	int deviceflags;
+	int extrahdports;
 };
 extern const struct expansionromtype expansionroms[];
 

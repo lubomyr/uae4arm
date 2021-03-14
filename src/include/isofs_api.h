@@ -18,7 +18,6 @@ struct isofs_info
 	time_t creation;
 };
 
-void *isofs_mount(int unitnum, uae_u64 *uniq);
 void isofs_unmount(void *sb);
 bool isofs_mediainfo(void *sb, struct isofs_info*);
 struct cd_opendir_s *isofs_opendir(void *sb, uae_u64 uniq);

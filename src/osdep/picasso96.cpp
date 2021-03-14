@@ -138,10 +138,10 @@ STATIC_INLINE void endianswap (uae_u32 *vp, int bpp)
   switch (bpp)
   {
 	case 2:
-  	*vp = do_byteswap_16(v);
+  	*vp = bswap_16(v);
   	break;
 	case 4:
-  	*vp = do_byteswap_32(v);
+  	*vp = bswap_32(v);
   	break;
   }
 }
@@ -182,20 +182,33 @@ STATIC_INLINE bool validatecoords2(TrapContext *ctx, struct RenderInfo *ri, uae_
 	uae_u32 Height = *Heightp;
 	uae_u32 X = *Xp;
 	uae_u32 Y = *Yp;
-	if (!Width || !Height)
+	if (!Width || !Height) {
 		return true;
+	}
+  if (Width > 32767 || Height > 32767 || X > 32767 || Y > 32767) {
+		return false;
+	}
 	if (ri) {
 		int bpp = GetBytesPerPixel (ri->RGBFormat);
-		if (X * bpp >= ri->BytesPerRow)
+		if (X * bpp >= ri->BytesPerRow) {
 			return false;
+		}
 		uae_u32 X2 = X + Width;
 		if (X2 * bpp > ri->BytesPerRow) {
 			X2 = ri->BytesPerRow / bpp;
 			Width = X2 - X;
 			*Widthp = Width;
 		}
-		if (!valid_address(ri->AMemory, (Y + Height - 1) * ri->BytesPerRow + (X + Width - 1) * bpp))
+  	uaecptr start = gfxmem_banks[0]->start;
+		uae_u32 size = gfxmem_banks[0]->allocated_size;
+		uaecptr mem = ri->AMemory;
+		if (mem < start || mem >= start + size) {
 			return false;
+		}
+	  mem += (Y + Height - 1) * ri->BytesPerRow + (X + Width - 1) * bpp;
+		if (mem < start || mem >= start + size) {
+			return false;
+		}
 	}
 	return true;
 }
@@ -373,16 +386,16 @@ static void do_fillrect_frame_buffer (struct RenderInfo *ri, int X, int Y, int W
     Pen |= Pen << 16;
     for (int lines = 0; lines < Height; lines++, dst += bpr) {
       uae_u16 *dst16 = (uae_u16 *)dst;
+      int tmpwidth = Width;
       if((uintptr_t)dst16 & 3) {
         *dst16++ = (uae_u16)Pen;
-        Width--;
+        tmpwidth--;
       }
   		uae_u32 *p = (uae_u32*)dst16;
-  		for (cols = 0; cols < Width >> 1; cols++)
+  		for (cols = 0; cols < tmpwidth >> 1; cols++)
 		    *p++ = Pen;
-  		if (Width & 1) {
+  		if (tmpwidth & 1)
 		    ((uae_u16*)p)[0] = (uae_u16)Pen;
-      }
     }
     break;
 	case 3:
@@ -429,7 +442,7 @@ static bool is_uaegfx_active(void)
 	return true;
 }
 
-static bool rtg_render (void)
+bool rtg_render (void)
 {
 	bool flushed = false;
 	bool uaegfx_active = is_uaegfx_active();
@@ -575,6 +588,7 @@ static int getconvert (int rgbformat, int pixbytes)
 
 static void setconvert(void)
 {
+  static int opixbytes = -1;
 	struct picasso_vidbuf_description *vidinfo = &picasso_vidinfo;
 	struct picasso96_state_struct *state = &picasso96_state;
 
@@ -586,11 +600,13 @@ static void setconvert(void)
 		alloc_colors_rgb(5, 6, 5, 11, 5, 0, p96rc, p96gc, p96bc);
 	gfx_set_picasso_colors(state->RGBFormat);
 	picasso_palette (state->CLUT, vidinfo->clut);
-	if (vidinfo->host_mode != vidinfo->ohost_mode || state->RGBFormat != vidinfo->orgbformat) {
+	if (vidinfo->host_mode != vidinfo->ohost_mode || state->RGBFormat != vidinfo->orgbformat
+	|| picasso_vidinfo.pixbytes != opixbytes) {
     write_log (_T("RTG conversion: Depth=%d HostRGBF=%d P96RGBF=%d Mode=%d\n"), 
       picasso_vidinfo.pixbytes, vidinfo->host_mode, state->RGBFormat, vidinfo->picasso_convert);
 		vidinfo->ohost_mode = vidinfo->host_mode;
 		vidinfo->orgbformat = state->RGBFormat;
+		opixbytes = picasso_vidinfo.pixbytes;
 	}
 }
 
@@ -1752,7 +1768,6 @@ static void init_picasso_screen (void)
   	picasso_refresh ();
   }
   init_picasso_screen_called = 1;
-
 }
 
 /*
@@ -2926,7 +2941,7 @@ addrbank gfxmem_bank = {
 	gfxmem_lget, gfxmem_wget, gfxmem_bget,
 	gfxmem_lput, gfxmem_wput, gfxmem_bput,
 	gfxmem_xlate, gfxmem_check, NULL, NULL, _T("RTG RAM"),
-	dummy_wgeti,
+	dummy_lgeti, dummy_wgeti,
 	ABFLAG_RAM | ABFLAG_RTG, 0, 0
 };
 addrbank *gfxmem_banks[MAX_RTG_BOARDS];

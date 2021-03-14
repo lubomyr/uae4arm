@@ -97,9 +97,12 @@ static void set_default_system(struct uae_prefs *p, const char *system, int rom)
     bip_a1200(p, rom);
   else if(strcmp(system, "a-2000") == 0)
     bip_a2000(p, rom);
-  else if(strcmp(system, "a-4000") == 0) {
+  else if(strcmp(system, "a-4000") == 0)
     bip_a4000(p, rom);
-  }
+
+  // Disable JIT as default, will be enabled with
+  // special compatibility flag
+  p->cachesize = 0;
 }
 
 
@@ -123,7 +126,7 @@ static void parse_compatibility(struct uae_prefs *p, xmlNode *node)
           clip_no_hires = true;
         else if(strcmp((const char *) content, "jit") == 0)
         {
-          p->cachesize = 8192;
+          p->cachesize = MAX_JIT_CACHE;
           p->address_space_24 = 0;
           p->compfpu = true;
         }
@@ -157,7 +160,7 @@ static void parse_ram(struct uae_prefs *p, xmlNode *node)
           else if(strcmp((const char *) attr, "z3") == 0)
             p->z3fastmem[0].size = size;
           else if(strcmp((const char *) attr, "chip") == 0)
-            p->chipmem_size = size;
+            p->chipmem.size = size;
           xmlFree(attr);
         }
 
@@ -193,10 +196,7 @@ static void parse_clip(struct uae_prefs *p, xmlNode *node)
       if(attr != NULL)
       {
         width = atoi((const char *)attr);
-        if(p->chipset_mask & CSMASK_AGA && clip_no_hires == false)
-          width = width / 2; // Use Hires in AGA mode
-        else
-          width = width / 4; // Use Lores in OCS/ECS
+        width = width / 2; // Use Hires mode
         if(width <= 320)
           p->gfx_monitor.gfx_size.width = 320;
         else if(width <= 352)
@@ -228,6 +228,7 @@ static void parse_clip(struct uae_prefs *p, xmlNode *node)
         else
           p->gfx_monitor.gfx_size.height = 270;
         xmlFree(attr);
+        p->gfx_vresolution = VRES_DOUBLE;
       }
       break;
     }
@@ -274,7 +275,7 @@ static void parse_peripheral(struct uae_prefs *p, xmlNode *node)
           }
         }
         else if(strcmp((const char *)content, "a-501") == 0)
-          p->bogomem_size = 0x00080000;
+          p->bogomem.size = 0x00080000;
         else if(strcmp((const char *)content, "cpu") == 0)
         {
           xmlChar *attr = xmlGetProp(curr_node, (const xmlChar *) _T("type"));
@@ -353,36 +354,37 @@ static void parse_boot(struct uae_prefs *p, xmlNode *node)
             if(f != NULL)
             {
               struct uaedev_config_data *uci;
-            	struct uaedev_config_info ci;
               
               fclose(f);
 
-              if(hardfile_testrdb (target_file)) {
-                uci_set_defaults(&ci, true);
-              } else {
-                uci_set_defaults(&ci, false);
-              }
-                            
-              ci.type = UAEDEV_HDF;
-              sprintf(ci.devname, "DH%d", add_HDF_DHnum);
-              ++add_HDF_DHnum;
-              strncpy(ci.rootdir, target_file, MAX_DPATH - 1);
-              
+              default_hfdlg (&current_hfdlg);
+              strncpy(current_hfdlg.ci.rootdir, target_file, MAX_DPATH - 1);
+            	hardfile_testrdb (&current_hfdlg);
+            	updatehdfinfo (true, true);
+            	updatehdfinfo (false, false);
+              sprintf(current_hfdlg.ci.devname, "DH%d", add_HDF_DHnum);
+
               xmlChar *ro = xmlGetProp(curr_node, (const xmlChar *) _T("readonly"));
               if(ro != NULL)
               {
                 if(strcmp((const char *) ro, "true") == 0)
-                  ci.readonly = 1;
+                  current_hfdlg.ci.readonly = 1;
                 xmlFree(ro);
               }
-              ci.bootpri = 127;
-              
+              current_hfdlg.ci.bootpri = 0;
+              updatehdfinfo (true, false);
+
+            	struct uaedev_config_info ci;
+          	  memcpy (&ci, &current_hfdlg.ci, sizeof (struct uaedev_config_info));
+
               uci = add_filesys_config(p, -1, &ci);
               if (uci) {
             		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
   		          if(hfd)
                   hardfile_media_change (hfd, &ci, true, false);
               }
+
+              ++add_HDF_DHnum;
             }
             xmlFree(content);
           }
@@ -471,27 +473,28 @@ static void extract_media(struct uae_prefs *p, unzFile uz, xmlNode *node)
                       {
                         // Add hardfile
                         struct uaedev_config_data *uci;
-                      	struct uaedev_config_info ci;
+
+                        default_hfdlg (&current_hfdlg);
+                        strncpy(current_hfdlg.ci.rootdir, target_file, MAX_DPATH - 1);
+                      	hardfile_testrdb (&current_hfdlg);
+                      	updatehdfinfo (true, true);
+                      	updatehdfinfo (false, false);
+                        sprintf(current_hfdlg.ci.devname, "DH%d", add_HDF_DHnum);
+                        
+                        current_hfdlg.ci.bootpri = (add_HDF_DHnum > 0) ? -128 : 0;
+                        updatehdfinfo (true, false);
           
-                        if(hardfile_testrdb (target_file)) {
-                          uci_set_defaults(&ci, true);
-                        } else {
-                          uci_set_defaults(&ci, false);
-                        }
-                        
-                        ci.type = UAEDEV_HDF;
-                        sprintf(ci.devname, "DH%d", add_HDF_DHnum);
-                        ++add_HDF_DHnum;
-                        strncpy(ci.rootdir, target_file, MAX_DPATH - 1);
-                        
-                        ci.bootpri = 0;
-                        
+                      	struct uaedev_config_info ci;
+                    	  memcpy (&ci, &current_hfdlg.ci, sizeof (struct uaedev_config_info));
+          
                         uci = add_filesys_config(p, -1, &ci);
                         if (uci) {
                       		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
-  		                    if(hfd)
+            		          if(hfd)
                             hardfile_media_change (hfd, &ci, true, false);
                         }
+          
+                        ++add_HDF_DHnum;
                       }
                       lstTmpRP9Files.push_back(target_file);
                     }

@@ -44,7 +44,6 @@ extern int scsi_hd_emulate(struct hardfiledata *hfd, struct hd_hardfiledata *hdh
 		uae_u8 *scsi_data, int *data_len, uae_u8 *r, int *reply_len, uae_u8 *s, int *sense_len);
 extern bool scsi_emulate_analyze (struct scsi_data*);
 
-#define SCSI_STATUS_GOOD                   0x00
 #define SCSI_STATUS_CHECK_CONDITION        0x02
 
 #endif /* UAE_SCSI_H */

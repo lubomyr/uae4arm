@@ -24,6 +24,8 @@ static int kpb_first, kpb_last;
 #define KEYBUF_SIZE 256
 static int keybuf[KEYBUF_SIZE];
 
+static int record_key_direct(int);
+
 int keys_available (void)
 {
   int val;
@@ -42,6 +44,13 @@ int get_next_key (void)
 }
 
 int record_key (int kc)
+{
+	if (pause_emulation)
+		return 0;
+	return record_key_direct (kc);
+}
+
+static int record_key_direct (int kc)
 {
   int kpb_next = kpb_first + 1;
 

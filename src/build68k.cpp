@@ -304,12 +304,12 @@ int main(int argc, char **argv)
 		char tmp[100], *p;
 		int slen = 0;
 
-    while (isspace((int)*opstrp))
+    while (isspace((unsigned char)*opstrp))
 			opstrp++;
 
 		osendp = opstrp;
 		while (*osendp) {
-		  if (!isspace ((int)*osendp))
+		  if (!isspace ((unsigned char)*osendp))
 				slen = osendp - opstrp + 1;
 			osendp++;
 		}
@@ -321,7 +321,7 @@ int main(int argc, char **argv)
 		strcpy (tmp, opstrp);
 		strcat (tmp, " ");
 		p = tmp;
-		while (!isspace(*p++));
+		while (!isspace((unsigned char)*p++));
 		*p = 0;
 		printf("/* %s */\n", tmp);
 		printf("{0x%04X,%2d,{", bitpattern, n_variable);
@@ -334,7 +334,7 @@ int main(int argc, char **argv)
 		for(i = 0; i < 5; i++) {
 			printf("{%d,%d}%s", flaguse[i], flagset[i], i == 4 ? "" : ",");
 		}
-    printf("}, %2d, %2d,_T(\"%s\"),%2d,%2d,%2d,%2d}", cflow, sduse, opstrp, head, tail, clocks, fetchmode);
+    printf("},0x%02x,0x%02x,_T(\"%s\"),%2d,%2d,%2d,%2d}", cflow, sduse, opstrp, head, tail, clocks, fetchmode);
     }
     printf("};\nint n_defs68k = %d;\n", no_insns);
     return 0;

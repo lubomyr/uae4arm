@@ -35,6 +35,7 @@ static gcn::UaeRadioButton* optCPU68030;
 static gcn::UaeRadioButton* optCPU68040;
 static gcn::UaeCheckBox* chk24Bit;
 static gcn::UaeCheckBox* chkCPUCompatible;
+static gcn::UaeCheckBox* chkCPUCycleExact;
 static gcn::UaeCheckBox* chkJIT;
 static gcn::Window *grpFPU;
 static gcn::UaeRadioButton* optFPUnone;
@@ -70,6 +71,8 @@ static void RefreshPanelCPU(void)
   chk24Bit->setEnabled(workprefs.cpu_model == 68020);
   chkCPUCompatible->setSelected(workprefs.cpu_compatible > 0);
   chkCPUCompatible->setEnabled(workprefs.cpu_model <= 68010);
+  chkCPUCycleExact->setSelected(workprefs.cpu_cycle_exact > 0);
+  chkCPUCycleExact->setEnabled(workprefs.cpu_model <= 68010);
   chkJIT->setSelected(workprefs.cachesize > 0);
 
   switch(workprefs.fpu_model)
@@ -144,19 +147,28 @@ class CPUActionListener : public gcn::ActionListener
   		  if(workprefs.fpu_model == 68040)
   		    workprefs.fpu_model = 68881;
   		  workprefs.cpu_compatible = 0;
-
+	      workprefs.cpu_cycle_exact = 0;
+	      workprefs.blitter_cycle_exact = 0;
+	      workprefs.cpu_memory_cycle_exact = 0;
+        
       } else if (actionEvent.getSource() == optCPU68030) {
   		  workprefs.cpu_model = 68030;
   		  if(workprefs.fpu_model == 68040)
   		    workprefs.fpu_model = 68881;
   		  workprefs.address_space_24 = false;
   		  workprefs.cpu_compatible = 0;
+	      workprefs.cpu_cycle_exact = 0;
+	      workprefs.blitter_cycle_exact = 0;
+	      workprefs.cpu_memory_cycle_exact = 0;
 
       } else if (actionEvent.getSource() == optCPU68040) {
   		  workprefs.cpu_model = 68040;
   		  workprefs.fpu_model = 68040;
   		  workprefs.address_space_24 = false;
   		  workprefs.cpu_compatible = 0;
+	      workprefs.cpu_cycle_exact = 0;
+	      workprefs.blitter_cycle_exact = 0;
+	      workprefs.cpu_memory_cycle_exact = 0;
 
       } else if (actionEvent.getSource() == optFPUnone) {
   		  workprefs.fpu_model = 0;
@@ -193,9 +205,28 @@ class CPUActionListener : public gcn::ActionListener
   	      workprefs.cpu_compatible = 0;
         }
 
+      } else if (actionEvent.getSource() == chkCPUCycleExact) {
+  	    if (chkCPUCycleExact->isSelected()) {
+  	      workprefs.cpu_cycle_exact = 1;
+  	      workprefs.blitter_cycle_exact = 1;
+  	      workprefs.cpu_memory_cycle_exact = 1;
+  	      workprefs.cachesize = 0;
+  	      workprefs.fast_copper = 0;
+        } else {
+  	      workprefs.cpu_cycle_exact = 0;
+  	      workprefs.blitter_cycle_exact = 0;
+  	      workprefs.cpu_memory_cycle_exact = 0;
+#ifdef FAST_COPPER_DEFAULT_ON
+  	      workprefs.fast_copper = 1;
+#endif
+        }
+
       } else if (actionEvent.getSource() == chkJIT) {
 		    if (chkJIT->isSelected()) {
 		      workprefs.cpu_compatible = 0;
+  	      workprefs.cpu_cycle_exact = 0;
+  	      workprefs.blitter_cycle_exact = 0;
+  	      workprefs.cpu_memory_cycle_exact = 0;
 		      workprefs.cachesize = MAX_JIT_CACHE;
 		      workprefs.compfpu = true;
 	      } else {
@@ -242,6 +273,10 @@ void InitPanelCPU(const struct _ConfigCategory& category)
 	chkCPUCompatible->setId("CPUComp");
   chkCPUCompatible->addActionListener(cpuActionListener);
 
+	chkCPUCycleExact = new gcn::UaeCheckBox("Cycle exact", true);
+	chkCPUCycleExact->setId("CPUCE");
+  chkCPUCycleExact->addActionListener(cpuActionListener);
+
 	chkJIT = new gcn::UaeCheckBox("JIT", true);
 	chkJIT->setId("JIT");
   chkJIT->addActionListener(cpuActionListener);
@@ -265,15 +300,16 @@ void InitPanelCPU(const struct _ConfigCategory& category)
 	grpCPU->add(optCPU68040, 5, 130);
 	grpCPU->add(chk24Bit, 5, 170);
 	grpCPU->add(chkCPUCompatible, 5, 200);
-	grpCPU->add(chkJIT, 5, 230);
-	grpCPU->add(lblCachemem, 5, 260);
-	grpCPU->add(sldCachemem, 6, 290);
-	grpCPU->add(lblCachesize, 110, 290);
+	grpCPU->add(chkCPUCycleExact, 5, 230);
+	grpCPU->add(chkJIT, 5, 260);
+	grpCPU->add(lblCachemem, 5, 290);
+	grpCPU->add(sldCachemem, 6, 320);
+	grpCPU->add(lblCachesize, 110, 320);
 	grpCPU->setMovable(false);
 #ifdef ANDROID
-	grpCPU->setSize(165, 335);
+	grpCPU->setSize(165, 365);
 #else
-	grpCPU->setSize(160, 335);
+	grpCPU->setSize(160, 365);
 #endif
   grpCPU->setBaseColor(gui_baseCol);
   
@@ -357,6 +393,7 @@ void ExitPanelCPU(const struct _ConfigCategory& category)
   delete optCPU68040;
   delete chk24Bit;
   delete chkCPUCompatible;
+  delete chkCPUCycleExact;
   delete chkJIT;
   delete lblCachemem;
   delete sldCachemem;
@@ -388,6 +425,7 @@ bool HelpPanelCPU(std::vector<std::string> &helptext)
   helptext.push_back("If you select 68020, you can choose between 24-bit addressing (68EC020) or 32-bit addressing (68020).");
   helptext.push_back("The option \"More compatible\" is only available if 68000 or 68010 is selected and emulates simple prefetch of");
   helptext.push_back("the 68000. This may improve compatibility in few situations but is not required for most games and demos.");
+  helptext.push_back("\"Cycle exact\" emulates 68000 and chipset cycle accurate. This is very slow and only required in few situations.");
   helptext.push_back("JIT enables the Just-in-time compiler. This may break compatibility in some games. With \"Cache\", you can select");
   helptext.push_back("the size of the memory for compiled code.");
   helptext.push_back("The available FPU models depending on the selected CPU.");

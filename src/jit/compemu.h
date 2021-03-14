@@ -105,6 +105,7 @@ typedef union {
 #define FLAG_X    0x0001
 #endif
 #define FLAG_CZNV (FLAG_C | FLAG_Z | FLAG_N | FLAG_V)
+#define FLAG_ALL  (FLAG_C | FLAG_Z | FLAG_N | FLAG_V | FLAG_X)
 #define FLAG_ZNV  (FLAG_Z | FLAG_N | FLAG_V)
 
 #if defined(CPU_arm)
@@ -185,6 +186,7 @@ STATIC_INLINE int end_block(uae_u16 opcode)
 	return (prop[opcode].cflow & fl_end_block);
 }
 
+#define SP_REG 15
 #define PC_P 16
 #define FLAGX 17
 #define FLAGTMP 18

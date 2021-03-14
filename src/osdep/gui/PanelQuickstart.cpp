@@ -216,7 +216,7 @@ static void SetModelFromConfig(void)
       quickstart_model = 0;
       if(workprefs.chipset_mask == 0)
         quickstart_conf = 0;
-      else if(workprefs.chipmem_size == 0x100000)
+      else if(workprefs.chipmem.size == 0x100000)
         quickstart_conf = 2;
       else
         quickstart_conf = 1;
@@ -224,7 +224,7 @@ static void SetModelFromConfig(void)
     
     case CP_A500P:
       quickstart_model = 1;
-      if(workprefs.chipmem_size == 0x200000)
+      if(workprefs.chipmem.size == 0x200000)
         quickstart_conf = 1;
       else if(workprefs.fastmem[0].size == 0x400000)
         quickstart_conf = 2;
@@ -234,7 +234,7 @@ static void SetModelFromConfig(void)
       
     case CP_A600:
       quickstart_model = 2;
-      if(workprefs.chipmem_size == 0x200000)
+      if(workprefs.chipmem.size == 0x200000)
         quickstart_conf = 1;
       else if(workprefs.fastmem[0].size == 0x400000)
         quickstart_conf = 2;

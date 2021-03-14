@@ -21,6 +21,8 @@
 static struct romlist *rl;
 static int romlist_cnt;
 
+static struct romlist *getromlistbyids(const int *ids, const TCHAR *romname);
+
 struct romlist *romlist_getit (void)
 {
 	return rl;
@@ -91,7 +93,7 @@ struct romdata *getromdatabypath (const TCHAR *path)
   return NULL;
 }
 
-#define NEXT_ROM_ID 257
+#define NEXT_ROM_ID 268
 
 #define ALTROM(id,grp,num,size,flags,crc32,a,b,c,d,e) \
 { _T("X"), 0, 0, 0, 0, 0, size, id, 0, 0, flags, (grp << 16) | num, 0, NULL, crc32, a, b, c, d, e },
@@ -386,7 +388,6 @@ struct romlist **getromlistbyident (int ver, int rev, int subver, int subrev, co
 	rdout[out] = NULL;
 	return rdout;
 }
-
 
 static int kickstart_checksum_do (uae_u8 *mem, int size)
 {
@@ -802,6 +803,15 @@ void getromname	(const struct romdata *rd, TCHAR *name)
 		_stprintf (name + _tcslen (name), _T(" [%s]"), rd->partnumber);
 }
 
+struct romlist *getromlistbyromdata (const struct romdata *rd)
+{
+  int ids[2];
+  
+  ids[0] = rd->id;
+	ids[1] = -1;
+	return getromlistbyids(ids, NULL);
+}
+
 static struct romlist *getromlistbyromtype(uae_u32 romtype, const TCHAR *romname)
 {
 	int i = 0;
@@ -858,15 +868,6 @@ static struct romlist *getromlistbyids (const int *ids, const TCHAR *romname)
   return NULL;
 }
 
-struct romlist *getromlistbyromdata (const struct romdata *rd)
-{
-  int ids[2];
-  
-  ids[0] = rd->id;
-	ids[1] = -1;
-	return getromlistbyids(ids, NULL);
-}
-
 static void romwarning (const int *ids)
 {
 	int i, exp;
@@ -885,7 +886,7 @@ static void romwarning (const int *ids)
 		  _tcscat (tmp2, _T("- "));
 		  _tcscat (tmp2, tmp1);
 		  _tcscat (tmp2, _T("\n"));
-			if (rd->type & (ROMTYPE_CD32CART))
+			if (rd->type & ROMTYPE_CD32CART)
 			  exp++;
 		}
 		i++;
@@ -1328,12 +1329,10 @@ static void device_rom_defaults(struct uae_prefs *p, struct boardromconfig *brc,
 		if (p->expansionboard[i].device_order > order)
 			order = p->expansionboard[i].device_order;
 	}
-	for (int i = 0; i < MAX_RAM_BOARDS; i++) {
-		if (p->fastmem[i].device_order > order)
-			order = p->fastmem[i].device_order;
-		if (p->z3fastmem[i].device_order > order)
-			order = p->z3fastmem[i].device_order;
-	}
+	if (p->fastmem[0].device_order > order)
+		order = p->fastmem[0].device_order;
+	if (p->z3fastmem[0].device_order > order)
+		order = p->z3fastmem[0].device_order;
 	if (p->rtgboards[0].device_order > order)
 		order = p->rtgboards[0].device_order;
 	brc->device_order = order + 1;

@@ -166,6 +166,7 @@ static void zfile_free (struct zfile *f)
 	xfree (f->originalname);
   xfree (f->data);
   xfree (f->mode);
+	xfree (f->userdata);
   xfree (f);
 }
 
@@ -273,7 +274,7 @@ int zfile_gettype (struct zfile *z)
 		if (strcasecmp (ext, _T("uae")) == 0)
 	    return ZFILE_CONFIGURATION;
 		if (strcasecmp(ext, _T("cue")) == 0 || strcasecmp(ext, _T("iso")) == 0 || strcasecmp(ext, _T("ccd")) == 0 ||
-			strcasecmp(ext, _T("mds")) == 0 || strcasecmp(ext, _T("chd")) == 0 || strcasecmp(ext, _T("nrg")) == 0)
+			strcasecmp(ext, _T("mds")) == 0 || strcasecmp(ext, _T("nrg")) == 0)
 			return ZFILE_CDIMAGE;
   }
   memset (buf, 0, sizeof (buf));
@@ -302,8 +303,211 @@ int zfile_gettype (struct zfile *z)
 	    return ZFILE_HDF;
 		if (strcasecmp (ext, _T("hdz")) == 0)
 	    return ZFILE_HDF;
+		if (strcasecmp (ext, _T("vhd")) == 0)
+			return ZFILE_HDF;
   }
   return ZFILE_UNKNOWN;
+}
+
+#define VHD_DYNAMIC 3
+#define VHD_FIXED 2
+
+STATIC_INLINE uae_u32 gl (uae_u8 *p)
+{
+	return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | (p[3] << 0);
+}
+
+static uae_u32 vhd_checksum (uae_u8 *p, int offset)
+{
+	int i;
+	uae_u32 sum;
+
+	sum = 0;
+	for (i = 0; i < 512; i++) {
+		if (offset >= 0 && i >= offset && i < offset + 4)
+			continue;
+		sum += p[i];
+	}
+	return ~sum;
+}
+
+struct zfile_vhd
+{
+	int vhd_type;
+	uae_u64 virtsize;
+	uae_u32 vhd_bamoffset;
+	uae_u32 vhd_blocksize;
+	uae_u8 *vhd_header, *vhd_sectormap;
+	uae_u64 vhd_footerblock;
+	uae_u32 vhd_bamsize;
+	uae_u64 vhd_sectormapblock;
+	uae_u32 vhd_bitmapsize;
+};
+
+
+static uae_u64 vhd_fread2 (struct zfile *zf, void *dataptrv, uae_u64 offset, uae_u64 len)
+{
+	uae_u32 bamoffset;
+	uae_u32 sectoroffset;
+	uae_u64 read;
+	struct zfile *zp = zf->parent;
+	struct zfile_vhd *zvhd = (struct zfile_vhd*)zf->userdata;
+	uae_u8 *dataptr = (uae_u8*)dataptrv;
+
+	read = 0;
+	if (offset & 511)
+		return read;
+	if (len & 511)
+		return read;
+	while (len > 0) {
+		bamoffset = (offset / zvhd->vhd_blocksize) * 4 + zvhd->vhd_bamoffset;
+		sectoroffset = gl (zvhd->vhd_header + bamoffset);
+		if (sectoroffset == 0xffffffff) {
+			memset (dataptr, 0, 512);
+			read += 512;
+		} else {
+			int bitmapoffsetbits;
+			int bitmapoffsetbytes;
+			int sectormapblock;
+
+			bitmapoffsetbits = (offset / 512) % (zvhd->vhd_blocksize / 512);
+			bitmapoffsetbytes = bitmapoffsetbits / 8;
+			sectormapblock = sectoroffset * 512 + (bitmapoffsetbytes & ~511);
+			if (zvhd->vhd_sectormapblock != sectormapblock) {
+				// read sector bitmap
+				zfile_fseek (zp, sectormapblock, SEEK_SET);
+				if (zfile_fread (zvhd->vhd_sectormap, 1, 512, zp) != 512)
+					return read;
+				zvhd->vhd_sectormapblock = sectormapblock;
+			}
+			// block allocated in bitmap?
+			if (zvhd->vhd_sectormap[bitmapoffsetbytes & 511] & (1 << (7 - (bitmapoffsetbits & 7)))) {
+				// read data block
+				int block = sectoroffset * 512 + zvhd->vhd_bitmapsize + bitmapoffsetbits * 512;
+				zfile_fseek (zp, block, SEEK_SET);
+				if (zfile_fread (dataptr, 1, 512, zp) != 512)
+					return read;
+			} else {
+				memset (dataptr, 0, 512);
+			}
+			read += 512;
+		}
+		len -= 512;
+		dataptr += 512;
+		offset += 512;
+	}
+	return read;
+}
+static uae_s64 vhd_fread (void *data, uae_u64 l1, uae_u64 l2, struct zfile *zf)
+{
+	uae_u64 size = l1 * l2;
+	uae_u64 out = 0;
+	int len = 0;
+
+	if (!l1 || !l2)
+		return 0;
+	if ((zf->seek & 511) || (size & 511)) {
+		uae_u8 tmp[512];
+
+		if (zf->seek & 511) {
+			int s;
+			s = 512 - (zf->seek & 511);
+			vhd_fread2 (zf, tmp, zf->seek & ~511, 512);
+			memcpy ((uae_u8*)data + len, tmp + 512 - s, s);
+			len += s;
+			out += s;
+			zf->seek += s;
+		}
+		while (size > 0) {
+			int s = size > 512 ? 512 : size;
+			vhd_fread2 (zf, tmp, zf->seek, 512);
+			memcpy ((uae_u8*)data + len, tmp, s);
+			zf->seek += s;
+			size -= s;
+			out += s;
+		}
+	} else {
+		out = vhd_fread2 (zf, data, zf->seek, size);
+		zf->seek += out;
+		out /= l1;
+	}
+	return out;
+}
+
+static struct zfile *vhd (struct zfile *z)
+{
+	uae_u8 tmp[512], tmp2[512];
+	uae_u32 v;
+	struct zfile_vhd *zvhd;
+	uae_u64 fsize;
+
+	zvhd = xcalloc (struct zfile_vhd, 1);
+	zfile_fseek (z, 0, SEEK_END);
+	fsize = zfile_ftell (z);
+	zfile_fseek (z, 0, SEEK_SET);
+	if (zfile_fread (tmp, 1, 512, z) != 512)
+		goto nonvhd;
+	v = gl (tmp + 8); // features
+	if ((v & 3) != 2)
+		goto nonvhd;
+	v = gl (tmp + 8 + 4); // version
+	if ((v >> 16) != 1)
+		goto nonvhd;
+	zvhd->vhd_type = gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 8 + 8 + 4);
+	if (zvhd->vhd_type != VHD_FIXED && zvhd->vhd_type != VHD_DYNAMIC)
+		goto nonvhd;
+	v = gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 4);
+	if (v == 0)
+		goto nonvhd;
+	if (vhd_checksum (tmp, 8 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 4) != v)
+		goto nonvhd;
+	zfile_fseek (z, fsize - sizeof tmp2, SEEK_SET);
+	if (zfile_fread (tmp2, 1, 512, z) != 512)
+		goto end;
+	if (memcmp (tmp, tmp2, sizeof tmp))
+		goto nonvhd;
+	zvhd->vhd_footerblock = fsize - 512;
+	zvhd->virtsize = (uae_u64)(gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 +4 + 4 + 8)) << 32;
+	zvhd->virtsize |= gl (tmp + 8 + 4 + 4 + 8 + 4 + 4 +4 + 4 + 8 + 4);
+	if (zvhd->vhd_type == VHD_DYNAMIC) {
+		uae_u32 size;
+		zvhd->vhd_bamoffset = gl (tmp + 8 + 4 + 4 + 4);
+		if (zvhd->vhd_bamoffset == 0 || zvhd->vhd_bamoffset >= fsize)
+			goto end;
+		zfile_fseek (z, zvhd->vhd_bamoffset, SEEK_SET);
+		if (zfile_fread (tmp, 1, 512, z) != 512)
+			goto end;
+		v = gl (tmp + 8 + 8 + 8 + 4 + 4 + 4);
+		if (vhd_checksum (tmp, 8 + 8 + 8 + 4 + 4 + 4) != v)
+			goto end;
+		v = gl (tmp + 8 + 8 + 8);
+		if ((v >> 16) != 1)
+			goto end;
+		zvhd->vhd_blocksize = gl (tmp + 8 + 8 + 8 + 4 + 4);
+		zvhd->vhd_bamoffset = gl (tmp + 8 + 8 + 4);
+		zvhd->vhd_bamsize = (((zvhd->virtsize + zvhd->vhd_blocksize - 1) / zvhd->vhd_blocksize) * 4 + 511) & ~511;
+		size = zvhd->vhd_bamoffset + zvhd->vhd_bamsize;
+		zvhd->vhd_header = xmalloc (uae_u8, size);
+		zfile_fseek (z, 0, SEEK_SET);
+		if (zfile_fread (zvhd->vhd_header, 1, size, z) != size)
+			goto end;
+		zvhd->vhd_sectormap = xmalloc (uae_u8, 512);
+		zvhd->vhd_sectormapblock = -1;
+		zvhd->vhd_bitmapsize = ((zvhd->vhd_blocksize / (8 * 512)) + 511) & ~511;
+	}
+	z = zfile_fopen_parent (z, NULL, 0, zvhd->virtsize);
+	z->useparent = 0;
+	z->dataseek = 1;
+	z->userdata = zvhd;
+	z->zfileread = vhd_fread;
+	write_log (_T("%s is VHD %s image, virtual size=%lldK\n"),
+		zfile_getname (z),
+		zvhd->vhd_type == 2 ? _T("fixed") : _T("dynamic"),
+		zvhd->virtsize / 1024);
+	return z;
+nonvhd:
+end:
+	return z;
 }
 
 static struct zfile *zfile_gunzip (struct zfile *z, int *retcode)
@@ -1263,6 +1467,11 @@ struct zfile *zuncompress (struct znode *parent, struct zfile *z, int dodefault,
   zfile_fseek (z, 0, SEEK_SET);
   zfile_fread (header, sizeof (header), 1, z);
   zfile_fseek (z, 0, SEEK_SET);
+	if (!memcmp (header, "conectix", 8)) {
+		if (index > 0)
+			return NULL;
+		return vhd (z);
+	}
   if (mask & ZFD_UNPACK) {
 	  if (index == 0) {
   	  if (header[0] == 0x1f && header[1] == 0x8b)
@@ -1646,7 +1855,11 @@ struct zfile *zfile_dup (struct zfile *zf)
   	return NULL;
 	if (zf->archiveparent)
 		checkarchiveparent (zf);
-	if (zf->data) {
+	if (zf->userdata)
+		return NULL;
+	if (!zf->data && zf->dataseek) {
+		nzf = zfile_create (zf, NULL);
+	} else if (zf->data) {
 		nzf = zfile_create (zf, NULL);
     nzf->data = xmalloc (uae_u8, zf->size);
 		if (!nzf->data) {
@@ -1819,14 +2032,14 @@ uae_s64 zfile_size (struct zfile *z)
 
 uae_s64 zfile_ftell (struct zfile *z)
 {
-	if (z->data || z->parent)
+	if (z->data || z->dataseek || z->parent)
 	  return z->seek;
 	return _ftelli64 (z->f);
 }
 
 uae_s64 zfile_fseek (struct zfile *z, uae_s64 offset, int mode)
 {
-	if (z->data || (z->parent && z->useparent)) {
+	if (z->data || z->dataseek || (z->parent && z->useparent)) {
   	int ret = 0;
   	switch (mode)
   	{
@@ -1857,6 +2070,8 @@ uae_s64 zfile_fseek (struct zfile *z, uae_s64 offset, int mode)
 
 size_t zfile_fread (void *b, size_t l1, size_t l2, struct zfile *z)
 {
+	if (z->zfileread)
+		return z->zfileread (b, l1, l2, z);
   if (z->data) {
   	if (z->datasize < z->size && z->seek + l1 * l2 > z->datasize) {
 			if (z->archiveparent) {
@@ -2038,63 +2253,14 @@ uae_u8 *zfile_getdata (struct zfile *z, uae_s64 offset, int len, int *outlen)
   return b;
 }
 
-int zfile_zuncompress (void *dst, int dstsize, struct zfile *src, int srcsize)
-{
-  z_stream zs;
-  int v;
-  uae_u8 inbuf[4096];
-  int incnt;
-
-  memset (&zs, 0, sizeof(zs));
-  if (inflateInit_ (&zs, ZLIB_VERSION, sizeof(z_stream)) != Z_OK)
-    return 0;
-  zs.next_out = (Bytef*)dst;
-  zs.avail_out = dstsize;
-  incnt = 0;
-  v = Z_OK;
-  while (v == Z_OK && zs.avail_out > 0) {
-    if (zs.avail_in == 0) {
-      int left = srcsize - incnt;
-      if (left == 0)
-	      break;
-      if (left > sizeof (inbuf)) 
-        left = sizeof (inbuf);
-      zs.next_in = inbuf;
-      zs.avail_in = zfile_fread (inbuf, 1, left, src);
-      incnt += left;
-    }
-    v = inflate (&zs, 0);
-  }
-  inflateEnd (&zs);
-  return 0;
-}
-
-int zfile_zcompress (struct zfile *f, void *src, int size)
-{
-  int v;
-  z_stream zs;
-  uae_u8 outbuf[4096];
-
-  memset (&zs, 0, sizeof (zs));
-  if (deflateInit_ (&zs, Z_DEFAULT_COMPRESSION, ZLIB_VERSION, sizeof(z_stream)) != Z_OK)
-    return 0;
-  zs.next_in = (Bytef*)src;
-  zs.avail_in = size;
-  v = Z_OK;
-  while (v == Z_OK) {
-    zs.next_out = outbuf;
-    zs.avail_out = sizeof (outbuf);
-    v = deflate(&zs, Z_NO_FLUSH | Z_FINISH);
-    if (sizeof(outbuf) - zs.avail_out > 0)
-      zfile_fwrite (outbuf, 1, sizeof (outbuf) - zs.avail_out, f);
-  }
-  deflateEnd(&zs);
-  return zs.total_out;
-}
-
 TCHAR *zfile_getname (struct zfile *f)
 {
   return f ? f->name : NULL;
+}
+
+TCHAR *zfile_getoriginalname (struct zfile *f)
+{
+	return f ? f->originalname : NULL;
 }
 
 TCHAR *zfile_getfilename (struct zfile *f)
@@ -2670,7 +2836,11 @@ static struct zvolume *zfile_fopen_archive (const TCHAR *filename, int flags)
 }
 struct zvolume *zfile_fopen_archive (const TCHAR *filename)
 {
-	return zfile_fopen_archive (filename, ZFD_ALL);
+	struct zvolume *zv = zfile_fopen_archive (filename, ZFD_ALL);
+	if (zv) {
+		zv->autofree = true;
+	}
+	return zv;
 }
 
 void zfile_fclose_archive(struct zvolume *zv)
@@ -2695,6 +2865,9 @@ void zfile_fclose_archive(struct zvolume *zv)
   	zn = zn2;
   }
   archive_access_close (zv->handle, zv->id);
+	if (zv->autofree) {
+		zfile_fclose(zv->archive);
+	}
   if (zvolume_list == zv) {
   	zvolume_list = zvolume_list->next;
   } else {

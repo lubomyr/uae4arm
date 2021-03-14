@@ -202,8 +202,6 @@ extern char *ua_fs_copy (char *dst, int maxlen, const TCHAR *src, int defchar);
 extern TCHAR *au_fs_copy (TCHAR *dst, int maxlen, const char *src);
 extern char *uutf8 (const TCHAR *s);
 extern TCHAR *utf8u (const char *s);
-extern void to_lower (TCHAR *s, int len);
-extern void to_upper (TCHAR *s, int len);
 
 /* We can only rely on GNU C getting enums right. Mickeysoft VSC++ is known
  * to have problems, and it's likely that other compilers choke too. */
@@ -453,13 +451,13 @@ extern void gui_message (const TCHAR *,...);
 
 #ifdef ARMV6_ASSEMBLY
 
-STATIC_INLINE uae_u32 do_byteswap_32(uae_u32 v) {
+STATIC_INLINE uae_u32 bswap_32(uae_u32 v) {
   __asm__ (
 		"rev %0, %0"
     : "=r" (v) : "0" (v) ); return v;
 }
 
-STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
+STATIC_INLINE uae_u32 bswap_16(uae_u32 v) {
   __asm__ (
     "revsh %0, %0\n\t"
     "uxth %0, %0"
@@ -468,13 +466,13 @@ STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
 
 #elif defined(CPU_AARCH64)
 
-STATIC_INLINE uae_u32 do_byteswap_32(uae_u32 v) {
+STATIC_INLINE uae_u32 bswap_32(uae_u32 v) {
   __asm__ (
 		"rev %w0, %w0"
     : "=r" (v) : "0" (v) ); return v;
 }
 
-STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
+STATIC_INLINE uae_u32 bswap_16(uae_u32 v) {
   __asm__ (
     "rev16 %w0, %w0\n\t"
     "uxth %w0, %w0"
@@ -493,12 +491,12 @@ STATIC_INLINE uae_u32 do_byteswap_16(uae_u32 v) {
 /* Else, if using SDL, try SDL's endian functions. */
 # ifdef USE_SDL
 #  include <SDL_endian.h>
-#define do_byteswap_16(x) SDL_Swap16(x)
-#define do_byteswap_32(x) SDL_Swap32(x)
+#define bswap_16(x) SDL_Swap16(x)
+#define bswap_32(x) SDL_Swap32(x)
 # else
 /* Otherwise, we'll roll our own. */
-#  define do_byteswap_16(x) (((x) >> 8) | (((x) & 0xFF) << 8))
-#  define do_byteswap_32(x) (((x) << 24) | (((x) << 8) & 0x00FF0000) | (((x) >> 8) & 0x0000FF00) | ((x) >> 24))
+#  define bswap_16(x) (((x) >> 8) | (((x) & 0xFF) << 8))
+#  define bswap_32(x) (((x) << 24) | (((x) << 8) & 0x00FF0000) | (((x) >> 8) & 0x0000FF00) | ((x) >> 24))
 # endif
 #endif
 

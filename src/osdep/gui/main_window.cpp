@@ -67,6 +67,7 @@ ConfigCategory categories[] = {
   { "RAM",              "data/chip.ico",      NULL, NULL, InitPanelRAM,       ExitPanelRAM,       HelpPanelRAM },
   { "Floppy drives",    "data/35floppy.ico",  NULL, NULL, InitPanelFloppy,    ExitPanelFloppy,    HelpPanelFloppy },
   { "Hard drives / CD", "data/drive.ico",     NULL, NULL, InitPanelHD,        ExitPanelHD,        HelpPanelHD },
+  { "Hardware info",    "data/expansion.ico", NULL, NULL, InitPanelHWInfo,    ExitPanelHWInfo,    HelpPanelHWInfo },
   { "Display",          "data/screen.ico",    NULL, NULL, InitPanelDisplay,   ExitPanelDisplay,   HelpPanelDisplay },
   { "Sound",            "data/sound.ico",     NULL, NULL, InitPanelSound,     ExitPanelSound,     HelpPanelSound },
   { "Game ports",       "data/joystick.ico",  NULL, NULL, InitPanelGamePort,  ExitPanelGamePort,  HelpPanelGamePort },
@@ -84,7 +85,7 @@ enum { PANEL_PATHS, PANEL_QUICKSTART, PANEL_CONFIGURATIONS, PANEL_CPU, PANEL_CHI
        PANEL_ONSCREEN, NUM_PANELS };
 #else
 enum { PANEL_PATHS, PANEL_QUICKSTART, PANEL_CONFIGURATIONS, PANEL_CPU, PANEL_CHIPSET, PANEL_ROM, PANEL_RAM,
-       PANEL_FLOPPY, PANEL_HD, PANEL_DISPLAY, PANEL_SOUND, PANEL_GAMEPORT, PANEL_INPUT, PANEL_MISC, PANEL_SAVESTATES, 
+       PANEL_FLOPPY, PANEL_HD, PANEL_HWINFO, PANEL_DISPLAY, PANEL_SOUND, PANEL_GAMEPORT, PANEL_INPUT, PANEL_MISC, PANEL_SAVESTATES, 
        NUM_PANELS };
 #endif
 
@@ -93,8 +94,14 @@ SDL_Texture* gui_texture;
 SDL_Cursor* cursor;
 SDL_Surface* cursorSurface;
 gcn::SDLTrueTypeFont* gui_font;
+gcn::SDLTrueTypeFont* gui_fontsmall;
+gcn::SDLTrueTypeFont* gui_fixedfont;
+gcn::SDLTrueTypeFont* gui_fixedfontsmall;
 #else
 gcn::contrib::SDLTrueTypeFont* gui_font;
+gcn::contrib::SDLTrueTypeFont* gui_fontsmall;
+gcn::contrib::SDLTrueTypeFont* gui_fixedfont;
+gcn::contrib::SDLTrueTypeFont* gui_fixedfontsmall;
 #endif
 
 gcn::Container* gui_top;
@@ -156,7 +163,7 @@ static int gui_create_rtarea_flag(struct uae_prefs *p)
   if(p->rtgboards[0].rtgmem_size)
     flag |= 16;
 
-  if (p->chipmem_size > 2 * 1024 * 1024)
+  if (p->chipmem.size > 2 * 1024 * 1024)
     flag |= 32;
 
   return flag;
@@ -677,11 +684,20 @@ namespace widgets
 	  TTF_Init();
 #ifdef USE_SDL2
 		gui_font = new gcn::SDLTrueTypeFont("data/FreeSans.ttf", 14);
+		gui_fontsmall = new gcn::SDLTrueTypeFont("data/FreeSans.ttf", 10);
+		gui_fixedfont = new gcn::SDLTrueTypeFont("data/Hack-Regular.ttf", 14);
+		gui_fixedfontsmall = new gcn::SDLTrueTypeFont("data/Hack-Regular.ttf", 10);
 #else
 #ifdef ANDROID
-	  gui_font = new gcn::contrib::SDLTrueTypeFont("data/FreeSans.ttf", 16);	  
+	  gui_font = new gcn::contrib::SDLTrueTypeFont("data/FreeSans.ttf", 16);
+	  gui_fontsmall = new gcn::contrib::SDLTrueTypeFont("data/FreeSans.ttf", 10);
+	  gui_fixedfont = new gcn::contrib::SDLTrueTypeFont("data/Hack-Regular.ttf", 14);
+	  gui_fixedfontsmall = new gcn::contrib::SDLTrueTypeFont("data/Hack-Regular.ttf", 10);	  
 #else
 	  gui_font = new gcn::contrib::SDLTrueTypeFont("data/FreeSans.ttf", 14);
+	  gui_fontsmall = new gcn::contrib::SDLTrueTypeFont("data/FreeSans.ttf", 10);
+	  gui_fixedfont = new gcn::contrib::SDLTrueTypeFont("data/Hack-Regular.ttf", 14);
+	  gui_fixedfontsmall = new gcn::contrib::SDLTrueTypeFont("data/Hack-Regular.ttf", 10);
 #endif
 #endif
     gcn::Widget::setGlobalFont(gui_font);
@@ -820,6 +836,9 @@ namespace widgets
     delete mainButtonActionListener;
     
     delete gui_font;
+    delete gui_fontsmall;
+    delete gui_fixedfont;
+    delete gui_fixedfontsmall;
     delete gui_top;
   }
 }

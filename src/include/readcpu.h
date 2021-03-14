@@ -39,10 +39,13 @@ ENUMDECL {
 	MAX_OPCODE_FAMILY
 } ENUMNAME (instrmnem);
 
+#define MNEMOFLAG_LOOPMODE 2
+
 struct mnemolookup {
   instrmnem mnemo;
   const TCHAR *name;
   const TCHAR *friendlyname;
+	uae_u32 flags;
 };
 
 extern struct mnemolookup lookuptab[];
@@ -67,8 +70,7 @@ ENUMDECL {
     fl_return		= 3,
     fl_trap		= 4,
     fl_const_jump	= 8,
-    /* Instructions that can trap don't mark the end of a block */
-    fl_end_block	= 3
+    fl_end_block	= 7
 } ENUMNAME (cflow_t);
 
 ENUMDECL {
@@ -88,7 +90,7 @@ struct instr_def {
 	  unsigned int flaguse:3;
 	  unsigned int flagset:3;
   } flaginfo[5];
-  unsigned char cflow;
+  uae_u8 cflow;
   uae_u8 sduse;
   const TCHAR *opcstr;
 	// 68020/030 timing
@@ -99,33 +101,33 @@ extern struct instr_def defs68k[];
 extern int n_defs68k;
 
 extern struct instr {
-    long int handler;
-    unsigned char dreg;
-    unsigned char sreg;
-    signed char dpos;
-    signed char spos;
-    unsigned char sduse;
-    int flagdead:8, flaglive:8;
-    unsigned int mnemo:8;
-    unsigned int cc:4;
-    unsigned int plev:2;
-    unsigned int size:2;
+  long int handler;
+  unsigned char dreg;
+  unsigned char sreg;
+  signed char dpos;
+  signed char spos;
+  unsigned char sduse;
+  int flagdead:8, flaglive:8;
+  unsigned int mnemo:8;
+  unsigned int cc:4;
+  unsigned int plev:2;
+  wordsizes size;
 	unsigned int unsized:1;
-    unsigned int smode:5;
-    unsigned int stype:3;
-    unsigned int dmode:5;
-    unsigned int suse:1;
-    unsigned int duse:1;
-    unsigned int ccuse:1;
-    unsigned int clev:3, unimpclev:3;
-    unsigned int cflow:3;
-    unsigned int unused3:6;
+  amodes smode;
+  unsigned int stype:3;
+  amodes dmode;
+  unsigned int suse:1;
+  unsigned int duse:1;
+  unsigned int ccuse:1;
+  unsigned int clev:3, unimpclev:3;
+  unsigned int cflow:3;
+  unsigned int unused2:1;
 	char head, tail, clocks, fetchmode;
 } *table68k;
 
-extern void read_table68k (void);
-extern void do_merges (void);
-extern int get_no_mismatches (void);
+extern void init_table68k(void);
+extern void exit_table68k(void);
+
 extern int nr_cpuop_funcs;
 
 #endif /* UAE_READCPU_H */

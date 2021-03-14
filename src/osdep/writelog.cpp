@@ -35,7 +35,7 @@ void write_log (const TCHAR *format,...)
   va_start (parms, format);
   count = vsnprintf( buffer, WRITE_LOG_BUF_SIZE-1, format, parms );
   if( debugfile ) {
-	  fprintf( debugfile, buffer );
+	  fprintf( debugfile, "%s", buffer );
 	  fflush (debugfile);
   }
   va_end (parms);

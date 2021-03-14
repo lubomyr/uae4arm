@@ -14,6 +14,7 @@ struct zfile {
 	TCHAR *originalname;
   FILE *f; // real file handle if physical file
   uae_u8 *data; // unpacked data
+  int dataseek; // use seek position even if real file
 	struct zfile *archiveparent; // set if parent is archive and this has not yet been unpacked (datasize < size)
 	int archiveid;
   uae_s64 size; // real size
@@ -25,6 +26,8 @@ struct zfile {
   struct zfile *parent;
   uae_u64 offset; // byte offset from parent file
   int opencnt;
+  ZFILEREAD zfileread;
+  void *userdata;
   int useparent;
 };
 
@@ -58,6 +61,7 @@ struct znode {
 struct zvolume
 {
   struct zfile *archive;
+  bool autofree;
   void *handle;
   struct znode root;
   struct zvolume *next;

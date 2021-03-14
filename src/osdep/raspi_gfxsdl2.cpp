@@ -12,6 +12,7 @@
 #include "inputdevice.h"
 #include "savestate.h"
 #include "picasso96.h"
+#include "statusline.h"
 
 #include <png.h>
 #include <SDL.h>
@@ -91,7 +92,7 @@ static void Create_SDL_Texture(int width, int height, int depth)
 	}
 	else if (depth == 32)
 	{
-		texture = SDL_CreateTexture(renderer,	SDL_PIXELFORMAT_BGRA32,	SDL_TEXTUREACCESS_STREAMING,
+		texture = SDL_CreateTexture(renderer,	SDL_PIXELFORMAT_ARGB32,	SDL_TEXTUREACCESS_STREAMING,
 			width, height);
 	}
 	check_error_sdl(texture == NULL, "Unable to create texture");
@@ -167,56 +168,53 @@ int graphics_setup(void)
 }
 
 
-#ifdef WITH_LOGGING
-
 SDL_Surface *liveInfo = NULL;
 TTF_Font *liveFont = NULL;
 int liveInfoCounter = 0;
-void ShowLiveInfo(char *msg)
+void 	statusline_updated(void)
 {
-  if(liveFont == NULL)
-  {
+  if(liveFont == NULL) {
     TTF_Init();
-    liveFont = TTF_OpenFont("data/FreeSans.ttf", 12);
+    liveFont = TTF_OpenFont("data/Hack-Regular.ttf", 10);
   }
   if(liveInfo != NULL) {
     SDL_FreeSurface(liveInfo);
     liveInfo = NULL;
   }
+  const TCHAR *text = statusline_fetch();
+  if(!text || text[0] == 0) {
+    liveInfoCounter = 0;
+    return;
+  }
   SDL_Color col;
-  col.r = 0xbf;
-  col.g = 0xbf;
-  col.b = 0xbf;
-  liveInfo = TTF_RenderText_Solid(liveFont, msg, col);
+  col.r = 0xdf;
+  col.g = 0xdf;
+  col.b = 0xdf;
+  liveInfo = TTF_RenderText_Solid(liveFont, text, col);
   liveInfoCounter = 50 * 5;
 }
 
 void RefreshLiveInfo()
 {
-  if(liveInfoCounter > 0)
+  if(liveInfoCounter > 0 && liveInfo != NULL)
   {
     SDL_Rect dst, src;
     
     dst.x = 0;
-    dst.y = 2;
+    dst.y = prSDLScreen->h - liveInfo->h;
     src.w = liveInfo->w;
     src.h = liveInfo->h;
     src.x = 0;
     src.y = 0;
-    if(liveInfo != NULL)
-      SDL_BlitSurface(liveInfo, &src, prSDLScreen, &dst);
+    SDL_BlitSurface(liveInfo, &src, prSDLScreen, &dst);
     liveInfoCounter--;
-    if(liveInfoCounter == 0)
-    {
-      if(liveInfo != NULL) {
-        SDL_FreeSurface(liveInfo);
-        liveInfo = NULL;
-      }
+    if(liveInfoCounter == 0) {
+      SDL_FreeSurface(liveInfo);
+      liveInfo = NULL;
     }
   }
 }
 
-#endif
 
 void InitAmigaVidMode(struct uae_prefs *p)
 {
@@ -377,7 +375,7 @@ void wait_for_vsync(void)
 }
 
 
-bool render_screen (bool immediate)
+bool render_screen (void)
 {
 	if (savestate_state == STATE_DOSAVE)
 	{
@@ -391,9 +389,7 @@ bool render_screen (bool immediate)
 		}
 	}
 
-#ifdef WITH_LOGGING
   RefreshLiveInfo();
-#endif
   
 	// Update the texture from the surface
 	SDL_UpdateTexture(texture, NULL, prSDLScreen->pixels, prSDLScreen->pitch);
@@ -471,7 +467,7 @@ void black_screen_now(void)
 {
   if(prSDLScreen != NULL) {	
     SDL_FillRect(prSDLScreen, NULL, 0);
-    render_screen(true);
+    render_screen();
 	  show_screen(0);
   }
 }
@@ -528,8 +524,8 @@ int GetSurfacePixelFormat(void)
 	return (unit == 8 ? RGBFB_CHUNKY
 		  : depth == 15 && unit == 16 ? RGBFB_R5G5B5
 		  : depth == 16 && unit == 16 ? RGBFB_R5G6B5
-		  : unit == 24 ? RGBFB_B8G8R8
-		  : unit == 32 ? RGBFB_R8G8B8A8
+		  : unit == 24 ? RGBFB_R8G8B8
+		  : unit == 32 ? RGBFB_A8R8G8B8
 		  : RGBFB_NONE);
 }
 
@@ -842,7 +838,7 @@ void picasso_InitResolutions(void)
 		for (bit_idx = 0; bit_idx < 3; ++bit_idx) {
 			int bitdepth = bits[bit_idx];
 			int bit_unit = (bitdepth + 1) & 0xF8;
-			int rgbFormat = (bitdepth == 8 ? RGBFB_CLUT : (bitdepth == 16 ? RGBFB_R5G6B5 : RGBFB_R8G8B8A8));
+			int rgbFormat = (bitdepth == 8 ? RGBFB_CLUT : (bitdepth == 16 ? RGBFB_R5G6B5 : RGBFB_A8R8G8B8));
 			int pixelFormat = 1 << rgbFormat;
 			pixelFormat |= RGBFF_CHUNKY;
       
@@ -916,7 +912,7 @@ void gfx_unlock_picasso(bool dorender)
   SDL_UnlockSurface(prSDLScreen);
   if(dorender)
   {
-    render_screen(true);
+    render_screen();
     show_screen(0);
   }
 }

@@ -67,6 +67,7 @@ STATIC_INLINE int coord_window_to_diw_x (int x)
  * !!! See color_reg_xxx functions below before touching !!!
  */
 #define CE_BORDERBLANK 0
+#define CE_BORDERNTRANS 1
 #define CE_BORDERSPRITE 2
 #define CE_SHRES_DELAY 4
 
@@ -77,6 +78,10 @@ STATIC_INLINE bool ce_is_borderblank(uae_u8 data)
 STATIC_INLINE bool ce_is_bordersprite(uae_u8 data)
 {
 	return (data & (1 << CE_BORDERSPRITE)) != 0;
+}
+STATIC_INLINE bool ce_is_borderntrans(uae_u8 data)
+{
+	return (data & (1 << CE_BORDERNTRANS)) != 0;
 }
 
 struct color_entry {
@@ -140,7 +145,7 @@ STATIC_INLINE void color_reg_cpy (struct color_entry *dst, struct color_entry *s
 struct color_change {
   int linepos;
   int regno;
-  unsigned int value;
+	uae_u32 value;
 };
 
 /* 440 rather than 880, since sprites are always lores.  */
@@ -189,7 +194,7 @@ struct decision {
   int ctable;
 
   uae_u16 bplcon0, bplcon2;
-  uae_u16 bplcon3, bplcon4;
+	uae_u16 bplcon3, bplcon4bm, bplcon4sp;
 	uae_u16 fmode;
   uae_u8 nr_planes;
   uae_u8 bplres;
@@ -222,6 +227,7 @@ extern void init_hardware_for_drawing_frame (void);
 extern void reset_drawing (void);
 extern void drawing_init (void);
 extern bool notice_interlace_seen (bool);
+extern void redraw_frame(void);
 extern void check_prefs_picasso(void);
 
 /* Finally, stuff that shouldn't really be shared.  */

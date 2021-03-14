@@ -64,6 +64,8 @@ extern void restore_cpu_finish (void);
 extern uae_u8 *save_cpu (int *, uae_u8 *);
 extern uae_u8 *restore_cpu_extra (uae_u8 *);
 extern uae_u8 *save_cpu_extra (int *, uae_u8 *);
+extern uae_u8 *save_cpu_trace (int *, uae_u8 *);
+extern uae_u8 *restore_cpu_trace (uae_u8 *);
 
 extern uae_u8 *restore_fpu (uae_u8 *);
 extern uae_u8 *save_fpu (int *, uae_u8 *);
@@ -88,6 +90,9 @@ extern uae_u8 *save_custom_sprite (int num, int *len, uae_u8 *);
 
 extern uae_u8 *restore_custom_agacolors (uae_u8 *src);
 extern uae_u8 *save_custom_agacolors (int *len, uae_u8 *);
+
+extern uae_u8 *restore_custom_event_delay (uae_u8 *src);
+extern uae_u8 *save_custom_event_delay (int *len, uae_u8 *dstptr);
 
 extern uae_u8 *restore_blitter (uae_u8 *src);
 extern uae_u8 *save_blitter (int *len, uae_u8 *);
@@ -140,6 +145,9 @@ extern uae_u8 *restore_cd (int, uae_u8 *src);
 
 extern uae_u8 *restore_input (uae_u8 *src);
 extern uae_u8 *save_input (int *len, uae_u8 *dstptr);
+
+extern uae_u8 *save_cycles (int *len, uae_u8 *dstptr);
+extern uae_u8 *restore_cycles (uae_u8 *src);
 
 extern void restore_cram (int, size_t);
 extern void restore_bram (int, size_t);

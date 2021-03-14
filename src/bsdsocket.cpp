@@ -771,7 +771,6 @@ static uae_u32 REGPARAM2 bsdsocklib_ReleaseCopyOfSocket (TrapContext *ctx)
 		sockdata->sockpoolflags[i] = flags;
 
 	} else {
-
 		return -1;
 	}
 

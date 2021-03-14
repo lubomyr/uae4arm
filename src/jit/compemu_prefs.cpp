@@ -19,6 +19,10 @@ bool check_prefs_changed_comp (bool checkonly)
 
   if (currprefs.cachesize != changed_prefs.cachesize) {
 	  currprefs.cachesize = changed_prefs.cachesize;
+	  if (currprefs.cachesize && currprefs.fast_copper)
+	    chipmem_bank.jit_write_flag = S_WRITE;
+	  else
+	    chipmem_bank.jit_write_flag = 0;
 	  alloc_cache();
 	  changed = 1;
   }

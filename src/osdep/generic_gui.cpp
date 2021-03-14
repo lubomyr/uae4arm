@@ -5,9 +5,11 @@
 #ifdef USE_SDL2
 #include <guisan.hpp>
 #include <guisan/sdl.hpp>
+#include <guisan/sdl/sdltruetypefont.hpp>
 #else
 #include <guichan.hpp>
 #include <guichan/sdl.hpp>
+#include "gui/sdltruetypefont.hpp"
 #endif
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -34,7 +36,6 @@
 #include "savestate.h"
 #include "filesys.h"
 #include "autoconf.h"
-#include "blkdev.h"
 #include <SDL.h>
 #include "threaddep/thread.h"
 
@@ -494,20 +495,19 @@ int gui_update (void)
 }
 
 
-void gui_display (int shortcut)
+void gui_display (void)
 {
 	if (quit_program != 0)
 		return;
 	emulating=1;
 
-  blkdev_entergui();
-	pause_sound();
-
+	setpaused (7);
 	inputdevice_unacquire ();
-	//wait_keyrelease(); ToDo: implement in host spezific xy_input.cpp
-	clearallkeys ();
-	setmouseactive(0);
-
+  //wait_keyrelease(); ToDo: implement in host spezific xy_input.cpp
+  clearallkeys ();
+  setmouseactive(0);
+  pause_emulation = 7; // Force continue after exit gui
+  
   graphics_subshutdown();
 
   get_settings();
@@ -522,10 +522,8 @@ void gui_display (int shortcut)
   inputdevice_config_change_test();
 	clearallkeys ();
 
-  blkdev_exitgui();
-	resume_sound();
-
   getcapslock();
+	resumepaused (7);
 	inputdevice_acquire (TRUE);
 	setmouseactive(1);
 	
@@ -646,10 +644,6 @@ void gui_flicker_led (int led, int unitnum, int status)
 	}
 }
 
-
-void gui_filename (int num, const char *name)
-{
-}
 
 void gui_message (const char *format,...)
 {
@@ -795,25 +789,59 @@ int tweakbootpri (int bp, int ab, int dnm)
 }
 
 
-bool hardfile_testrdb (const TCHAR *filename)
-{
-	bool isrdb = false;
-	struct zfile *f = zfile_fopen (filename, _T("rb"), ZFD_NORMAL);
-	uae_u8 tmp[8];
-	int i;
+struct fsvdlg_vals current_fsvdlg;
+struct hfdlg_vals current_hfdlg;
 
-	if (!f)
-		return false;
-	for (i = 0; i < 16; i++) {
-		zfile_fseek (f, i * 512, SEEK_SET);
-		memset (tmp, 0, sizeof tmp);
-		zfile_fread (tmp, 1, sizeof tmp, f);
-		if (!memcmp (tmp, "RDSK\0\0\0", 7) || !memcmp (tmp, "DRKS\0\0", 6) || (tmp[0] == 0x53 && tmp[1] == 0x10 && tmp[2] == 0x9b && tmp[3] == 0x13 && tmp[4] == 0 && tmp[5] == 0)) {
-			// RDSK or ADIDE "encoded" RDSK
-			isrdb = true;
-			break;
+void hardfile_testrdb (struct hfdlg_vals *hdf)
+{
+	uae_u8 id[512];
+	int i;
+	struct hardfiledata hfd;
+
+	memset (id, 0, sizeof id);
+	memset (&hfd, 0, sizeof hfd);
+	hfd.ci.readonly = true;
+	hfd.ci.blocksize = 512;
+	if (hdf_open (&hfd, hdf->ci.rootdir) > 0) {
+		for (i = 0; i < 16; i++) {
+			hdf_read_rdb (&hfd, id, i * 512, 512);
+			bool babe = id[0] == 0xBA && id[1] == 0xBE; // A2090
+			if (!memcmp (id, "RDSK\0\0\0", 7) || !memcmp (id, "CDSK\0\0\0", 7) || !memcmp (id, "DRKS\0\0", 6) ||
+				(id[0] == 0x53 && id[1] == 0x10 && id[2] == 0x9b && id[3] == 0x13 && id[4] == 0 && id[5] == 0) || babe) {
+				// RDSK or ADIDE "encoded" RDSK
+				int blocksize = 512;
+				if (!babe)
+					blocksize = (id[16] << 24)  | (id[17] << 16) | (id[18] << 8) | (id[19] << 0);
+				hdf->ci.cyls = hdf->ci.highcyl = hdf->forcedcylinders = 0;
+				hdf->ci.sectors = 0;
+				hdf->ci.surfaces = 0;
+				hdf->ci.reserved = 0;
+				hdf->ci.bootpri = 0;
+				hdf->ci.devname[0] = 0;
+				if (blocksize >= 512)
+					hdf->ci.blocksize = blocksize;
+				break;
+			}
 		}
+		hdf_close (&hfd);
 	}
-	zfile_fclose (f);
-  return isrdb;
+}
+
+void default_fsvdlg (struct fsvdlg_vals *f)
+{
+	memset (f, 0, sizeof (struct fsvdlg_vals));
+	f->ci.type = UAEDEV_DIR;
+}
+
+void default_hfdlg (struct hfdlg_vals *f)
+{
+	int ctrl = f->ci.controller_type;
+	int unit = f->ci.controller_unit;
+	memset (f, 0, sizeof (struct hfdlg_vals));
+	uci_set_defaults (&f->ci);
+	f->original = true;
+	f->ci.type = UAEDEV_HDF;
+	f->ci.controller_type = ctrl;
+	f->ci.controller_unit = unit;
+	f->ci.unit_feature_level = 1;
 }

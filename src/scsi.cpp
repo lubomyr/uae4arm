@@ -92,28 +92,34 @@ bool scsi_emulate_analyze (struct scsi_data *sd)
 			sd->data_len = 0;
 			return true;
 		}
-	break;
+	  break;
 	case 0x06: // FORMAT TRACK
 	case 0x07: // FORMAT BAD TRACK 
 		sd->direction = 0;
 		sd->data_len = 0;
 		return true;
 	case 0x0c: // INITIALIZE DRIVE CHARACTERICS (SASI)
+		if (sd->hfd)
 			goto nocmd;
+		data_len = 8;
+	  break;
 	case 0x08: // READ(6)
 		data_len2 = (sd->cmd[4] == 0 ? 256 : sd->cmd[4]) * sd->blocksize;
 		scsi_grow_buffer(sd, data_len2);
-	break;
+	  break;
 	case 0x11: // ASSIGN ALTERNATE TRACK (SASI)
+		if (sd->hfd)
 			goto nocmd;
+		data_len = 4;
+		break;
 	case 0x28: // READ(10)
 		data_len2 = ((sd->cmd[7] << 8) | (sd->cmd[8] << 0)) * (uae_s64)sd->blocksize;
 		scsi_grow_buffer(sd, data_len2);
-	break;
+	  break;
 	case 0xa8: // READ(12)
 		data_len2 = ((sd->cmd[6] << 24) | (sd->cmd[7] << 16) | (sd->cmd[8] << 8) | (sd->cmd[9] << 0)) * (uae_s64)sd->blocksize;
 		scsi_grow_buffer(sd, data_len2);
-	break;
+	  break;
 	case 0x0f: // WRITE SECTOR BUFFER
 		data_len = sd->blocksize;
 		scsi_grow_buffer(sd, data_len);
@@ -121,15 +127,15 @@ bool scsi_emulate_analyze (struct scsi_data *sd)
 	case 0x0a: // WRITE(6)
 		data_len = (sd->cmd[4] == 0 ? 256 : sd->cmd[4]) * sd->blocksize;
 		scsi_grow_buffer(sd, data_len);
-	break;
+	  break;
 	case 0x2a: // WRITE(10)
 		data_len = ((sd->cmd[7] << 8) | (sd->cmd[8] << 0)) * (uae_s64)sd->blocksize;
 		scsi_grow_buffer(sd, data_len);
-	break;
+	  break;
 	case 0xaa: // WRITE(12)
 		data_len = ((sd->cmd[6] << 24) | (sd->cmd[7] << 16) | (sd->cmd[8] << 8) | (sd->cmd[9] << 0)) * (uae_s64)sd->blocksize;
 		scsi_grow_buffer(sd, data_len);
-	break;
+	  break;
 	case 0xbe: // READ CD
 	case 0xb9: // READ CD MSF
 	case 0xd8: // READ CD-DA

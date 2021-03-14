@@ -63,7 +63,7 @@ static void RefreshPanelRAM(void)
   int i;
   
   for(i = 0; i < 5; ++i) {
-    if(workprefs.chipmem_size == ChipMem_values[i]) {
+    if(workprefs.chipmem.size == ChipMem_values[i]) {
       sldChipmem->setValue(i);
       lblChipsize->setCaption(ChipMem_list[i]);
       break;
@@ -71,7 +71,7 @@ static void RefreshPanelRAM(void)
   }
 
   for(i = 0; i < 5; ++i) {
-    if(workprefs.bogomem_size == SlowMem_values[i]) {
+    if(workprefs.bogomem.size == SlowMem_values[i]) {
       sldSlowmem->setValue(i);
       lblSlowsize->setCaption(SlowMem_list[i]);
       break;
@@ -105,7 +105,7 @@ static void RefreshPanelRAM(void)
   sldGfxmem->setEnabled(!workprefs.address_space_24);
 
   for(i = 0; i < 5; ++i) {
-    if(workprefs.mbresmem_low_size == A3000LowMem_values[i]) {
+    if(workprefs.mbresmem_low.size == A3000LowMem_values[i]) {
       sldA3000Lowmem->setValue(i);
       lblA3000Lowsize->setCaption(A3000LowMem_list[i]);
       break;
@@ -113,7 +113,7 @@ static void RefreshPanelRAM(void)
   }
 
   for(i = 0; i < 6; ++i) {
-    if(workprefs.mbresmem_high_size == A3000HighMem_values[i]) {
+    if(workprefs.mbresmem_high.size == A3000HighMem_values[i]) {
       sldA3000Highmem->setValue(i);
       lblA3000Highsize->setCaption(A3000HighMem_list[i]);
       break;
@@ -130,19 +130,19 @@ class MemorySliderActionListener : public gcn::ActionListener
     void action(const gcn::ActionEvent& actionEvent)
     {
  	    if (actionEvent.getSource() == sldChipmem) {
-    		workprefs.chipmem_size = ChipMem_values[(int)(sldChipmem->getValue())];
-      	if ((workprefs.chipmem_size > 0x200000) && (workprefs.fastmem[0].size > 0))
+    		workprefs.chipmem.size = ChipMem_values[(int)(sldChipmem->getValue())];
+      	if ((workprefs.chipmem.size > 0x200000) && (workprefs.fastmem[0].size > 0))
       		workprefs.fastmem[0].size = 0;
 			}
 			
  	    if (actionEvent.getSource() == sldSlowmem) {
-      	workprefs.bogomem_size = SlowMem_values[(int)(sldSlowmem->getValue())];
+      	workprefs.bogomem.size = SlowMem_values[(int)(sldSlowmem->getValue())];
       }
       
 	    if (actionEvent.getSource() == sldFastmem) {
      		workprefs.fastmem[0].size = FastMem_values[(int)(sldFastmem->getValue())];
-	      if (workprefs.fastmem[0].size > 0 && workprefs.chipmem_size > 0x200000)
-	        workprefs.chipmem_size = 0x200000;
+	      if (workprefs.fastmem[0].size > 0 && workprefs.chipmem.size > 0x200000)
+	        workprefs.chipmem.size = 0x200000;
   		}	
 
 	    if (actionEvent.getSource() == sldZ3mem) {
@@ -157,14 +157,14 @@ class MemorySliderActionListener : public gcn::ActionListener
   		}	
 
  	    if (actionEvent.getSource() == sldA3000Lowmem) {
-      	workprefs.mbresmem_low_size = A3000LowMem_values[(int)(sldA3000Lowmem->getValue())];
-      	if(currprefs.mbresmem_low_size != workprefs.mbresmem_low_size)
+      	workprefs.mbresmem_low.size = A3000LowMem_values[(int)(sldA3000Lowmem->getValue())];
+      	if(currprefs.mbresmem_low.size != workprefs.mbresmem_low.size)
       	  DisableResume();
       }
 
  	    if (actionEvent.getSource() == sldA3000Highmem) {
-      	workprefs.mbresmem_high_size = A3000HighMem_values[(int)(sldA3000Highmem->getValue())];
-      	if(currprefs.mbresmem_high_size != workprefs.mbresmem_high_size)
+      	workprefs.mbresmem_high.size = A3000HighMem_values[(int)(sldA3000Highmem->getValue())];
+      	if(currprefs.mbresmem_high.size != workprefs.mbresmem_high.size)
       	  DisableResume();
       }
 
@@ -217,7 +217,7 @@ void InitPanelRAM(const struct _ConfigCategory& category)
   sldFastmem->addActionListener(memorySliderActionListener);
   lblFastsize = new gcn::Label("None   ");
 
-	lblZ3mem = new gcn::Label("Z3 fast:");
+	lblZ3mem = new gcn::Label("Z3 Fast:");
   sldZ3mem = new gcn::Slider(0, 8);
   sldZ3mem->setSize(sldWidth, SLIDER_HEIGHT);
   sldZ3mem->setBaseColor(gui_baseCol);

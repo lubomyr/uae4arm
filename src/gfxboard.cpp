@@ -1,8 +1,6 @@
 /*
 * UAE - The Un*x Amiga Emulator
 *
-* Cirrus Logic based graphics board emulation
-*
 * Copyright 2013 Toni Wilen
 *
 */

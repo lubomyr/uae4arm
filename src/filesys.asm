@@ -95,13 +95,13 @@ startjmp:
 	bra.w filesys_mainloop		    ;  1 16
 	dc.l make_dev-start			      ;  2 20
 	dc.l filesys_init-start		    ;  3 24
-	dc.l moverom-start				    ;  4 28
+	dc.l 0; moverom-start			;  4 28
 	dc.l bootcode-start			      ;  5 32
 	dc.l setup_exter-start		    ;  6 36
 	dc.l bcplwrapper-start        ;  7 40
 	dc.l afterdos-start 	        ;  8 44
 	dc.l hwtrap_install-start     ;  9 48
-	dc.l 0   	  ; 10 52
+	dc.l 0 ; hwtrap_entry-start 	; 10 52
 	dc.l 0 ; keymaphack-start		  ; 11 56
 	dc.l 0 ; fpu060disable-start	; 12 60
 
@@ -142,6 +142,81 @@ resident
 	dc.l 0
 	dc.l start-resident
 
+; KS 1.x does not support RTF_AFTERDOS and KS 2.x RTF_AFTERDOS is broken.
+afterdos_hack:
+	movem.l d0-d2/a0-a2/a6,-(sp)
+
+	move.l 4.w,a6
+	cmp.w #39,20(a6)
+	bcc.s .rsh
+	cmp.w #37,20(a6)
+	bcs.s .rsh
+
+	move.w #$FF38,d0
+	moveq #17,d1
+	bsr.w getrtbase
+	jsr (a0)
+	tst.l d0
+	beq.s .rsh
+
+	moveq #residentcodeend-residentcodestart,d0
+	move.l d0,d2
+	moveq #1,d1
+	jsr AllocMem(a6)
+	tst.l d0
+	beq.s .rsh
+	move.l d0,a2
+
+	move.l a2,a0
+	lea residentcodestart(pc),a1
+.cp1
+	move.l (a1)+,(a0)+
+	subq.l #4,d2
+	bne.s .cp1
+
+	jsr -$0078(a6) ;Disable
+	move.l a6,a1
+	move.w #-$48,a0 ;InitCode
+	move.l a2,d0
+	jsr -$01a4(a6) ;SetFunction
+	move.l d0,residentcodejump2-residentcodestart+2(a2)
+	lea myafterdos(pc),a0
+	move.l a0,residentcodejump1-residentcodestart+2(a2)
+	jsr -$27C(a6) ;CacheClearU
+	jsr -$007e(a6) ;Enable
+.rsh
+	movem.l (sp)+,d0-d2/a0-a2/a6
+	rts
+
+myafterdos
+	move.l (sp),a0
+	move.l 2(a0),a0
+	move.l a0,-(sp)
+	jsr (a0) ;jump to original InitCode
+	move.l (sp)+,a0
+	addq.l #4,sp ;remove return address
+	movem.l d0-d7/a1-a6,-(sp)
+	move.l a6,a1
+	move.l a0,d0
+	move.w #-$48,a0 ;InitCode
+	jsr -$01a4(a6) ;SetFunction (restore original)
+
+	movem.l (sp)+,d0-d7/a1-a6
+	rts ;return directly to caller
+
+	cnop 0,4
+residentcodestart:
+	btst #2,d0 ;RTF_AFTERDOS?
+	beq.s resjump
+residentcodejump1
+	jsr $f00000
+resjump
+residentcodejump2
+	jmp $f00000
+	cnop 0,4
+residentcodeend:
+
+	; v39 RTF_AFTERDOS
 afterdos:
 	movem.l d2-d7/a2-a6,-(sp)
 
@@ -160,7 +235,7 @@ afterdos:
 	move.w #RTAREA_INTBASE,d0
 	bsr.w getrtbase
 	move.l d1,(a0)
-	
+
 	movem.l (sp)+,d2-d7/a2-a6
 	moveq #0,d0
 	rts
@@ -656,6 +731,9 @@ kaint:
 setup_exter:
 	movem.l d0-d3/d7/a0-a2,-(sp)
 	move.l d0,d7
+	
+	bsr.w afterdos_hack
+	
 	move.l #RTAREA_INTREQ,d0
 	bsr.w getrtbase
 	move.l a0,a2
@@ -3067,127 +3145,6 @@ hw_multi:
 	bne.s .multi0
 	movem.l (sp)+,d0-d7/a0-a6
 	rts
-
-
-	; this is called from external executable
-
-moverom:
-	; a0 = ram copy
-
-	move.l a0,a5 ; ram copy
-	
-	moveq #20,d7
-	move.l 4.w,a6
-
-	jsr -$0084(a6) ;Forbid
-	
-	move.w #$FF38,d0
-	bsr.w getrtbase
-	move.l a5,d2
-	moveq #19,d1
-	jsr (a0)
-	;ROM is now write-enabled
-	;d0 = temp space
-	tst.l d0
-	beq.w .mov1
-	move.l d0,a3
-	move.l (a3)+,a4 ; ROM
-
-	; Copy ROM to RAM
-	move.l a4,a0
-	move.l a5,a1
-	move.w #65536/4-1,d0
-.mov5
-	move.l (a0)+,(a1)+
-	dbf d0,.mov5
-
-	move.l a5,d1
-	sub.l a4,d1
-
-	; Handle relocations from UAE side
-	
-	; Relative
-	move.l a3,a0
-.mov7
-	moveq #0,d0
-	move.w (a0)+,d0
-	beq.s .mov6
-	lea 0(a4,d0.l),a1
-	add.l d1,(a1)
-	lea 0(a5,d0.l),a1
-	add.l d1,(a1)
-	bra.s .mov7
-.mov6
-
-	; Absolute
-.mov9
-	moveq #0,d0
-	move.l (a0)+,d0
-	beq.s .mov8
-	move.l d0,a1
-	add.l d1,(a1)
-	bra.s .mov9
-.mov8
-
-	moveq #0,d0
-	bsr.w getrtbase
-	lea getrtbase(pc),a1
-	sub.l a0,a1
-	
-	add.l a5,a1
-	; replace RAM copy relative getrtbase
-	; fetch with absolute lea rombase,a0
-	move.w #$41f9,(a1)+
-	move.l a4,(a1)+
-	; and.l #$ffff,d0
-	move.w #$0280,(a1)+
-	move.l #$0000ffff,(a1)+
-	; add.l d0,a0; rts
-	move.l #$d1c04e75,(a1)
-	
-	; redirect some commonly used
-	; functions to RAM code
-	lea moveromreloc(pc),a0
-.mov3
-	moveq #0,d0
-	move.w (a0)+,d0
-	beq.s .mov2
-	add.w #8+4,d0
-	lea 0(a4,d0.l),a1
-	; JMP xxxxxxxx
-	move.w #$4ef9,(a1)+
-	lea 0(a5,d0.l),a2
-	move.l a2,(a1)
-	bra.s .mov3
-.mov2
-
-	cmp.w #36,20(a6)
-	bcs.s .mov4
-	jsr -$27c(a6) ; CacheClearU
-.mov4
-
-	; Tell UAE that all is done
-	; Re-enables write protection
-	move.w #$FF38,d0
-	bsr.w getrtbase
-	move.l a5,d2
-	moveq #20,d1
-	jsr (a0)
-	moveq #0,d7
-
-.mov1
-	jsr -$008a(a6)
-	
-	move.l d7,d0
-	rts
-	
-moveromreloc:
-	dc.w FSML_loop-start
-	dc.w mhloop-start
-	dc.w kaint-start
-	dc.w trap_task_wait-start
-	dc.w exter_task_wait-start
-	dc.w 0
 
 	cnop 0,4
 getrtbaselocal:

@@ -18,7 +18,6 @@
 #include "zarchive.h"
 #include "disk.h"
 
-
 static time_t fromdostime (uae_u32 dd)
 {
 	struct tm tm;
@@ -155,10 +154,6 @@ struct zfile *archive_access_select (struct znode *parent, struct zfile *zf, uns
 				int ft = 0;
 				if (mask & ZFD_CD) {
 					if (ext && !_tcsicmp (ext, _T(".iso"))) {
-						whf = 2;
-						ft = ZFILE_CDIMAGE;
-					}
-					if (ext && !_tcsicmp (ext, _T(".chd"))) {
 						whf = 2;
 						ft = ZFILE_CDIMAGE;
 					}

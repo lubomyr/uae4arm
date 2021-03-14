@@ -55,6 +55,7 @@ struct inputdevice_functions {
 extern struct inputdevice_functions inputdevicefunc_joystick;
 extern struct inputdevice_functions inputdevicefunc_mouse;
 extern struct inputdevice_functions inputdevicefunc_keyboard;
+extern int pause_emulation;
 
 struct uae_input_device_default_node
 {
@@ -88,6 +89,9 @@ struct inputevent {
 #define ID_FLAG_INVERTTOGGLE 16
 #define ID_FLAG_INVERT 32
 #define ID_FLAG_RESERVEDGAMEPORTSCUSTOM 64
+#define ID_FLAG_SET_ONOFF 128
+#define ID_FLAG_SET_ONOFF_VAL1 256
+#define ID_FLAG_SET_ONOFF_VAL2 512
 
 #define ID_FLAG_GAMEPORTSCUSTOM_MASK (ID_FLAG_GAMEPORTSCUSTOM1 | ID_FLAG_GAMEPORTSCUSTOM2)
 #define ID_FLAG_AUTOFIRE_MASK (ID_FLAG_TOGGLE | ID_FLAG_INVERTTOGGLE | ID_FLAG_AUTOFIRE)
@@ -127,6 +131,9 @@ struct inputevent {
 #define IDEV_MAPPED_GAMEPORTSCUSTOM1 16
 #define IDEV_MAPPED_GAMEPORTSCUSTOM2 32
 #define IDEV_MAPPED_INVERT 64
+#define IDEV_MAPPED_SET_ONOFF 128
+#define IDEV_MAPPED_SET_ONOFF_VAL1 256
+#define IDEV_MAPPED_SET_ONOFF_VAL2 512
 
 #define IDEV_MAPPED_QUALIFIER1          0x000000100000000ULL
 #define IDEV_MAPPED_QUALIFIER2          0x000000400000000ULL
@@ -142,6 +149,12 @@ struct inputevent {
 #define IDEV_MAPPED_QUALIFIER_ALT       0x040000000000000ULL
 #define IDEV_MAPPED_QUALIFIER_WIN       0x100000000000000ULL
 #define IDEV_MAPPED_QUALIFIER_MASK      0xfffffff00000000ULL
+
+#define SET_ONOFF_PRESSREL_VALUE 0x7fffff30
+#define SET_ONOFF_PRESS_VALUE 0x7fffff20
+#define SET_ONOFF_ON_VALUE  0x7fffff10
+#define SET_ONOFF_OFF_VALUE 0x7fffff00
+#define SET_ONOFF_MASK_PRESS 15
 
 #define ID_BUTTON_OFFSET 0
 #define ID_BUTTON_TOTAL 32
@@ -172,11 +185,13 @@ extern void inputdevice_copyconfig (struct uae_prefs *src, struct uae_prefs *dst
 extern void inputdevice_config_change (void);
 extern int inputdevice_config_change_test (void);
 extern TCHAR *inputdevice_get_device_name (int type, int devnum);
+extern int inputdevice_get_device_status (int devnum);
+extern void inputdevice_set_device_status (int devnum, int enabled);
 extern int inputdevice_get_device_total (int type);
 extern int inputdevice_get_widget_num (int devnum);
 extern int inputdevice_get_widget_type (int devnum, int num, TCHAR *name, bool inccode);
 
-extern int input_get_default_mouse (struct uae_input_device *uid, int num, int port, int af, bool gp, bool wheel, bool joymouseswap);
+extern int input_get_default_mouse (struct uae_input_device *uid, int num, int port, int af, bool gp, bool joymouseswap);
 extern int input_get_default_joystick (struct uae_input_device *uid, int num, int port, int af, int mode, bool gp, bool joymouseswap);
 extern int input_get_default_joystick_analog (struct uae_input_device *uid, int num, int port, int af, bool gp, bool joymouseswap);
 extern int input_get_default_keyboard (int num);
@@ -192,7 +207,7 @@ INPUTEVENT_END
 #undef DEFEVENT2
 
 extern void handle_cd32_joystick_cia (uae_u8, uae_u8);
-extern uae_u8 handle_parport_joystick (int port, uae_u8 pra, uae_u8 dra);
+extern uae_u8 handle_parport_joystick (int port, uae_u8 data);
 extern uae_u8 handle_joystick_buttons (uae_u8, uae_u8);
 
 extern int input_mousehack_status(TrapContext *ctx, int mode, uaecptr diminfo, uaecptr dispinfo, uaecptr vp, uae_u32 moffset);
@@ -233,7 +248,7 @@ extern void inputdevice_reset (void);
 extern void write_inputdevice_config (struct uae_prefs *p, struct zfile *f);
 extern void read_inputdevice_config (struct uae_prefs *p, const TCHAR *option, TCHAR *value);
 extern void reset_inputdevice_config (struct uae_prefs *pr, bool reset);
-extern void inputdevice_joyport_config_store(struct uae_prefs *p, const TCHAR *value, int portnum, int mode, int submode, int type);
+extern void inputdevice_joyport_config_store(struct uae_prefs *p, const TCHAR *value, int portnum, int mode, int type);
 extern int inputdevice_getjoyportdevice (int port, int val);
 extern void inputdevice_validate_jports (struct uae_prefs *p, int changedport, bool *fixedports);
 extern void inputdevice_fix_prefs(struct uae_prefs *p, bool userconfig);
@@ -246,17 +261,20 @@ extern void inputdevice_acquire (int allmode);
 extern void inputdevice_unacquire (void);
 extern void inputdevice_releasebuttons(void);
 
+extern void warpmode (int mode);
+extern void pausemode (int mode);
+
 extern void inputdevice_add_inputcode (int code, int state, const TCHAR *);
+extern void inputdevice_handle_inputcode (void);
 
 extern void inputdevice_tablet_strobe (void);
 
 #define JSEM_MODE_DEFAULT 0
-#define JSEM_MODE_WHEELMOUSE 1
-#define JSEM_MODE_MOUSE 2
-#define JSEM_MODE_JOYSTICK 3
-#define JSEM_MODE_GAMEPAD 4
-#define JSEM_MODE_JOYSTICK_ANALOG 5
-#define JSEM_MODE_JOYSTICK_CD32 6
+#define JSEM_MODE_MOUSE 1
+#define JSEM_MODE_JOYSTICK 2
+#define JSEM_MODE_GAMEPAD 3
+#define JSEM_MODE_JOYSTICK_ANALOG 4
+#define JSEM_MODE_JOYSTICK_CD32 5
 
 #define JSEM_KBDLAYOUT 0
 #define JSEM_JOYS 100

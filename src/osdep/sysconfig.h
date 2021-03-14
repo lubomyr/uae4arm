@@ -4,7 +4,7 @@
 #define SUPPORT_THREADS
 #define MAX_DPATH 512
 
-/* #define DRIVESOUND */
+#define DRIVESOUND
 /* #define GFXFILTER */
 //#define USE_SOFT_LONG_DOUBLE
 #define PACKAGE_STRING "UAE4ARM"
@@ -26,7 +26,7 @@
 /* #define FPU_UAE */
 #define CPUEMU_0 /* generic 680x0 emulation */
 #define CPUEMU_11 /* 68000/68010 prefetch emulation */
-/* #define CPUEMU_13 */ /* 68000/68010 cycle-exact cpu&blitter */
+#define CPUEMU_13 /* 68000/68010 cycle-exact cpu&blitter */
 #define CPUEMU_40 /* generic 680x0 with JIT direct memory access */
 #define ACTION_REPLAY /* Action Replay 1/2/3 support */
 #define PICASSO96 /* Picasso96 display card emulation */

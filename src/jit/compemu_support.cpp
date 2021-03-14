@@ -1231,6 +1231,8 @@ void compiler_exit(void)
     jit_log("%03d: %04x %10u %s", i, opcode_nums[i], count, lookup->name);
   }
 #endif
+
+	exit_table68k();
 }
 
 static void init_comp(void)
@@ -2009,6 +2011,9 @@ void build_comp(void)
   unsigned long opcode;
   const struct comptbl* tbl = op_smalltbl_0_comp_ff;
   const struct comptbl* nftbl = op_smalltbl_0_comp_nf;
+  unsigned int cpu_level = (currprefs.cpu_model - 68000) / 10;
+  if (cpu_level > 4)
+    cpu_level--;
 
 #ifdef PROFILE_UNTRANSLATED_INSNS
   regs.raw_cputbl_count = raw_cputbl_count;
@@ -2018,14 +2023,14 @@ void build_comp(void)
   
   for (opcode = 0; opcode < 65536; opcode++) {
     reset_compop(opcode);
-    prop[opcode].use_flags = 0x1f;
-    prop[opcode].set_flags = 0x1f;
+    prop[opcode].use_flags = FLAG_ALL;
+    prop[opcode].set_flags = FLAG_ALL;
     prop[opcode].cflow = fl_jump | fl_trap; // ILLEGAL instructions do trap
   }
 
   for (i = 0; tbl[i].opcode < 65536; i++) {
     int cflow = table68k[tbl[i].opcode].cflow;
-    if (follow_const_jumps && (tbl[i].specific & 16))
+    if (follow_const_jumps && (tbl[i].specific & COMP_OPCODE_ISCJUMP))
       cflow = fl_const_jump;
     else
       cflow &= ~fl_const_jump;
@@ -2039,7 +2044,7 @@ void build_comp(void)
   }
 
   for (i = 0; nftbl[i].opcode < 65536; i++) {
-    int uses_fpu = tbl[i].specific & COMP_OPCODE_USES_FPU;
+		bool uses_fpu = (tbl[i].specific & COMP_OPCODE_USES_FPU) != 0;
     if (uses_fpu && avoid_fpu)
       nfcompfunctbl[nftbl[i].opcode] = NULL;
     else
@@ -2049,21 +2054,19 @@ void build_comp(void)
   for (opcode = 0; opcode < 65536; opcode++) {
     compop_func *f;
     compop_func *nff;
-    int isaddx, cflow;
+		int isaddx;
+		int cflow;
 
-    int cpu_level = (currprefs.cpu_model - 68000) / 10;
-    if (cpu_level > 4)
-      cpu_level--;
     if (table68k[opcode].mnemo == i_ILLG || table68k[opcode].clev > cpu_level)
       continue;
 
     if (table68k[opcode].handler != -1) {
       f = compfunctbl[table68k[opcode].handler];
       nff = nfcompfunctbl[table68k[opcode].handler];
-      cflow = prop[table68k[opcode].handler].cflow;
       isaddx = prop[table68k[opcode].handler].is_addx;
-      prop[opcode].cflow = cflow;
       prop[opcode].is_addx = isaddx;
+      cflow = prop[table68k[opcode].handler].cflow;
+      prop[opcode].cflow = cflow;
       compfunctbl[opcode] = f;
       nfcompfunctbl[opcode] = nff;
     }
@@ -2222,7 +2225,7 @@ void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
     free_checksum_info_chain(bi->csi);
     bi->csi = NULL;
 
-    liveflags[blocklen] = 0x1f; /* All flags needed afterwards */
+    liveflags[blocklen] = FLAG_ALL; /* All flags needed afterwards */
     i = blocklen;
     while (i--) {
       uae_u16* currpcp = pc_hist[i].location;

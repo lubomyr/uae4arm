@@ -29,7 +29,7 @@ addrbank rtarea_bank = {
   rtarea_lget, rtarea_wget, rtarea_bget,
   rtarea_lput, rtarea_wput, rtarea_bput,
 	rtarea_xlate, rtarea_check, NULL, _T("rtarea"), _T("UAE Boot ROM"),
-	rtarea_wget,
+	rtarea_lget, rtarea_wget,
 	ABFLAG_ROMIN, S_READ, S_WRITE
 };
 
@@ -267,6 +267,7 @@ void rtarea_free(void)
 void rtarea_init (void)
 {
   uae_u32 a;
+	TCHAR uaever[100];
 
   rt_straddr = 0xFF00 - 2;
   rt_addr = 0;
@@ -276,8 +277,12 @@ void rtarea_init (void)
   rtarea_init_mem ();
 	memset (rtarea_bank.baseaddr, 0, RTAREA_SIZE);
 
+	_stprintf (uaever, _T("uae-%d.%d.%d"), UAEMAJOR, UAEMINOR, UAESUBREV);
+
+	ds (uaever);
   EXPANSION_explibname = ds (_T("expansion.library"));
   EXPANSION_doslibname = ds (_T("dos.library"));
+	ds (_T("uae.device"));
 
   dw (0);
   dw (0);

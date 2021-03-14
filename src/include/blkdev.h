@@ -66,7 +66,6 @@ struct device_info {
   int media_inserted;
 	int audio_playing;
   int removable;
-  int write_protected;
   int cylinders;
   int trackspercylinder;
   int sectorspertrack;
@@ -105,9 +104,6 @@ typedef void (*close_bus_func)(void);
 typedef int (*open_device_func)(int, const TCHAR*, int);
 typedef void (*close_device_func)(int);
 typedef struct device_info* (*info_device_func)(int, struct device_info*, int, int);
-typedef uae_u8* (*execscsicmd_out_func)(int, uae_u8*, int);
-typedef uae_u8* (*execscsicmd_in_func)(int, uae_u8*, int, int*);
-typedef int (*execscsicmd_direct_func)(int, struct amigascsi*);
 
 typedef void (*play_subchannel_callback)(uae_u8*, int);
 typedef int (*play_status_callback)(int, int);
@@ -120,8 +116,6 @@ typedef int (*qcode_func)(int, uae_u8*, int, bool);
 typedef int (*toc_func)(int, struct cd_toc_head*);
 typedef int (*read_func)(int, uae_u8*, int, int);
 typedef int (*rawread_func)(int, uae_u8*, int, int, int, uae_u32);
-typedef int (*write_func)(int, uae_u8*, int, int);
-typedef int (*isatapi_func)(int);
 typedef int (*ismedia_func)(int, int);
 
 struct device_functions {
@@ -131,9 +125,6 @@ struct device_functions {
 	open_device_func opendev;
 	close_device_func closedev;
 	info_device_func info;
-	execscsicmd_out_func exec_out;
-	execscsicmd_in_func exec_in;
-	execscsicmd_direct_func exec_direct;
 
 	pause_func pause;
 	stop_func stop;
@@ -143,9 +134,7 @@ struct device_functions {
 	toc_func toc;
 	read_func read;
 	rawread_func rawread;
-	write_func write;
 
-	isatapi_func isatapi;
 	ismedia_func ismedia;
 };
 
@@ -166,7 +155,6 @@ extern int sys_command_cd_read (int unitnum, uae_u8 *data, int block, int size);
 extern int sys_command_cd_rawread (int unitnum, uae_u8 *data, int sector, int size, int sectorsize);
 int sys_command_cd_rawread (int unitnum, uae_u8 *data, int sector, int size, int sectorsize, uae_u8 sectortype, uae_u8 scsicmd9, uae_u8 subs);
 extern int sys_command_read (int unitnum, uae_u8 *data, int block, int size);
-extern int sys_command_write (int unitnum, uae_u8 *data, int block, int size);
 extern int sys_command_scsi_direct(TrapContext *ctx, int unitnum, int type, uaecptr request);
 extern int sys_command_ismedia (int unitnum, int quick);
 
@@ -186,7 +174,7 @@ extern int isaudiotrack (struct cd_toc_head*, int block);
 extern int isdatatrack (struct cd_toc_head*, int block);
 void sub_to_interleaved (const uae_u8 *s, uae_u8 *d);
 
-enum cd_standard_unit { CD_STANDARD_UNIT_DEFAULT, CD_STANDARD_UNIT_AUDIO, CD_STANDARD_UNIT_CDTV, CD_STANDARD_UNIT_CD32 };
+enum cd_standard_unit { CD_STANDARD_UNIT_DEFAULT, CD_STANDARD_UNIT_AUDIO, CD_STANDARD_UNIT_CD32 };
 
 extern int get_standard_cd_unit (enum cd_standard_unit csu);
 extern void blkdev_cd_change (int unitnum, const TCHAR *name);

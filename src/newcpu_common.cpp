@@ -3,7 +3,7 @@
 #include "options.h"
 #include "memory-uae.h"
 #include "newcpu.h"
-#include "cpummu030.h"
+#include "cpummu.h"
 
 int get_cpu_model(void)
 {
@@ -133,7 +133,7 @@ int m68k_movec2 (int regno, uae_u32 *regp)
   	case 5: *regp = regs.itt1; break;
   	case 6: *regp = regs.dtt0; break;
   	case 7: *regp = regs.dtt1; break;
-  	case 8: *regp = regs.buscr; break;
+  	case 8: *regp = 0; break;
 
   	case 0x800: *regp = regs.usp; break;
   	case 0x801: *regp = regs.vbr; break;
@@ -234,7 +234,7 @@ void REGPARAM2 put_bitfield (uae_u32 dst, uae_u32 bdata[2], uae_u32 val, uae_s32
 	}
 }
 
-uae_u32 REGPARAM2 _get_disp_ea_020 (uae_u32 base)
+uae_u32 REGPARAM2 get_disp_ea_020 (uae_u32 base)
 {
 	uae_u16 dp = next_diword ();
   int reg = (dp >> 12) & 15;
@@ -269,6 +269,98 @@ uae_u32 REGPARAM2 _get_disp_ea_020 (uae_u32 base)
   	return base + (uae_s32)((uae_s8)dp) + regd;
   }
 }
+
+uae_u32 REGPARAM2 x_get_disp_ea_020 (uae_u32 base)
+{
+	uae_u16 dp = x_next_iword ();
+	int reg = (dp >> 12) & 15;
+	int cycles = 0;
+	uae_u32 v;
+
+	uae_s32 regd = regs.regs[reg];
+	if ((dp & 0x800) == 0)
+		regd = (uae_s32)(uae_s16)regd;
+	regd <<= (dp >> 9) & 3;
+	if (dp & 0x100) {
+
+		uae_s32 outer = 0;
+		if (dp & 0x80)
+			base = 0;
+		if (dp & 0x40)
+			regd = 0;
+
+		if ((dp & 0x30) == 0x20) {
+			base += (uae_s32)(uae_s16) x_next_iword ();
+			cycles++;
+		}
+		if ((dp & 0x30) == 0x30) {
+			base += x_next_ilong ();
+			cycles++;
+		}
+
+		if ((dp & 0x3) == 0x2) {
+			outer = (uae_s32)(uae_s16) x_next_iword ();
+			cycles++;
+		}
+		if ((dp & 0x3) == 0x3) {
+			outer = x_next_ilong ();
+			cycles++;
+		}
+
+		if ((dp & 0x4) == 0) {
+			base += regd;
+			cycles++;
+		}
+		if (dp & 0x3) {
+			base = x_get_long (base);
+			cycles++;
+		}
+		if (dp & 0x4) {
+			base += regd;
+			cycles++;
+		}
+		v = base + outer;
+	} else {
+		v = base + (uae_s32)((uae_s8)dp) + regd;
+	}
+	return v;
+}
+
+int getMulu68kCycles(uae_u16 src)
+{
+	int cycles = 0;
+	if (currprefs.cpu_model == 68000) {
+		cycles = 38 - 4;
+		for (int bits = 0; bits < 16 && src; bits++, src >>= 1) {
+			if (src & 1)
+				cycles += 2;
+		}
+	} else {
+		cycles = 40 - 4;
+	}
+	return cycles;
+}
+
+int getMuls68kCycles(uae_u16 src)
+{
+	int cycles;
+	if (currprefs.cpu_model == 68000) {
+		cycles = 38 - 4;
+		uae_u32 usrc = ((uae_u32)src) << 1;
+		for (int bits = 0; bits < 16 && usrc; bits++, usrc >>= 1) {
+			if ((usrc & 3) == 1 || (usrc & 3) == 2) {
+				cycles += 2;
+			}
+		}
+	} else {
+		cycles = 40 - 4;
+		// 2 extra cycles added if source is negative
+		if (src & 0x8000)
+			cycles += 2;
+	}
+	return cycles;
+}
+
 
 /*
 * Compute exact number of CPU cycles taken
@@ -309,14 +401,19 @@ uae_u32 REGPARAM2 _get_disp_ea_020 (uae_u32 base)
  (Note the difference with the documented range.)
 
 
- DIVU:
+DIVU 68000:
 
  Overflow (always): 10 cycles.
  Worst case: 136 cycles.
  Best case: 76 cycles.
 
+DIVU 68010:
 
- DIVS:
+Overflow (always): 8 cycles.
+Wost case: 108 cycles.
+Best case: 78 cycles.
+
+DIVS 68000:
 
  Absolute overflow: 16-18 cycles.
  Signed overflow is not detected prematurely.
@@ -325,6 +422,13 @@ uae_u32 REGPARAM2 _get_disp_ea_020 (uae_u32 base)
  Best case without signed overflow: 122 cycles.
  Best case with signed overflow: 120 cycles
 
+DIVS 68010:
+
+Absolute overflow: 16 cycles.
+Signed overflow is not detected prematurely.
+
+Worst case: 122 cycles.
+Best case: 120 cycles.
 
  */
 
@@ -337,31 +441,65 @@ int getDivu68kCycles (uae_u32 dividend, uae_u16 divisor)
 	if(divisor == 0)
 		return 0;
 
-	// Overflow
-	if((dividend >> 16) >= divisor)
-		return (mcycles = 5) * 2;
+	if (currprefs.cpu_model == 68010) {
 
-	mcycles = 38;
-	hdivisor = divisor << 16;
+		// Overflow
+		if ((dividend >> 16) >= divisor) {
+			return 4;
+		}
 
-	for( i = 0; i < 15; i++) {
-		uae_u32 temp;
-		temp = dividend;
+		mcycles = 74;
 
-		dividend <<= 1;
+		hdivisor = divisor << 16;
 
-		// If carry from shift
-		if((uae_s32)temp < 0)
-			dividend -= hdivisor;
-		else {
-			mcycles += 2;
-			if(dividend >= hdivisor) {
+		for (i = 0; i < 15; i++) {
+			uae_u32 temp;
+			temp = dividend;
+
+			dividend <<= 1;
+
+			// If carry from shift
+			if ((uae_s32)temp < 0) {
 				dividend -= hdivisor;
-				mcycles--;
+			} else {
+				mcycles += 2;
+				if (dividend >= hdivisor) {
+					dividend -= hdivisor;
+				}
 			}
 		}
+		return mcycles;
+
+	} else {
+
+	  // Overflow
+	  if((dividend >> 16) >= divisor)
+			return (mcycles = 5) * 2 - 4;
+
+	  mcycles = 38;
+
+	  hdivisor = divisor << 16;
+
+	  for( i = 0; i < 15; i++) {
+		  uae_u32 temp;
+		  temp = dividend;
+
+		  dividend <<= 1;
+
+		  // If carry from shift
+		  if((uae_s32)temp < 0)
+			  dividend -= hdivisor;
+		  else {
+			  mcycles += 2;
+			  if(dividend >= hdivisor) {
+				  dividend -= hdivisor;
+				  mcycles--;
+			  }
+		  }
+	  }
+		// -4 = remove prefetch cycle
+		return mcycles * 2 - 4;
 	}
-	return mcycles * 2;
 }
 
 int getDivs68kCycles (uae_s32 dividend, uae_s16 divisor)
@@ -373,6 +511,17 @@ int getDivs68kCycles (uae_s32 dividend, uae_s16 divisor)
 	if(divisor == 0)
 		return 0;
 
+	if (currprefs.cpu_model == 68010) {
+		// Check for absolute overflow
+		if (((uae_u32)abs(dividend) >> 16) >= (uae_u16)abs(divisor))
+			return 12;
+		mcycles = 116;
+		// add 2 extra cycles if negative dividend
+		if (dividend < 0)
+			mcycles += 2;
+		return mcycles;
+	}
+
 	mcycles = 6;
 
 	if( dividend < 0)
@@ -380,7 +529,7 @@ int getDivs68kCycles (uae_s32 dividend, uae_s16 divisor)
 
 	// Check for absolute overflow
 	if(((uae_u32)abs(dividend) >> 16) >= (uae_u16)abs(divisor))
-		return (mcycles + 2) * 2;
+		return (mcycles + 2) * 2 - 4;
 
 	// Absolute quotient
 	aquot = (uae_u32) abs(dividend) / (uae_u16)abs(divisor);
@@ -402,7 +551,7 @@ int getDivs68kCycles (uae_s32 dividend, uae_s16 divisor)
 		aquot <<= 1;
 	}
 
-	return mcycles * 2;
+	return mcycles * 2 - 4;
 }
 
 /* DIV divide by zero
@@ -446,7 +595,7 @@ void divbyzero_special (bool issigned, uae_s32 dst)
 /* DIVU overflow
  *
  * 68000: V=1, N=1, C=0, Z=0
- * 68010: V=1, N=divisor<0x8000, C=0, Z=divided upper word == 0xffff and divisor == 0xffff
+ * 68010: V=1, N=1, C=0, Z=0
  * 68020: V=1, C=0, Z=0, N=X
  * 68040: V=1, C=0, NZ not modified.
  *
@@ -465,9 +614,8 @@ void setdivuflags(uae_u32 dividend, uae_u16 divisor)
 			SET_NFLG(1);
 	} else if (currprefs.cpu_model == 68010) {
 		SET_VFLG(1);
-		SET_NFLG(divisor < 0x8000);
-		// can anyone explain this?
-		SET_ZFLG((dividend >> 16) == 0xffff && divisor == 0xffff);
+		SET_NFLG(1);
+		SET_ZFLG(0);
 		SET_CFLG(0);
 	} else {
 		// 68000
@@ -726,7 +874,7 @@ static void divul_overflow(uae_u16 extra, uae_s64 a)
 	}
 }
 
-static void divsl_divbyzero(uae_u16 extra, uae_s64 a)
+static void divsl_divbyzero(uae_u16 extra, uae_s64 a, uaecptr oldpc)
 {
 	if (currprefs.cpu_model >= 68040) {
 		SET_CFLG(0);
@@ -735,10 +883,10 @@ static void divsl_divbyzero(uae_u16 extra, uae_s64 a)
 		SET_ZFLG(1);
 		SET_CFLG(0);
 	}
-	Exception_cpu(5);
+	Exception_cpu_oldpc(5, oldpc);
 }
 
-static void divul_divbyzero(uae_u16 extra, uae_s64 a)
+static void divul_divbyzero(uae_u16 extra, uae_s64 a, uaecptr oldpc)
 {
 	if (currprefs.cpu_model >= 68040) {
 		SET_CFLG(0);
@@ -750,10 +898,10 @@ static void divul_divbyzero(uae_u16 extra, uae_s64 a)
 		SET_VFLG(1);
 		SET_CFLG(0);
 	}
-	Exception_cpu(5);
+	Exception_cpu_oldpc(5, oldpc);
 }
 
-bool m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
+int m68k_divl(uae_u32 opcode, uae_u32 src, uae_u16 extra, uaecptr oldpc)
 {
   if (extra & 0x800) {
   	/* signed variant */
@@ -766,8 +914,8 @@ bool m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 		}
 
 		if (src == 0) {
-			divsl_divbyzero(extra, a);
-			return false;
+			divsl_divbyzero(extra, a, oldpc);
+			return 0;
   	}
 
 		if ((uae_u64)a == 0x8000000000000000UL && src == ~0u) {
@@ -800,8 +948,8 @@ bool m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
   	}
 
 		if (src == 0) {
-			divul_divbyzero(extra, a);
-			return false;
+			divul_divbyzero(extra, a, oldpc);
+			return 0;
 		}
 
   	rem = a % (uae_u64)src;
@@ -817,10 +965,10 @@ bool m68k_divl (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 	    m68k_dreg(regs, (extra >> 12) & 7) = (uae_u32)quot;
   	}
   }
-	return true;
+	return 1;
 }
 
-bool m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
+int m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 {
   if (extra & 0x800) {
   	/* signed */
@@ -883,7 +1031,7 @@ bool m68k_mull (uae_u32 opcode, uae_u32 src, uae_u16 extra)
 			SET_NFLG(b < 0);
 	  }
   }
-	return true;
+	return 1;
 }
 
 uae_u32 exception_pc(int nr)
@@ -950,7 +1098,7 @@ void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int
 		  m68k_areg(regs, 7) -= 4;
 		  x_put_long(m68k_areg(regs, 7), 0);
 			break;
-  	case 0x8: // address error (68010)
+  	case 0x8: // bus/address error (68010)
 	  {
 		  uae_u16 in = regs.read_buffer;
 		  uae_u16 out = regs.write_buffer;
@@ -963,17 +1111,19 @@ void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int
   		m68k_areg(regs, 7) -= 2;
 		  x_put_word(m68k_areg(regs, 7), regs.irc); // instruction input buffer
   		m68k_areg(regs, 7) -= 2;
-  		x_put_word(m68k_areg(regs, 7), 0); // unused
+		  // unused not written
   		m68k_areg(regs, 7) -= 2;
 		  x_put_word(m68k_areg(regs, 7), in); // data input buffer
   		m68k_areg(regs, 7) -= 2;
-  		x_put_word(m68k_areg(regs, 7), 0); // unused
+		  // unused not written
   		m68k_areg(regs, 7) -= 2;
 		  x_put_word(m68k_areg(regs, 7), out); // data output buffer
   		m68k_areg(regs, 7) -= 2;
-  		x_put_word(m68k_areg(regs, 7), 0); // unused
-  		m68k_areg(regs, 7) -= 4;
-		  x_put_long(m68k_areg(regs, 7), regs.mmu_fault_addr); // fault addr
+		  // unused not written
+		  m68k_areg(regs, 7) -= 2;
+		  x_put_word(m68k_areg(regs, 7), regs.mmu_fault_addr); // fault addr
+		  m68k_areg(regs, 7) -= 2;
+		  x_put_word(m68k_areg(regs, 7), regs.mmu_fault_addr >> 16); // fault addr
   		m68k_areg(regs, 7) -= 2;
   		x_put_word(m68k_areg(regs, 7), ssw); // ssw
   		break;
@@ -992,7 +1142,7 @@ void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int
 			  m68k_areg(regs, 7) -= 4;
 			  x_put_long(m68k_areg(regs, 7), 0);
 		  }
-		  while (i < MAX_MMU030_ACCESS) {
+		  while (i < 9) {
 			  uae_u32 v = 0;
 			  m68k_areg(regs, 7) -= 4;
 			  x_put_long(m68k_areg(regs, 7), v);
@@ -1013,8 +1163,11 @@ void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int
 		  x_put_long(m68k_areg(regs, 7), regs.mmu_fault_addr);
 		  // 2xinternal
 		  {
+			  uae_u32 ps = 0;
+			  ps |= (7 << 8);
+			  ps |= (7 << 11);
 			  m68k_areg(regs, 7) -= 4;
-			  x_put_long(m68k_areg(regs, 7), 0);
+			  x_put_long(m68k_areg(regs, 7), ps);
 		  }
 		  // stage b address
 		  m68k_areg(regs, 7) -= 4;
@@ -1027,24 +1180,31 @@ void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int
   		// short bus cycle fault stack frame (68020, 68030)
   		// used when instruction's last write causes bus fault
   		m68k_areg(regs, 7) -= 4;
-			x_put_long(m68k_areg(regs, 7), 0);
-  		m68k_areg(regs, 7) -= 4;
-  		// Data output buffer = value that was going to be written
-  		x_put_long(m68k_areg(regs, 7), 0);
-  		m68k_areg(regs, 7) -= 4;
 		  if (format == 0xb) {
-			  x_put_long(m68k_areg(regs, 7), 0);  // Internal register (opcode storage)
+			  x_put_long(m68k_areg(regs, 7), 0); // 28 0x1c
 		  } else {
-			  x_put_long(m68k_areg(regs, 7), regs.irc);  // Internal register (opcode storage)
+			  uae_u32 ps = 0;
+			  ps |= (7 << 8);
+			  ps |= (7 << 11);
+			  x_put_long(m68k_areg(regs, 7), ps); // 28 0x1c
 		  }
   		m68k_areg(regs, 7) -= 4;
-		  x_put_long(m68k_areg(regs, 7), regs.mmu_fault_addr); // data cycle fault address
+  		// Data output buffer = value that was going to be written
+  		x_put_long(m68k_areg(regs, 7), 0); // 24 0x18
+  		m68k_areg(regs, 7) -= 4;
+		  if (format == 0xb) {
+			  x_put_long(m68k_areg(regs, 7), 0);  // Internal register (opcode storage) 20 0x14
+		  } else {
+			  x_put_long(m68k_areg(regs, 7), regs.irc);  // Internal register (opcode storage)  20 0x14
+		  }
+  		m68k_areg(regs, 7) -= 4;
+		  x_put_long(m68k_areg(regs, 7), regs.mmu_fault_addr); // data cycle fault address 16 0x10
   		m68k_areg(regs, 7) -= 2;
-  		x_put_word(m68k_areg(regs, 7), 0);  // Instr. pipe stage B
+		  x_put_word(m68k_areg(regs, 7), 0);  // Instr. pipe stage B 14 0x0e
   		m68k_areg(regs, 7) -= 2;
-  		x_put_word(m68k_areg(regs, 7), 0);  // Instr. pipe stage C
+		  x_put_word(m68k_areg(regs, 7), 0);  // Instr. pipe stage C 12 0x0c
   		m68k_areg(regs, 7) -= 2;
-  		x_put_word(m68k_areg(regs, 7), ssw);
+		  x_put_word(m68k_areg(regs, 7), ssw); // 10 0x0a
   		m68k_areg(regs, 7) -= 2;
   		x_put_word(m68k_areg(regs, 7), 0);
   		break;
@@ -1063,6 +1223,8 @@ void Exception_build_stack_frame(uae_u32 oldpc, uae_u32 currpc, uae_u32 ssw, int
 void Exception_build_stack_frame_common(uae_u32 oldpc, uae_u32 currpc, int nr)
 {
 	if (nr == 5 || nr == 6 || nr == 7 || nr == 9) {
+		if (nr == 9)
+			oldpc = regs.trace_pc;
 		if (currprefs.cpu_model <= 68010)
 			Exception_build_stack_frame(oldpc, currpc, 0, nr, 0x0);
 		else
@@ -1097,14 +1259,6 @@ void Exception_build_68000_address_error_stack_frame(uae_u16 mode, uae_u16 opcod
 	x_put_word(m68k_areg(regs, 7) + 6, opcode);
 	x_put_word(m68k_areg(regs, 7) + 8, regs.sr);
 	x_put_long(m68k_areg(regs, 7) + 10, pc);
-}
-
-void cpu_restore_fixup(void)
-{
-	if (mmufixup[0].reg >= 0) {
-		m68k_areg(regs, mmufixup[0].reg) = mmufixup[0].value;
-		mmufixup[0].reg = -1;
-	}
 }
 
 // Low word: Clear + Z and N
@@ -1153,7 +1307,18 @@ void ccr_68000_word_move_ae_normal(uae_s16 src)
 	SET_NFLG(src < 0);
 }
 
+void dreg_68000_long_replace_low(int reg, uae_u16 v)
+{
+	m68k_dreg(regs, reg) = (m68k_dreg(regs, reg) & 0xffff0000) | v;
+}
+
+void areg_68000_long_replace_low(int reg, uae_u16 v)
+{
+	m68k_areg(regs, reg) = (m68k_areg(regs, reg) & 0xffff0000) | v;
+}
+
 // Change F-line to privilege violation if missing co-pro
+// 68040 always return F-line
 bool privileged_copro_instruction(uae_u16 opcode)
 {
 	if (currprefs.cpu_model >= 68020 && !regs.s) {
@@ -1163,14 +1328,16 @@ bool privileged_copro_instruction(uae_u16 opcode)
 		// cpSAVE and cpRESTORE: privilege violation if user mode.
 		if ((opcode & 0xf1c0) == 0xf100) {
 			// cpSAVE
+			// check if valid EA
 			if (mode == 2 || (mode >= 4 && mode <= 6) || (mode == 7 && (reg == 0 || reg == 1))) {
-				if ((currprefs.cpu_model >= 68040 && id > 0) || currprefs.cpu_model < 68040)
+				if (currprefs.cpu_model < 68040 || (currprefs.cpu_model >= 68040 && id == 1))
 					return true;
 			}
 		} else if ((opcode & 0xf1c0) == 0xf140) {
 			// cpRESTORE
+			// check if valid EA
 			if (mode == 2 || mode == 3 || (mode >= 5 && mode <= 6) || (mode == 7 && reg <= 3)) {
-				if ((currprefs.cpu_model >= 68040 && id > 0) || currprefs.cpu_model < 68040)
+				if (currprefs.cpu_model < 68040 || (currprefs.cpu_model >= 68040 && id == 1))
 					return true;
 			}
 		}

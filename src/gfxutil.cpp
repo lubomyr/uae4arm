@@ -148,7 +148,7 @@ void alloc_colors_picasso (int rw, int gw, int bw, int rs, int gs, int bs, int r
 		int lbmask = (1 << blue_bits) - 1;
 		for (i = 65535; i >= 0; i--) {
 			uae_u32 r, g, b, c;
-			uae_u32 j = byte_swap ? do_byteswap_16 (i) : i;
+			uae_u32 j = byte_swap ? bswap_16 (i) : i;
 			r = (((j >>   red_shift) & lrmask) << lrbits) | lowbits (j,   red_shift, lrbits);
 			g = (((j >> green_shift) & lgmask) << lgbits) | lowbits (j, green_shift, lgbits);
 			b = (((j >>  blue_shift) & lbmask) << lbbits) | lowbits (j,  blue_shift, lbbits);

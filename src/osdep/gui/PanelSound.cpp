@@ -50,6 +50,9 @@ static gcn::Slider* sldStereoDelay;
 static gcn::Label* lblPaulaVol;
 static gcn::Label* lblPaulaVolInfo;
 static gcn::Slider* sldPaulaVol;
+static gcn::Label* lblDriveVol;
+static gcn::Label* lblDriveVolInfo;
+static gcn::Slider* sldDriveVol;
 
 static int curr_separation_idx;
 static int curr_stereodelay_idx;
@@ -151,6 +154,10 @@ static void RefreshPanelSound(void)
   sldPaulaVol->setValue(100 - workprefs.sound_volume_paula);
   snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - workprefs.sound_volume_paula);
   lblPaulaVolInfo->setCaption(tmp);
+
+  sldDriveVol->setValue(100 - workprefs.dfxclickvolume_disk[0]);
+  snprintf(tmp, sizeof (tmp) - 1, "%d %%", 100 - workprefs.dfxclickvolume_disk[0]);
+  lblDriveVolInfo->setCaption(tmp);
 }
 
 
@@ -245,6 +252,16 @@ class SoundActionListener : public gcn::ActionListener
         int newvol = 100 - (int) sldPaulaVol->getValue();
         if(workprefs.sound_volume_paula != newvol)
           workprefs.sound_volume_paula = newvol;
+
+      } else if (actionEvent.getSource() == sldDriveVol) {
+        int newvol = 100 - (int) sldDriveVol->getValue();
+        if(workprefs.dfxclickvolume_disk[0] != newvol) {
+          for (int i = 0; i < 4; ++i) {
+            workprefs.floppyslots[i].dfxclick = newvol < 100 ? 1 : 0;
+            workprefs.dfxclickvolume_disk[i] = newvol;
+            workprefs.dfxclickvolume_empty[i] = newvol;
+          }
+        }
 			}
 
       RefreshPanelSound();
@@ -374,12 +391,28 @@ void InitPanelSound(const struct _ConfigCategory& category)
   lblPaulaVolInfo = new gcn::Label("80 %");
   lblPaulaVolInfo->setSize(100, LABEL_HEIGHT);
 
+	lblDriveVol = new gcn::Label("Drive sound:");
+  lblDriveVol->setSize(100, LABEL_HEIGHT);
+  lblDriveVol->setAlignment(gcn::Graphics::RIGHT);
+  sldDriveVol = new gcn::Slider(0, 100);
+  sldDriveVol->setSize(100, SLIDER_HEIGHT);
+  sldDriveVol->setBaseColor(gui_baseCol);
+	sldDriveVol->setMarkerLength(20);
+	sldDriveVol->setStepLength(10);
+	sldDriveVol->setId("DriveVol");
+  sldDriveVol->addActionListener(soundActionListener);
+  lblDriveVolInfo = new gcn::Label("80 %");
+  lblDriveVolInfo->setSize(100, LABEL_HEIGHT);
+
   int posY = DISTANCE_BORDER;
   category.panel->add(grpSound, DISTANCE_BORDER, posY);
   category.panel->add(grpMode, grpSound->getX() + grpSound->getWidth() + DISTANCE_NEXT_X, posY);
   posY += grpSound->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(lblFrequency, DISTANCE_BORDER, posY);
   category.panel->add(cboFrequency, lblFrequency->getX() + lblFrequency->getWidth() + 12, posY);
+  category.panel->add(lblDriveVol, cboFrequency->getX() + cboFrequency->getWidth() + 12, posY);
+  category.panel->add(sldDriveVol, lblDriveVol->getX() + lblDriveVol->getWidth() + 12, posY);
+  category.panel->add(lblDriveVolInfo, sldDriveVol->getX() + sldDriveVol->getWidth() + 12, posY);
   posY += cboFrequency->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(lblInterpolation, DISTANCE_BORDER, posY);
   category.panel->add(cboInterpolation, lblInterpolation->getX() + lblInterpolation->getWidth() + 12, posY);
@@ -431,6 +464,9 @@ void ExitPanelSound(const struct _ConfigCategory& category)
   delete lblPaulaVol;
   delete lblPaulaVolInfo;
   delete sldPaulaVol;
+  delete lblDriveVol;
+  delete lblDriveVolInfo;
+  delete sldDriveVol;
   delete soundActionListener;
 }
 

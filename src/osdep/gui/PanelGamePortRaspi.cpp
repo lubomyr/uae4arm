@@ -27,7 +27,9 @@
 #include "GenericListModel.h"
 
 
+#define MAX_TOTAL_DEVICES 12
 static int total_devices;
+static int total_devicesPara;
 
 
 static const char *mousespeed_list[] = { ".25", ".5", "1x", "2x", "4x" };
@@ -52,12 +54,14 @@ static gcn::UaeDropDown* cboKBDLed_scr;
 static gcn::Label *lblCapLock;
 static gcn::UaeDropDown* cboKBDLed_cap;
 
-static const char *inputport_list[12] = { "<none>", "Keyboard Layout A", "Keyboard Layout B", "Keyboard Layout C", NULL };
+static const char *inputport_list[MAX_TOTAL_DEVICES] = { "<none>", "Keyboard Layout A", "Keyboard Layout B", "Keyboard Layout C", NULL };
 static gcn::GenericListModel ctrlPortList;
+static gcn::GenericListModel ctrlPortListPara;
 
-static const char *inputmode_list[] = { "Default", "Mouse", "Joystick", "CD32 pad" };
-static const int inputmode_val[] = { JSEM_MODE_DEFAULT, JSEM_MODE_MOUSE, JSEM_MODE_JOYSTICK, JSEM_MODE_JOYSTICK_CD32 };
-static gcn::GenericListModel ctrlPortModeList(inputmode_list, 4);
+#define MAX_INPUT_MODES 6
+static const char *inputmode_list[] = { "Default", "Mouse", "Joystick", "Gamepad", "Analog joystick", "CD32 pad" };
+static const int inputmode_val[] = { JSEM_MODE_DEFAULT, JSEM_MODE_MOUSE, JSEM_MODE_JOYSTICK, JSEM_MODE_GAMEPAD, JSEM_MODE_JOYSTICK_ANALOG, JSEM_MODE_JOYSTICK_CD32 };
+static gcn::GenericListModel ctrlPortModeList(inputmode_list, MAX_INPUT_MODES);
 
 const char *autofireValues[] = { "No autofire", "Autofire", "Autofire (toggle)", "Autofire (always)" };
 static gcn::GenericListModel autofireList(autofireValues, 4);
@@ -70,35 +74,11 @@ static gcn::UaeDropDown* cboAutofires[MAX_JPORTS] = { NULL, NULL, NULL, NULL };
 static const char *listValues[] = { "none", "POWER", "DF0", "DF1", "DF2", "DF3", "DF*", "HD", "CD" };
 static gcn::GenericListModel KBDLedList(listValues, 9);
 
-static void RefreshPanelGamePort(void)
+
+static void updatejoyport (int changedport)
 {
-  int i, idx, port;
-  TCHAR tmp[100];
-
-  for(port = 0; port < MAX_JPORTS; ++port) {
-    // Set current device in port
-    idx = inputdevice_getjoyportdevice (0, workprefs.jports[port].id);
-  	if (idx >= 0)
-  		idx += 1;
-  	else
-      idx = 0;
-  	if (idx >= total_devices)
-  		idx = 0;
-    cboPorts[port]->setSelected(idx); 
-    
-    if(port >= 2)
-      continue;
-
-    for(i = 0; i < 4; ++i) {
-      if(workprefs.jports[port].mode == inputmode_val[i]) {
-        cboPortModes[0]->setSelected(i);
-        break;
-      }
-    }
-
-    cboAutofires[port]->setSelected(workprefs.jports[port].autofire);
-  }
-
+  int i;
+  TCHAR tmp[32];
   
   for(i = 0; i < 5; ++i) {
     if(workprefs.input_joymouse_multiplier == mousespeed_values[i]) {
@@ -106,6 +86,32 @@ static void RefreshPanelGamePort(void)
       lblMouseSpeedInfo->setCaption(mousespeed_list[i]);
       break;
     }
+  }
+
+	for (i = 0; i < MAX_JPORTS; i++) {
+		int v = workprefs.jports[i].id;
+		int vm = workprefs.jports[i].mode;
+
+    if (i < 2) {
+      for(int idx = 0; idx < MAX_INPUT_MODES; ++idx) {
+        if(workprefs.jports[i].mode == inputmode_val[idx]) {
+          cboPortModes[i]->setSelected(idx);
+          break;
+        }
+      }
+    }
+     
+		int idx = inputdevice_getjoyportdevice (i, v);
+		if (idx >= 0)
+			idx += 1;
+		else
+			idx = 0;
+		if (idx >= (i < 2 ? total_devices : total_devicesPara))
+			idx = 0;
+    cboPorts[i]->setSelected(idx); 
+
+		if (i < 2)
+      cboAutofires[i]->setSelected(workprefs.jports[i].autofire);
   }
 
   sldAutofireRate->setValue(workprefs.input_autofire_linecnt / 100);
@@ -117,61 +123,58 @@ static void RefreshPanelGamePort(void)
 }
 
 
-static void values_to_dialog(void)
-{
-	inputdevice_updateconfig (NULL, &workprefs);
-
-  RefreshPanelGamePort();
-}
-
-
-static void values_from_dialog(int changedport, bool reset)
+static void values_from_gameportsdlg(int changedport)
 {
 	int i;
 	int changed = 0;
-	int prevport;
-
-  if(reset)
-    inputdevice_compa_clear (&workprefs, changedport);
 
 	for (i = 0; i < MAX_JPORTS; i++) {
-		int prevport = workprefs.jports[i].id;
+		int idx = 0;
+		int *port = &workprefs.jports[i].id;
+		int *portm = &workprefs.jports[i].mode;
+		int prevport = *port;
+    
+    int v = cboPorts[i]->getSelected();
+
 		int max = JSEM_LASTKBD + inputdevice_get_device_total (IDTYPE_JOYSTICK);
 		if (i < 2)
 			max += inputdevice_get_device_total (IDTYPE_MOUSE);
-    int id = cboPorts[i]->getSelected() - 1;
-		if (id < 0) {
-			workprefs.jports[i].id = JPORT_NONE;
-		} else if (id >= max) {
-			workprefs.jports[i].id = JPORT_NONE;
-		} else if (id < JSEM_LASTKBD) {
-			workprefs.jports[i].id = JSEM_KBDLAYOUT + id;
-		} else if (id >= JSEM_LASTKBD + inputdevice_get_device_total (IDTYPE_JOYSTICK)) {
-			workprefs.jports[i].id = JSEM_MICE + id - inputdevice_get_device_total (IDTYPE_JOYSTICK) - JSEM_LASTKBD;
+		v -= 1;
+		if (v < 0) {
+			*port = JPORT_NONE;
+		} else if (v >= max) {
+			*port = JPORT_NONE;
+		} else if (v < JSEM_LASTKBD) {
+			*port = JSEM_KBDLAYOUT + (int)v;
+		} else if (v >= JSEM_LASTKBD + inputdevice_get_device_total (IDTYPE_JOYSTICK)) {
+			*port = JSEM_MICE + (int)v - inputdevice_get_device_total (IDTYPE_JOYSTICK) - JSEM_LASTKBD;
 		} else {
-			workprefs.jports[i].id = JSEM_JOYS + id - JSEM_LASTKBD;
+			*port = JSEM_JOYS + (int)v - JSEM_LASTKBD;
 		}
 
-		if (workprefs.jports[i].id != prevport)
+		if (i < 2) {
+		  v = inputmode_val[cboPortModes[i]->getSelected()];
+			*portm = v;
+      int af = cboAutofires[i]->getSelected();
+      workprefs.jports[i].autofire = af;
+		}
+
+		if (*port != prevport)
 			changed = 1;
-
-	  if (i >= 2)
-	    continue;
-
-		if(cboPortModes[i] != NULL)
-		  workprefs.jports[i].mode = inputmode_val[cboPortModes[i]->getSelected()];
-		if(cboAutofires[i] != NULL)
-		  workprefs.jports[i].autofire = cboAutofires[i]->getSelected();
 	}
+	if (changed)
+		inputdevice_validate_jports (&workprefs, changedport, NULL);
+}
 
-  if (changed)
-    inputdevice_validate_jports (&workprefs, changedport, NULL);        
 
-	RefreshPanelGamePort();
-
-  inputdevice_config_change();
-  if(reset)
-    inputdevice_forget_unplugged_device(changedport);
+static void processport (bool reset, int port)
+{
+	if (reset)
+		inputdevice_compa_clear (&workprefs, port);
+	values_from_gameportsdlg (port);
+	updatejoyport (port);
+	inputdevice_updateconfig (NULL, &workprefs);
+	inputdevice_config_change ();
 }
 
 
@@ -181,37 +184,43 @@ class GamePortActionListener : public gcn::ActionListener
     void action(const gcn::ActionEvent& actionEvent)
     {
       if (actionEvent.getSource() == cboPorts[0] || actionEvent.getSource() == cboPortModes[0]) {
-        values_from_dialog(0, true);
+				processport (true, 0);
+				inputdevice_forget_unplugged_device(0);
       }
       
       else if (actionEvent.getSource() == cboPorts[1] || actionEvent.getSource() == cboPortModes[1]) {
-        values_from_dialog(1, true);
+				processport (true, 1);
+				inputdevice_forget_unplugged_device(1);
       }
       
       else if (actionEvent.getSource() == cboPorts[2]) {
-        values_from_dialog(2, true);
+				processport (true, 2);
+				inputdevice_forget_unplugged_device(2);
       }
 
       else if (actionEvent.getSource() == cboPorts[3]) {
-        values_from_dialog(3, true);
+				processport (true, 3);
+				inputdevice_forget_unplugged_device(3);
       }
 
       else if (actionEvent.getSource() == cboAutofires[0]) {
-        values_from_dialog(0, false);
+        processport (false, 0);
       }
       
       else if (actionEvent.getSource() == cboAutofires[1]) {
-        values_from_dialog(1, false);
+        processport (false, 1);
       }
       
  	    else if (actionEvent.getSource() == sldMouseSpeed) {
     		workprefs.input_joymouse_multiplier = mousespeed_values[(int)(sldMouseSpeed->getValue())];
-    		RefreshPanelGamePort();
+        lblMouseSpeedInfo->setCaption(mousespeed_list[(int)sldMouseSpeed->getValue()]);
     	}
 
  	    else if (actionEvent.getSource() == sldAutofireRate) {
+        TCHAR tmp[32];
     		workprefs.input_autofire_linecnt = (int)(sldAutofireRate->getValue()) * 100;
-    		RefreshPanelGamePort();
+        _stprintf (tmp, _T("%d lines"), workprefs.input_autofire_linecnt);
+        lblAutofireRateInfo->setCaption(tmp);
     	}
 
       else if (actionEvent.getSource() == cboKBDLed_num)
@@ -229,14 +238,19 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   int j;
 
   total_devices = 1 + JSEM_LASTKBD;
-	for (j = 0; j < inputdevice_get_device_total (IDTYPE_JOYSTICK) && total_devices < 12; j++, total_devices++)
+	for (j = 0; j < inputdevice_get_device_total (IDTYPE_JOYSTICK) && total_devices < MAX_TOTAL_DEVICES; j++, total_devices++)
 	  inputport_list[total_devices] = inputdevice_get_device_name (IDTYPE_JOYSTICK, j);
-	for (j = 0; j < inputdevice_get_device_total (IDTYPE_MOUSE) && total_devices < 12; j++, total_devices++)
+  total_devicesPara = total_devices;
+	for (j = 0; j < inputdevice_get_device_total (IDTYPE_MOUSE) && total_devices < MAX_TOTAL_DEVICES; j++, total_devices++)
 		inputport_list[total_devices] = inputdevice_get_device_name (IDTYPE_MOUSE, j);
 
   ctrlPortList.clear();
   for(j = 0; j < total_devices; ++j)
     ctrlPortList.add(inputport_list[j]);
+
+  ctrlPortListPara.clear();
+  for(j = 0; j < total_devicesPara; ++j)
+    ctrlPortListPara.add(inputport_list[j]);
   
   gameportActionListener = new GamePortActionListener();
 
@@ -261,7 +275,7 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   lblPort2 = new gcn::Label("paral. Port 1:");
   lblPort2->setSize(95, LABEL_HEIGHT);
   lblPort2->setAlignment(gcn::Graphics::RIGHT);
-	cboPorts[2] = new gcn::UaeDropDown(&ctrlPortList);
+	cboPorts[2] = new gcn::UaeDropDown(&ctrlPortListPara);
   cboPorts[2]->setSize(230, DROPDOWN_HEIGHT);
   cboPorts[2]->setBaseColor(gui_baseCol);
   cboPorts[2]->setId("cboPort2");
@@ -270,7 +284,7 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   lblPort3 = new gcn::Label("paral. Port 2:");
   lblPort3->setSize(95, LABEL_HEIGHT);
   lblPort3->setAlignment(gcn::Graphics::RIGHT);
-	cboPorts[3] = new gcn::UaeDropDown(&ctrlPortList);
+	cboPorts[3] = new gcn::UaeDropDown(&ctrlPortListPara);
   cboPorts[3]->setSize(230, DROPDOWN_HEIGHT);
   cboPorts[3]->setBaseColor(gui_baseCol);
   cboPorts[3]->setId("cboPort3");
@@ -386,7 +400,8 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
 //	category.panel->add(cboKBDLed_scr, lblScrLock->getX() + lblScrLock->getWidth() + 8, posY);
 //  posY += cboKBDLed_scr->getHeight() + DISTANCE_NEXT_Y;
 
-  values_to_dialog();
+	inputdevice_updateconfig (NULL, &workprefs);
+	updatejoyport (-1);
 }
 
 

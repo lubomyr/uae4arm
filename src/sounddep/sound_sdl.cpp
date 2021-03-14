@@ -20,6 +20,7 @@
 #include "newcpu.h"
 #include "custom.h"
 #include "audio.h"
+#include "driveclick.h"
 #include "gensound.h"
 #include "sounddep/sound.h"
 #include <SDL.h>
@@ -69,6 +70,7 @@ static int s_oldrate = 0, s_oldbits = 0, s_oldstereo = 0;
 static int sound_thread_active = 0, sound_thread_exit = 0;
 static int rdcnt = 0;
 static int wrcnt = 0;
+static const int cnt_max_diff = 4;
 
 
 static void sound_copy_produced_block(void *ud, Uint8 *stream, int len)
@@ -81,15 +83,13 @@ static void sound_copy_produced_block(void *ud, Uint8 *stream, int len)
 				sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)][i] += cdaudio_buffer[cdrdcnt & (CDAUDIO_BUFFERS - 1)][i];
   		cdrdcnt++; 
 		}
-	
-		memcpy(stream, sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)], len);
 	}
-	else
-		memcpy(stream, sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)], len);
 
-	if (wrcnt - rdcnt >= (SOUND_BUFFERS_COUNT / 2))
-	{
+	if (wrcnt - rdcnt >= 1) {
+	  memcpy(stream, sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)], len);
 		rdcnt++;
+	} else {
+	  memset(stream, 0, len);
 	}
 }
 
@@ -182,6 +182,14 @@ void stop_sound(void)
 
 void finish_sound_buffer(void)
 {
+	if (currprefs.turbo_emulation) {
+		sndbufpt = render_sndbuff = sndbuffer[wrcnt & (SOUND_BUFFERS_COUNT - 1)];
+		return;
+	}
+#ifdef DRIVESOUND
+	driveclick_mix((uae_s16*)render_sndbuff, currprefs.sound_stereo ? SNDBUFFER_LEN * 2 : SNDBUFFER_LEN);
+#endif
+
 	wrcnt++;
 	sndbufpt = render_sndbuff = sndbuffer[wrcnt & (SOUND_BUFFERS_COUNT - 1)];
 
@@ -190,9 +198,10 @@ void finish_sound_buffer(void)
 	else
 		finish_sndbuff = sndbufpt + SNDBUFFER_LEN;
 
-	while ((wrcnt & (SOUND_BUFFERS_COUNT - 1)) == (rdcnt & (SOUND_BUFFERS_COUNT - 1)))
+	if (wrcnt - rdcnt > cnt_max_diff)
 	{
-		usleep(500);
+	  // Audiodriver has big delay, skip two buffers
+		rdcnt = wrcnt - (cnt_max_diff - 1);
 	} 
 }
 
@@ -254,6 +263,8 @@ static int open_sound(void)
 	else
 		sample_handler = sample16_handler;
 
+	driveclick_init ();
+
 	return 1;
 }
 
@@ -266,12 +277,6 @@ void close_sound(void)
 	stop_sound();
 
 	have_sound = 0;
-}
-
-int init_sound(void)
-{
-	have_sound = open_sound();
-	return have_sound;
 }
 
 void pause_sound(void)
@@ -293,6 +298,20 @@ void reset_sound(void)
 
 	clear_sound_buffers();
 	clear_cdaudio_buffers();
+}
+
+int init_sound (void)
+{
+	if (!sound_available)
+		return 0;
+	if (currprefs.produce_sound <= 1)
+		return 0;
+	if (have_sound)
+		return 1;
+	if (!open_sound ())
+		return 0;
+	driveclick_reset ();
+	return 1;
 }
 
 void sound_volume(int dir)

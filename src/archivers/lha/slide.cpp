@@ -56,7 +56,7 @@ static struct decode_option decode_set;
 
 #define HSHSIZ (((unsigned long)1) <<15)
 #define NIL 0
-#define LIMIT 0x100	/* chain Ä¹¤Î limit */
+#define LIMIT 0x100	/* chain Ĺ�� limit */
 
 static unsigned int txtsiz;
 

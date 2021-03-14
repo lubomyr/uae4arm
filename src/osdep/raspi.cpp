@@ -15,18 +15,11 @@ void target_default_options (struct uae_prefs *p, int type)
 {
   p->gfx_monitor.gfx_size.y = OFFSET_Y_ADJUST;
   
-	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
+	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_A8R8G8B8;
 	
 	p->cr[0].index = 0;
-	p->cr[0].horiz = -1;
-	p->cr[0].vert = -1;
-	p->cr[0].lace = -1;
-	p->cr[0].resolution = 0;
 	p->cr[0].rate = 60.0;
 	p->cr[0].ntsc = 1;
-	p->cr[0].rtg = true;
-	p->cr[0].inuse = true;
-	_tcscpy (p->cr[0].label, _T("RTG"));
 
 #ifdef USE_SDL2
 	p->gfx_correct_aspect = 0;
@@ -65,7 +58,7 @@ void target_fixup_options (struct uae_prefs *p)
     p->cs_cd32fmv = 1;
   }
   
-	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
+	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_A8R8G8B8;
   p->gfx_resolution = p->gfx_monitor.gfx_size.width > 600 ? 1 : 0;
   
   if(p->cachesize > 0)

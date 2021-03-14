@@ -75,6 +75,9 @@ void keyboard_settrans (void);
 #define REMAP_CD32_FFW            -12
 #define REMAP_CD32_RWD            -13
 
+extern bool resumepaused (int priority);
+extern bool setpaused (int priority);
+
 extern void input_closeall(void);
 extern int get_sdlkbd (void);
 extern int get_sdlmouse (void);
@@ -85,10 +88,6 @@ extern void graphics_thread_leave(void);
 
 extern void free_AmigaMem(void);
 extern void alloc_AmigaMem(void);
-
-#ifdef WITH_LOGGING
-extern void ShowLiveInfo(char *msg);
-#endif
 
 extern void fetch_configurationpath (char *out, int size);
 extern void set_configurationpath(char *newpath);
@@ -128,7 +127,6 @@ extern const int amigaheight_values[AMIGAHEIGHT_COUNT];
 
 extern void gui_force_rtarea_hdchange(void);
 extern void gui_restart(void);
-extern bool hardfile_testrdb (const TCHAR *filename);
 
 extern bool host_poweroff;
 

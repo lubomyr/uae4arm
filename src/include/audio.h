@@ -11,7 +11,7 @@
 
 #include "uae/types.h"
 
-#define PERIOD_MAX UINT_MAX
+#define PERIOD_MAX ULONG_MAX
 #define MAX_EV ~0u
 
 void AUDxDAT (int nr, uae_u16 value);
@@ -44,6 +44,12 @@ enum {
   SND_STEREO,
   SND_NONE
 };
+
+STATIC_INLINE int get_audio_nativechannels (int stereomode)
+{
+	int ch[] = { 1, 2, 0 };
+	return ch[stereomode];
+}
 
 #define SOUND_MAX_DELAY_BUFFER 1024
 #define SOUND_MAX_LOG_DELAY 10
