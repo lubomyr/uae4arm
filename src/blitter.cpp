@@ -1547,7 +1547,7 @@ uae_u8 *save_blitter_new (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 256);
 
 	uae_u8 state;
 	save_u8 (blitter_cycle_exact ? 3 : 0);

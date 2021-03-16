@@ -1959,7 +1959,7 @@ uae_u8 *save_akiko (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 256);
 	save_u16 (0);
 	save_u16 (0xCAFE);
 	save_u32 (cdrom_intreq);

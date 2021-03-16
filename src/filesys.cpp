@@ -8234,7 +8234,7 @@ uae_u8 *save_filesys_common (int *len)
   uae_u8 *dstbak, *dst;
   if (nr_units() == 0)
   	return NULL;
-  dstbak = dst = xmalloc (uae_u8, 1000);
+  dstbak = dst = xmalloc (uae_u8, 32);
   save_u32 (2);
   save_u64 (a_uniq);
   save_u64 (key_uniq);

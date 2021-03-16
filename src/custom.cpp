@@ -7666,7 +7666,7 @@ void custom_prepare_savestate (void)
 
 uae_u8 *restore_custom (uae_u8 *src)
 {
-  uae_u16 dsklen, dskbytr, ru16;
+  uae_u16 dsklen, dskbytr;
   int dskpt;
   int i;
 
@@ -7709,30 +7709,30 @@ uae_u8 *restore_custom (uae_u8 *src)
   BLTCON1(0, RW);	  /* 042 BLTCON1 */
   BLTAFWM(0, RW);	  /* 044 BLTAFWM */
   BLTALWM(0, RW);	  /* 046 BLTALWM */
-  bltcpt = RL; 	  /* 048-04B BLTCPT */
-  bltbpt = RL; 	  /* 04C-04F BLTBPT */
-  bltapt = RL; 	  /* 050-053 BLTAPT */
-  bltdpt = RL; 	  /* 054-057 BLTDPT */
+	BLTCPTH (0, RW);BLTCPTL(0, RW);	/* 048-04B BLTCPT */
+	BLTBPTH (0, RW);BLTBPTL(0, RW);	/* 04C-04F BLTBPT */
+	BLTAPTH (0, RW);BLTAPTL(0, RW);	/* 050-053 BLTAPT */
+	BLTDPTH (0, RW);BLTDPTL(0, RW);	/* 054-057 BLTDPT */
   RW;				      /* 058 BLTSIZE */
   RW;				      /* 05A BLTCON0L -> see 040 */
   blt_info.vblitsize=RW;  /* 05C BLTSIZV */
   blt_info.hblitsize=RW;	/* 05E BLTSIZH */
-  blt_info.bltcmod = RW;  /* 060 BLTCMOD */
-  blt_info.bltbmod = RW;  /* 062 BLTBMOD */
-  blt_info.bltamod = RW;  /* 064 BLTAMOD */
-  blt_info.bltdmod = RW;  /* 066 BLTDMOD */
+	BLTCMOD (0, RW);		/* 060 BLTCMOD */
+	BLTBMOD (0, RW);		/* 062 BLTBMOD */
+	BLTAMOD (0, RW);		/* 064 BLTAMOD */
+	BLTDMOD (0, RW);		/* 066 BLTDMOD */
   RW;				/* 068 ? */
   RW;				/* 06A ? */
   RW;				/* 06C ? */
   RW;				/* 06E ? */
-  blt_info.bltcdat =RW;   /* 070 BLTCDAT */
+	BLTCDAT (0, RW);		/* 070 BLTCDAT */
   BLTBDAT(0, RW);	  /* 072 BLTBDAT */
-  blt_info.bltadat=RW;    /* 074 BLTADAT */
+	BLTADAT (0, RW);		/* 074 BLTADAT */
   RW;				/* 076 ? */
   RW;				/* 078 ? */
   RW;				/* 07A ? */
   RW;				/* 07C LISAID */
-  ru16=RW; DSKSYNC(-1, ru16);	/* 07E DSKSYNC */
+	DSKSYNC (-1, RW);		/* 07E DSKSYNC */
   cop1lc =  RL;		/* 080/082 COP1LC */
   cop2lc =  RL;		/* 084/086 COP2LC */
   RW;				      /* 088 COPJMP1 */
@@ -7757,7 +7757,7 @@ uae_u8 *restore_custom (uae_u8 *src)
   bpl1mod = RW;		/* 108 BPL1MOD */
   bpl2mod = RW;		/* 10A BPL2MOD */
   bplcon4 = RW;		/* 10C BPLCON4 */
-  CLXCON2(RW);	  /* 10E CLXCON2* */
+	clxcon2 = RW;		/* 10E CLXCON2* */
   for(i = 0; i < 8; i++)
   	fetched[i] = RW;			/*     BPLXDAT */
   /* 120 - 17E Sprite regs */
@@ -8130,7 +8130,7 @@ uae_u8 *save_custom_extra (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 32);
 
 	SL ((currprefs.cs_compatible << 24) | (&get_mem_bank (0) != &chipmem_bank ? 2 : 0) | 1);
 	SB (currprefs.cs_rtc);
@@ -8190,7 +8190,7 @@ uae_u8 *save_custom_event_delay (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 256);
 
 	save_u32 (1);
 	save_u8 (cnt);
@@ -8200,7 +8200,6 @@ uae_u8 *save_custom_event_delay (int *len, uae_u8 *dstptr)
 			save_u8 (1);
 			save_u64 (e->evtime - get_cycles ());
 			save_u32 (e->data);
-		
 		}
 	}
 
@@ -8214,7 +8213,7 @@ uae_u8 *save_cycles (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 32);
 	save_u32 (1);
 	save_u32 (CYCLE_UNIT);
 	save_u64 (get_cycles ());

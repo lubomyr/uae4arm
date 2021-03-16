@@ -1554,7 +1554,7 @@ uae_u8 *save_audio (int nr, int *len, uae_u8 *dstptr)
   if (dstptr)
   	dstbak = dst = dstptr;
   else
-		dstbak = dst = xmalloc (uae_u8, 100);
+		dstbak = dst = xmalloc (uae_u8, 32);
 	save_u8 (acd->state);
 	save_u8 (acd->data.audvol);
   save_u8 (acd->intreq2);

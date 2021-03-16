@@ -842,7 +842,7 @@ uae_u8 *save_gayle (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 32);
 	save_u8 (currprefs.cs_ide);
 	save_u8 (gayle_int);
 	save_u8 (gayle_irq);
@@ -868,7 +868,7 @@ uae_u8 *save_gayle_ide (int num, int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 32);
 	save_u32 (num);
 	dst = ide_save_state(dst, ide);
 	*len = dst - dstbak;

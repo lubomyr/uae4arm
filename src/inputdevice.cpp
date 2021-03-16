@@ -286,7 +286,7 @@ uae_u8 *save_input (int *len, uae_u8 *dstptr)
 	if (dstptr)
 		dstbak = dst = dstptr;
 	else
-		dstbak = dst = xmalloc (uae_u8, 1000);
+		dstbak = dst = xmalloc (uae_u8, 32);
 	save_u32 (0);
 	for (int i = 0; i < 2; i++) {
 		for (int j = 0; j < 2; j++) {
