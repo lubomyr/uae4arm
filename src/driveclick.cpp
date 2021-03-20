@@ -93,44 +93,6 @@ static void freesample (struct drvsample *s)
 	s->p = 0;
 }
 
-static void processclicks (struct drvsample *ds)
-{
-	unsigned int nClick = 0;
-
-	for (int n = 0; n < CLICK_TRACKS; n++)  {
-		ds->indexes[n] = 0;
-		ds->lengths[n] = 0;
-	}
-	for(int n = 0; n < ds->len; n++) {
-		uae_s16 smp = ds->p[n];
-		if (smp > 0x6ff0 && nClick < CLICK_TRACKS)  {
-			ds->indexes[nClick] = n - 128;
-			ds->lengths[nClick] = 2800;
-			nClick ++;
-			n += 3000;
-		}
-	}
-	if (nClick == 0) {
-		for(int n = 0; n < CLICK_TRACKS; n++) {
-			ds->indexes[n] = 0;
-			ds->lengths[n] = ds->len;
-		}
-	} else {
-		if (nClick == 1) {
-			ds->lengths[0] = ds->len - ds->indexes[0];
-			for(int n = 1; n < CLICK_TRACKS; n++) {
-				ds->indexes[n] = ds->indexes[0];
-				ds->lengths[n] = ds->lengths[0];
-			}
-		} else  {
-			for(int n = nClick; n < CLICK_TRACKS; n++) {
-				ds->indexes[n] = ds->indexes[nClick-1];
-				ds->lengths[n] = ds->lengths[nClick-1];
-			}
-		}
-	}
-}
-
 static void driveclick_close(void)
 {
 	for (int i = 0; i < 4; i++) {

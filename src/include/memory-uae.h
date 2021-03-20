@@ -305,6 +305,18 @@ static uae_u8 *REGPARAM2 name ## index ## _xlate (uaecptr addr) \
 	return name ## _bank[index].baseaddr + addr; \
 }
 
+#define DECLARE_MEMORY_ARRAY_FUNCTIONS(name, index) \
+static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## index ## _lget) (uaecptr) REGPARAM; \
+static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## index ## _lgeti) (uaecptr) REGPARAM; \
+static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## index ## _wget) (uaecptr) REGPARAM; \
+static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## index ## _wgeti) (uaecptr) REGPARAM; \
+static uae_u32 REGPARAM3 NOWARN_UNUSED(name ## index ## _bget) (uaecptr) REGPARAM; \
+static void REGPARAM3 NOWARN_UNUSED(name ## index ## _lput) (uaecptr, uae_u32) REGPARAM; \
+static void REGPARAM3 NOWARN_UNUSED(name ## index ## _wput) (uaecptr, uae_u32) REGPARAM; \
+static void REGPARAM3 NOWARN_UNUSED(name ## index ## _bput) (uaecptr, uae_u32) REGPARAM; \
+static int REGPARAM3 NOWARN_UNUSED(name ## index ## _check) (uaecptr addr, uae_u32 size) REGPARAM; \
+static uae_u8 *REGPARAM3 NOWARN_UNUSED(name ## index ## _xlate) (uaecptr addr) REGPARAM;
+
 #define MEMORY_ARRAY_FUNCTIONS(name, index) \
 MEMORY_ARRAY_LGET(name, index); \
 MEMORY_ARRAY_WGET(name, index); \
@@ -323,7 +335,6 @@ extern addrbank cia_bank;
 extern addrbank rtarea_bank;
 extern addrbank filesys_bank;
 extern addrbank uaeboard_bank;
-extern addrbank expamem_bank;
 extern addrbank expamem_null;
 extern addrbank fastmem_bank[MAX_RAM_BOARDS];
 extern addrbank *gfxmem_banks[MAX_RTG_BOARDS];
@@ -332,13 +343,10 @@ extern addrbank gayle2_bank;
 extern addrbank mbres_bank;
 extern addrbank akiko_bank;
 extern addrbank bogomem_bank;
-extern addrbank z3fastmem_bank[MAX_RAM_BOARDS];
 extern addrbank a3000lmem_bank;
 extern addrbank a3000hmem_bank;
 extern addrbank extendedkickmem_bank;
 extern addrbank extendedkickmem2_bank;
-extern addrbank custmem1_bank;
-extern addrbank custmem2_bank;
 
 extern void rtarea_init (void);
 extern void rtarea_free(void);
@@ -649,8 +657,6 @@ extern void REGPARAM3 chipmem_lput_fc (uaecptr, uae_u32) REGPARAM;
 extern void REGPARAM3 chipmem_wput_fc (uaecptr, uae_u32) REGPARAM;
 extern void REGPARAM3 chipmem_bput_fc (uaecptr, uae_u32) REGPARAM;
 
-extern void REGPARAM3 chipmem_agnus_wput (uaecptr, uae_u32) REGPARAM;
-
 extern uae_u32 chipmem_full_mask;
 extern addrbank dummy_bank;
 
@@ -662,7 +668,14 @@ STATIC_INLINE uae_u32 chipmem_wget_indirect (uae_u32 addr) {
   return do_get_mem_word((uae_u16 *)(chipmem_bank.baseaddr + addr));
 }
 
-#define chipmem_wput_indirect  chipmem_agnus_wput
+STATIC_INLINE void chipmem_wput_indirect (uaecptr addr, uae_u32 w)
+{
+  uae_u16 *m;
+
+  addr &= chipmem_full_mask;
+  m = (uae_u16 *)(chipmem_bank.baseaddr + addr);
+  do_put_mem_word (m, w);
+}
 
 extern bool mapped_malloc (addrbank*);
 extern void mapped_free (addrbank*);

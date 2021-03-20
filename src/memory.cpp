@@ -538,23 +538,26 @@ addrbank extendedkickmem2_bank = {
 	ABFLAG_ROM | ABFLAG_THREADSAFE, 0, S_WRITE
 };
 
-MEMORY_FUNCTIONS(custmem1);
-MEMORY_FUNCTIONS(custmem2);
+DECLARE_MEMORY_FUNCTIONS(custmem1);
+DECLARE_MEMORY_FUNCTIONS(custmem2);
 
-addrbank custmem1_bank = {
+static addrbank custmem1_bank = {
 	custmem1_lget, custmem1_wget, custmem1_bget,
 	custmem1_lput, custmem1_wput, custmem1_bput,
 	custmem1_xlate, custmem1_check, NULL, _T("custmem1"), _T("Non-autoconfig RAM #1"),
 	custmem1_lget, custmem1_wget,
 	ABFLAG_RAM | ABFLAG_THREADSAFE, 0, 0
 };
-addrbank custmem2_bank = {
+static addrbank custmem2_bank = {
 	custmem2_lget, custmem2_wget, custmem2_bget,
 	custmem2_lput, custmem2_wput, custmem2_bput,
 	custmem2_xlate, custmem2_check, NULL, _T("custmem2"), _T("Non-autoconfig RAM #2"),
 	custmem2_lget, custmem2_wget,
 	ABFLAG_RAM | ABFLAG_THREADSAFE, 0, 0
 };
+
+MEMORY_FUNCTIONS(custmem1);
+MEMORY_FUNCTIONS(custmem2);
 
 static bool singlebit (uae_u32 v)
 {

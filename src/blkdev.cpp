@@ -660,7 +660,7 @@ int sys_command_cd_rawread (int unitnum, uae_u8 *data, int block, int size, int 
 	freesem (unitnum);
 	return v;
 }
-int sys_command_cd_rawread (int unitnum, uae_u8 *data, int block, int size, int sectorsize, uae_u8 sectortype, uae_u8 scsicmd9, uae_u8 subs)
+static int sys_command_cd_rawread (int unitnum, uae_u8 *data, int block, int size, int sectorsize, uae_u8 sectortype, uae_u8 scsicmd9, uae_u8 subs)
 {
 	int v;
 	if (failunit (unitnum))
@@ -1861,4 +1861,3 @@ uae_u8 *restore_cd (int num, uae_u8 *src)
 }
 
 #endif
-

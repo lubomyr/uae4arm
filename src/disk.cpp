@@ -2633,7 +2633,7 @@ static void disk_insert_2 (int num, const TCHAR *name, bool forced, bool forcedw
 	}
 }
 
-void disk_insert (int num, const TCHAR *name, bool forcedwriteprotect)
+static void disk_insert (int num, const TCHAR *name, bool forcedwriteprotect)
 {
   set_config_changed ();
 	target_addtorecent (name, 0);
@@ -2685,7 +2685,7 @@ void DISK_vsync (void)
 
 int disk_empty (int num)
 {
-    return drive_empty (floppy + num);
+  return drive_empty (floppy + num);
 }
 
 static void fetch_DISK_select(uae_u8 data)
@@ -3134,40 +3134,6 @@ static void wordsync_detected(bool startup)
 	}
 }
 
-static void disk_doupdate_read_reallynothing(int floppybits, bool state)
-{
-	// Only because there is at least one demo that checks wrong bit
-	// and hangs unless DSKSYNC bit it set with zero DSKSYNC value...
-	if (INTREQR() & 0x1000)
-		return;
-	while (floppybits >= get_floppy_speed()) {
-		bool skipbit = false;
-		word <<= 1;
-		word |= (state ? 1 : 0);
-		// MSBSYNC
-		if (adkcon & 0x200) {
-			if ((word & 0x0001) == 0 && bitoffset == 0) {
-				word = 0;
-				skipbit = true;
-			}
-			if ((word & 0x0001) == 0 && bitoffset == 8) {
-				word >>= 1;
-				skipbit = true;
-			}
-		}
-		if (!skipbit && (bitoffset & 7) == 7) {
-			dskbytr_val = word & 0xff;
-			dskbytr_val |= 0x8000;
-		}
-		if (!(adkcon & 0x200) && word == dsksync) {
-			INTREQ(0x8000 | 0x1000);
-		}
-		bitoffset++;
-		bitoffset &= 15;
-		floppybits -= get_floppy_speed();
-	}
-}
-
 static void disk_doupdate_read_nothing(int floppybits)
 {
 	while (floppybits >= get_floppy_speed()) {
@@ -3478,8 +3444,6 @@ void DISK_update (int tohpos)
 	    disk_doupdate_read_nothing(cycles);
 		} else if (dskdmaen == DSKDMA_WRITE) {
 			disk_doupdate_write(cycles, get_floppy_speed());
-    } else {
-			//disk_doupdate_read_reallynothing(cycles, true);
 		}
   }
 
@@ -3677,7 +3641,7 @@ void DSKLEN (uae_u16 v, int hpos)
   }
 }
 
-void DISK_update_adkcon (int hpos, uae_u16 v)
+void DISK_update_adkcon (uae_u16 v)
 {
 	uae_u16 vold = adkcon;
 	uae_u16 vnew = adkcon;

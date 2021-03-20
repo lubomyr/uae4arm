@@ -148,7 +148,7 @@ static void* popall_execute_exception = NULL;
  * lists that we maintain for each hash result.
  */
 static cacheline cache_tags[TAGSIZE];
-static int letit=0;
+static int cache_enabled=0;
 static blockinfo* hold_bi[MAX_HOLD_BI];
 blockinfo* active;
 blockinfo* dormant;
@@ -1680,9 +1680,9 @@ void calc_disp_ea_020(int base, uae_u32 dp, int target)
 
 void set_cache_state(int enabled)
 {
-  if (enabled != letit)
+  if (enabled != cache_enabled)
     flush_icache_hard(3);
-  letit = enabled;
+  cache_enabled = enabled;
 }
 
 void alloc_cache(void)
@@ -2187,7 +2187,7 @@ STATIC_INLINE unsigned int get_opcode_cft_map(unsigned int f)
 
 void compile_block(cpu_history* pc_hist, int blocklen, int totcycles)
 {
-  if (letit && compiled_code && currprefs.cpu_model >= 68020) {
+  if (cache_enabled && compiled_code && currprefs.cpu_model >= 68020) {
 #ifdef PROFILE_COMPILE_TIME
     compile_count++;
     clock_t start_time = clock();

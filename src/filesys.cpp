@@ -1408,11 +1408,6 @@ static uae_s64 key_seek(Key *k, uae_s64 offset, int whence)
 	return fs_lseek64 (k->fd, offset, whence);
 }
 
-static void set_highcyl(uaecptr volume, uae_u32 blocks)
-{
-	put_long(volume + 184 - 32, blocks);
-}
-
 static void set_volume_name (Unit *unit, struct mytimeval *tv)
 {
   int namelen;

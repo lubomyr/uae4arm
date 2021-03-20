@@ -291,7 +291,7 @@ static void addextrachip (uae_u32 sysbase)
 addrbank expamem_null;
 
 DECLARE_MEMORY_FUNCTIONS(expamem);
-addrbank expamem_bank = {
+static addrbank expamem_bank = {
   expamem_lget, expamem_wget, expamem_bget,
   expamem_lput, expamem_wput, expamem_bput,
 	default_xlate, default_check, NULL, NULL, _T("Autoconfig Z2"),
@@ -1026,9 +1026,9 @@ static bool expamem_init_uaeboard(struct autoconfig_info *aci)
  *  Z3fastmem Memory
  */
 
-MEMORY_ARRAY_FUNCTIONS(z3fastmem, 0);
+DECLARE_MEMORY_ARRAY_FUNCTIONS(z3fastmem, 0);
 
-addrbank z3fastmem_bank[MAX_RAM_BOARDS] =
+static addrbank z3fastmem_bank[MAX_RAM_BOARDS] =
 {
 	{
 		z3fastmem0_lget, z3fastmem0_wget, z3fastmem0_bget,
@@ -1038,6 +1038,8 @@ addrbank z3fastmem_bank[MAX_RAM_BOARDS] =
 		ABFLAG_RAM | ABFLAG_THREADSAFE, 0, 0
   }
 };
+
+MEMORY_ARRAY_FUNCTIONS(z3fastmem, 0);
 
 /* ********************************************************** */
 

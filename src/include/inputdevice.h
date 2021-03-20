@@ -262,7 +262,6 @@ extern void inputdevice_unacquire (void);
 extern void inputdevice_releasebuttons(void);
 
 extern void warpmode (int mode);
-extern void pausemode (int mode);
 
 extern void inputdevice_add_inputcode (int code, int state, const TCHAR *);
 extern void inputdevice_handle_inputcode (void);

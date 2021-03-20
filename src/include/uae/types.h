@@ -25,10 +25,10 @@ typedef int32_t uae_s32;
 typedef uint32_t uae_u32;
 
 #ifndef uae_s64
-typedef long long int uae_s64;
+typedef long long uae_s64;
 #endif
 #ifndef uae_u64
-typedef unsigned long long int uae_u64;
+typedef unsigned long long uae_u64;
 #endif
 
 /* Parts of the UAE/WinUAE code uses the bool type (from C++).

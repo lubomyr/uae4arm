@@ -365,8 +365,6 @@ extern uae_u32 REGPARAM3 get_disp_ea_020 (uae_u32 base) REGPARAM;
 extern uae_u32 REGPARAM3 get_bitfield (uae_u32 src, uae_u32 bdata[2], uae_s32 offset, int width) REGPARAM;
 extern void REGPARAM3 put_bitfield (uae_u32 dst, uae_u32 bdata[2], uae_u32 val, uae_s32 offset, int width) REGPARAM;
 
-extern int get_cpu_model (void);
-
 extern void set_cpu_caches (bool flush);
 extern void flush_cpu_caches_040(uae_u16 opcode);
 extern void REGPARAM3 MakeSR (void) REGPARAM;
@@ -401,7 +399,6 @@ extern bool privileged_copro_instruction(uae_u16 opcode);
 extern bool generates_group1_exception(uae_u16 opcode);
 
 void ccr_68000_long_move_ae_LZN(uae_s32 src);
-void ccr_68000_long_move_ae_LN(uae_s32 src);
 void ccr_68000_long_move_ae_HNZ(uae_s32 src);
 void ccr_68000_long_move_ae_normal(uae_s32 src);
 void ccr_68000_word_move_ae_normal(uae_s16 src);
@@ -429,7 +426,6 @@ extern void exception3_read_prefetch(uae_u32 opcode, uaecptr addr);
 extern void exception3_read_prefetch_68040bug(uae_u32 opcode, uaecptr addr, uae_u16 secondarysr);
 extern void exception3_read_prefetch_only(uae_u32 opcode, uaecptr addr);
 extern void hardware_exception2(uaecptr addr, uae_u32 v, bool read, bool ins, int size);
-extern void exception2_setup(uae_u32 opcode, uaecptr addr, bool read, int size, uae_u32 fc);
 extern void exception2_read(uae_u32 opcode, uaecptr addr, int size, int fc);
 extern void exception2_write(uae_u32 opcode, uaecptr addr, int size, uae_u32 val, int fc);
 extern void exception2_fetch_opcode(uae_u32 opcode, int offset, int pcoffset);

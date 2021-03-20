@@ -596,7 +596,7 @@ static void fill_line2 (int startpos, int len)
 	}
 }
 
-static void fill_line_border (int lineno)
+static void fill_line_border (void)
 {
 	struct vidbuf_description *vidinfo = &adisplays.gfxvidinfo;
 	int lastpos = visible_left_border;
@@ -2064,16 +2064,16 @@ static void pfield_draw_line (int lineno, int gfx_ypos, int follow_ypos)
 				// blanked border line
 				int tmp = hposblank;
 				hposblank = 1;
-				fill_line_border(lineno);
+				fill_line_border();
 				hposblank = tmp;
 			} else {
 			  // normal border line
-			  fill_line_border(lineno);
+			  fill_line_border();
       }
 
 			if (do_double) {
 				xlinebuffer = row_map[follow_ypos] - linetoscr_x_adjust_pixbytes;
-				fill_line_border(lineno);
+				fill_line_border();
 			}
 			return;
 		}

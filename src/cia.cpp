@@ -58,7 +58,7 @@ static unsigned int ciabpra;
 
 static uae_u32 ciaala, ciaalb, ciabla, ciablb;
 static int ciaatodon, ciabtodon;
-static unsigned int ciaapra, ciaaprb, ciaadra, ciaadrb, ciaasdr, ciaasdr_buf, ciaasdr_load, ciaasdr_cnt;
+static unsigned int ciaapra, ciaaprb, ciaadra, ciaadrb, ciaasdr, ciaasdr_load, ciaasdr_cnt;
 static unsigned int ciabprb, ciabdra, ciabdrb, ciabsdr, ciabsdr_buf, ciabsdr_load, ciabsdr_cnt;
 static int div10;
 static int kbstate, kblostsynccnt;
@@ -231,7 +231,6 @@ static int CIA_update_check (void)
 	          asp = 1;
 						if (ciaasdr_load) {
 							ciaasdr_load = 0;
-							ciaasdr_buf = ciaasdr;
 							ciaasdr_cnt = 8 * 2;
 						}
           }
@@ -924,7 +923,6 @@ static void WriteCIAA (uae_u16 addr,uae_u8 val)
      if (ciaasdr_cnt == 0) {
 	      ciaasdr_cnt = 8 * 2;
 				ciaasdr_load = 0;
-				ciaasdr_buf = ciaasdr;
       }
     }
 	  CIA_calctimers ();
@@ -1732,7 +1730,7 @@ uae_u8 *restore_cia (int num, uae_u8 *src)
   b = restore_u8 ();
   if (num) ciabsdr_cnt = b; else ciaasdr_cnt = b;
   b = restore_u8 ();
-	if (num) ciabsdr_buf = b; else ciaasdr_buf = b;
+	if (num) ciabsdr_buf = b;
   return src;
 }
 
@@ -1817,7 +1815,7 @@ uae_u8 *save_cia (int num, int *len, uae_u8 *dstptr)
   save_u8 (b);
   save_u8 (num ? div10 / CYCLE_UNIT : 0);
   save_u8 (num ? ciabsdr_cnt : ciaasdr_cnt);
-	save_u8(num ? ciabsdr_buf : ciaasdr_buf);
+	save_u8(num ? ciabsdr_buf : 0);
   *len = dst - dstbak;
   return dstbak;
 }

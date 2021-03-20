@@ -146,7 +146,16 @@ extern float hblank_hz;
 
 #define CYCLE_MASK 0x0f
 
-extern uae_u32 timeframes;
+#ifdef CPUEMU_13
+extern uae_u8 cycle_line[256 + 1];
+#endif
+
+STATIC_INLINE void alloc_cycle (int hpos, int type)
+{
+#ifdef CPUEMU_13
+	cycle_line[hpos] = type;
+#endif
+}
 
 /* 100 words give you 1600 horizontal pixels. Should be more than enough for
  * superhires. Don't forget to update the definition in genp2c.c as well.
@@ -192,7 +201,6 @@ STATIC_INLINE int GET_PLANES(uae_u16 bplcon0)
 extern void fpscounter_reset (void);
 extern uae_u32 idletime;
 
-extern void alloc_cycle_blitter (int hpos, uaecptr *ptr, int);
 extern int current_maxvpos (void);
 int is_bitplane_dma (int hpos);
 void custom_cpuchange(void);

@@ -5,11 +5,6 @@
 #include "newcpu.h"
 #include "cpummu.h"
 
-int get_cpu_model(void)
-{
-	return currprefs.cpu_model;
-}
-
 static int movec_illg (int regno)
 {
   int regno2 = regno & 0x7ff;
@@ -1267,14 +1262,6 @@ void ccr_68000_long_move_ae_LZN(uae_s32 src)
 	CLEAR_CZNV();
 	uae_s16 vsrc = (uae_s16)(src & 0xffff);
 	SET_ZFLG(vsrc == 0);
-	SET_NFLG(vsrc < 0);
-}
-
-// Low word: Clear + N only
-void ccr_68000_long_move_ae_LN(uae_s32 src)
-{
-	CLEAR_CZNV();
-	uae_s16 vsrc = (uae_s16)(src & 0xffff);
 	SET_NFLG(vsrc < 0);
 }
 

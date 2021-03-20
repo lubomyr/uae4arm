@@ -98,6 +98,7 @@ static int inputdevice_joyport_config(struct uae_prefs *p, const TCHAR *value1, 
 static int jsem_isjoy (int port, const struct uae_prefs *p);
 static int jsem_ismouse (int port, const struct uae_prefs *p);
 static int jsem_iskbdjoy (int port, const struct uae_prefs *p);
+static void pausemode (int mode);;
 
 static struct inputdevice_functions idev[IDTYPE_MAX];
 
@@ -2307,7 +2308,6 @@ static void queue_input_event (int evt, int state, int max, int linecnt, int aut
 	}
 }
 
-static uae_u8 keybuf[256];
 #define MAX_PENDING_EVENTS 20
 struct inputcode
 {
@@ -2340,7 +2340,6 @@ void inputdevice_do_keyboard (int code, int state)
 {
 	if (code < 0x80) {
 		uae_u8 key = code | (state ? 0x00 : 0x80);
-		keybuf[key & 0x7f] = (key & 0x80) ? 0 : 1;
     record_key ((uae_u8)((key << 1) | (key >> 7)));
 		return;
 	}
@@ -4090,7 +4089,6 @@ static void resetinput (void)
 		mouse_deltanoreset[i][2] = 0;
 		mouse_delta[i][2] = 0;
   }
-	memset (keybuf, 0, sizeof keybuf);
 	for (int i = 0; i < INPUT_QUEUE_SIZE; i++)
 		input_queue[i].linecnt = input_queue[i].nextlinecnt = -1;
 
@@ -5102,7 +5100,7 @@ void warpmode (int mode)
 	set_config_changed ();
 }
 
-void pausemode (int mode)
+static void pausemode (int mode)
 {
 	if (mode < 0)
 		pause_emulation = pause_emulation ? 0 : 9;

@@ -1838,9 +1838,6 @@ static void move_68000_address_error(int size, int *setapdi, int *fcmodeflags)
 		if (set_low_word == 1) {
 			// Low word: Z and N
 			out("ccr_68000_long_move_ae_LZN(src);\n");
-		} else if (set_low_word == 2) {
-			// Low word: N only
-			out("ccr_68000_long_move_ae_LN(src);\n");
 		} else if (set_high_word) {
 			// High word: N and Z clear.
 			out("ccr_68000_long_move_ae_HNZ(src);\n");
@@ -1951,9 +1948,6 @@ static void move_68010_address_error(int size, int *setapdi, int *fcmodeflags)
 		if (set_low_word == 1) {
 			// Low word: Z and N
 			out("ccr_68000_long_move_ae_LZN(src);\n");
-		} else if (set_low_word == 2) {
-			// Low word: N only
-			out("ccr_68000_long_move_ae_LN(src);\n");
 		} else if (set_high_word) {
 			// High word: N and Z clear.
 			out("ccr_68000_long_move_ae_HNZ(src);\n");

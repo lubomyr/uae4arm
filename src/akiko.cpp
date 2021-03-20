@@ -200,6 +200,7 @@ static void nvram_read (void)
 	if (!cd32_nvram || cd32_nvram_size != maxlen) {
 		xfree(cd32_nvram);
 		cd32_nvram = xmalloc(uae_u8, maxlen);
+		cd32_nvram_size = maxlen;
 	}
 	memset(cd32_nvram, 0, maxlen);
 	TCHAR path[MAX_DPATH];
@@ -727,7 +728,6 @@ static void sys_cddev_close (void)
 		sys_command_close (unitnum);
 	}
 	unitnum = -1;
-	
 }
 
 static bool cdrom_can_return_data(void)
@@ -2116,4 +2116,3 @@ void akiko_mute (int muted)
 		}
 	}
 }
-

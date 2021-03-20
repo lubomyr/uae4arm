@@ -73,14 +73,6 @@ int movem_next[256];
 
 cpuop_func *cpufunctbl[65536];
 
-struct cputbl_data
-{
-	uae_s16 length;
-	uae_s8 disp020[2];
-	uae_s8 branch;
-};
-static struct cputbl_data cpudatatbl[65536];
-
 struct mmufixup mmufixup[1];
 
 static uae_u64 fake_srp_030, fake_crp_030;
@@ -790,10 +782,6 @@ static void build_cpufunctbl (void)
   for (i = 0; tbl[i].handler_ff != NULL; i++) {
     opcode = tbl[i].opcode;
   	cpufunctbl[opcode] = tbl[i].handler_ff;
-		cpudatatbl[opcode].length = tbl[i].length;
-		cpudatatbl[opcode].disp020[0] = tbl[i].disp020[0];
-		cpudatatbl[opcode].disp020[1] = tbl[i].disp020[1];
-		cpudatatbl[opcode].branch = tbl[i].branch;
   }
 
   /* hack fpu to 68000/68010 mode */
@@ -802,10 +790,6 @@ static void build_cpufunctbl (void)
   	for (i = 0; tbl[i].handler_ff != NULL; i++) {
 			if ((tbl[i].opcode & 0xfe00) == 0xf200) {
     		cpufunctbl[tbl[i].opcode] = tbl[i].handler_ff;
-				cpudatatbl[tbl[i].opcode].length = tbl[i].length;
-				cpudatatbl[tbl[i].opcode].disp020[0] = tbl[i].disp020[0];
-				cpudatatbl[tbl[i].opcode].disp020[1] = tbl[i].disp020[1];
-				cpudatatbl[tbl[i].opcode].branch = tbl[i].branch;
       }
   	}
   }
@@ -838,7 +822,6 @@ static void build_cpufunctbl (void)
 	    if (f == op_illg_1)
     		abort();
 	    cpufunctbl[opcode] = f;
-			memcpy(&cpudatatbl[opcode], &cpudatatbl[idx], sizeof(struct cputbl_data));
 			opcnt++;
   	}
   }
@@ -3132,7 +3115,7 @@ uae_u8 *save_cpu (int *len, uae_u8 *dstptr)
   uae_u8 *dstbak,*dst;
   int model, khz;
   uae_u32 flags;
-
+  
   if (dstptr)
   	dstbak = dst = dstptr;
   else
@@ -3312,7 +3295,7 @@ void exception3_write(uae_u32 opcode, uaecptr addr, int size, uae_u32 val, int f
 	exception3f(opcode, addr, true, ia, ni, 0xffffffff, size & 15, fc, 0);
 }
 
-void exception2_setup(uae_u32 opcode, uaecptr addr, bool read, int size, uae_u32 fc)
+static void exception2_setup(uae_u32 opcode, uaecptr addr, bool read, int size, uae_u32 fc)
 {
 	last_addr_for_exception_3 = m68k_getpc();
 	last_fault_for_exception_3 = addr;

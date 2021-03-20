@@ -804,4 +804,3 @@ static void fpp_to_pack (fpdata *fpd, uae_u32 *wrd, int dummy)
 	sscanf (str, "%le", &d);
 	fpp_from_native(d, fpd);
 }
-
