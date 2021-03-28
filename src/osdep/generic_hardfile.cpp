@@ -166,20 +166,24 @@ static int hdf_seek (struct hardfiledata *hfd, uae_u64 offset)
     uae_restart(1, NULL);
     return -1;
 	}
-	if (offset >= hfd->physsize - hfd->virtual_size) {
-		write_log (_T("hd: tried to seek out of bounds! (%I64X >= %I64X - %I64X)\n"), offset, hfd->physsize, hfd->virtual_size);
-    target_startup_msg(_T("Internal error"), _T("hd: tried to seek out of bounds."));
-    uae_restart(1, NULL);
-    return -1;
-	}
-	offset += hfd->offset;
-	if (offset & (hfd->ci.blocksize - 1)) {
-		write_log (_T("hd: poscheck failed, offset=%I64X not aligned to blocksize=%d! (%I64X & %04X = %04X)\n"),
-			offset, hfd->ci.blocksize, offset, hfd->ci.blocksize, offset & (hfd->ci.blocksize - 1));
-    target_startup_msg(_T("Internal error"), _T("hd: poscheck failed."));
-    uae_restart(1, NULL);
-    return -1;
-	}
+	if (hfd->physsize) {
+	  if (offset >= hfd->physsize - hfd->virtual_size) {
+			if (hfd->virtual_rdb)
+				return -1;
+		  write_log (_T("hd: tried to seek out of bounds! (%I64X >= %I64X - %I64X)\n"), offset, hfd->physsize, hfd->virtual_size);
+      target_startup_msg(_T("Internal error"), _T("hd: tried to seek out of bounds."));
+      uae_restart(1, NULL);
+      return -1;
+	  }
+	  offset += hfd->offset;
+	  if (offset & (hfd->ci.blocksize - 1)) {
+		  write_log (_T("hd: poscheck failed, offset=%I64X not aligned to blocksize=%d! (%I64X & %04X = %04X)\n"),
+			  offset, hfd->ci.blocksize, offset, hfd->ci.blocksize, offset & (hfd->ci.blocksize - 1));
+      target_startup_msg(_T("Internal error"), _T("hd: poscheck failed."));
+      uae_restart(1, NULL);
+      return -1;
+	  }
+  }
 	if (hfd->handle_valid == HDF_HANDLE_FILE) {
 		ret = fseek (hfd->handle->f, offset, SEEK_SET);
 		if (ret != 0)
@@ -192,7 +196,7 @@ static int hdf_seek (struct hardfiledata *hfd, uae_u64 offset)
 
 static void poscheck (struct hardfiledata *hfd, int len)
 {
-	uae_u64 pos;
+	uae_s64 pos = -1;
 
 	if (hfd->handle_valid == HDF_HANDLE_FILE) {
 		pos = ftell (hfd->handle->f);
@@ -255,12 +259,14 @@ static int hdf_read_2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, i
 	hfd->cache_offset = offset;
 	if (offset + CACHE_SIZE > hfd->offset + (hfd->physsize - hfd->virtual_size))
 		hfd->cache_offset = hfd->offset + (hfd->physsize - hfd->virtual_size) - CACHE_SIZE;
-	hdf_seek (hfd, hfd->cache_offset);
+	if (hdf_seek (hfd, hfd->cache_offset))
+	  return 0;
 	poscheck (hfd, CACHE_SIZE);
-	if (hfd->handle_valid == HDF_HANDLE_FILE)
+	if (hfd->handle_valid == HDF_HANDLE_FILE) {
 		outlen = fread(hfd->cache, 1, CACHE_SIZE, hfd->handle->f);
-	else if (hfd->handle_valid == HDF_HANDLE_ZFILE)
+	} else if (hfd->handle_valid == HDF_HANDLE_ZFILE) {
 		outlen = zfile_fread (hfd->cache, 1, CACHE_SIZE, hfd->handle->zf);
+	}
 	hfd->cache_valid = 0;
 	if (outlen != CACHE_SIZE)
 		return 0;
@@ -282,21 +288,16 @@ int hdf_read_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, int
 
 	if (hfd->drive_empty)
 		return 0;
-	if (offset < hfd->virtual_size) {
-		uae_u64 len2 = offset + len <= hfd->virtual_size ? len : hfd->virtual_size - offset;
-		if (!hfd->virtual_rdb)
-			return 0;
-		memcpy (buffer, hfd->virtual_rdb + offset, len2);
-		return len2;
-	}
-	offset -= hfd->virtual_size;
+
 	while (len > 0) {
 		int maxlen;
 		int ret;
 		if (hfd->physsize < CACHE_SIZE) {
 			hfd->cache_valid = 0;
-			hdf_seek (hfd, offset);
-			poscheck (hfd, len);
+			if (hdf_seek (hfd, offset))
+        return got;
+			if (hfd->physsize)
+			  poscheck (hfd, len);
 			if (hfd->handle_valid == HDF_HANDLE_FILE) {
 				ret = fread (hfd->cache, 1, len, hfd->handle->f);
 				memcpy (buffer, hfd->cache, ret);
@@ -324,8 +325,12 @@ static int hdf_write_2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, 
 
 	if (hfd->ci.readonly)
 		return 0;
+	if (len == 0)
+		return 0;
+
 	hfd->cache_valid = 0;
-	hdf_seek (hfd, offset);
+	if (hdf_seek (hfd, offset))
+		return 0;
 	poscheck (hfd, len);
 	memcpy (hfd->cache, buffer, len);
 	if (hfd->handle_valid == HDF_HANDLE_FILE) {
@@ -337,10 +342,11 @@ static int hdf_write_2 (struct hardfiledata *hfd, void *buffer, uae_u64 offset, 
 			int tmplen = 512;
 			tmp = (uae_u8*)malloc (tmplen);
 			if (tmp) {
+				int cmplen = tmplen > len ? len : tmplen;
 				memset (tmp, 0xa1, tmplen);
 				hdf_seek (hfd, offset);
 				outlen2 = fread (tmp, 1, tmplen, hfd->handle->f);
-				if (memcmp (hfd->cache, tmp, tmplen) != 0 || outlen != len)
+				if (memcmp (hfd->cache, tmp, cmplen) != 0 || outlen != len)
 					gui_message (_T("\"%s\"\n\nblock zero write failed!"), name);
 				free (tmp);
 			}
@@ -356,11 +362,9 @@ int hdf_write_target (struct hardfiledata *hfd, void *buffer, uae_u64 offset, in
 	int got = 0;
 	uae_u8 *p = (uae_u8*)buffer;
 
-	if (hfd->drive_empty)
+	if (hfd->drive_empty || hfd->physsize == 0)
 		return 0;
-	if (offset < hfd->virtual_size)
-		return len;
-	offset -= hfd->virtual_size;
+
 	while (len > 0) {
 		int maxlen = len > CACHE_SIZE ? CACHE_SIZE : len;
 		int ret = hdf_write_2 (hfd, p, offset, maxlen);

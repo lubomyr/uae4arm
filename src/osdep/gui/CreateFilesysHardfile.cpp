@@ -307,7 +307,6 @@ bool CreateFilesysHardfile(void)
   chkDynamic->setSelected(false);
 
   CreateFilesysHardfileLoop();
-  ExitCreateFilesysHardfile();
   
   if(dialogResult)
   {
@@ -317,54 +316,71 @@ bool CreateFilesysHardfile(void)
       size = 1;
     if(size > 2048)
       size = 2048;    
-    int bp = tweakbootpri(atoi(txtBootPri->getText().c_str()), 1, 0);
     extractPath((char *) txtPath->getText().c_str(), currentDir);
     
     char init_path[MAX_DPATH];
     _tcsncpy(init_path, txtPath->getText().c_str(), MAX_DPATH - 1);
     if (chkDynamic->isSelected()) {
-			if (_tcslen (init_path) > 4 && !_tcsicmp (init_path + _tcslen (init_path) - 4, _T(".hdf")))
-				_tcscpy (init_path + _tcslen (init_path) - 4, _T(".vhd"));
+   		if (_tcslen (init_path) > 4 && !_tcsicmp (init_path + _tcslen (init_path) - 4, _T(".hdf")))
+   			_tcscpy (init_path + _tcslen (init_path) - 4, _T(".vhd"));
       bool result = vhd_create (init_path, size * 1024 * 1024, 0);
       if(!result) {
         ShowMessage("Create Hardfile", "Unable to create new VHD file.", "", "Ok", "");
-        return false;
+        dialogResult = false;
       }
     } else {
       FILE *newFile = fopen(init_path, "wb");
       if(!newFile)
       {
         ShowMessage("Create Hardfile", "Unable to create new file.", "", "Ok", "");
-        return false;
+        dialogResult = false;
       }
       fseek(newFile, size * 1024 * 1024 - 1, SEEK_SET);
       fwrite(&zero, 1, 1, newFile);
       fclose(newFile);
     }
-        
-    struct uaedev_config_data *uci;
-  	struct uaedev_config_info ci;
-
-    uci_set_defaults(&ci);
-    strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
-    strncpy(ci.rootdir, (char *) init_path, MAX_DPATH - 1);
-    ci.type = UAEDEV_HDF;
-    ci.surfaces = (size / 1024) + 1;
-    ci.bootpri = bp;
-
-	  ci.controller_type = 0;
-	  ci.controller_type_unit = 0;
-	  ci.controller_unit = 0;
-   	ci.unit_feature_level = 1;
-	  ci.readonly = 0;
     
-    uci = add_filesys_config(&workprefs, -1, &ci);
-    if (uci) {
-  		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
-  		if(hfd)
-        hardfile_media_change (hfd, &ci, true, false);
+    if (dialogResult) {
+      struct uaedev_config_data *uci;
+    	struct uaedev_config_info ci;
+   
+      uci_set_defaults(&ci);
+      strncpy(ci.devname, (char *) txtDevice->getText().c_str(), MAX_DPATH - 1);
+      strncpy(ci.rootdir, (char *) init_path, MAX_DPATH - 1);
+      ci.type = UAEDEV_HDF;
+      ci.surfaces = (size / 1024) + 1;
+
+			ci.bootpri = atoi(txtBootPri->getText().c_str());
+			if (ci.bootpri < -127)
+				ci.bootpri = -127;
+			if (ci.bootpri > 127)
+				ci.bootpri = 127;
+      if (!chkAutoboot->isSelected()) {
+				ci.bootpri = BOOTPRI_NOAUTOBOOT;
+      }
+   
+      ci.controller_type = 0;
+      ci.controller_type_unit = 0;
+      ci.controller_unit = 0;
+     	ci.unit_feature_level = 1;
+      ci.readonly = 0;
+
+  		int blocksize = 512;
+    	uae_u64 bsize = size * 1024 * 1024;
+		  bsize &= ~(blocksize - 1);
+
+			getchspgeometry (bsize, &ci.pcyls, &ci.pheads, &ci.psecs, false);
+      gethdfgeometry(bsize, &ci);
+
+      uci = add_filesys_config(&workprefs, -1, &ci);
+      if (uci) {
+    		struct hardfiledata *hfd = get_hardfile_data (uci->configoffset);
+    		if(hfd)
+          hardfile_media_change (hfd, &ci, true, false);
+      }
     }
   }
+  ExitCreateFilesysHardfile();
 
   return dialogResult;
 }
