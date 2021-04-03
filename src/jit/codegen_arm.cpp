@@ -68,19 +68,19 @@ extern void __clear_cache (char*, char*);
 #define REG_PAR1 R0_INDEX
 #define REG_PAR2 R1_INDEX
 
+/* REG_WORK1 needs to be even register number and REG_WORK2 must be the following register number!
+   We use LDRD with them.*/
 #define REG_WORK1 R2_INDEX
 #define REG_WORK2 R3_INDEX
 #define REG_WORK3 R12_INDEX
 
-//#define REG_DATAPTR R10_INDEX
-
 #define REG_PC_TMP R1_INDEX /* Another register that is not the above */
 
-#define R_MEMSTART 10
-#define R_REGSTRUCT 11
-uae_s8 always_used[]={2,3,R_MEMSTART,R_REGSTRUCT,12,-1}; // r2, r3 and r12 are work register in emitted code
+#define R_MEMSTART R11_INDEX
+#define R_REGSTRUCT RLR_INDEX
+uae_s8 always_used[]={REG_WORK1,REG_WORK2,R_MEMSTART,REG_WORK3,R_REGSTRUCT,-1}; // r2, r3 and r12 are work register in emitted code
 
-uae_u8 call_saved[]={0,0,0,0, 1,1,1,1, 1,1,1,1, 0,1,1,1};
+uae_u8 call_saved[]={0,0,0,0, 1,1,1,1, 1,1,1,1, 0,1,0,1};
 
 /* This *should* be the same as call_saved. But:
    - We might not really know which registers are saved, and which aren't,
@@ -91,9 +91,8 @@ uae_u8 call_saved[]={0,0,0,0, 1,1,1,1, 1,1,1,1, 0,1,1,1};
 */
 /* Without save and restore R12, we sometimes get seg faults when entering gui...
    Don't understand why. */
-static const uae_u8 need_to_preserve[]={0,0,0,0, 1,1,1,1, 1,1,1,1, 1,0,0,0};
 static const uae_u32 PRESERVE_MASK = ((1<<R4_INDEX)|(1<<R5_INDEX)|(1<<R6_INDEX)|(1<<R7_INDEX)|(1<<R8_INDEX)|(1<<R9_INDEX)
-		|(1<<R10_INDEX)|(1<<R11_INDEX)|(1<<R12_INDEX));
+		|(1<<R10_INDEX)|(1<<R11_INDEX)|(1<<R12_INDEX)|(1<<RLR_INDEX));
 
 #include "codegen_arm.h"
 
@@ -417,7 +416,7 @@ STATIC_INLINE void compemu_raw_handle_except(IM32 cycles)
 	
   LOAD_U32(REG_PAR1, cycles);
   uae_u32* branchadd2 = (uae_u32*)get_target();
-  B_i(0); // <exec_nostats>
+  B_i(0); // <execute_exception>
   write_jmp_target(branchadd2, (uintptr)popall_execute_exception);
 	
 	// Write target of next instruction

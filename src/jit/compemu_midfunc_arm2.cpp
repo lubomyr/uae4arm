@@ -7889,78 +7889,140 @@ MENDFUNC(1,jff_TST_l,(RR4 s))
  */
 MIDFUNC(2,jnf_MEM_WRITE_OFF_b,(RR4 adr, RR4 b))
 {
-  adr = readreg(adr);
-	b = readreg(b);
-  
-  STRB_rRR(b, adr, R_MEMSTART);
-  
-  unlock2(b);
-  unlock2(adr);
+  int adrr, br;
+ 
+  if (isconst(adr)) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
+  if (isconst(b)) {
+    br = REG_WORK2;
+    LOAD_U32(REG_WORK2, live.state[b].val & 0xff);
+  } else {
+    br = readreg(b);
+  }
+ 
+  STRB_rRR(br, adrr, R_MEMSTART);
+ 
+  if (br != REG_WORK2)
+    unlock2(br);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_WRITE_OFF_b,(RR4 adr, RR4 b))
 
 MIDFUNC(2,jnf_MEM_WRITE_OFF_w,(RR4 adr, RR4 w))
 {
-  adr = readreg(adr);
-	w = readreg(w);
+  int adrr;
+ 
+  if (isconst(adr)) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
+  if (isconst(w)) {
+    LOAD_U32(REG_WORK3, bswap_16(live.state[w].val & 0xffff));
+  } else {
+    int wr = readreg(w);
+    REV16_rr(REG_WORK3, wr);
+    unlock2(wr);
+  }
   
-  REV16_rr(REG_WORK1, w);
-  STRH_rRR(REG_WORK1, adr, R_MEMSTART);
+  STRH_rRR(REG_WORK3, adrr, R_MEMSTART);
   
-  unlock2(w);
-  unlock2(adr);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_WRITE_OFF_w,(RR4 adr, RR4 w))
 
 MIDFUNC(2,jnf_MEM_WRITE_OFF_l,(RR4 adr, RR4 l))
 {
-  adr = readreg(adr);
-  l = readreg(l);
+  int adrr;
+ 
+  if (isconst(adr)) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
+  if (isconst(l)) {
+    LOAD_U32(REG_WORK3, bswap_32(live.state[l].val));
+  } else {
+    int lr = readreg(l);
+    REV_rr(REG_WORK3, lr);
+    unlock2(lr);
+  }
+
+  STR_rRR(REG_WORK3, adrr, R_MEMSTART);
   
-  REV_rr(REG_WORK1, l);
-  STR_rRR(REG_WORK1, adr, R_MEMSTART);
-  
-  unlock2(l);
-  unlock2(adr);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_WRITE_OFF_l,(RR4 adr, RR4 l))
 
 
 MIDFUNC(2,jnf_MEM_READ_OFF_b,(W4 d, RR4 adr))
 {
-  adr = readreg(adr);
+  int adrr;
+  
+  if (isconst(adr) && !has_free_reg()) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
   d = writereg(d);
   
-  LDRB_rRR(d, adr, R_MEMSTART);
+  LDRB_rRR(d, adrr, R_MEMSTART);
   
   unlock2(d);
-  unlock2(adr);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_READ_OFF_b,(W4 d, RR4 adr))
 
 MIDFUNC(2,jnf_MEM_READ_OFF_w,(W4 d, RR4 adr))
 {
-  adr = readreg(adr);
+  int adrr;
+  
+  if (isconst(adr) && !has_free_reg()) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
   d = writereg(d);
   
-  LDRH_rRR(REG_WORK1, adr, R_MEMSTART);
-  REV16_rr(d, REG_WORK1);
+  LDRH_rRR(REG_WORK3, adrr, R_MEMSTART);
+  REV16_rr(d, REG_WORK3);
   
   unlock2(d);
-  unlock2(adr);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_READ_OFF_w,(W4 d, RR4 adr))
 
 MIDFUNC(2,jnf_MEM_READ_OFF_l,(W4 d, RR4 adr))
 {
-  adr = readreg(adr);
+  int adrr;
+  
+  if (isconst(adr) && !has_free_reg()) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
   d = writereg(d);
   
-  LDR_rRR(REG_WORK1, adr, R_MEMSTART);
-  REV_rr(d, REG_WORK1);
+  LDR_rRR(REG_WORK3, adrr, R_MEMSTART);
+  REV_rr(d, REG_WORK3);
   
   unlock2(d);
-  unlock2(adr);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_READ_OFF_l,(W4 d, RR4 adr))
 
@@ -8051,13 +8113,21 @@ MENDFUNC(2,jnf_MEM_READ24_OFF_l,(W4 d, RR4 adr))
 
 MIDFUNC(2,jnf_MEM_GETADR_OFF,(W4 d, RR4 adr))
 {
-  adr = readreg(adr);
+  int adrr;
+  
+  if (isconst(adr)) {
+    adrr = REG_WORK1;
+    LOAD_U32(REG_WORK1, live.state[adr].val);
+  } else {
+    adrr = readreg(adr);
+  }
   d = writereg(d);
   
-  ADD_rrr(d, adr, R_MEMSTART);
+  ADD_rrr(d, adrr, R_MEMSTART);
   
   unlock2(d);
-  unlock2(adr);
+  if (adrr != REG_WORK1)
+    unlock2(adrr);
 }
 MENDFUNC(2,jnf_MEM_GETADR_OFF,(W4 d, RR4 adr))
 
@@ -8082,24 +8152,38 @@ MIDFUNC(3,jnf_MEM_READMEMBANK,(W4 dest, RR4 adr, IM8 offset))
     COMPCALL(forget_about)(dest);
   }
 
-  adr = readreg_specific(adr, REG_PAR1);
-  prepare_for_call_1();
-  unlock2(adr);
+  if (isconst(adr)) {
+    free_nreg(REG_PAR1);
+    prepare_for_call_1();
+  } else {
+    readreg_specific(adr, REG_PAR1);
+    prepare_for_call_1();
+    unlock2(REG_PAR1);
+  }
+
   prepare_for_call_2();
+
+  if (isconst(adr)) {
+    LOAD_U32(REG_PAR1, live.state[adr].val);
+  }
 	
   uintptr idx = (uintptr)(&regs.mem_banks) - (uintptr)(&regs);
-  LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  LSR_rri(REG_WORK1, adr, 16);
-  LDR_rRR_LSLi(REG_WORK3, REG_WORK2, REG_WORK1, 2);
-  LDR_rRI(REG_WORK3, REG_WORK3, offset);
+  LDR_rRI(REG_WORK3, R_REGSTRUCT, idx);
+  LSR_rri(REG_WORK2, REG_PAR1, 16);
+  LDR_rRR_LSLi(REG_WORK3, REG_WORK3, REG_WORK2, 2);
+  LDR_rRI(REG_WORK2, REG_WORK3, offset);
    
-  compemu_raw_call_r(REG_WORK3);
+  compemu_raw_call_r(REG_WORK2);
 
-  live.nat[REG_RESULT].holds[0] = dest;
-  live.nat[REG_RESULT].nholds = 1;
-  live.nat[REG_RESULT].touched = touchcnt++;
+  // In most cases, the result will be written back to memory later.
+  // So we use REG_PAR2 as destination.
+  MOV_rr(REG_PAR2, REG_RESULT);
 
-  live.state[dest].realreg = REG_RESULT;
+  live.nat[REG_PAR2].holds[0] = dest;
+  live.nat[REG_PAR2].nholds = 1;
+  live.nat[REG_PAR2].touched = touchcnt++;
+
+  live.state[dest].realreg = REG_PAR2;
   live.state[dest].realind = 0;
   live.state[dest].val = 0;
   set_status(dest, DIRTY);
@@ -8111,20 +8195,39 @@ MIDFUNC(3,jnf_MEM_WRITEMEMBANK,(RR4 adr, RR4 source, IM8 offset))
 {
   clobber_flags();
 
-  adr = readreg_specific(adr, REG_PAR1);
-  source = readreg_specific(source, REG_PAR2);
+  if (isconst(adr)) {
+    free_nreg(REG_PAR1);
+  } else {
+    readreg_specific(adr, REG_PAR1);
+  }
+  if (isconst(source)) {
+    free_nreg(REG_PAR2);
+  } else {
+    readreg_specific(source, REG_PAR2);
+  }
+  
   prepare_for_call_1();
-  unlock2(adr);
-  unlock2(source);
+  
+  if (!isconst(adr))
+    unlock2(REG_PAR1);
+  if (!isconst(source))
+    unlock2(REG_PAR2);
+    
   prepare_for_call_2();
 	
+	if (isconst(adr)) {
+	  LOAD_U32(REG_PAR1, live.state[adr].val);
+	}
+	if (isconst(source)) {
+	  LOAD_U32(REG_PAR2, live.state[source].val);
+  }
+	
   uintptr idx = (uintptr)(&regs.mem_banks) - (uintptr)(&regs);
-  LDR_rRI(REG_WORK2, R_REGSTRUCT, idx);
-  LSR_rri(REG_WORK1, adr, 16);
-  LDR_rRR_LSLi(REG_WORK3, REG_WORK2, REG_WORK1, 2);
-  LDR_rRI(REG_WORK3, REG_WORK3, offset);
-    
-  compemu_raw_call_r(REG_WORK3);
+  LDR_rRI(REG_WORK3, R_REGSTRUCT, idx);
+  LSR_rri(REG_WORK2, REG_PAR1, 16);
+  LDR_rRR_LSLi(REG_WORK3, REG_WORK3, REG_WORK2, 2);
+  LDR_rRI(REG_WORK2, REG_WORK3, offset);
+
+  compemu_raw_call_r(REG_WORK2);
 }
 MENDFUNC(3,jnf_MEM_WRITEMEMBANK,(RR4 adr, RR4 source, IM8 offset))
-

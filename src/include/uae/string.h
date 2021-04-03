@@ -56,7 +56,7 @@
 #define _vsntprintf vsnprintf
 #endif
 
-static inline size_t uae_tcslcpy(TCHAR *dst, const TCHAR *src, size_t size)
+static size_t uae_tcslcpy(TCHAR *dst, const TCHAR *src, size_t size)
 {
 	if (size == 0) {
 		return 0;
