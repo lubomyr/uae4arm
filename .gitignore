@@ -6,3 +6,4 @@ src/target.h
 src/threaddep
 src/machdep
 src/sounddep
+src-*/

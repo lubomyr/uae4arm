@@ -36,7 +36,6 @@ extern void custom_reset (bool hardreset, bool keyboardreset);
 extern int intlev (void);
 
 extern void do_copper (void);
-extern void check_copperlist_write(uaecptr addr);
 
 extern void notice_new_xcolors (void);
 extern void init_row_map (void);
@@ -146,21 +145,9 @@ extern float hblank_hz;
 
 #define CYCLE_MASK 0x0f
 
-#ifdef CPUEMU_13
-extern uae_u8 cycle_line[256 + 1];
-#endif
-
-STATIC_INLINE void alloc_cycle (int hpos, int type)
-{
-#ifdef CPUEMU_13
-	cycle_line[hpos] = type;
-#endif
-}
-
-/* 100 words give you 1600 horizontal pixels. Should be more than enough for
- * superhires. Don't forget to update the definition in genp2c.c as well.
- * needs to be larger for superhires support */
-#define MAX_WORDS_PER_LINE 100
+// 100 words give you 1600 horizontal pixels. Should be more than enough for superhires.
+// must be divisible by 8
+#define MAX_WORDS_PER_LINE 104
 
 /* AGA mode color lookup tables */
 extern unsigned int xredcolors[256], xgreencolors[256], xbluecolors[256];
@@ -204,5 +191,18 @@ extern uae_u32 idletime;
 extern int current_maxvpos (void);
 int is_bitplane_dma (int hpos);
 void custom_cpuchange(void);
+
+#define RGA_PIPELINE_ADJUST 4
+#define MAX_CHIPSETSLOTS 256
+#ifdef CPUEMU_13
+extern uae_u8 cycle_line_slot[MAX_CHIPSETSLOTS + RGA_PIPELINE_ADJUST];
+#endif
+
+STATIC_INLINE void alloc_cycle (int hpos, int type)
+{
+#ifdef CPUEMU_13
+	cycle_line_slot[hpos] = type;
+#endif
+}
 
 #endif /* UAE_CUSTOM_H */

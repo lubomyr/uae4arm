@@ -28,17 +28,17 @@ before it appears on-screen. (TW: display emulation now does this automatically)
 #define max_diwlastword   (PIXEL_XPOS(0x1d4>> 1))
 
 extern int lores_shift, shres_shift, interlace_seen;
-extern bool aga_mode;
+extern bool aga_mode, ecs_agnus, ecs_denise;
 
-STATIC_INLINE int shres_coord_hw_to_window_x (int x)
+STATIC_INLINE int shres_coord_hw_to_window_x(int x)
 {
-	x -= DISPLAY_LEFT_SHIFT << 2;
+	x -= DISPLAY_LEFT_SHIFT_SHRES;
 	x <<= lores_shift;
 	x >>= 2;
 	return x;
 }
 
-STATIC_INLINE int coord_hw_to_window_x (int x)
+STATIC_INLINE int coord_hw_to_window_x_lores(int x)
 {
   x -= DISPLAY_LEFT_SHIFT;
 	return x << lores_shift;

@@ -404,7 +404,7 @@ extern void gui_message (const TCHAR *,...);
 #define NORETURN
 #elif __GNUC__ - 1 > 1 && __GNUC_MINOR__ - 1 >= 0
 #ifdef RASPBERRY
-#define STATIC_INLINE static /*__inline__*/
+#define STATIC_INLINE static /* __inline__ */
 #else
 #define STATIC_INLINE static /*__inline__ __attribute__ ((always_inline))*/
 #endif
