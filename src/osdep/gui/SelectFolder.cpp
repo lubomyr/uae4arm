@@ -38,6 +38,11 @@ static gcn::Button* cmdCancel;
 static gcn::ListBox* lstFolders;
 static gcn::ScrollArea* scrAreaFolders;
 static gcn::TextField *txtCurrent;
+#ifdef ANDROID
+static gcn::Button* cmdStorage;
+#endif
+
+static void checkfoldername (char *current);
 
 
 class ButtonActionListener : public gcn::ActionListener
@@ -45,6 +50,18 @@ class ButtonActionListener : public gcn::ActionListener
   public:
     void action(const gcn::ActionEvent& actionEvent)
     {
+#ifdef ANDROID
+      if (actionEvent.getSource() == cmdStorage) {
+        const char *root = GetInternalStoragePath();
+        if(root != NULL) {
+          char tmp[MAX_PATH];
+          strncpy(tmp, root, MAX_PATH - 1);
+          tmp[MAX_PATH - 1] = '\0';
+          checkfoldername(tmp);
+        }
+        return; // Keep the dialog open, we only moved to another directory
+      }
+#endif
       if (actionEvent.getSource() == cmdOK) {
         dialogResult = true;
       }
@@ -158,6 +175,14 @@ static void InitSelectFolder(const char *title)
   cmdCancel->setBaseColor(gui_baseCol + 0x202020);
   cmdCancel->addActionListener(buttonActionListener);
 
+#ifdef ANDROID
+  cmdStorage = new gcn::Button("Internal storage");
+  cmdStorage->setSize(BUTTON_WIDTH * 2, BUTTON_HEIGHT);
+  cmdStorage->setPosition(DISTANCE_BORDER, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
+  cmdStorage->setBaseColor(gui_baseCol + 0x202020);
+  cmdStorage->addActionListener(buttonActionListener);
+#endif
+
   txtCurrent = new gcn::TextField();
   txtCurrent->setSize(DIALOG_WIDTH - 2 * DISTANCE_BORDER - 4, TEXTFIELD_HEIGHT);
   txtCurrent->setPosition(DISTANCE_BORDER, 10);
@@ -194,6 +219,9 @@ static void InitSelectFolder(const char *title)
   
   wndSelectFolder->add(cmdOK);
   wndSelectFolder->add(cmdCancel);
+#ifdef ANDROID
+  wndSelectFolder->add(cmdStorage);
+#endif
   wndSelectFolder->add(txtCurrent);
   wndSelectFolder->add(scrAreaFolders);
   
@@ -212,8 +240,11 @@ static void ExitSelectFolder(void)
 
   delete cmdOK;
   delete cmdCancel;
+#ifdef ANDROID
+  delete cmdStorage;
+#endif
   delete buttonActionListener;
-  
+
   delete txtCurrent;
   delete lstFolders;
   delete scrAreaFolders;
@@ -252,8 +283,15 @@ static void SelectFolderLoop(void)
                 cmdCancel->requestFocus();
               else if(activeWidget == cmdCancel)
                 cmdOK->requestFocus();
+#ifdef ANDROID
+              else if(activeWidget == cmdOK)
+                cmdStorage->requestFocus();
+              else if(activeWidget == cmdStorage)
+                lstFolders->requestFocus();
+#else
               else if(activeWidget == cmdOK)
                 lstFolders->requestFocus();
+#endif
               continue;
             }
             break;
@@ -262,8 +300,15 @@ static void SelectFolderLoop(void)
             {
               gcn::FocusHandler* focusHdl = gui_top->_getFocusHandler();
               gcn::Widget* activeWidget = focusHdl->getFocused();
+#ifdef ANDROID
+              if(activeWidget == lstFolders)
+                cmdStorage->requestFocus();
+              else if(activeWidget == cmdStorage)
+                cmdOK->requestFocus();
+#else
               if(activeWidget == lstFolders)
                 cmdOK->requestFocus();
+#endif
               else if(activeWidget == cmdCancel)
                 lstFolders->requestFocus();
               else if(activeWidget == cmdOK)

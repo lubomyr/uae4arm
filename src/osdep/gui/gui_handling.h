@@ -152,6 +152,9 @@ ConfigFileInfo* SearchConfigInList(const char *name);
 
 extern void ReadDirectory(const char *path, std::vector<std::string> *dirs, std::vector<std::string> *files);
 extern void FilterFiles(std::vector<std::string> *files, const char *filter[]);
+#ifdef ANDROID
+extern const char *GetInternalStoragePath(void);
+#endif
 
 enum { DIRECTION_NONE, DIRECTION_UP, DIRECTION_DOWN, DIRECTION_LEFT, DIRECTION_RIGHT };
 bool HandleNavigation(int direction);
