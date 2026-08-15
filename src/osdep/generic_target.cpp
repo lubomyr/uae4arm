@@ -411,6 +411,39 @@ void removeFileExtension(char *filename)
 }
 
 
+#ifdef ANDROID
+// The file dialogs open inside the private app directory, and its parent
+// /storage/emulated/0/Android/data cannot be opened since Android 11, so
+// walking up with ".." dead ends there and drops back to the start path.
+// Give the dialogs a way to jump straight to the storage root instead.
+const char *GetInternalStoragePath(void)
+{
+  static char path[MAX_DPATH];
+  const char *candidates[3];
+  int i;
+
+  candidates[0] = getenv("EXTERNAL_STORAGE");
+  candidates[1] = "/storage/emulated/0";
+  candidates[2] = "/sdcard";
+
+  for(i = 0; i < 3; ++i)
+  {
+    DIR *dir;
+    if(candidates[i] == NULL || candidates[i][0] == '\0')
+      continue;
+    dir = opendir(candidates[i]);
+    if(dir == NULL)
+      continue;
+    closedir(dir);
+    strncpy(path, candidates[i], MAX_DPATH - 1);
+    path[MAX_DPATH - 1] = '\0';
+    return path;
+  }
+  return NULL;
+}
+#endif
+
+
 void ReadDirectory(const char *path, std::vector<std::string> *dirs, std::vector<std::string> *files)
 {
   DIR *dir;
