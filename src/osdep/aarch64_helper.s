@@ -11,6 +11,18 @@
 .global copy_screen_32bit_to_16bit
 .global copy_screen_32bit_to_32bit
 
+// These are only called from within this shared library. Without hidden
+// visibility the conditional branches below are routed through the PLT,
+// which is out of range for b.cond (+/-1MB) once the library grows.
+.hidden save_host_fp_regs
+.hidden restore_host_fp_regs
+.hidden copy_screen_8bit_to_16bit
+.hidden copy_screen_8bit_to_32bit
+.hidden copy_screen_16bit_swap
+.hidden copy_screen_16bit_to_32bit
+.hidden copy_screen_32bit_to_16bit
+.hidden copy_screen_32bit_to_32bit
+
 .text
 
 .align 8

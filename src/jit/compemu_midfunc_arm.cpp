@@ -555,6 +555,12 @@ MENDFUNC(2,arm_SUB_l_ri8,(RW4 d, IM8 i))
 
 STATIC_INLINE void flush_cpu_icache(void *start, void *stop)
 {
+	#if defined(__clang__)
+	/* clang reserves r7 as the frame pointer in Thumb mode and rejects the
+	   hand written EABI cacheflush syscall below. Let the compiler emit the
+	   cache flush instead, the same way the AArch64 backend does it. */
+	__builtin___clear_cache((char *)start, (char *)stop);
+	#else
 	register void *_beg __asm ("a1") = start;
 	register void *_end __asm ("a2") = stop;
 	register void *_flg __asm ("a3") = 0;
@@ -567,6 +573,7 @@ STATIC_INLINE void flush_cpu_icache(void *start, void *stop)
 	   __asm __volatile ("swi 0x9f0002		@ sys_cacheflush"
 		   		    : "=r" (_beg)
 		   		    : "0" (_beg), "r" (_end), "r" (_flg));
+	#endif
 	#endif
 }
 

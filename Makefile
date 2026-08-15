@@ -36,6 +36,9 @@ all: $(PROG)
 #SDL_CFLAGS = `sdl-config --cflags`
 
 MORE_CFLAGS += -Isrc-$(arch)/osdep -Isrc -Isrc-$(arch)/include -Isrc-$(arch)/archivers
+# libpng now comes from the sdl2_image submodule, where pnglibconf.h sits in a
+# separate android/ dir. setEnvironment only passes the main include dir.
+MORE_CFLAGS += -isystem ../../png/include/android
 MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
@@ -273,6 +276,12 @@ endif
 
 .cpp.o:
 	$(CXX) $(MY_CFLAGS) $(TRACE_CFLAGS) -c $< -o $@
+
+# Assembly helpers used to rely on make's builtin .s.o rule, which runs $(AS).
+# Since NDK r24 there is no binutils assembler and $(AS) is clang, which needs
+# an explicit -c or it tries to link the object into an executable.
+src-$(arch)/osdep/%_helper.o: src-$(arch)/osdep/%_helper.s
+	$(CC) $(MY_CFLAGS) -c $< -o $@
 
 .cpp.s:
 	$(CXX) $(MY_CFLAGS) -S -c $< -o $@
