@@ -53,6 +53,9 @@ LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxm
 
 ifndef DEBUG
 MORE_CFLAGS += -O2 -ffast-math -pipe
+# The UAE sources predate strict aliasing rules and punt Amiga memory through
+# incompatible pointer types all over the place. Newer clang exploits that.
+MORE_CFLAGS += -fno-strict-aliasing
 #MORE_CFLAGS += -frename-registers
 #MORE_CFLAGS += -ftracer
 # flags -Ofast and -funroll-loops caused crash on android
