@@ -42,5 +42,5 @@ ln -sr src/osdep/gui/* src-$1/osdep/gui
 ln -sr src/sounddep/* src-$1/sounddep
 
 env LDFLAGS=-L`pwd`/../../../obj/local/$1 \
-../setEnvironment-$1.sh sh -c "make -j$JOBS arch=$1" && mv -f uae4arm-$1  libapplication-$1.so
+../setEnvironment-$1.sh sh -c "make -j$JOBS arch=$1 KEEPSYMBOLS=$KEEPSYMBOLS WITH_LOGGING=$WITH_LOGGING" && mv -f uae4arm-$1  libapplication-$1.so
 

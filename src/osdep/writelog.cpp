@@ -8,6 +8,13 @@
 #include "sysdeps.h"
 #include "uae.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+// stdout is discarded on Android, so printf() based logging is invisible.
+#define UAE_LOG(buf) __android_log_print(ANDROID_LOG_INFO, "uae4arm", "%s", buf)
+#else
+#define UAE_LOG(buf) printf("%s", buf)
+#endif
 
 #define WRITE_LOG_BUF_SIZE 4096
 FILE *debugfile = NULL;
@@ -20,7 +27,7 @@ void console_out (const TCHAR *format,...)
     va_start (parms, format);
     vsnprintf (buffer, WRITE_LOG_BUF_SIZE-1, format, parms);
     va_end (parms);
-    printf("%s", buffer);
+    UAE_LOG(buffer);
 }
 
 #ifdef WITH_LOGGING
@@ -38,6 +45,7 @@ void write_log (const TCHAR *format,...)
 	  fprintf( debugfile, "%s", buffer );
 	  fflush (debugfile);
   }
+  UAE_LOG(buffer);
   va_end (parms);
 }
 

@@ -14,20 +14,20 @@
 STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
 {
   uae_u16 v;
-   __asm__ (
+   __asm__ __volatile__ (
 						"ldrh %[v], [%[a]] \n\t"
 						"rev16 %[v], %[v] \n\t"
-           : [v] "=r" (v) : [a] "r" (a) ); 
+           : [v] "=r" (v) : [a] "r" (a) );
   return v;
 }
 #elif defined(CPU_AARCH64)
 STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
 {
   uae_u16 v;
-   __asm__ (
+   __asm__ __volatile__ (
 						"ldrh %w[v], [%x[a]] \n\t"
 						"rev16 %w[v], %w[v] \n\t"
-           : [v] "=r" (v) : [a] "r" (a) ); 
+           : [v] "=r" (v) : [a] "r" (a) );
   return v;
 }
 #else
@@ -44,20 +44,20 @@ STATIC_INLINE uae_u16 do_get_mem_word(uae_u16 *_GCCRES_ a)
 STATIC_INLINE uae_u32 do_get_mem_long(uae_u32 *a) 
 {
   uae_u32 v;
-   __asm__ (
+   __asm__ __volatile__ (
 						"ldr %[v], [%[a]] \n\t"
 						"rev %[v], %[v] \n\t"
-           : [v] "=r" (v) : [a] "r" (a) ); 
+           : [v] "=r" (v) : [a] "r" (a) );
   return v;
 }
 #elif defined(CPU_AARCH64)
 STATIC_INLINE uae_u32 do_get_mem_long(uae_u32 *a) 
 {
   uae_u32 v;
-   __asm__ (
+   __asm__ __volatile__ (
 						"ldr %w[v], [%x[a]] \n\t"
 						"rev %w[v], %w[v] \n\t"
-           : [v] "=r" (v) : [a] "r" (a) ); 
+           : [v] "=r" (v) : [a] "r" (a) );
   return v;
 }
 #else

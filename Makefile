@@ -43,6 +43,9 @@ MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
 MORE_CFLAGS += -DFAST_COPPER_DEFAULT_ON
+ifdef WITH_LOGGING
+MORE_CFLAGS += -DWITH_LOGGING
+endif
 #MORE_CFLAGS += -fuse-ld=gold
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
@@ -50,6 +53,9 @@ LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxm
 
 ifndef DEBUG
 MORE_CFLAGS += -O2 -ffast-math -pipe
+# The UAE sources predate strict aliasing rules and punt Amiga memory through
+# incompatible pointer types all over the place. Newer clang exploits that.
+MORE_CFLAGS += -fno-strict-aliasing
 #MORE_CFLAGS += -frename-registers
 #MORE_CFLAGS += -ftracer
 # flags -Ofast and -funroll-loops caused crash on android
@@ -289,7 +295,9 @@ src-$(arch)/osdep/%_helper.o: src-$(arch)/osdep/%_helper.s
 $(PROG): $(OBJS)
 	$(CXX) -o $(PROG) $(OBJS) $(LDFLAGS)
 ifndef DEBUG
+ifndef KEEPSYMBOLS
 	$(STRIP) $(PROG)
+endif
 endif
 
 ASMS = \
