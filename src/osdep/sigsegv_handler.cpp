@@ -335,7 +335,19 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
     output_log(_T("PC  = 0x%016lx\n"), ucontext->uc_mcontext.pc);
     output_log(_T("Fault Address = 0x%016lx\n"), ucontext->uc_mcontext.fault_address);
     output_log(_T("pstate  = 0x%016lx\n"), ucontext->uc_mcontext.pstate);
-  
+
+    // Absolute addresses are useless with ASLR, print offsets within the
+    // module so they can be fed to a symbolizer.
+    {
+      Dl_info off;
+      void *pc = (void *)ucontext->uc_mcontext.pc;
+      void *lr = (void *)ucontext->uc_mcontext.regs[30];
+      if(dladdr(pc, &off) && off.dli_fbase)
+        output_log(_T("PC offset = 0x%lx in %s\n"), (unsigned long)((char *)pc - (char *)off.dli_fbase), off.dli_fname);
+      if(dladdr(lr, &off) && off.dli_fbase)
+        output_log(_T("LR offset = 0x%lx in %s\n"), (unsigned long)((char *)lr - (char *)off.dli_fbase), off.dli_fname);
+    }
+
     void *getaddr = (void *)ucontext->uc_mcontext.regs[30];
     if(dladdr(getaddr, &dlinfo))
   	  output_log(_T("LR - 0x%08X: <%s> (%s)\n"), getaddr, dlinfo.dli_sname, dlinfo.dli_fname);
@@ -420,6 +432,18 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
   output_log(_T("PC  = 0x%016lx\n"), ucontext->uc_mcontext.pc);
   output_log(_T("Fault Address = 0x%016lx\n"), ucontext->uc_mcontext.fault_address);
   output_log(_T("pstate  = 0x%016lx\n"), ucontext->uc_mcontext.pstate);
+
+  // Absolute addresses are useless with ASLR, print offsets within the
+  // module so they can be fed to a symbolizer.
+  {
+    Dl_info off;
+    void *pc = (void *)ucontext->uc_mcontext.pc;
+    void *lr = (void *)ucontext->uc_mcontext.regs[30];
+    if(dladdr(pc, &off) && off.dli_fbase)
+      output_log(_T("PC offset = 0x%lx in %s\n"), (unsigned long)((char *)pc - (char *)off.dli_fbase), off.dli_fname);
+    if(dladdr(lr, &off) && off.dli_fbase)
+      output_log(_T("LR offset = 0x%lx in %s\n"), (unsigned long)((char *)lr - (char *)off.dli_fbase), off.dli_fname);
+  }
 
   void *getaddr = (void *)ucontext->uc_mcontext.regs[30];
   if(dladdr(getaddr, &dlinfo))

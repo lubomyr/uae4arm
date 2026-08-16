@@ -1,5 +1,8 @@
 #include <algorithm>
 #include <iostream>
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 #include <vector>
 #include <sstream>
 #ifdef USE_SDL2
@@ -654,6 +657,9 @@ void gui_message (const char *format,...)
   vsprintf( msg, format, parms );
   va_end (parms);
 
+#ifdef ANDROID
+  __android_log_print(ANDROID_LOG_ERROR, "uae4arm", "gui_message: %s", msg);
+#endif
   target_startup_msg("Error", msg);
   uae_restart(1, NULL);
 }

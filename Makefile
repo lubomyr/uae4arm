@@ -43,6 +43,9 @@ MORE_CFLAGS += -Wno-write-strings -Wno-narrowing
 MORE_CFLAGS += -fdiagnostics-color=auto
 MORE_CFLAGS += -falign-functions=16
 MORE_CFLAGS += -DFAST_COPPER_DEFAULT_ON
+ifdef WITH_LOGGING
+MORE_CFLAGS += -DWITH_LOGGING
+endif
 #MORE_CFLAGS += -fuse-ld=gold
 
 LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
@@ -289,7 +292,9 @@ src-$(arch)/osdep/%_helper.o: src-$(arch)/osdep/%_helper.s
 $(PROG): $(OBJS)
 	$(CXX) -o $(PROG) $(OBJS) $(LDFLAGS)
 ifndef DEBUG
+ifndef KEEPSYMBOLS
 	$(STRIP) $(PROG)
+endif
 endif
 
 ASMS = \
