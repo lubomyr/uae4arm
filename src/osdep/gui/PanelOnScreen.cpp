@@ -6,6 +6,7 @@
 #include "UaeRadioButton.hpp"
 #include "UaeDropDown.hpp"
 #include "UaeCheckBox.hpp"
+#include "GenericListModel.h"
 
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -26,6 +27,13 @@ static gcn::UaeCheckBox* checkBox_onscreen_button6;
 static gcn::UaeCheckBox* checkBox_onscreen_custompos;
 static gcn::UaeCheckBox* checkBox_floatingJoystick;
 static gcn::UaeCheckBox* checkBox_disableMenuVKeyb;
+static gcn::Label* label_onscreen_size;
+static gcn::UaeDropDown* dropdown_onscreen_size;
+
+// Розмір екранних кнопок у відсотках від типового
+static const int onScreenSizeValues[] = { 50, 75, 100, 125, 150, 200 };
+static const TCHAR* onScreenSizeLabels[] = { _T("50%"), _T("75%"), _T("100%"), _T("125%"), _T("150%"), _T("200%") };
+static gcn::GenericListModel onScreenSizeList(onScreenSizeLabels, 6);
 static gcn::Button* button_onscreen_pos;
 static gcn::Button* button_onscreen_ok;
 static gcn::Button* button_onscreen_reset;
@@ -43,6 +51,14 @@ static gcn::TextField *textInput;
 
 static void RefreshPanelOnScreen(void)
 {
+    int sizeIdx = 2; // 100%
+    for (int i = 0; i < 6; ++i) {
+        if (onScreenSizeValues[i] == workprefs.onScreen_size)
+            sizeIdx = i;
+    }
+    dropdown_onscreen_size->setSelected(sizeIdx);
+    dropdown_onscreen_size->setEnabled(workprefs.custom_position != 0);
+
     if (workprefs.onScreen==0)
         checkBox_onscreen_control->setSelected(false);
     else if (workprefs.onScreen==1)
@@ -196,6 +212,11 @@ class OnScreenActionListener : public gcn::ActionListener
                 workprefs.disableMenuVKeyb=1;
             else
                 workprefs.disableMenuVKeyb=0;
+        if (actionEvent.getSource() == dropdown_onscreen_size) {
+            int idx = dropdown_onscreen_size->getSelected();
+            if (idx >= 0 && idx < 6)
+                workprefs.onScreen_size = onScreenSizeValues[idx];
+        }
         RefreshPanelOnScreen();
     }
 };
@@ -310,6 +331,16 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     checkBox_disableMenuVKeyb->setId("DisableMenuVKeyb");
     checkBox_disableMenuVKeyb->addActionListener(onScreenActionListener);
 
+    label_onscreen_size = new gcn::Label("Controls size");
+    label_onscreen_size->setPosition(10, 243);
+
+    dropdown_onscreen_size = new gcn::UaeDropDown(&onScreenSizeList);
+    dropdown_onscreen_size->setSize(90, DROPDOWN_HEIGHT);
+    dropdown_onscreen_size->setPosition(130, 240);
+    dropdown_onscreen_size->setBaseColor(gui_baseCol);
+    dropdown_onscreen_size->setId("OnScrSize");
+    dropdown_onscreen_size->addActionListener(onScreenActionListener);
+
     button_onscreen_pos = new gcn::Button("Position Setup");
     button_onscreen_pos->setPosition(170,180);
     button_onscreen_pos->setBaseColor(gui_baseCol);
@@ -378,7 +409,7 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     window_setup_position->add(window_pos_button5);
     window_setup_position->add(window_pos_button6);
     window_setup_position->setMovable(false);
-    window_setup_position->setSize(485,370);   
+    window_setup_position->setSize(ONSCREEN_SETUP_WIDTH, ONSCREEN_SETUP_HEIGHT);   
     window_setup_position->setVisible(false);
     
     category.panel->add(checkBox_onscreen_control);
@@ -393,6 +424,8 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     category.panel->add(checkBox_onscreen_custompos);
     category.panel->add(checkBox_floatingJoystick);
     category.panel->add(checkBox_disableMenuVKeyb);
+    category.panel->add(label_onscreen_size);
+    category.panel->add(dropdown_onscreen_size);
     category.panel->add(button_onscreen_pos);
     category.panel->add(window_setup_position);
     
@@ -403,7 +436,9 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
 void ExitPanelOnScreen(const struct _ConfigCategory& category)
 {
 	category.panel->clear();
-	
+
+    delete label_onscreen_size;
+    delete dropdown_onscreen_size;
     delete checkBox_onscreen_control;
     delete checkBox_onscreen_textinput;
     delete checkBox_onscreen_dpad;

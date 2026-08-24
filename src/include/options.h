@@ -429,6 +429,7 @@ int onScreen_button4;
 int onScreen_button5;
 int onScreen_button6;
 int custom_position;
+int onScreen_size;
 int pos_x_textinput;
 int pos_y_textinput;
 int pos_x_dpad;

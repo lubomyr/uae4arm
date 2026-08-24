@@ -10,6 +10,7 @@
 #include "xwin.h"
 #include "drawing.h"
 #include "inputdevice.h"
+#include "onscreen_layout.h"
 #include "savestate.h"
 #include "picasso96.h"
 #include "statusline.h"
@@ -196,13 +197,44 @@ static int CalcPandoraWidth(struct uae_prefs *p)
     pandWidth = 800;
   return pandWidth;
 }
+// Places one on-screen control. Positions are stored as the top left corner of
+// a 100% sized button, so the size is scaled around its centre - otherwise
+// changing the size drags the control up-left or down-right.
+//
+// The rect is deliberately NOT clamped to the screen. Clamping only moves the
+// controls that do not fit, which breaks the spacing of the ones that do: the
+// outer column slides into the inner one and the rows stop being evenly
+// spaced. Keeping every centre where the user put it preserves the layout, at
+// the cost of large sizes hanging over the edge - which is a placement
+// problem, to be solved in Setup position.
+static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize,
+                                float widthScaler, float heightScaler, float sizeScaler)
+{
+  int size = (int)(baseSize * sizeScaler);
+  int grow = size - (int)baseSize;
+  SDL_Rect r;
+
+  r.w = size;
+  r.h = size;
+  r.x = (int)(posX * widthScaler) - grow / 2;
+  r.y = (int)(posY * heightScaler) - grow / 2;
+
+  SDL_ANDROID_SetScreenKeyboardButtonPos(buttonId, &r);
+}
+
 
 #ifdef ANDROIDSDL
 void update_onscreen()
 {
-	float aspectRatioScaler = SDL_ListModes(NULL, 0)[0]->w / (float) SDL_ListModes(NULL, 0)[0]->h;
-	float widthScaler = aspectRatioScaler * 3;
-    float heightScaler = SDL_ListModes(NULL, 0)[0]->h/(float)320;
+	// Positions come from the "Setup position" window in PanelOnScreen, whose
+	// coordinate space is ONSCREEN_SETUP_WIDTH x ONSCREEN_SETUP_HEIGHT. Scale
+	// from that space to the real screen, or the buttons land nowhere near
+	// where they were placed.
+	float widthScaler = SDL_ListModes(NULL, 0)[0]->w / (float)ONSCREEN_SETUP_WIDTH;
+	float heightScaler = SDL_ListModes(NULL, 0)[0]->h / (float)ONSCREEN_SETUP_HEIGHT;
+	float sizeScaler = changed_prefs.onScreen_size / 100.0f;
+	if (sizeScaler <= 0.0f)
+	  sizeScaler = 1.0f;
 	SDL_ANDROID_SetScreenKeyboardFloatingJoystick(changed_prefs.floatingJoystick);
 	if (changed_prefs.onScreen==0)
 	{
@@ -212,47 +244,15 @@ void update_onscreen()
 	{
 	  SDL_ANDROID_SetScreenKeyboardShown(1);
 	  if (changed_prefs.custom_position==1) {
-	    SDL_Rect pos_textinput, pos_dpad, pos_button1, pos_button2, pos_button3, pos_button4, pos_button5, pos_button6;
-	    pos_textinput.x = changed_prefs.pos_x_textinput * widthScaler;
-	    pos_textinput.y = changed_prefs.pos_y_textinput * heightScaler;
-	    pos_textinput.h=SDL_ListModes(NULL, 0)[0]->h / (float)10;
-	    pos_textinput.w=pos_textinput.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_TEXT, &pos_textinput);
-	    pos_dpad.x = changed_prefs.pos_x_dpad * widthScaler;
-	    pos_dpad.y = changed_prefs.pos_y_dpad * heightScaler;
-	    pos_dpad.h=SDL_ListModes(NULL, 0)[0]->h / (float)2.5;
-	    pos_dpad.w=pos_dpad.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_DPAD, &pos_dpad);
-	    pos_button1.x = changed_prefs.pos_x_button1 * widthScaler;
-	    pos_button1.y = changed_prefs.pos_y_button1 * heightScaler;
-	    pos_button1.h=SDL_ListModes(NULL, 0)[0]->h / (float)5;
-	    pos_button1.w=pos_button1.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_0, &pos_button1);
-	    pos_button2.x = changed_prefs.pos_x_button2 * widthScaler;
-	    pos_button2.y = changed_prefs.pos_y_button2 * heightScaler;
-	    pos_button2.h=SDL_ListModes(NULL, 0)[0]->h / (float)5;
-	    pos_button2.w=pos_button2.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_1, &pos_button2);
-	    pos_button3.x = changed_prefs.pos_x_button3 * widthScaler;
-	    pos_button3.y = changed_prefs.pos_y_button3 * heightScaler;
-	    pos_button3.h=SDL_ListModes(NULL, 0)[0]->h / (float)5;
-	    pos_button3.w=pos_button3.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_2, &pos_button3);
-	    pos_button4.x = changed_prefs.pos_x_button4 * widthScaler;
-	    pos_button4.y = changed_prefs.pos_y_button4 * heightScaler;
-	    pos_button4.h=SDL_ListModes(NULL, 0)[0]->h / (float)5;
-	    pos_button4.w=pos_button4.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_3, &pos_button4);
-	    pos_button5.x = changed_prefs.pos_x_button5 * widthScaler;
-	    pos_button5.y = changed_prefs.pos_y_button5 * heightScaler;
-	    pos_button5.h=SDL_ListModes(NULL, 0)[0]->h / (float)5;
-	    pos_button5.w=pos_button5.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_4, &pos_button5);
-	    pos_button6.x = changed_prefs.pos_x_button6 * widthScaler;
-	    pos_button6.y = changed_prefs.pos_y_button6 * heightScaler;
-	    pos_button6.h=SDL_ListModes(NULL, 0)[0]->h / (float)5;
-	    pos_button6.w=pos_button6.h;
-	    SDL_ANDROID_SetScreenKeyboardButtonPos(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5, &pos_button6);
+	    const float screenH = SDL_ListModes(NULL, 0)[0]->h;
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_TEXT, changed_prefs.pos_x_textinput, changed_prefs.pos_y_textinput, screenH / 10.0f,  widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_DPAD, changed_prefs.pos_x_dpad,      changed_prefs.pos_y_dpad,      screenH / 2.5f,   widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_0,    changed_prefs.pos_x_button1,   changed_prefs.pos_y_button1,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_1,    changed_prefs.pos_x_button2,   changed_prefs.pos_y_button2,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_2,    changed_prefs.pos_x_button3,   changed_prefs.pos_y_button3,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_3,    changed_prefs.pos_x_button4,   changed_prefs.pos_y_button4,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_4,    changed_prefs.pos_x_button5,   changed_prefs.pos_y_button5,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
+	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5,    changed_prefs.pos_x_button6,   changed_prefs.pos_y_button6,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
 	  }
 	  SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_TEXT, changed_prefs.onScreen_textinput);
 	  SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_DPAD, changed_prefs.onScreen_dpad);
