@@ -1085,7 +1085,14 @@ static void genmovemle(uae_u16 opcode)
       on her, but unfortunately, gfx mem isn't "real" mem, and thus that
       act of cleverness means that movmle must pay attention to special_mem,
       or Genetic Species is a rather boring-looking game ;-) */
-  comprintf("\tif (!special_mem) {\n");
+  /* With pre-decrement the base register may be in the register list, and
+     then the value written for it is not the decremented one. The fast path
+     cannot express that, so fall through to the slow path in that case.
+     Ported from Amiberry, "handle ARM64 JIT MOVEM predec base", 2026-06-01. */
+  if (table68k[opcode].dmode == Apdi)
+    comprintf("\tif (!special_mem && !(mask & (1 << (7 - dstreg)))) {\n");
+  else
+    comprintf("\tif (!special_mem) {\n");
   comprintf("\tint native=alloc_scratch();\n");
   comprintf("\tget_n_addr(srca,native);\n");
 
@@ -1148,16 +1155,28 @@ static void genmovemle(uae_u16 opcode)
 		}
   }
   else {  /* Pre-decrement */
+	  /* Keep the undecremented base around: when the base register itself is
+	     in the list, that is the value the write has to use. */
+	  comprintf("\tint base=alloc_scratch();\n");
+	  switch(table68k[opcode].size) {
+	    case sz_long: comprintf("\tlea_l_brr(base,srca,-4);\n"); break;
+	    case sz_word: comprintf("\tlea_l_brr(base,srca,-2);\n"); break;
+	    default: abort();
+	  }
 	  comprintf("\tfor (i=0;i<16;i++) {\n"
 		    "\t\tif ((mask>>i)&1) {\n");
 	  switch(table68k[opcode].size) {
 	    case sz_long:
-	      comprintf("\t\t\tarm_SUB_l_ri8(srca,4);\n"
-		        "\t\t\twritelong(srca,15-i);\n");
+	      comprintf("\t\t\tint value=15-i;\n"
+	                "\t\t\tarm_SUB_l_ri8(srca,4);\n"
+	                "\t\t\tif (value==srca)\n\t\t\t\tvalue=base;\n"
+		        "\t\t\twritelong(srca,value);\n");
 	      break;
 	    case sz_word:
-	      comprintf("\t\t\tarm_SUB_l_ri8(srca,2);\n"
-		        "\t\t\twriteword(srca,15-i);\n");
+	      comprintf("\t\t\tint value=15-i;\n"
+	                "\t\t\tarm_SUB_l_ri8(srca,2);\n"
+	                "\t\t\tif (value==srca)\n\t\t\t\tvalue=base;\n"
+		        "\t\t\twriteword(srca,value);\n");
 	      break;
 	    default: abort();
 	  }
