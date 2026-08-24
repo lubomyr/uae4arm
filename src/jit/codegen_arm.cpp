@@ -233,11 +233,28 @@ LOWFUNC(WRITE,READ,1,compemu_raw_cmp_pc,(IMPTR s))
 }
 LENDFUNC(WRITE,READ,1,compemu_raw_cmp_pc,(IMPTR s))
 
+/* Stores the full PC state from REG_WORK1, not just pc_p. Leaving pc_oldp,
+   pc and instruction_pc stale makes the 68k exception handling see the wrong
+   address once the JIT leaves compiled code.
+   Ported from Amiberry, "Fix ARM JIT branch target PC state", 2026-06-04. */
+STATIC_INLINE void compemu_raw_store_pc_state_from_work1(void)
+{
+  uintptr idx = (uintptr)&regs.pc_p - (uintptr)&regs;
+  STR_rRI(REG_WORK1, R_REGSTRUCT, idx);
+  idx = (uintptr)&regs.pc_oldp - (uintptr)&regs;
+  STR_rRI(REG_WORK1, R_REGSTRUCT, idx);
+
+  SUB_rrr(REG_WORK2, REG_WORK1, R_MEMSTART);
+  idx = (uintptr)&regs.pc - (uintptr)&regs;
+  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+  idx = (uintptr)&regs.instruction_pc - (uintptr)&regs;
+  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+}
+
 LOWFUNC(NONE,WRITE,1,compemu_raw_set_pc_i,(IMPTR s))
 {
-  LOAD_U32(REG_WORK2, s);
-  uintptr idx = (uintptr) &(regs.pc_p) - (uintptr) &regs;
-  STR_rRI(REG_WORK2, R_REGSTRUCT, idx);
+  LOAD_U32(REG_WORK1, s);
+  compemu_raw_store_pc_state_from_work1();
 }
 LENDFUNC(NONE,WRITE,1,compemu_raw_set_pc_i,(IMPTR s))
 
