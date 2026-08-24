@@ -386,7 +386,13 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 
   output_log(_T("--- end exception ---\n"));
 
-  if (handled != HANDLE_EXCEPTION_A4000RAM) {
+  /* Only count violations we could not emulate. A handled one means the JIT
+     hit memory it cannot reach directly, we stepped in and the program carried
+     on correctly - charging those to the budget makes the emulator give up on
+     programs that simply use such memory a lot. An unhandled one resumes at
+     the same instruction and would fault forever, which is what this guard is
+     actually for. */
+  if (handled == HANDLE_EXCEPTION_NONE) {
     --max_signals;
     if(max_signals <= 0) {
       target_startup_msg(_T("Exception"), _T("Too many access violations. Please turn off JIT."));
@@ -795,7 +801,13 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 
   output_log(_T("--- end exception ---\n"));
 
-  if (handled != HANDLE_EXCEPTION_A4000RAM) {
+  /* Only count violations we could not emulate. A handled one means the JIT
+     hit memory it cannot reach directly, we stepped in and the program carried
+     on correctly - charging those to the budget makes the emulator give up on
+     programs that simply use such memory a lot. An unhandled one resumes at
+     the same instruction and would fault forever, which is what this guard is
+     actually for. */
+  if (handled == HANDLE_EXCEPTION_NONE) {
     --max_signals;
     if(max_signals <= 0) {
       target_startup_msg(_T("Exception"), _T("Too many access violations. Please turn off JIT."));
