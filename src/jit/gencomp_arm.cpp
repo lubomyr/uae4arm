@@ -2686,6 +2686,14 @@ static int gen_opcode(unsigned int opcode)
 #ifdef DISABLE_I_LINK
     failure;
 #endif
+    /* LINK A7 has the stack pointer as both the frame register and the stack,
+       which the generated code gets wrong. Let the interpreter handle it.
+       Ported from Amiberry, "Force ARM JIT LINK A7 fallback", 2026-06-04. */
+    comprintf("\tif (srcreg == 7) {\n"
+              "\t\tm68k_pc_offset = m68k_pc_offset_thisinst;\n"
+              "\t\tFAIL(1);\n"
+              "\t\treturn 0;\n"
+              "\t}\n");
     comprintf("\tint dodgy=0;\n");
     comprintf("\tif (srcreg==7) dodgy=1;\n");
     genamode(curi->smode, "srcreg", sz_long, "src", 1, 0);
