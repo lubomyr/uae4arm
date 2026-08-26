@@ -44,6 +44,16 @@ git clone https://github.com/lubomyr/uae4arm
 cd uae4arm
 . link_android_dirs.sh
 
+8. apply androidsdl.patch to the libSDL-environment
+
+The On-screen panel sets the theme, size, draw size and transparency of the
+on-screen controls, which are owned by the SDL wrapper. The patch adds the
+SDL_ANDROID_CONFIG_SCREENKB_* options they are passed through; without it the
+build fails on the missing constants.
+
+cd ~/androidsdl
+git apply project/jni/application/uae4arm/androidsdl.patch
+
 // Now you can build project (apk)
 cd ~/androidsdl
 ./build.sh uae4arm

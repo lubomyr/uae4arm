@@ -1,0 +1,86 @@
+diff --git a/project/java/Settings.java b/project/java/Settings.java
+index c99131b2a..047a5af36 100644
+--- a/project/java/Settings.java
++++ b/project/java/Settings.java
+@@ -940,6 +940,41 @@ public class Settings
+ 
+ 	static final int SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0;
+ 	static final int SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1;
++	static final int SDL_ANDROID_CONFIG_SCREENKB_THEME = 2;
++	static final int SDL_ANDROID_CONFIG_SCREENKB_SIZE = 3;
++	static final int SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE = 4;
++	static final int SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5;
++
++	// Re-applies the on-screen control settings to the running app. The settings menu
++	// only ever applies them at startup, but an app that offers them in its own UI
++	// needs them to take effect right away.
++	private static void applyScreenKeyboardSettings(boolean reloadGraphics)
++	{
++		if( !Globals.UseTouchscreenKeyboard )
++			return;
++		nativeSetupScreenKeyboard(	Globals.TouchscreenKeyboardSize,
++									Globals.TouchscreenKeyboardDrawSize,
++									Globals.TouchscreenKeyboardTheme,
++									Globals.TouchscreenKeyboardTransparency,
++									Globals.FloatingScreenJoystick ? 1 : 0,
++									Globals.AppTouchscreenKeyboardKeysAmount );
++		// Only the theme changes the button bitmaps, and reloading them means
++		// re-uploading every texture, so do not do it for the other options.
++		if( reloadGraphics )
++			DemoGLSurfaceView.SetupTouchscreenKeyboardGraphics(MainActivity.instance);
++		// nativeSetupScreenKeyboard() lays out every button from scratch, and a hidden
++		// button is just one with an empty rect - so without this the call above brings
++		// back each button the user has switched off. Apply() does the same afterwards.
++		if( Globals.TouchscreenKeyboardSize == Globals.TOUCHSCREEN_KEYBOARD_CUSTOM )
++		{
++			for( int i = 0; i < Globals.ScreenKbControlsLayout.length; i++ )
++				if( Globals.ScreenKbControlsLayout[i][0] < Globals.ScreenKbControlsLayout[i][2] )
++					nativeSetScreenKbKeyLayout( i, Globals.ScreenKbControlsLayout[i][0], Globals.ScreenKbControlsLayout[i][1],
++						Globals.ScreenKbControlsLayout[i][2], Globals.ScreenKbControlsLayout[i][3]);
++		}
++		for( int i = 0; i < Globals.ScreenKbControlsShown.length; i++ )
++			nativeSetScreenKbKeyUsed(i, Globals.ScreenKbControlsShown[i] ? 1 : 0);
++	}
+ 
+ 	public static void setConfigOptionFromSDL(int option, int value)
+ 	{
+@@ -951,6 +986,22 @@ public class Settings
+ 			case SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT:
+ 				Globals.HorizontalOrientation = (value == 0);
+ 				break;
++			case SDL_ANDROID_CONFIG_SCREENKB_THEME:
++				Globals.TouchscreenKeyboardTheme = value;
++				applyScreenKeyboardSettings(true);
++				break;
++			case SDL_ANDROID_CONFIG_SCREENKB_SIZE:
++				Globals.TouchscreenKeyboardSize = value;
++				applyScreenKeyboardSettings(false);
++				break;
++			case SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE:
++				Globals.TouchscreenKeyboardDrawSize = value;
++				applyScreenKeyboardSettings(false);
++				break;
++			case SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY:
++				Globals.TouchscreenKeyboardTransparency = value;
++				applyScreenKeyboardSettings(false);
++				break;
+ 			default:
+ 				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
+ 				break;
+diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
+index 14d8a4dd1..62bec2c4d 100644
+--- a/project/jni/sdl-1.2/include/SDL_android.h
++++ b/project/jni/sdl-1.2/include/SDL_android.h
+@@ -139,6 +139,12 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+ enum {
+ 	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
+ 	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
++	/* On-screen controls. Unlike the video options above these are applied immediately,
++	   so an app can offer them in its own settings instead of the wrapper menu. */
++	SDL_ANDROID_CONFIG_SCREENKB_THEME = 2, /* 0-9, see the theme list in SettingsMenuKeyboard.java */
++	SDL_ANDROID_CONFIG_SCREENKB_SIZE = 3, /* 0 = large, 1 = medium, 2 = small, 3 = tiny, 4 = custom layout */
++	SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE = 4, /* 0 = large, 1 = medium, 2 = small, 3 = tiny */
++	SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5, /* 0 = invisible to 4 = opaque */
+ 	/* TODO: more options, see Globals.java */
+ };
+ 
