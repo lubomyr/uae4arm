@@ -52,6 +52,7 @@ int quickstart_conf = 0;
 bool host_poweroff = false;
 
 extern void signal_segv(int signum, siginfo_t* info, void*ptr);
+extern void init_crash_report(void);
 extern void signal_buserror(int signum, siginfo_t* info, void*ptr);
 extern void signal_term(int signum, siginfo_t* info, void*ptr);
 extern void gui_force_rtarea_hdchange(void);
@@ -735,6 +736,8 @@ int generic_main (int argc, char *argv[])
   snprintf(savestate_fname, MAX_PATH - 1, "%s/saves/default.ads", start_path_data);
 	logging_init ();
   
+  init_crash_report();
+
   memset(&action, 0, sizeof(action));
   action.sa_sigaction = signal_segv;
   action.sa_flags = SA_SIGINFO;

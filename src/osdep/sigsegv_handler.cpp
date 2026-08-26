@@ -47,6 +47,10 @@ char** backtrace_symbols(void* const*,int){return NULL; }
 void backtrace_symbols_fd(void* const*,int,int){} 
 #endif
 #include <SDL.h>
+#include <fcntl.h>
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 
 #ifdef JIT
 extern uae_u8* current_compile_p;
@@ -92,6 +96,61 @@ enum style_type_t {
 
 static int in_handler = 0;
 static int max_signals = 200;  
+
+/* Where to leave a crash report. Built once at startup, because working it out
+   inside a signal handler is neither safe nor possible once memory is suspect. */
+static char crash_log_path[MAX_DPATH] = { 0 };
+
+/* An unhandled fault ends in exit(1) below, which Android sees as an ordinary
+   exit: no tombstone, no "app has stopped" dialog, nothing in the bug report.
+   Every trace this handler collects is also compiled out unless WITH_LOGGING is
+   set, so release builds die in complete silence and the crash cannot be
+   diagnosed from a user's report at all.
+
+   Leave the bare minimum behind unconditionally: the signal, the faulting
+   address, and the offsets of PC and LR within their module - absolute
+   addresses are useless under ASLR, while offsets can be fed straight to
+   llvm-symbolizer. It goes to logcat and to a file next to the configurations,
+   so a reporter who cannot run adb still has something to send. */
+static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr)
+{
+  Dl_info info;
+  char pcoff[MAX_DPATH] = "unknown";
+  char lroff[MAX_DPATH] = "unknown";
+  char msg[MAX_DPATH * 3];
+  int fd;
+
+  if(dladdr(pc, &info) && info.dli_fbase)
+    snprintf(pcoff, sizeof(pcoff) - 1, "0x%lx in %s",
+      (unsigned long)((char *)pc - (char *)info.dli_fbase), info.dli_fname);
+  if(dladdr(lr, &info) && info.dli_fbase)
+    snprintf(lroff, sizeof(lroff) - 1, "0x%lx in %s",
+      (unsigned long)((char *)lr - (char *)info.dli_fbase), info.dli_fname);
+
+  snprintf(msg, sizeof(msg) - 1,
+    "uae4arm crashed: signal %d at address %p\n  PC offset = %s\n  LR offset = %s\n",
+    signum, fault_addr, pcoff, lroff);
+
+#ifdef ANDROID
+  __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s", msg);
+#endif
+
+  if(crash_log_path[0]) {
+    fd = open(crash_log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if(fd >= 0) {
+      write(fd, msg, strlen(msg));
+      close(fd);
+    }
+  }
+}
+
+/* Called where the handlers are installed, not from init_max_signals(): that one
+   runs when emulation starts, and a crash in the GUI happens before it ever does. */
+void init_crash_report(void)
+{
+  fetch_configurationpath(crash_log_path, MAX_DPATH - 32);
+  strncat(crash_log_path, "uae4arm_crash.log", MAX_DPATH - 1);
+}
 
 void init_max_signals(void)
 {
@@ -404,6 +463,8 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 	if (handled != HANDLE_EXCEPTION_NONE)
 	  return;
 
+  report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.pc,
+    (void *)ucontext->uc_mcontext.regs[30]);
   SDL_Quit();
   exit(1);
 }
@@ -483,6 +544,8 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
 
   output_log(_T("--- end exception ---\n"));
 
+  report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.pc,
+    (void *)ucontext->uc_mcontext.regs[30]);
   SDL_Quit();
   exit(1);
 }
@@ -819,6 +882,8 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 	if (handled != HANDLE_EXCEPTION_NONE)
 	  return;
 
+  report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.arm_pc,
+    (void *)ucontext->uc_mcontext.arm_lr);
   SDL_Quit();
   exit(1);
 }
@@ -917,6 +982,8 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
 
   output_log(_T("--- end exception ---\n"));
 
+  report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.arm_pc,
+    (void *)ucontext->uc_mcontext.arm_lr);
   SDL_Quit();
   exit(1);
 }
