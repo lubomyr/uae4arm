@@ -838,4 +838,9 @@ int main (int argc, char *argv[])
   generic_main(argc, argv);
   
 	resetCpuSpeed();
+
+  /* SDL renames main() to SDL_main(), so this is an ordinary function and
+     running off its end is undefined - clang -O2 emits no epilogue at all and
+     execution falls into the padding, raising SIGILL on every clean exit. */
+  return 0;
 }

@@ -231,4 +231,8 @@ int main (int argc, char *argv[])
 	printf("UAE4ARM %d.%d.%d, by TomB\n", UAEMAJOR, UAEMINOR, UAESUBREV);
 
   generic_main(argc, argv);
+
+  /* See the note in pandora.cpp: SDL_main() is not main(), and falling off the
+     end of it is undefined behaviour. */
+  return 0;
 }
