@@ -95,6 +95,11 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->onScreen_button6 = 0;
 	p->custom_position = 0;
 	p->onScreen_size = 100;
+	/* Same defaults as the SDL wrapper uses in Globals.java */
+	p->onScreen_theme = 2;
+	p->onScreen_controlsize = 1;
+	p->onScreen_drawsize = 2;
+	p->onScreen_transparency = 2;
 	p->pos_x_textinput = 0;
 	p->pos_y_textinput = 0;
 	p->pos_x_dpad = 4;
@@ -177,6 +182,10 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.onscreen_button6", "%d", p->onScreen_button6);
   cfgfile_write (f, "pandora.custom_position", "%d", p->custom_position);
   cfgfile_write (f, "pandora.onScreen_size", "%d", p->onScreen_size);
+  cfgfile_write (f, "pandora.onScreen_theme", "%d", p->onScreen_theme);
+  cfgfile_write (f, "pandora.onScreen_controlsize", "%d", p->onScreen_controlsize);
+  cfgfile_write (f, "pandora.onScreen_drawsize", "%d", p->onScreen_drawsize);
+  cfgfile_write (f, "pandora.onScreen_transparency", "%d", p->onScreen_transparency);
   cfgfile_write (f, "pandora.pos_x_textinput", "%d", p->pos_x_textinput);
   cfgfile_write (f, "pandora.pos_y_textinput", "%d", p->pos_y_textinput);
   cfgfile_write (f, "pandora.pos_x_dpad", "%d", p->pos_x_dpad);
@@ -215,6 +224,10 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "onscreen_button6", &p->onScreen_button6, 1)
     || cfgfile_intval (option, value, "custom_position", &p->custom_position, 1)
     || cfgfile_intval (option, value, "onScreen_size", &p->onScreen_size, 1)
+    || cfgfile_intval (option, value, "onScreen_theme", &p->onScreen_theme, 1)
+    || cfgfile_intval (option, value, "onScreen_controlsize", &p->onScreen_controlsize, 1)
+    || cfgfile_intval (option, value, "onScreen_drawsize", &p->onScreen_drawsize, 1)
+    || cfgfile_intval (option, value, "onScreen_transparency", &p->onScreen_transparency, 1)
     || cfgfile_intval (option, value, "pos_x_textinput", &p->pos_x_textinput, 1)
     || cfgfile_intval (option, value, "pos_y_textinput", &p->pos_y_textinput, 1)
     || cfgfile_intval (option, value, "pos_x_dpad", &p->pos_x_dpad, 1)

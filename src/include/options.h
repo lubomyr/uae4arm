@@ -430,6 +430,12 @@ int onScreen_button5;
 int onScreen_button6;
 int custom_position;
 int onScreen_size;
+/* On-screen control appearance. These live in the SDL wrapper, which owns the
+   button graphics; we keep a copy per config and push it across on startup. */
+int onScreen_theme;
+int onScreen_controlsize;
+int onScreen_drawsize;
+int onScreen_transparency;
 int pos_x_textinput;
 int pos_y_textinput;
 int pos_x_dpad;

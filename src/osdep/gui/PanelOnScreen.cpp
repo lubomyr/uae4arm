@@ -29,11 +29,33 @@ static gcn::UaeCheckBox* checkBox_floatingJoystick;
 static gcn::UaeCheckBox* checkBox_disableMenuVKeyb;
 static gcn::Label* label_onscreen_size;
 static gcn::UaeDropDown* dropdown_onscreen_size;
+static gcn::Label* label_onscreen_theme;
+static gcn::UaeDropDown* dropdown_onscreen_theme;
+static gcn::Label* label_onscreen_ctrlsize;
+static gcn::UaeDropDown* dropdown_onscreen_ctrlsize;
+static gcn::Label* label_onscreen_drawsize;
+static gcn::UaeDropDown* dropdown_onscreen_drawsize;
+static gcn::Label* label_onscreen_transparency;
+static gcn::UaeDropDown* dropdown_onscreen_transparency;
 
 // Розмір екранних кнопок у відсотках від типового
 static const int onScreenSizeValues[] = { 50, 75, 100, 125, 150, 200 };
 static const TCHAR* onScreenSizeLabels[] = { _T("50%"), _T("75%"), _T("100%"), _T("125%"), _T("150%"), _T("200%") };
 static gcn::GenericListModel onScreenSizeList(onScreenSizeLabels, 6);
+
+// Вигляд екранного керування. Ці списки мусять збігатися з тими, що в обгортці
+// SDL (SettingsMenuKeyboard.java) - значення передаються туди як індекси.
+static const TCHAR* onScreenThemeLabels[] = { _T("Ultimate Droid"), _T("Simple"), _T("Sun"), _T("Keen"),
+                                              _T("Retro"), _T("Gba"), _T("Psx"), _T("Snes"),
+                                              _T("DualShock"), _T("N64") };
+static gcn::GenericListModel onScreenThemeList(onScreenThemeLabels, 10);
+static const TCHAR* onScreenCtrlSizeLabels[] = { _T("Large"), _T("Medium"), _T("Small"), _T("Tiny"), _T("Custom") };
+static gcn::GenericListModel onScreenCtrlSizeList(onScreenCtrlSizeLabels, 5);
+static const TCHAR* onScreenDrawSizeLabels[] = { _T("Large"), _T("Medium"), _T("Small"), _T("Tiny") };
+static gcn::GenericListModel onScreenDrawSizeList(onScreenDrawSizeLabels, 4);
+static const TCHAR* onScreenTransparencyLabels[] = { _T("Invisible"), _T("Almost invisible"), _T("Transparent"),
+                                                     _T("Semi-transparent"), _T("Opaque") };
+static gcn::GenericListModel onScreenTransparencyList(onScreenTransparencyLabels, 5);
 static gcn::Button* button_onscreen_pos;
 static gcn::Button* button_onscreen_ok;
 static gcn::Button* button_onscreen_reset;
@@ -58,6 +80,11 @@ static void RefreshPanelOnScreen(void)
     }
     dropdown_onscreen_size->setSelected(sizeIdx);
     dropdown_onscreen_size->setEnabled(workprefs.custom_position != 0);
+
+    dropdown_onscreen_theme->setSelected(workprefs.onScreen_theme);
+    dropdown_onscreen_ctrlsize->setSelected(workprefs.onScreen_controlsize);
+    dropdown_onscreen_drawsize->setSelected(workprefs.onScreen_drawsize);
+    dropdown_onscreen_transparency->setSelected(workprefs.onScreen_transparency);
 
     if (workprefs.onScreen==0)
         checkBox_onscreen_control->setSelected(false);
@@ -217,6 +244,14 @@ class OnScreenActionListener : public gcn::ActionListener
             if (idx >= 0 && idx < 6)
                 workprefs.onScreen_size = onScreenSizeValues[idx];
         }
+        if (actionEvent.getSource() == dropdown_onscreen_theme)
+            workprefs.onScreen_theme = dropdown_onscreen_theme->getSelected();
+        if (actionEvent.getSource() == dropdown_onscreen_ctrlsize)
+            workprefs.onScreen_controlsize = dropdown_onscreen_ctrlsize->getSelected();
+        if (actionEvent.getSource() == dropdown_onscreen_drawsize)
+            workprefs.onScreen_drawsize = dropdown_onscreen_drawsize->getSelected();
+        if (actionEvent.getSource() == dropdown_onscreen_transparency)
+            workprefs.onScreen_transparency = dropdown_onscreen_transparency->getSelected();
         RefreshPanelOnScreen();
     }
 };
@@ -283,66 +318,104 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
 {
     onScreenActionListener = new OnScreenActionListener();
     checkBox_onscreen_control = new gcn::UaeCheckBox("On-screen control");
-    checkBox_onscreen_control->setPosition(10,20);
+    checkBox_onscreen_control->setPosition(10,125);
     checkBox_onscreen_control->setId("OnScrCtrl");
     checkBox_onscreen_control->addActionListener(onScreenActionListener);
     checkBox_onscreen_textinput = new gcn::UaeCheckBox("TextInput button");
-    checkBox_onscreen_textinput->setPosition(10,50);
+    checkBox_onscreen_textinput->setPosition(10,155);
     checkBox_onscreen_textinput->setId("OnScrTextInput");
     checkBox_onscreen_textinput->addActionListener(onScreenActionListener);
     checkBox_onscreen_dpad = new gcn::UaeCheckBox("D-pad");
-    checkBox_onscreen_dpad->setPosition(10,80);
+    checkBox_onscreen_dpad->setPosition(10,185);
     checkBox_onscreen_dpad->setId("OnScrDpad");
     checkBox_onscreen_dpad->addActionListener(onScreenActionListener);
     checkBox_onscreen_button1 = new gcn::UaeCheckBox("Button 1 <A>");
-    checkBox_onscreen_button1->setPosition(10,110);
+    checkBox_onscreen_button1->setPosition(10,215);
     checkBox_onscreen_button1->setId("OnScrButton1");
     checkBox_onscreen_button1->addActionListener(onScreenActionListener);
     checkBox_onscreen_button2 = new gcn::UaeCheckBox("Button 2 <B>");
-    checkBox_onscreen_button2->setPosition(10,140);
+    checkBox_onscreen_button2->setPosition(10,245);
     checkBox_onscreen_button2->setId("OnScrButton2");
     checkBox_onscreen_button2->addActionListener(onScreenActionListener);
     checkBox_onscreen_button3 = new gcn::UaeCheckBox("Button 3 <X>");
-    checkBox_onscreen_button3->setPosition(170,20);
+    checkBox_onscreen_button3->setPosition(170,125);
     checkBox_onscreen_button3->setId("OnScrButton3");
     checkBox_onscreen_button3->addActionListener(onScreenActionListener);
     checkBox_onscreen_button4 = new gcn::UaeCheckBox("Button 4 <Y>");
-    checkBox_onscreen_button4->setPosition(170,50);
+    checkBox_onscreen_button4->setPosition(170,155);
     checkBox_onscreen_button4->setId("OnScrButton4");
     checkBox_onscreen_button4->addActionListener(onScreenActionListener);
     checkBox_onscreen_button5 = new gcn::UaeCheckBox("Button 5 <R>");
-    checkBox_onscreen_button5->setPosition(170,80);
+    checkBox_onscreen_button5->setPosition(170,185);
     checkBox_onscreen_button5->setId("OnScrButton5");
     checkBox_onscreen_button5->addActionListener(onScreenActionListener);
     checkBox_onscreen_button6 = new gcn::UaeCheckBox("Button 6 <L>");
-    checkBox_onscreen_button6->setPosition(170,110);
+    checkBox_onscreen_button6->setPosition(170,215);
     checkBox_onscreen_button6->setId("OnScrButton6");
     checkBox_onscreen_button6->addActionListener(onScreenActionListener);
     checkBox_onscreen_custompos = new gcn::UaeCheckBox("Custom position");
-    checkBox_onscreen_custompos->setPosition(170,140);
+    checkBox_onscreen_custompos->setPosition(170,245);
     checkBox_onscreen_custompos->setId("CustomPos");
     checkBox_onscreen_custompos->addActionListener(onScreenActionListener);
     checkBox_floatingJoystick = new gcn::UaeCheckBox("Floating Joystick");
-    checkBox_floatingJoystick->setPosition(10,180);
+    checkBox_floatingJoystick->setPosition(10,285);
     checkBox_floatingJoystick->setId("FloatJoy");
     checkBox_floatingJoystick->addActionListener(onScreenActionListener);
     checkBox_disableMenuVKeyb = new gcn::UaeCheckBox("Disable virtual keyboard in menu");
-    checkBox_disableMenuVKeyb->setPosition(10,210);
+    checkBox_disableMenuVKeyb->setPosition(10,315);
     checkBox_disableMenuVKeyb->setId("DisableMenuVKeyb");
     checkBox_disableMenuVKeyb->addActionListener(onScreenActionListener);
 
-    label_onscreen_size = new gcn::Label("Controls size");
-    label_onscreen_size->setPosition(10, 243);
+    label_onscreen_size = new gcn::Label("Custom control size");
+    label_onscreen_size->setPosition(10, 93);
 
     dropdown_onscreen_size = new gcn::UaeDropDown(&onScreenSizeList);
     dropdown_onscreen_size->setSize(90, DROPDOWN_HEIGHT);
-    dropdown_onscreen_size->setPosition(130, 240);
+    dropdown_onscreen_size->setPosition(170, 90);
     dropdown_onscreen_size->setBaseColor(gui_baseCol);
     dropdown_onscreen_size->setId("OnScrSize");
     dropdown_onscreen_size->addActionListener(onScreenActionListener);
 
+    // Вигляд екранного керування - два ряди по два списки. Усі випадні списки
+    // тримаємо вгорі панелі: вони розкриваються вниз, і внизу їм бракує місця.
+    label_onscreen_theme = new gcn::Label("Theme");
+    label_onscreen_theme->setPosition(10, 23);
+    dropdown_onscreen_theme = new gcn::UaeDropDown(&onScreenThemeList);
+    dropdown_onscreen_theme->setSize(150, DROPDOWN_HEIGHT);
+    dropdown_onscreen_theme->setPosition(110, 20);
+    dropdown_onscreen_theme->setBaseColor(gui_baseCol);
+    dropdown_onscreen_theme->setId("OnScrTheme");
+    dropdown_onscreen_theme->addActionListener(onScreenActionListener);
+
+    label_onscreen_ctrlsize = new gcn::Label("Size");
+    label_onscreen_ctrlsize->setPosition(300, 23);
+    dropdown_onscreen_ctrlsize = new gcn::UaeDropDown(&onScreenCtrlSizeList);
+    dropdown_onscreen_ctrlsize->setSize(150, DROPDOWN_HEIGHT);
+    dropdown_onscreen_ctrlsize->setPosition(400, 20);
+    dropdown_onscreen_ctrlsize->setBaseColor(gui_baseCol);
+    dropdown_onscreen_ctrlsize->setId("OnScrCtrlSize");
+    dropdown_onscreen_ctrlsize->addActionListener(onScreenActionListener);
+
+    label_onscreen_drawsize = new gcn::Label("Draw size");
+    label_onscreen_drawsize->setPosition(10, 58);
+    dropdown_onscreen_drawsize = new gcn::UaeDropDown(&onScreenDrawSizeList);
+    dropdown_onscreen_drawsize->setSize(150, DROPDOWN_HEIGHT);
+    dropdown_onscreen_drawsize->setPosition(110, 55);
+    dropdown_onscreen_drawsize->setBaseColor(gui_baseCol);
+    dropdown_onscreen_drawsize->setId("OnScrDrawSize");
+    dropdown_onscreen_drawsize->addActionListener(onScreenActionListener);
+
+    label_onscreen_transparency = new gcn::Label("Transparency");
+    label_onscreen_transparency->setPosition(300, 58);
+    dropdown_onscreen_transparency = new gcn::UaeDropDown(&onScreenTransparencyList);
+    dropdown_onscreen_transparency->setSize(150, DROPDOWN_HEIGHT);
+    dropdown_onscreen_transparency->setPosition(400, 55);
+    dropdown_onscreen_transparency->setBaseColor(gui_baseCol);
+    dropdown_onscreen_transparency->setId("OnScrTransparency");
+    dropdown_onscreen_transparency->addActionListener(onScreenActionListener);
+
     button_onscreen_pos = new gcn::Button("Position Setup");
-    button_onscreen_pos->setPosition(170,180);
+    button_onscreen_pos->setPosition(170,285);
     button_onscreen_pos->setBaseColor(gui_baseCol);
     setupPosButtonActionListener = new SetupPosButtonActionListener();
     button_onscreen_pos->addActionListener(setupPosButtonActionListener);
@@ -426,6 +499,14 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     category.panel->add(checkBox_disableMenuVKeyb);
     category.panel->add(label_onscreen_size);
     category.panel->add(dropdown_onscreen_size);
+    category.panel->add(label_onscreen_theme);
+    category.panel->add(dropdown_onscreen_theme);
+    category.panel->add(label_onscreen_ctrlsize);
+    category.panel->add(dropdown_onscreen_ctrlsize);
+    category.panel->add(label_onscreen_drawsize);
+    category.panel->add(dropdown_onscreen_drawsize);
+    category.panel->add(label_onscreen_transparency);
+    category.panel->add(dropdown_onscreen_transparency);
     category.panel->add(button_onscreen_pos);
     category.panel->add(window_setup_position);
     
@@ -439,6 +520,14 @@ void ExitPanelOnScreen(const struct _ConfigCategory& category)
 
     delete label_onscreen_size;
     delete dropdown_onscreen_size;
+    delete label_onscreen_theme;
+    delete dropdown_onscreen_theme;
+    delete label_onscreen_ctrlsize;
+    delete dropdown_onscreen_ctrlsize;
+    delete label_onscreen_drawsize;
+    delete dropdown_onscreen_drawsize;
+    delete label_onscreen_transparency;
+    delete dropdown_onscreen_transparency;
     delete checkBox_onscreen_control;
     delete checkBox_onscreen_textinput;
     delete checkBox_onscreen_dpad;

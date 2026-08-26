@@ -25,6 +25,7 @@
 
 #ifdef ANDROIDSDL
 #include <SDL_screenkeyboard.h>
+#include <SDL_android.h>
 #endif
 
 #include <linux/fb.h>
@@ -224,8 +225,38 @@ static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize
 
 
 #ifdef ANDROIDSDL
+// Theme, size, draw size and transparency belong to the SDL wrapper, which owns
+// the button graphics and stores them in its own settings file. Push our copies
+// across, but only when they actually differ: every push makes the wrapper
+// rewrite that file, and this runs on each screen mode change.
+static void update_onscreen_appearance()
+{
+  static int last_theme = -1;
+  static int last_controlsize = -1;
+  static int last_drawsize = -1;
+  static int last_transparency = -1;
+
+  if (changed_prefs.onScreen_theme != last_theme) {
+    last_theme = changed_prefs.onScreen_theme;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_SCREENKB_THEME, last_theme);
+  }
+  if (changed_prefs.onScreen_controlsize != last_controlsize) {
+    last_controlsize = changed_prefs.onScreen_controlsize;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_SCREENKB_SIZE, last_controlsize);
+  }
+  if (changed_prefs.onScreen_drawsize != last_drawsize) {
+    last_drawsize = changed_prefs.onScreen_drawsize;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE, last_drawsize);
+  }
+  if (changed_prefs.onScreen_transparency != last_transparency) {
+    last_transparency = changed_prefs.onScreen_transparency;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY, last_transparency);
+  }
+}
+
 void update_onscreen()
 {
+	update_onscreen_appearance();
 	// Positions come from the "Setup position" window in PanelOnScreen, whose
 	// coordinate space is ONSCREEN_SETUP_WIDTH x ONSCREEN_SETUP_HEIGHT. Scale
 	// from that space to the real screen, or the buttons land nowhere near
