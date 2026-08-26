@@ -42,6 +42,9 @@ static gcn::Label* lblVertPosInfo;
 static gcn::Slider* sldVertPos;
 static gcn::UaeCheckBox* chkLineDbl;
 static gcn::UaeCheckBox* chkFrameskip;
+#ifdef ANDROIDSDL
+static gcn::UaeCheckBox* chkKeepAspectRatio;
+#endif
 #if defined(RASPBERRY) && !defined(USE_SDL2)
 static gcn::Label*  lblFSRatio;
 static gcn::Label*  lblFSRatioInfo;
@@ -98,6 +101,9 @@ static void RefreshPanelDisplay(void)
   
   chkLineDbl->setSelected(workprefs.gfx_vresolution != VRES_NONDOUBLE);
   chkFrameskip->setSelected(workprefs.gfx_framerate);
+#ifdef ANDROIDSDL
+  chkKeepAspectRatio->setSelected(workprefs.keepAspectRatio != 0);
+#endif
 }
 
 
@@ -131,6 +137,12 @@ class AmigaScreenActionListener : public gcn::ActionListener
         workprefs.gfx_vresolution = chkLineDbl->isSelected() ? VRES_DOUBLE : VRES_NONDOUBLE;
 
       }
+#ifdef ANDROIDSDL
+      else if (actionEvent.getSource() == chkKeepAspectRatio) {
+        workprefs.keepAspectRatio = chkKeepAspectRatio->isSelected() ? 1 : 0;
+
+      }
+#endif
 #if defined(RASPBERRY) && !defined(USE_SDL2)
       else if (actionEvent.getSource() == sldFSRatio) {
         if(workprefs.gfx_fullscreen_ratio != FullscreenRatio[(int)(sldFSRatio->getValue())]) {
@@ -212,6 +224,12 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
 	chkFrameskip = new gcn::UaeCheckBox("Frameskip");
   chkFrameskip->addActionListener(amigaScreenActionListener);
 
+#ifdef ANDROIDSDL
+  chkKeepAspectRatio = new gcn::UaeCheckBox("Keep 4:3 screen ratio");
+  chkKeepAspectRatio->setId("KeepAspect");
+  chkKeepAspectRatio->addActionListener(amigaScreenActionListener);
+#endif
+
 	grpAmigaScreen = new gcn::Window("Amiga Screen");
 	grpAmigaScreen->setPosition(DISTANCE_BORDER, DISTANCE_BORDER);
   
@@ -250,6 +268,10 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   category.panel->add(chkLineDbl, DISTANCE_BORDER, posY);
   posY += chkLineDbl->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkFrameskip, DISTANCE_BORDER, posY);
+#ifdef ANDROIDSDL
+  posY += chkFrameskip->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkKeepAspectRatio, DISTANCE_BORDER, posY);
+#endif
 
   RefreshPanelDisplay();
 }
@@ -270,6 +292,9 @@ void ExitPanelDisplay(const struct _ConfigCategory& category)
   delete lblVertPosInfo;
   delete grpAmigaScreen;
   delete chkLineDbl;
+#ifdef ANDROIDSDL
+  delete chkKeepAspectRatio;
+#endif
   delete chkFrameskip;
 #if defined(RASPBERRY) && !defined(USE_SDL2)
   delete lblFSRatio;

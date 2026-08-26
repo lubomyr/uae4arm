@@ -436,6 +436,9 @@ int onScreen_theme;
 int onScreen_controlsize;
 int onScreen_drawsize;
 int onScreen_transparency;
+/* 4:3 with black bars at the sides, rather than stretching to the whole
+   screen. Also owned by the wrapper, and read by every SDL_SetVideoMode(). */
+int keepAspectRatio;
 int pos_x_textinput;
 int pos_y_textinput;
 int pos_x_dpad;

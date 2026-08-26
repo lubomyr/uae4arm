@@ -225,16 +225,21 @@ static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize
 
 
 #ifdef ANDROIDSDL
-// Theme, size, draw size and transparency belong to the SDL wrapper, which owns
-// the button graphics and stores them in its own settings file. Push our copies
-// across, but only when they actually differ: every push makes the wrapper
-// rewrite that file, and this runs on each screen mode change.
+// Theme, size, draw size and transparency of the on-screen controls, plus the
+// 4:3 screen ratio, belong to the SDL wrapper, which owns the button graphics
+// and stores all of them in its own settings file. Push our copies across, but
+// only when they actually differ: every push makes the wrapper rewrite that
+// file, and this runs on each screen mode change.
+//
+// Called before SDL_SetVideoMode(), which is where the wrapper picks up the
+// screen ratio - pushing it afterwards would only take effect one mode later.
 static void update_onscreen_appearance()
 {
   static int last_theme = -1;
   static int last_controlsize = -1;
   static int last_drawsize = -1;
   static int last_transparency = -1;
+  static int last_keepaspect = -1;
 
   if (changed_prefs.onScreen_theme != last_theme) {
     last_theme = changed_prefs.onScreen_theme;
@@ -251,6 +256,10 @@ static void update_onscreen_appearance()
   if (changed_prefs.onScreen_transparency != last_transparency) {
     last_transparency = changed_prefs.onScreen_transparency;
     SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY, last_transparency);
+  }
+  if (changed_prefs.keepAspectRatio != last_keepaspect) {
+    last_keepaspect = changed_prefs.keepAspectRatio;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO, last_keepaspect);
   }
 }
 

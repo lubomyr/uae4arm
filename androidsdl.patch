@@ -1,8 +1,8 @@
 diff --git a/project/java/Settings.java b/project/java/Settings.java
-index c99131b2a..047a5af36 100644
+index c99131b2a..6aa2cc5de 100644
 --- a/project/java/Settings.java
 +++ b/project/java/Settings.java
-@@ -940,6 +940,41 @@ public class Settings
+@@ -940,6 +940,42 @@ public class Settings
  
  	static final int SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0;
  	static final int SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1;
@@ -10,6 +10,7 @@ index c99131b2a..047a5af36 100644
 +	static final int SDL_ANDROID_CONFIG_SCREENKB_SIZE = 3;
 +	static final int SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE = 4;
 +	static final int SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5;
++	static final int SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO = 6;
 +
 +	// Re-applies the on-screen control settings to the running app. The settings menu
 +	// only ever applies them at startup, but an app that offers them in its own UI
@@ -44,7 +45,7 @@ index c99131b2a..047a5af36 100644
  
  	public static void setConfigOptionFromSDL(int option, int value)
  	{
-@@ -951,6 +986,22 @@ public class Settings
+@@ -951,6 +987,29 @@ public class Settings
  			case SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT:
  				Globals.HorizontalOrientation = (value == 0);
  				break;
@@ -64,14 +65,42 @@ index c99131b2a..047a5af36 100644
 +				Globals.TouchscreenKeyboardTransparency = value;
 +				applyScreenKeyboardSettings(false);
 +				break;
++			case SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO:
++				if( MainActivity.instance != null && MainActivity.instance.mGLView != null &&
++					MainActivity.instance.mGLView.mRenderer != null )
++					MainActivity.instance.mGLView.mRenderer.setKeepAspectRatio(value);
++				else
++					Globals.KeepAspectRatio = (value != 0);
++				break;
  			default:
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
+diff --git a/project/java/Video.java b/project/java/Video.java
+index f0a437bb6..6a872e61e 100644
+--- a/project/java/Video.java
++++ b/project/java/Video.java
+@@ -647,6 +647,16 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 				Globals.TouchscreenCalibration[2], Globals.TouchscreenCalibration[3]);
+ 	}
+ 
++	// The 4:3 flag lives in native code but is re-read by every SDL_SetVideoMode(),
++	// so an app can change it at runtime - it just has to go through here, or the
++	// next onSurfaceChanged() would put Globals.KeepAspectRatio back.
++	public void setKeepAspectRatio(int keepRatio)
++	{
++		Globals.KeepAspectRatio = (keepRatio != 0);
++		if( mWidth > 0 && mHeight > 0 )
++			nativeResize(mWidth, mHeight, keepRatio);
++	}
++
+ 	int mLastPendingResize = 0;
+ 	public void onWindowResize(final int w, final int h)
+ 	{
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..62bec2c4d 100644
+index 14d8a4dd1..175bcbdcf 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,6 +139,12 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,6 +139,14 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -81,6 +110,8 @@ index 14d8a4dd1..62bec2c4d 100644
 +	SDL_ANDROID_CONFIG_SCREENKB_SIZE = 3, /* 0 = large, 1 = medium, 2 = small, 3 = tiny, 4 = custom layout */
 +	SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE = 4, /* 0 = large, 1 = medium, 2 = small, 3 = tiny */
 +	SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5, /* 0 = invisible to 4 = opaque */
++	SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO = 6, /* 0 = stretch to the whole screen, 1 = keep 4:3 with black bars.
++	                                             Read by SDL_SetVideoMode(), so set it before changing the mode. */
  	/* TODO: more options, see Globals.java */
  };
  
