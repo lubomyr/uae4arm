@@ -9,6 +9,7 @@
 .global copy_screen_16bit_swap
 .global copy_screen_16bit_to_32bit
 .global copy_screen_32bit_to_16bit
+.global copy_screen_32bit_to_16bit_rgba
 .global copy_screen_32bit_to_32bit
 
 .text
@@ -177,6 +178,38 @@ orr r6, r6, r4, lsl #11
 strh r6, [r0], #2
 subs r2, r2, #4
 bne copy_screen_32bit_to_16bit_loop
+ldmia sp!, {r4-r6, pc}
+
+
+@----------------------------------------------------------------
+@ copy_screen_32bit_to_16bit_rgba
+@
+@ r0: uae_u8   *dst - Format (bits): rrrr rggg gggb bbbb
+@ r1: uae_u8   *src - Format (bytes) in memory rgba
+@ r2: int      bytes
+@
+@ Same as copy_screen_32bit_to_16bit, but for RGBFB_R8G8B8A8 screens,
+@ where the alpha byte trails the colour components instead of leading
+@ them, so every component sits one byte higher after the rev.
+@
+@ void copy_screen_32bit_to_16bit_rgba(uae_u8 *dst, uae_u8 *src, int bytes);
+@
+@----------------------------------------------------------------
+copy_screen_32bit_to_16bit_rgba:
+stmdb sp!, {r4-r6, lr}
+copy_screen_32bit_to_16bit_rgba_loop:
+ldr r3, [r1], #4
+rev r3, r3
+lsr r4, r3, #27
+lsr r5, r3, #18
+and r5, r5, #63
+lsr r6, r3, #11
+and r6, r6, #31
+orr r6, r6, r5, lsl #5
+orr r6, r6, r4, lsl #11
+strh r6, [r0], #2
+subs r2, r2, #4
+bne copy_screen_32bit_to_16bit_rgba_loop
 ldmia sp!, {r4-r6, pc}
 
 

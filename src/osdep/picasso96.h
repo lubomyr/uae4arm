@@ -639,6 +639,7 @@ extern void gfx_unlock_picasso (bool);
   void copy_screen_16bit_swap(uae_u8 *dst, uae_u8 *src, int bytes);
   void copy_screen_16bit_to_32bit(uae_u8 *dst, uae_u8 *src, int bytes);
   void copy_screen_32bit_to_16bit(uae_u8 *dst, uae_u8 *src, int bytes);
+  void copy_screen_32bit_to_16bit_rgba(uae_u8 *dst, uae_u8 *src, int bytes);
   void copy_screen_32bit_to_32bit(uae_u8 *dst, uae_u8 *src, int bytes);
 #ifdef __cplusplus
   }

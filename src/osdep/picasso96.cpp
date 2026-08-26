@@ -2893,10 +2893,17 @@ static void copyall (uae_u8 *src, uae_u8 *dst)
     else
       copy_screen_8bit_to_32bit(dst, src, pixels, vidinfo->clut);
   } else {
-    if(vidinfo->pixbytes == 2)
-      copy_screen_32bit_to_16bit(dst, src, state->Width * state->Height * 4);
-    else
-      copy_screen_32bit_to_32bit(dst, src, state->Width * state->Height * 4);
+    int bytes = state->Width * state->Height * 4;
+    if(vidinfo->pixbytes == 2) {
+      /* The converters differ only in where the unused alpha byte sits: the
+         R8G8B8A8 screens this port advertises keep it last, everything else
+         keeps it first. */
+      if(state->RGBFormat == RGBFB_R8G8B8A8)
+        copy_screen_32bit_to_16bit_rgba(dst, src, bytes);
+      else
+        copy_screen_32bit_to_16bit(dst, src, bytes);
+    } else
+      copy_screen_32bit_to_32bit(dst, src, bytes);
   }
 }
 
@@ -2925,6 +2932,7 @@ static bool picasso_flushpixels (uae_u8 *src, int off)
   dst = gfx_lock_picasso ();
   if (dst == NULL)
     return false;
+
 
   copyall (src + off, dst);
 

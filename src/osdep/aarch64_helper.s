@@ -9,6 +9,7 @@
 .global copy_screen_16bit_swap
 .global copy_screen_16bit_to_32bit
 .global copy_screen_32bit_to_16bit
+.global copy_screen_32bit_to_16bit_rgba
 .global copy_screen_32bit_to_32bit
 
 // These are only called from within this shared library. Without hidden
@@ -21,6 +22,7 @@
 .hidden copy_screen_16bit_swap
 .hidden copy_screen_16bit_to_32bit
 .hidden copy_screen_32bit_to_16bit
+.hidden copy_screen_32bit_to_16bit_rgba
 .hidden copy_screen_32bit_to_32bit
 
 .text
@@ -190,6 +192,46 @@ copy_screen_32bit_to_16bit_loop:
   subs      w2, w2, #16
   st1       {v3.4H}, [x0], #8
   bne       copy_screen_32bit_to_16bit_loop
+  ret
+
+
+//----------------------------------------------------------------
+// copy_screen_32bit_to_16bit_rgba
+//
+// x0: uae_u8   *dst - Format (bits): rrrr rggg gggb bbbb
+// x1: uae_u8   *src - Format (bytes) in memory rgba
+// x2: int      bytes
+//
+// Same as copy_screen_32bit_to_16bit, but for RGBFB_R8G8B8A8 screens,
+// where the alpha byte trails the colour components instead of leading
+// them, so every component sits one byte higher after the rev32.
+//
+// void copy_screen_32bit_to_16bit_rgba(uae_u8 *dst, uae_u8 *src, int bytes);
+//
+//----------------------------------------------------------------
+copy_screen_32bit_to_16bit_rgba:
+  mov x3, #0xf800
+  mov v0.s[0], w3
+  mov v0.s[1], w3
+  mov v0.s[2], w3
+  mov v0.s[3], w3
+  mov x3, #0x07e0
+  mov v1.s[0], w3
+  mov v1.s[1], w3
+  mov v1.s[2], w3
+  mov v1.s[3], w3
+copy_screen_32bit_to_16bit_rgba_loop:
+  ld1       {v3.4S}, [x1], #16
+  rev32     v3.16B, v3.16B
+  ushr      v4.4S, v3.4S, #16
+  ushr      v5.4S, v3.4S, #13
+  ushr      v3.4S, v3.4S, #11
+  bit       v3.16B, v4.16B, v0.16B
+  bit       v3.16B, v5.16B, v1.16B
+  xtn       v3.4H, v3.4S
+  subs      w2, w2, #16
+  st1       {v3.4H}, [x0], #8
+  bne       copy_screen_32bit_to_16bit_rgba_loop
   ret
 
 
