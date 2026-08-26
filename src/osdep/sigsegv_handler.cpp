@@ -48,6 +48,7 @@ void backtrace_symbols_fd(void* const*,int,int){}
 #endif
 #include <SDL.h>
 #include <fcntl.h>
+#include <link.h>
 #ifdef ANDROID
 #include <android/log.h>
 #endif
@@ -101,6 +102,50 @@ static int max_signals = 200;
    inside a signal handler is neither safe nor possible once memory is suspect. */
 static char crash_log_path[MAX_DPATH] = { 0 };
 
+/* The build id of our own shared library, as hex. Offsets in a report only mean
+   something against the exact binary they came from, and a report may arrive
+   several releases later - this is what pins it to one. */
+static char crash_build_id[64] = "unknown";
+
+/* Reads the GNU build id out of our own PT_NOTE segment. Done once at startup:
+   the parsing has no business running inside a signal handler. */
+static int find_build_id(struct dl_phdr_info *info, size_t size, void *data)
+{
+  /* The main executable comes first with an empty name; we want the library
+     holding this very function, which is the one dladdr resolves. */
+  Dl_info self;
+  if(!dladdr((void *)find_build_id, &self) || !self.dli_fname)
+    return 1;
+  if(!info->dlpi_name || strcmp(info->dlpi_name, self.dli_fname) != 0)
+    return 0;
+
+  for(int i = 0; i < info->dlpi_phnum; ++i) {
+    const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
+    if(ph->p_type != PT_NOTE)
+      continue;
+
+    const char *p = (const char *)(info->dlpi_addr + ph->p_vaddr);
+    const char *end = p + ph->p_memsz;
+    while(p + sizeof(ElfW(Nhdr)) <= end) {
+      const ElfW(Nhdr) *nh = (const ElfW(Nhdr) *)p;
+      const char *name = p + sizeof(ElfW(Nhdr));
+      const char *desc = name + ((nh->n_namesz + 3) & ~3);
+
+      if(nh->n_type == NT_GNU_BUILD_ID && nh->n_namesz == 4 &&
+         memcmp(name, "GNU", 4) == 0) {
+        unsigned int n = nh->n_descsz;
+        if(n > (sizeof(crash_build_id) - 1) / 2)
+          n = (sizeof(crash_build_id) - 1) / 2;
+        for(unsigned int b = 0; b < n; ++b)
+          snprintf(crash_build_id + b * 2, 3, "%02x", (unsigned char)desc[b]);
+        return 1;
+      }
+      p = desc + ((nh->n_descsz + 3) & ~3);
+    }
+  }
+  return 1;
+}
+
 /* An unhandled fault ends in exit(1) below, which Android sees as an ordinary
    exit: no tombstone, no "app has stopped" dialog, nothing in the bug report.
    Every trace this handler collects is also compiled out unless WITH_LOGGING is
@@ -128,8 +173,9 @@ static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr
       (unsigned long)((char *)lr - (char *)info.dli_fbase), info.dli_fname);
 
   snprintf(msg, sizeof(msg) - 1,
-    "uae4arm crashed: signal %d at address %p\n  PC offset = %s\n  LR offset = %s\n",
-    signum, fault_addr, pcoff, lroff);
+    "uae4arm crashed: signal %d at address %p\n  build = %s\n"
+    "  PC offset = %s\n  LR offset = %s\n",
+    signum, fault_addr, crash_build_id, pcoff, lroff);
 
 #ifdef ANDROID
   __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s", msg);
@@ -150,6 +196,12 @@ void init_crash_report(void)
 {
   fetch_configurationpath(crash_log_path, MAX_DPATH - 32);
   strncat(crash_log_path, "uae4arm_crash.log", MAX_DPATH - 1);
+  dl_iterate_phdr(find_build_id, NULL);
+#ifdef ANDROID
+  /* Also state it up front, so a plain logcat says which build is running -
+     and so a report that says "unknown" can be told apart from a stale file. */
+  __android_log_print(ANDROID_LOG_INFO, "uae4arm", "build id %s", crash_build_id);
+#endif
 }
 
 void init_max_signals(void)
