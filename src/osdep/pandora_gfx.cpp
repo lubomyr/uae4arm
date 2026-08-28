@@ -360,6 +360,14 @@ static void open_screen(struct uae_prefs *p)
   }
   
   current_vsync_frame = 0;
+  /* machdep_init() resets the epoch that read_processor_time() counts from, and
+     it runs again on every restart - so the clock starts near zero while these
+     still hold timestamps from the previous session. show_screen() would then
+     see a next_synctime far in the "future" and usleep() until it arrives,
+     stalling for as long as the previous session had been running. The delay
+     grows with each restart, which is why the first two go unnoticed. */
+  next_synctime = 0;
+  last_synctime = 0;
 
   fbdev = open("/dev/fb0", O_RDWR);
   if(fbdev != -1)
