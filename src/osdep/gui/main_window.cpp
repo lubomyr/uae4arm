@@ -341,10 +341,10 @@ namespace sdl
       gui_screen = NULL;
     }
 #else
-    // NOT ours: SDL_SetVideoMode() returns the display surface, which SDL owns
-    // and frees itself. Freeing it here took its pixel format with it, and every
-    // later SDL_SetVideoMode() - from reopening this menu or from open_screen() -
-    // then worked on freed memory.
+    // NOT ours: SDL_SetVideoMode() returns the display surface, which SDL owns.
+    // The SDL_FreeSurface() that used to stand here did nothing at all - it
+    // refuses the display and shadow surfaces - so dropping it changes no
+    // behaviour, it just stops the code claiming an ownership it never had.
     gui_screen = NULL;
 #endif
 #ifdef USE_SDL2
@@ -529,9 +529,11 @@ namespace sdl
         DisableResume();
 
 #if !defined(USE_SDL2)
-      // SDL can replace the display surface behind our back - a mode change or
-      // the GL context coming back both do it - and drawing into the old one
-      // means drawing into freed memory. Keep guichan pointed at the live one.
+      // A user's crash report has guichan drawing into a surface whose pixel
+      // format is NULL, which is the state SDL_FreeSurface() leaves behind, so
+      // something frees the surface under us and we keep painting into it. What
+      // does that is not established; this only keeps the target in step with
+      // whatever SDL currently considers the display surface.
       {
         SDL_Surface *current = SDL_GetVideoSurface();
         if(current != NULL && current != gui_screen) {
