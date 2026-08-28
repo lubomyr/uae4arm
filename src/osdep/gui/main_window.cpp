@@ -334,10 +334,19 @@ namespace sdl
     delete gui_input;
     delete gui_graphics;
     
+#ifdef USE_SDL2
+    // Ours, from SDL_CreateRGBSurface()
     if(gui_screen != NULL) {
       SDL_FreeSurface(gui_screen);
       gui_screen = NULL;
     }
+#else
+    // NOT ours: SDL_SetVideoMode() returns the display surface, which SDL owns
+    // and frees itself. Freeing it here took its pixel format with it, and every
+    // later SDL_SetVideoMode() - from reopening this menu or from open_screen() -
+    // then worked on freed memory.
+    gui_screen = NULL;
+#endif
 #ifdef USE_SDL2
 		SDL_DestroyTexture(gui_texture);
 		gui_texture = NULL;
@@ -518,6 +527,19 @@ namespace sdl
 
   		if(gui_rtarea_flags_onenter != gui_create_rtarea_flag(&workprefs))
         DisableResume();
+
+#if !defined(USE_SDL2)
+      // SDL can replace the display surface behind our back - a mode change or
+      // the GL context coming back both do it - and drawing into the old one
+      // means drawing into freed memory. Keep guichan pointed at the live one.
+      {
+        SDL_Surface *current = SDL_GetVideoSurface();
+        if(current != NULL && current != gui_screen) {
+          gui_screen = current;
+          gui_graphics->setTarget(gui_screen);
+        }
+      }
+#endif
 
       // Now we let the Gui object perform its logic.
       uae_gui->logic();
