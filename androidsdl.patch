@@ -115,3 +115,98 @@ index 14d8a4dd1..175bcbdcf 100644
  	/* TODO: more options, see Globals.java */
  };
  
+diff --git a/project/jni/sdl-1.2/src/video/android/keymap.c b/project/jni/sdl-1.2/src/video/android/keymap.c
+index 400c01b8a..f41e34d67 100644
+--- a/project/jni/sdl-1.2/src/video/android/keymap.c
++++ b/project/jni/sdl-1.2/src/video/android/keymap.c
+@@ -269,11 +269,19 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     }
+   }
+ 
++/* The keymap setter takes C and Z between Y and L1, but RedefinedKeysGamepad in
++   AndroidAppSettings.cfg documents - and SDL_androidinput.h defaults for - an
++   order without them. Passing the entries straight through shifted everything
++   from L1 onwards by two, which left the d-pad sending LEFT and RIGHT for up and
++   down, and UP and DOWN for left and right. Pass zero for the two buttons that
++   have no entry, so the documented order lines up again. */
+   SDL_ANDROID_SetIndividualGamepadKeymap(   0,
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_0)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_1)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_2)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_3)),
++    0, 0, // C and Z: no such buttons on any real gamepad, and no
++          // corresponding entry in RedefinedKeysGamepad
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_4)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_5)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_6)),
+@@ -293,9 +301,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_20)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_21)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_22)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_23)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_24)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_25))
++    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_23))
+   );
+ 
+   SDL_ANDROID_SetIndividualGamepadKeymap(   1,
+@@ -303,6 +309,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_1)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_2)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_3)),
++    0, 0, // C and Z: no such buttons on any real gamepad, and no
++          // corresponding entry in RedefinedKeysGamepad
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_4)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_5)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_6)),
+@@ -322,9 +330,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_20)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_21)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_22)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_23)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_24)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_25))
++    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_23))
+   );
+ 
+   SDL_ANDROID_SetIndividualGamepadKeymap(   2,
+@@ -332,6 +338,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_1)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_2)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_3)),
++    0, 0, // C and Z: no such buttons on any real gamepad, and no
++          // corresponding entry in RedefinedKeysGamepad
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_4)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_5)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_6)),
+@@ -351,9 +359,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_20)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_21)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_22)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_23)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_24)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_25))
++    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_23))
+   );
+ 
+   SDL_ANDROID_SetIndividualGamepadKeymap(   3,
+@@ -361,6 +367,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_1)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_2)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_3)),
++    0, 0, // C and Z: no such buttons on any real gamepad, and no
++          // corresponding entry in RedefinedKeysGamepad
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_4)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_5)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_6)),
+@@ -380,9 +388,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_20)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_21)),
+     SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_22)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_23)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_24)),
+-    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_25))
++    SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_23))
+   );
+ }
+ 
