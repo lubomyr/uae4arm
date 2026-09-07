@@ -69,6 +69,34 @@ void free_AmigaMem(void)
 }
 
 
+/* MAP_FIXED does not fail when the address is taken - it silently unmaps
+   whoever was there. In this process that is the Android runtime: its heaps and
+   its JIT code cache land wherever ASLR puts them, and a crash report from a
+   user faulted at 0x680020f0, inside the range claimed below. The runtime then
+   dies in libart with corrupted structures, which is why the crash never showed
+   up in our own code and only happened on some devices.
+
+   MAP_FIXED_NOREPLACE fails instead, so the caller can fall back. Old kernels
+   ignore the flag and pick another address, hence the check afterwards. */
+#ifndef MAP_FIXED_NOREPLACE
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
+
+static uae_u8 *map_at_address(void *addr, size_t size)
+{
+  uae_u8 *p = (uae_u8 *)mmap(addr, size, PROT_READ | PROT_WRITE,
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+
+  if (p == MAP_FAILED)
+    return (uae_u8 *)MAP_FAILED;
+  if (p != addr) {
+    munmap(p, size);
+    return (uae_u8 *)MAP_FAILED;
+  }
+  return p;
+}
+
+
 void alloc_AmigaMem(void)
 {
 	int i;
@@ -83,8 +111,15 @@ void alloc_AmigaMem(void)
   natmem_size = 16 * 1024 * 1024;
 #ifdef ANDROID
   // address returned by valloc() too high for later mmap() calls. Use mmap() also for first area.
-  regs.natmem_offset = (uae_u8*) mmap((void *)0x20000000, natmem_size + BARRIER,
-    PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+  regs.natmem_offset = map_at_address((void *)0x20000000, natmem_size + BARRIER);
+  if (regs.natmem_offset == MAP_FAILED) {
+    // Someone else is already there - take whatever the kernel offers instead
+    write_log("0x20000000 is taken, letting the kernel place the 24-bit area\n");
+    regs.natmem_offset = (uae_u8*) mmap(NULL, natmem_size + BARRIER,
+      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  }
+  if (regs.natmem_offset == MAP_FAILED)
+    regs.natmem_offset = 0;
 #else
   regs.natmem_offset = (uae_u8*)valloc (natmem_size + BARRIER);
 #endif
@@ -93,8 +128,7 @@ void alloc_AmigaMem(void)
 		write_log("Can't allocate 16M of virtual address space!?\n");
     abort();
 	}
-  additional_mem = (uae_u8*) mmap(regs.natmem_offset + Z3BASE_REAL, ADDITIONAL_MEMSIZE + BARRIER,
-    PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+  additional_mem = map_at_address(regs.natmem_offset + Z3BASE_REAL, ADDITIONAL_MEMSIZE + BARRIER);
   if(additional_mem != MAP_FAILED)
   {
     // Allocation successful -> we can use natmem_offset for entire memory access at real address
@@ -111,8 +145,7 @@ void alloc_AmigaMem(void)
     return;
   }
 
-  additional_mem = (uae_u8*) mmap(regs.natmem_offset + Z3BASE_UAE, ADDITIONAL_MEMSIZE + BARRIER,
-    PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+  additional_mem = map_at_address(regs.natmem_offset + Z3BASE_UAE, ADDITIONAL_MEMSIZE + BARRIER);
   if(additional_mem != MAP_FAILED)
   {
     // Allocation successful -> we can use natmem_offset for entire memory access at fake address
@@ -194,8 +227,9 @@ static bool HandleA3000Mem(int lowsize, int highsize)
     write_log("Try to get A3000 memory at correct place (0x%08x). %d MB and %d MB.\n", A3000MEM_START, 
       lowsize / (1024 * 1024), highsize / (1024 * 1024));
     a3000_totalsize = lowsize + highsize;
-    a3000_mem = (uae_u8*) mmap(regs.natmem_offset + (A3000MEM_START - lowsize), a3000_totalsize,
-      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    // A3000MEM_START is 128 MB past the base, well outside our own mapping, so
+    // this must not replace whatever happens to live there either
+    a3000_mem = map_at_address(regs.natmem_offset + (A3000MEM_START - lowsize), a3000_totalsize);
     if(a3000_mem != MAP_FAILED)
     {
       lastLowSize = lowsize;
