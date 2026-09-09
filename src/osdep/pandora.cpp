@@ -101,6 +101,7 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->onScreen_drawsize = 2;
 	p->onScreen_transparency = 2;
 	p->keepAspectRatio = 1;
+	p->onScreen_dpad_mode = 0;
 	p->pos_x_textinput = 0;
 	p->pos_y_textinput = 0;
 	p->pos_x_dpad = 4;
@@ -188,6 +189,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.onscreen_drawsize", "%d", p->onScreen_drawsize);
   cfgfile_write (f, "pandora.onscreen_transparency", "%d", p->onScreen_transparency);
   cfgfile_write (f, "pandora.keepaspectratio", "%d", p->keepAspectRatio);
+  cfgfile_write (f, "pandora.onscreen_dpad_mode", "%d", p->onScreen_dpad_mode);
   cfgfile_write (f, "pandora.pos_x_textinput", "%d", p->pos_x_textinput);
   cfgfile_write (f, "pandora.pos_y_textinput", "%d", p->pos_y_textinput);
   cfgfile_write (f, "pandora.pos_x_dpad", "%d", p->pos_x_dpad);
@@ -231,6 +233,7 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "onscreen_drawsize", &p->onScreen_drawsize, 1)
     || cfgfile_intval (option, value, "onscreen_transparency", &p->onScreen_transparency, 1)
     || cfgfile_intval (option, value, "keepaspectratio", &p->keepAspectRatio, 1)
+    || cfgfile_intval (option, value, "onscreen_dpad_mode", &p->onScreen_dpad_mode, 1)
     || cfgfile_intval (option, value, "pos_x_textinput", &p->pos_x_textinput, 1)
     || cfgfile_intval (option, value, "pos_y_textinput", &p->pos_y_textinput, 1)
     || cfgfile_intval (option, value, "pos_x_dpad", &p->pos_x_dpad, 1)
@@ -403,6 +406,23 @@ static bool handle_internal_functions(int sdlkeycode, int sdlmodifier)
 // This functions returns the Amiga key code (AK_...) and maybe changes modifier
 static int translate_pandora_keys(int sdlkeycode, int *sdlmodifier)
 {
+  /* In cursor key mode the d-pad has to reach the Amiga as cursor keys on its
+     own. Until now that only happened while the right shoulder was held, which
+     is the sole path that ever produced AK_UP and friends - so switching the
+     joystick feed off alone left the d-pad doing nothing at all. */
+  if (changed_prefs.onScreen_dpad_mode == 1) {
+    switch(sdlkeycode) {
+      case SDLK_UP:
+        return AK_UP;
+      case SDLK_DOWN:
+        return AK_DN;
+      case SDLK_LEFT:
+        return AK_LF;
+      case SDLK_RIGHT:
+        return AK_RT;
+    }
+  }
+
   if (*sdlmodifier == KMOD_RCTRL) {
     // Right shoulder button pressed
     switch(sdlkeycode) {

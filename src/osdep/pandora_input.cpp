@@ -641,8 +641,9 @@ static void read_joystick (void)
 		if(keystate == NULL)
   	  keystate = SDL_GetKeyState(NULL);
 
-    // dPad is joystick only without right shoulder
-    if(!keystate[SDLK_RCTRL]) {
+    // The d-pad drives the joystick unless the panel says to leave it as cursor
+    // keys, and holding the sixth on-screen button suspends it either way.
+    if(changed_prefs.onScreen_dpad_mode == 0 && !keystate[SDLK_RCTRL]) {
       int axis = (keystate[SDLK_LEFT] ? -32767 : (keystate[SDLK_RIGHT] ? 32767 : 0));
       setjoystickstate (i, 0, axis, 32767);
       axis = (keystate[SDLK_UP] ? -32767 : (keystate[SDLK_DOWN] ? 32767 : 0));

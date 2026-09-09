@@ -439,6 +439,8 @@ int onScreen_transparency;
 /* 4:3 with black bars at the sides, rather than stretching to the whole
    screen. Also owned by the wrapper, and read by every SDL_SetVideoMode(). */
 int keepAspectRatio;
+/* 0 = the on-screen d-pad drives the joystick, 1 = it stays cursor keys */
+int onScreen_dpad_mode;
 int pos_x_textinput;
 int pos_y_textinput;
 int pos_x_dpad;

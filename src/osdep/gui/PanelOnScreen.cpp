@@ -37,6 +37,8 @@ static gcn::Label* label_onscreen_drawsize;
 static gcn::UaeDropDown* dropdown_onscreen_drawsize;
 static gcn::Label* label_onscreen_transparency;
 static gcn::UaeDropDown* dropdown_onscreen_transparency;
+static gcn::Label* label_onscreen_dpadmode;
+static gcn::UaeDropDown* dropdown_onscreen_dpadmode;
 
 // Розмір екранних кнопок у відсотках від типового
 static const int onScreenSizeValues[] = { 50, 75, 100, 125, 150, 200 };
@@ -56,6 +58,8 @@ static gcn::GenericListModel onScreenDrawSizeList(onScreenDrawSizeLabels, 4);
 static const TCHAR* onScreenTransparencyLabels[] = { _T("Invisible"), _T("Almost invisible"), _T("Transparent"),
                                                      _T("Semi-transparent"), _T("Opaque") };
 static gcn::GenericListModel onScreenTransparencyList(onScreenTransparencyLabels, 5);
+static const TCHAR* onScreenDpadModeLabels[] = { _T("Joystick"), _T("Cursor keys") };
+static gcn::GenericListModel onScreenDpadModeList(onScreenDpadModeLabels, 2);
 static gcn::Button* button_onscreen_pos;
 static gcn::Button* button_onscreen_ok;
 static gcn::Button* button_onscreen_reset;
@@ -85,6 +89,7 @@ static void RefreshPanelOnScreen(void)
     dropdown_onscreen_ctrlsize->setSelected(workprefs.onScreen_controlsize);
     dropdown_onscreen_drawsize->setSelected(workprefs.onScreen_drawsize);
     dropdown_onscreen_transparency->setSelected(workprefs.onScreen_transparency);
+    dropdown_onscreen_dpadmode->setSelected(workprefs.onScreen_dpad_mode);
 
     if (workprefs.onScreen==0)
         checkBox_onscreen_control->setSelected(false);
@@ -252,6 +257,8 @@ class OnScreenActionListener : public gcn::ActionListener
             workprefs.onScreen_drawsize = dropdown_onscreen_drawsize->getSelected();
         if (actionEvent.getSource() == dropdown_onscreen_transparency)
             workprefs.onScreen_transparency = dropdown_onscreen_transparency->getSelected();
+        if (actionEvent.getSource() == dropdown_onscreen_dpadmode)
+            workprefs.onScreen_dpad_mode = dropdown_onscreen_dpadmode->getSelected();
         RefreshPanelOnScreen();
     }
 };
@@ -405,6 +412,15 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     dropdown_onscreen_drawsize->setId("OnScrDrawSize");
     dropdown_onscreen_drawsize->addActionListener(onScreenActionListener);
 
+    label_onscreen_dpadmode = new gcn::Label("D-Pad");
+    label_onscreen_dpadmode->setPosition(300, 93);
+    dropdown_onscreen_dpadmode = new gcn::UaeDropDown(&onScreenDpadModeList);
+    dropdown_onscreen_dpadmode->setSize(150, DROPDOWN_HEIGHT);
+    dropdown_onscreen_dpadmode->setPosition(400, 90);
+    dropdown_onscreen_dpadmode->setBaseColor(gui_baseCol);
+    dropdown_onscreen_dpadmode->setId("OnScrDpadMode");
+    dropdown_onscreen_dpadmode->addActionListener(onScreenActionListener);
+
     label_onscreen_transparency = new gcn::Label("Transparency");
     label_onscreen_transparency->setPosition(300, 58);
     dropdown_onscreen_transparency = new gcn::UaeDropDown(&onScreenTransparencyList);
@@ -507,6 +523,8 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     category.panel->add(dropdown_onscreen_drawsize);
     category.panel->add(label_onscreen_transparency);
     category.panel->add(dropdown_onscreen_transparency);
+    category.panel->add(label_onscreen_dpadmode);
+    category.panel->add(dropdown_onscreen_dpadmode);
     category.panel->add(button_onscreen_pos);
     category.panel->add(window_setup_position);
     
@@ -528,6 +546,8 @@ void ExitPanelOnScreen(const struct _ConfigCategory& category)
     delete dropdown_onscreen_drawsize;
     delete label_onscreen_transparency;
     delete dropdown_onscreen_transparency;
+    delete label_onscreen_dpadmode;
+    delete dropdown_onscreen_dpadmode;
     delete checkBox_onscreen_control;
     delete checkBox_onscreen_textinput;
     delete checkBox_onscreen_dpad;
