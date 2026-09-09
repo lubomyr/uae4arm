@@ -44,6 +44,18 @@ static int lastHighSize = 0;
 int z3base_adr = 0;
 
 
+/* The crash report includes this: which layout alloc_AmigaMem() settled on says
+   more about a fault address than the address alone. A guest that jumps outside
+   the mapped memory looks the same whichever way the memory was placed. */
+void get_amiga_mem_layout(char *out, int size)
+{
+  snprintf(out, size - 1, "natmem=%p size=%uM z3base=0x%08x z3/rtg=%s",
+    regs.natmem_offset, natmem_size / (1024 * 1024), z3base_adr,
+    additional_mem != MAP_FAILED ? "mapped" : "none");
+  out[size - 1] = 0;
+}
+
+
 void free_AmigaMem(void)
 {
   if(regs.natmem_offset != 0)
@@ -111,10 +123,19 @@ void alloc_AmigaMem(void)
   natmem_size = 16 * 1024 * 1024;
 #ifdef ANDROID
   // address returned by valloc() too high for later mmap() calls. Use mmap() also for first area.
-  regs.natmem_offset = map_at_address((void *)0x20000000, natmem_size + BARRIER);
+  /* The JIT reaches Amiga memory through natmem_offset and needs it below 4 GB,
+     which is why a fixed low address is asked for at all. If it is taken, walk
+     other low addresses rather than letting the kernel choose - on arm64 it
+     hands back something far above 4 GB, and the JIT then crashes. Leave enough
+     room above each candidate for the Z3 and RTG area, which goes 1 GB higher. */
+  regs.natmem_offset = (uae_u8 *)MAP_FAILED;
+  for (uae_u64 base = 0x20000000; base <= 0xa0000000 && regs.natmem_offset == MAP_FAILED;
+       base += 0x08000000) {
+    regs.natmem_offset = map_at_address((void *)base, natmem_size + BARRIER);
+  }
   if (regs.natmem_offset == MAP_FAILED) {
-    // Someone else is already there - take whatever the kernel offers instead
-    write_log("0x20000000 is taken, letting the kernel place the 24-bit area\n");
+    // Nothing free down there at all - the kernel picks, and the JIT is lost
+    write_log("No free address below 4 GB for the 24-bit area, JIT will not work\n");
     regs.natmem_offset = (uae_u8*) mmap(NULL, natmem_size + BARRIER,
       PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   }

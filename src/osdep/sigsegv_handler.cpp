@@ -172,10 +172,13 @@ static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr
     snprintf(lroff, sizeof(lroff) - 1, "0x%lx in %s",
       (unsigned long)((char *)lr - (char *)info.dli_fbase), info.dli_fname);
 
+  char layout[160] = "unknown";
+  get_amiga_mem_layout(layout, sizeof(layout));
+
   snprintf(msg, sizeof(msg) - 1,
-    "uae4arm crashed: signal %d at address %p\n  build = %s\n"
+    "uae4arm crashed: signal %d at address %p\n  build = %s\n  memory: %s\n"
     "  PC offset = %s\n  LR offset = %s\n",
-    signum, fault_addr, crash_build_id, pcoff, lroff);
+    signum, fault_addr, crash_build_id, layout, pcoff, lroff);
 
 #ifdef ANDROID
   __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s", msg);

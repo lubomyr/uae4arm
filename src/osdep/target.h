@@ -40,6 +40,7 @@ extern int generic_main (int argc, char *argv[]);
 extern int emulating;
 
 extern int z3base_adr;
+extern void get_amiga_mem_layout(char *out, int size);
 
 extern uae_u32 time_per_frame;
 
