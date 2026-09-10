@@ -157,6 +157,14 @@ void target_fixup_options (struct uae_prefs *p)
 	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
   p->gfx_resolution = p->gfx_monitor.gfx_size.width > 600 ? 1 : 0;
   
+#if defined(ANDROID) && !defined(CPU_AARCH64)
+  /* The JIT reaches Amiga memory as natmem_offset + address with no bank check,
+     so an address outside the mapped area writes wherever that lands. In a 32
+     bit process the space is full - a user's crash landed inside the vendor EGL
+     driver - while on 64 bit the same miss falls into empty space. Keep it off. */
+  p->cachesize = 0;
+#endif
+
   if(p->cachesize > 0)
     p->fpu_no_unimplemented = 0;
   else

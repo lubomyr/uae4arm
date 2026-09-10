@@ -166,11 +166,16 @@ static uae_u8 *cache_alloc (int size)
   size = size < getpagesize() ? getpagesize() : size;
 
   void *cache = mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
-  if (!cache) {
-    printf ("Cache_Alloc of %d failed. ERR=%d\n", size, errno);
-  } else {
-    memset(cache, 0, size);
+  /* mmap reports failure as MAP_FAILED, not NULL - the old check never fired,
+     so a failed allocation went on to memset() at address -1. */
+  if (cache == MAP_FAILED) {
+    write_log("JIT: cache_alloc of %d bytes failed, errno=%d\n", size, errno);
+    return NULL;
   }
+  /* No memset: MAP_ANON memory is already zero-filled, and touching all of it
+     made the whole 16 MB resident the moment JIT was switched on. Letting the
+     pages arrive as they are used matters on 32 bit devices, where that pressure
+     showed up as the graphics driver failing an allocation and crashing. */
   return (uae_u8 *) cache;
 }
 

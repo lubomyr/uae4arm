@@ -74,6 +74,10 @@ static void RefreshPanelCPU(void)
   chkCPUCycleExact->setSelected(workprefs.cpu_cycle_exact > 0);
   chkCPUCycleExact->setEnabled(workprefs.cpu_model <= 68010);
   chkJIT->setSelected(workprefs.cachesize > 0);
+#if defined(ANDROID) && !defined(CPU_AARCH64)
+  // Unsafe on 32 bit - see the note in target_fixup_options()
+  chkJIT->setEnabled(false);
+#endif
 
   switch(workprefs.fpu_model)
   {
