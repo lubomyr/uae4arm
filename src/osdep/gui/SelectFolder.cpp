@@ -115,7 +115,11 @@ static void checkfoldername (char *current)
 	  strncpy(workingDir, ptr, MAX_PATH - 1);
 	  closedir(dir);
 	} else
-    strncpy(workingDir, start_path_data, MAX_PATH - 1);
+  {
+    /* See SelectFile.cpp: an unreadable folder must not throw the user back
+       into the app's own directory. */
+    return;
+  }
   txtCurrent->setText(workingDir);
 }
 

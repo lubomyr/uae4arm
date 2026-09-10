@@ -160,7 +160,13 @@ static void checkfoldername (char *current)
 	  closedir(dir);
 	}
   else
-    strncpy(workingDir, start_path_data, MAX_PATH - 1);
+  {
+    /* Cannot read it - /storage/emulated is not listable for an app, and that
+       is exactly what ".." leads to from the root of internal storage. Stay
+       where we are; dropping the user back into the app's own folder was far
+       more surprising than simply not moving. */
+    return;
+  }
   txtCurrent->setText(workingDir);
 }
 

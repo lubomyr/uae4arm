@@ -462,16 +462,24 @@ void ReadDirectory(const char *path, std::vector<std::string> *dirs, std::vector
     {
       if(dent->d_type == DT_DIR)
       {
-        if(dirs != NULL)
+        /* The old code dropped "." only when readdir happened to return it
+           first, which is not guaranteed - drop it wherever it turns up. */
+        if(dirs != NULL && strcmp(dent->d_name, ".") != 0)
           dirs->push_back(dent->d_name);
       }
       else if (files != NULL)
         files->push_back(dent->d_name);
     }
-    if(dirs != NULL && dirs->size() > 0 && (*dirs)[0] == ".")
-      dirs->erase(dirs->begin());
     closedir(dir);
   }
+
+  /* Android's emulated storage does not return "." and ".." from readdir at
+     all, so outside the app's own directory there was no way back up: the
+     caller only added ".." when the listing came out completely empty, which
+     never happens in a folder that has subfolders. */
+  if(dirs != NULL && strcmp(path, "/") != 0 &&
+     std::find(dirs->begin(), dirs->end(), "..") == dirs->end())
+    dirs->push_back("..");
   
   if(dirs != NULL)
     std::sort(dirs->begin(), dirs->end());
