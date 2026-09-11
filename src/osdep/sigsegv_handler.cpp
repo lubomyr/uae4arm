@@ -207,6 +207,29 @@ void init_crash_report(void)
 #endif
 }
 
+/* An uncaught C++ exception - guichan throws on a few kinds of API misuse -
+   ends in abort(), which is none of the signals handled below: the process
+   just vanished and the log held nothing. Report it too, then let the
+   default action run so the platform still gets its own record. */
+void signal_abort(int signum, siginfo_t* info, void* ptr)
+{
+  ucontext_t *ucontext = (ucontext_t *)ptr;
+  void *pc = NULL;
+
+  if(ucontext != NULL) {
+#if defined(CPU_AARCH64)
+    pc = (void *)ucontext->uc_mcontext.pc;
+#elif defined(CPU_arm)
+    pc = (void *)ucontext->uc_mcontext.arm_pc;
+#endif
+  }
+  report_fatal_signal(signum, info != NULL ? info->si_addr : NULL, pc, NULL);
+
+  signal(signum, SIG_DFL);
+  raise(signum);
+}
+
+
 void init_max_signals(void)
 {
 #ifdef WITH_LOGGING

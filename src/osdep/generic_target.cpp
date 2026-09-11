@@ -54,6 +54,7 @@ bool host_poweroff = false;
 extern void signal_segv(int signum, siginfo_t* info, void*ptr);
 extern void init_crash_report(void);
 extern void signal_buserror(int signum, siginfo_t* info, void*ptr);
+extern void signal_abort(int signum, siginfo_t* info, void*ptr);
 extern void signal_term(int signum, siginfo_t* info, void*ptr);
 extern void gui_force_rtarea_hdchange(void);
 
@@ -757,6 +758,15 @@ int generic_main (int argc, char *argv[])
   if(sigaction(SIGILL, &action, NULL) < 0)
   {
     printf("Failed to set signal handler (SIGILL).\n");
+    abort();
+  }
+
+  memset(&action, 0, sizeof(action));
+  action.sa_sigaction = signal_abort;
+  action.sa_flags = SA_SIGINFO;
+  if(sigaction(SIGABRT, &action, NULL) < 0)
+  {
+    printf("Failed to set signal handler (SIGABRT).\n");
     abort();
   }
 
