@@ -219,11 +219,23 @@ static void checkfoldername (char *current)
 	}
   else
   {
-    /* Cannot read it - /storage/emulated is not listable for an app, and that
-       is exactly what ".." leads to from the root of internal storage. Stay
-       where we are; dropping the user back into the app's own folder was far
-       more surprising than simply not moving. */
-    return;
+    /* An unreadable folder must not throw the user back into the app's own
+       directory: ".." from the root of internal storage leads to
+       /storage/emulated, which an app may not list, and jumping away from
+       there was far more surprising than simply not moving.
+       Staying put is only right if there is somewhere valid to stay. The
+       dialog opens with an empty path the first time, and the list model already lists
+       the startup directory, so leaving workingDir empty put the two out of
+       step and every tap built a path that could not be opened. */
+    DIR *cur = workingDir[0] != '\0' ? opendir(workingDir) : NULL;
+    if(cur != NULL)
+    {
+      closedir(cur);
+      return;
+    }
+    strncpy(workingDir, start_path_data, MAX_PATH - 1);
+    workingDir[MAX_PATH - 1] = '\0';
+    fileList->changeDir(workingDir);
   }
   txtCurrent->setText(workingDir);
 }

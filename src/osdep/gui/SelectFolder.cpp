@@ -173,9 +173,18 @@ static void checkfoldername (char *current)
 	  closedir(dir);
 	} else
   {
-    /* See SelectFile.cpp: an unreadable folder must not throw the user back
-       into the app's own directory. */
-    return;
+    /* See SelectFile.cpp: staying put is right for a folder we may not read,
+       but only when there is somewhere valid to stay - otherwise workingDir
+       and what the list shows drift apart and no tap opens anything. */
+    DIR *cur = workingDir[0] != '\0' ? opendir(workingDir) : NULL;
+    if(cur != NULL)
+    {
+      closedir(cur);
+      return;
+    }
+    strncpy(workingDir, start_path_data, MAX_PATH - 1);
+    workingDir[MAX_PATH - 1] = '\0';
+    dirList = workingDir;
   }
   txtCurrent->setText(workingDir);
 }
