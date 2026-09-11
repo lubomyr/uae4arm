@@ -51,6 +51,13 @@ static gcn::Button* cmdStorage;
 
 static void checkfoldername (char *current);
 
+#ifdef ANDROID
+/* The list doubles as the disk chooser: DISKS fills it with the volumes,
+   shown as folders, and picking one enters it like any other directory. */
+static bool showingVolumes = false;
+static std::vector<std::string> volumePaths;
+#endif
+
 
 class SelectFileListModel : public gcn::ListModel
 {
@@ -89,8 +96,59 @@ class SelectFileListModel : public gcn::ListModel
     {
       return (i < dirs.size());
     }
+
+#ifdef ANDROID
+    void showVolumes(const std::vector<std::string> &names)
+    {
+      dirs = names;
+      files.clear();
+    }
+#endif
 };
 static SelectFileListModel *fileList;
+
+#ifdef ANDROID
+static void fillVolumeList(const std::vector<std::string> &names,
+  const std::vector<std::string> &paths)
+{
+  volumePaths = paths;
+  fileList->showVolumes(names);
+  showingVolumes = true;
+  txtCurrent->setText("Disks");
+  lstFiles->setSelected(0);
+}
+
+
+static void showVolumeList(void)
+{
+  std::vector<std::string> names, paths;
+
+  GetStorageVolumes(&names, &paths);
+  if(!names.empty())
+    fillVolumeList(names, paths);
+}
+
+
+/* ".." from the root of a volume would lead to /storage, which no app is
+   allowed to list. The disk list is where the user came from and the only
+   thing above a volume that means anything, so go there instead. */
+static bool showVolumeListIfAtRoot(const char *dir)
+{
+  std::vector<std::string> names, paths;
+  size_t i;
+
+  GetStorageVolumes(&names, &paths);
+  for(i = 0; i < paths.size(); ++i)
+  {
+    if(paths[i] == dir)
+    {
+      fillVolumeList(names, paths);
+      return true;
+    }
+  }
+  return false;
+}
+#endif
 
 
 class FileButtonActionListener : public gcn::ActionListener
@@ -101,20 +159,17 @@ class FileButtonActionListener : public gcn::ActionListener
 #ifdef ANDROID
       if (actionEvent.getSource() == cmdStorage)
       {
-        const char *root = GetInternalStoragePath();
-        if(root != NULL)
-        {
-          char tmp[MAX_PATH];
-          strncpy(tmp, root, MAX_PATH - 1);
-          tmp[MAX_PATH - 1] = '\0';
-          checkfoldername(tmp);
-        }
-        return; // Keep the dialog open, we only moved to another directory
+        showVolumeList();
+        return; // Keep the dialog open, we only changed what it lists
       }
 #endif
       if (actionEvent.getSource() == cmdOK)
       {
         int selected_item;
+#ifdef ANDROID
+        if(showingVolumes)
+          return; // A disk is not a choice, it is a place to go into
+#endif
         selected_item = lstFiles->getSelected();
         if(createNew)
         {
@@ -155,6 +210,9 @@ static void checkfoldername (char *current)
 	if (dir = opendir(current))
 	{ 
 	  fileList->changeDir(current);
+#ifdef ANDROID
+	  showingVolumes = false;
+#endif
 	  ptr = realpath(current, actualpath);
 	  strncpy(workingDir, ptr, MAX_PATH - 1);
 	  closedir(dir);
@@ -195,6 +253,21 @@ class SelectFileActionListener : public gcn::ActionListener
       char foldername[MAX_PATH] = "";
 
       selected_item = lstFiles->getSelected();
+#ifdef ANDROID
+      if(showingVolumes)
+      {
+        if(selected_item >= 0 && selected_item < (int)volumePaths.size())
+        {
+          strncpy(foldername, volumePaths[selected_item].c_str(), MAX_PATH - 1);
+          foldername[MAX_PATH - 1] = '\0';
+          checkfoldername(foldername);
+        }
+        return;
+      }
+      if(fileList->getElementAt(selected_item) == ".." &&
+         showVolumeListIfAtRoot(workingDir))
+        return;
+#endif
       strncpy(foldername, workingDir, MAX_PATH - 1);
       strncat(foldername, "/", MAX_PATH - 1);
       strncat(foldername, fileList->getElementAt(selected_item).c_str(), MAX_PATH - 1);
@@ -248,7 +321,7 @@ static void InitSelectFile(const char *title)
   cmdCancel->addActionListener(fileButtonActionListener);
 
 #ifdef ANDROID
-  cmdStorage = new gcn::Button("Internal storage");
+  cmdStorage = new gcn::Button("DISKS");
   cmdStorage->setSize(BUTTON_WIDTH * 2, BUTTON_HEIGHT);
   cmdStorage->setPosition(DISTANCE_BORDER, DIALOG_HEIGHT - 2 * DISTANCE_BORDER - BUTTON_HEIGHT - 10);
   cmdStorage->setBaseColor(gui_baseCol + 0x202020);
@@ -461,6 +534,9 @@ bool SelectFile(const char *title, char *value, const char *filter[], bool creat
   filefilter = filter;
   dialogCreated = false;
   selectedOnStart = -1;
+#ifdef ANDROID
+  showingVolumes = false;
+#endif
   
 	if (Already_init == 0)
 	{
