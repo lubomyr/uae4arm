@@ -752,9 +752,13 @@ static bool DevicenameExists(const char *name)
   struct uaedev_config_data *uci;
   struct uaedev_config_info *ci;
   
-  for(i=0; i<MAX_HD_DEVICES; ++i)
+  /* The panel edits workprefs, and changed_prefs only catches up with it when
+     emulation starts - so a drive added a moment ago in the GUI was invisible
+     here and every new one was offered DH0 again. Count from mountitems too:
+     entries past it are leftovers and must not reserve a name. */
+  for(i=0; i<workprefs.mountitems; ++i)
   {
-    uci = &changed_prefs.mountconfig[i];
+    uci = &workprefs.mountconfig[i];
     ci = &uci->ci;
     
     if(ci->devname && ci->devname[0])
