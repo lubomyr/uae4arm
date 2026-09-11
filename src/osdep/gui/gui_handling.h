@@ -155,6 +155,8 @@ extern void ReadDirectory(const char *path, std::vector<std::string> *dirs, std:
 extern void FilterFiles(std::vector<std::string> *files, const char *filter[]);
 #ifdef ANDROID
 extern const char *GetInternalStoragePath(void);
+/* Live - a stick can appear or vanish while the app runs, so never cache. */
+extern void GetStorageVolumes(std::vector<std::string> *names, std::vector<std::string> *paths);
 #endif
 
 enum { DIRECTION_NONE, DIRECTION_UP, DIRECTION_DOWN, DIRECTION_LEFT, DIRECTION_RIGHT };

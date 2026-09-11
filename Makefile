@@ -203,6 +203,7 @@ OBJS =	\
 	src-$(arch)/osdep/generic_serial.o \
 	src-$(arch)/osdep/generic_mem.o \
 	src-$(arch)/osdep/sigsegv_handler.o \
+	src-$(arch)/osdep/storage_volumes.o \
 	src-$(arch)/osdep/gui/GenericListModel.o \
 	src-$(arch)/osdep/gui/UaeRadioButton.o \
 	src-$(arch)/osdep/gui/UaeDropDown.o \
@@ -331,6 +332,7 @@ ASMS = \
 	src-$(arch)/machdep/support.s \
 	src-$(arch)/osdep/picasso96.s \
 	src-$(arch)/osdep/sigsegv_handler.s \
+	src-$(arch)/osdep/storage_volumes.s \
 	src-$(arch)/newcpu.s \
 	src-$(arch)/newcpu_common.s \
 	src-$(arch)/readcpu.s \
