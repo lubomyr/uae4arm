@@ -948,6 +948,9 @@ void picasso_InitResolutions (void)
   int i, count = 0;
   char tmp[200];
   int bit_idx;
+  int mode_width[MAX_SCREEN_MODES + 4];
+  int mode_height[MAX_SCREEN_MODES + 4];
+  int num_modes = 0;
   int bits[] = { 8, 16, 32 };
   
   Displays[0].primary = 1;
@@ -962,7 +965,62 @@ void picasso_InitResolutions (void)
 
   md1 = Displays;
   DisplayModes = md1->DisplayModes = xmalloc (struct PicassoResolution, MAX_PICASSO_MODES);
-  for (i = 0; i < MAX_SCREEN_MODES && count < MAX_PICASSO_MODES; i++) {
+
+  for (i = 0; i < MAX_SCREEN_MODES; i++) {
+    mode_width[num_modes] = x_size_table[i];
+    mode_height[num_modes] = y_size_table[i];
+    num_modes++;
+  }
+
+#ifdef ANDROID
+  /* Not one of the sizes above has the shape of a phone or a tablet, so an RTG
+     screen is always either stretched or left with bars down the sides. Offer a
+     few that match this device: shown full screen they come out right with no
+     correction at all, and nothing in the scaling has to know about them. */
+  {
+    static const int heights[] = { 480, 600, 800, 1024 };
+    /* No video mode has been set yet, so SDL_ListModes() cannot be asked -
+       the wrapper puts the real screen size in the environment instead. */
+    const char *env_w = getenv("DISPLAY_RESOLUTION_WIDTH");
+    const char *env_h = getenv("DISPLAY_RESOLUTION_HEIGHT");
+    int screen_w = env_w != NULL ? atoi(env_w) : 0;
+    int screen_h = env_h != NULL ? atoi(env_h) : 0;
+
+    if (screen_w < screen_h) {
+      int t = screen_w; screen_w = screen_h; screen_h = t;
+    }
+    if (screen_w > 0 && screen_h > 0) {
+      int k;
+
+      for (k = 0; k < 4 && num_modes < MAX_SCREEN_MODES + 4; k++) {
+        int h = heights[k];
+        /* Picasso96 wants the width in multiples of 16 - every size in the
+           table above is one, and 600x400 came out as the one generated size
+           that was not, and was the one mode that would not start. The
+           fraction of a percent the rounding costs is not visible. */
+        int w = ((h * screen_w / screen_h) + 8) & ~15;
+        int j, already = 0;
+
+        /* Picasso96 will not open a screen narrower than 640 - it quietly
+           widens the bitmap to 640 instead, and the screen then scrolls. A
+           height that cannot reach 640 across is no use here. */
+        if (w < 640 || h > screen_h * 2)
+          continue;
+        for (j = 0; j < num_modes; j++) {
+          if (mode_width[j] == w && mode_height[j] == h)
+            already = 1;
+        }
+        if (already)
+          continue;
+        mode_width[num_modes] = w;
+        mode_height[num_modes] = h;
+        num_modes++;
+      }
+    }
+  }
+#endif
+
+  for (i = 0; i < num_modes && count < MAX_PICASSO_MODES; i++) {
     for(bit_idx = 0; bit_idx < 3; ++bit_idx) {
       int bitdepth = bits[bit_idx];
       int bit_unit = (bitdepth + 1) & 0xF8;
@@ -970,10 +1028,10 @@ void picasso_InitResolutions (void)
       int pixelFormat = 1 << rgbFormat;
   	  pixelFormat |= RGBFF_CHUNKY;
       
-  	  if (SDL_VideoModeOK (x_size_table[i], y_size_table[i], 16, SDL_SWSURFACE))
+  	  if (SDL_VideoModeOK (mode_width[i], mode_height[i], 16, SDL_SWSURFACE))
   	  {
-  	    DisplayModes[count].res.width = x_size_table[i];
-  	    DisplayModes[count].res.height = y_size_table[i];
+  	    DisplayModes[count].res.width = mode_width[i];
+  	    DisplayModes[count].res.height = mode_height[i];
   	    DisplayModes[count].depth = bit_unit >> 3;
         DisplayModes[count].refresh[0] = 50;
         DisplayModes[count].refresh[1] = 60;
