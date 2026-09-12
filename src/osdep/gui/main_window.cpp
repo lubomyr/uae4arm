@@ -310,6 +310,13 @@ namespace sdl
     // Enable Android multitouch
     SDL_InitSubSystem(SDL_INIT_JOYSTICK);
     SDL_JoystickOpen(0);
+    /* Let go of the pointer while the menu is up. Holding it is right for the
+       emulator - it hides the system cursor, which would otherwise sit on top
+       of the one the Amiga draws, and turns the mouse into relative movement -
+       but it leaves the menu with a mouse you cannot see. Released, Android
+       draws its own cursor and reports absolute positions, which is what the
+       menu wants; gui_halt() takes it back. */
+    SDL_ANDROID_SetMouseCaptured(0);
 #endif
     SDL_ShowCursor(SDL_ENABLE);
 #endif
@@ -329,6 +336,11 @@ namespace sdl
 
   void gui_halt()
   {
+#ifdef ANDROIDSDL
+    /* Back to the emulator: hold the pointer again so the system cursor goes
+       away and does not sit on top of the Amiga's own. */
+    SDL_ANDROID_SetMouseCaptured(1);
+#endif
     delete uae_gui;
     delete gui_imageLoader;
     delete gui_input;

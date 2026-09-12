@@ -1,4 +1,5 @@
 #include <guichan/sdl.hpp>
+#include <SDL_android.h>
 
 void androidsdl_event(SDL_Event event, gcn::SDLInput* gui_input) {
             /*
@@ -11,8 +12,25 @@ void androidsdl_event(SDL_Event event, gcn::SDLInput* gui_input) {
             if (event.type == SDL_MOUSEMOTION ||
                 event.type == SDL_MOUSEBUTTONDOWN ||
                 event.type == SDL_MOUSEBUTTONUP) {
-                // Filter emulated mouse events for Guichan, we wand absolute input
+                /* Every press reaches this function twice: as these events,
+                   and as the joystick ball events converted below. Which pair
+                   is the usable one depends on what is driving the pointer, so
+                   take one and drop the other. A finger only carries an
+                   absolute position through the ball events, so that is the
+                   pair kept for touch. A real mouse, once the pointer is
+                   released in gui_init(), reports absolute positions in these
+                   events directly, already in the menu's own 800x480 space -
+                   keeping them is what makes the menu usable with a mouse. */
+                if (SDL_ANDROID_GetHardwareMouseDetected())
+                    gui_input->pushInput(event);
             } else {
+                /* A mouse click arrives as a touch as well, so it also turns up
+                   here as a joystick ball event - acting on both would work
+                   every click twice, which showed up as a config starting on a
+                   single click. The real mouse events above already carry it. */
+                if ((event.type == SDL_JOYBALLMOTION || event.type == SDL_JOYBUTTONUP) &&
+                    SDL_ANDROID_GetHardwareMouseDetected())
+                    return;
                 // Convert multitouch event to SDL mouse event
                 static int x = 0, y = 0, buttons = 0, wx=0, wy=0, pr=0;
                 SDL_Event event2;

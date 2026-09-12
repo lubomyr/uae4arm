@@ -1,3 +1,29 @@
+diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
+index 69c7f86c2..1b089f520 100644
+--- a/project/java/MainActivity.java
++++ b/project/java/MainActivity.java
+@@ -1590,6 +1590,21 @@ public class MainActivity extends Activity
+ 		}
+ 	}
+ 
++	/* Released while the emulator's own menu is up: capture hides the system
++	   pointer and turns the mouse into relative movement, which is what the
++	   Amiga wants but leaves the menu with an invisible cursor. */
++	public void setMouseCaptured(final int captured)
++	{
++		runOnUiThread(new Runnable()
++		{
++			public void run()
++			{
++				if (mGLView != null)
++					mGLView.captureMouse(captured != 0);
++			}
++		});
++	}
++
+ 	public void setSystemMousePointerVisible(int visible)
+ 	{
+ 		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
 diff --git a/project/java/Settings.java b/project/java/Settings.java
 index c99131b2a..6aa2cc5de 100644
 --- a/project/java/Settings.java
@@ -76,7 +102,7 @@ index c99131b2a..6aa2cc5de 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..52e8f21cb 100644
+index f0a437bb6..f692b55b8 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -126,7 +152,19 @@ index f0a437bb6..52e8f21cb 100644
  	int mLastPendingResize = 0;
  	public void onWindowResize(final int w, final int h)
  	{
-@@ -1122,9 +1144,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -950,6 +972,11 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 		context.setSystemMousePointerVisible(visible);
+ 	}
+ 
++	public void setMouseCaptured(int captured)
++	{
++		context.setMouseCaptured(captured);
++	}
++
+ 	public void restartMyself(String restartParams)
+ 	{
+ 		Intent intent = new Intent(context, RestartMainActivity.class);
+@@ -1122,9 +1149,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -166,7 +204,7 @@ index f0a437bb6..52e8f21cb 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1199,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1204,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -174,7 +212,7 @@ index f0a437bb6..52e8f21cb 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1218,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1223,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -183,7 +221,7 @@ index f0a437bb6..52e8f21cb 100644
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..175bcbdcf 100644
+index 14d8a4dd1..81f7fcb67 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
 @@ -139,6 +139,14 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
@@ -201,6 +239,72 @@ index 14d8a4dd1..175bcbdcf 100644
  	/* TODO: more options, see Globals.java */
  };
  
+@@ -159,6 +167,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+ 
+ extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
+ 
++/* Non-zero when a real mouse or stylus is driving the pointer, rather than a
++   finger - the coordinates are then absolute and need no emulation. */
++extern DECLSPEC int SDLCALL SDL_ANDROID_GetHardwareMouseDetected();
++
++/* Hold or release the pointer. While it is captured the system cursor is
++   hidden and the mouse reports relative movement; released, Android draws its
++   own cursor and reports absolute positions. */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseCaptured(int captured);
++
+ /* Control the System mouse pointer visibility */
+ extern DECLSPEC void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible);
+ 
+diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
+index bed900ebe..92fef6d20 100644
+--- a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
++++ b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
+@@ -1242,6 +1242,10 @@ int SDLCALL SDL_ANDROID_GetMouseEmulationMode() {
+     return relativeMovement;
+ }
+ 
++int SDLCALL SDL_ANDROID_GetHardwareMouseDetected() {
++    return hardwareMouseDetected;
++}
++
+ typedef struct
+ {
+ 		int leftClickMethod;
+diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
+index 30df36343..6066a44e4 100644
+--- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
++++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
+@@ -122,6 +122,7 @@ static jmethodID JavaRequestOpenExternalApp = NULL;
+ static jmethodID JavaRequestRestartMyself = NULL;
+ static jmethodID JavaRequestSetConfigOption = NULL;
+ static jmethodID JavaSetSystemMousePointerVisible = NULL;
++static jmethodID JavaSetMouseCaptured = NULL;
+ static jmethodID JavaSetCapturedMousePosition = NULL;
+ static int glContextLost = 0;
+ static int showScreenKeyboardDeferred = 0;
+@@ -429,6 +430,7 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+ 	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
+ 	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
+ 	JavaSetSystemMousePointerVisible = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setSystemMousePointerVisible", "(I)V");
++	JavaSetMouseCaptured = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setMouseCaptured", "(I)V");
+ 	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
+ 
+ 	ANDROID_InitOSKeymap();
+@@ -697,6 +699,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+ 	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
+ }
+ 
++void SDLCALL SDL_ANDROID_SetMouseCaptured(int captured)
++{
++	JNIEnv *JavaEnv = GetJavaEnv();
++	if( JavaSetMouseCaptured == NULL )
++		return;
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetMouseCaptured, (jint)captured );
++}
++
+ void SDLCALL SDL_ANDROID_SetCapturedMousePosition(int x, int y)
+ {
+ 	JNIEnv *JavaEnv = GetJavaEnv();
 diff --git a/project/jni/sdl-1.2/src/video/android/keymap.c b/project/jni/sdl-1.2/src/video/android/keymap.c
 index 400c01b8a..f41e34d67 100644
 --- a/project/jni/sdl-1.2/src/video/android/keymap.c
