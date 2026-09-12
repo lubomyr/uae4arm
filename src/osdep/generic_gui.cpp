@@ -458,12 +458,23 @@ static void gui_purge_events(void)
 }
 
 
+/* The folder previews were written to before they moved next to the state. */
+char screenshot_filename_legacy[MAX_DPATH];
+
 int gui_update (void)
 {
   char tmp[MAX_PATH];
 
   fetch_savestatepath(savestate_fname, MAX_DPATH);
-  fetch_screenshotpath(screenshot_filename, MAX_DPATH);
+  /* The preview belongs to the savestate, so keep the two together. They used
+     to be split - the state in the savestates folder, the picture in one of
+     its own - which was harmless while both sat inside the app's directory,
+     but that folder can now be chosen, and the halves would end up in
+     different places. fetch_screenshotpath() had no other caller. */
+  fetch_savestatepath(screenshot_filename, MAX_DPATH);
+  /* And where it used to be written, so a preview saved by an older version
+     is still found rather than silently lost. */
+  fetch_screenshotpath(screenshot_filename_legacy, MAX_DPATH);
   
   if(strlen(currprefs.floppyslots[0].df) > 0)
     extractFileName(currprefs.floppyslots[0].df, tmp);
@@ -472,26 +483,32 @@ int gui_update (void)
 
   strncat(savestate_fname, tmp, MAX_DPATH - 1);
   strncat(screenshot_filename, tmp, MAX_DPATH - 1);
+  strncat(screenshot_filename_legacy, tmp, MAX_DPATH - 1);
   removeFileExtension(savestate_fname);
   removeFileExtension(screenshot_filename);
+  removeFileExtension(screenshot_filename_legacy);
 
   switch(currentStateNum)
   {
     case 1:
   		strncat(savestate_fname,"-1.uss", MAX_PATH - 1);
 	    strncat(screenshot_filename,"-1.png", MAX_PATH - 1);
+	    strncat(screenshot_filename_legacy,"-1.png", MAX_PATH - 1);
 	    break;
     case 2:
   		strncat(savestate_fname,"-2.uss", MAX_PATH - 1);
   		strncat(screenshot_filename,"-2.png", MAX_PATH - 1);
+  		strncat(screenshot_filename_legacy,"-2.png", MAX_PATH - 1);
   		break;
     case 3:
   		strncat(savestate_fname,"-3.uss", MAX_PATH - 1);
   		strncat(screenshot_filename,"-3.png", MAX_PATH - 1);
+  		strncat(screenshot_filename_legacy,"-3.png", MAX_PATH - 1);
   		break;
     default: 
 	   	strncat(savestate_fname,".uss", MAX_PATH - 1);
   		strncat(screenshot_filename,".png", MAX_PATH - 1);
+  		strncat(screenshot_filename_legacy,".png", MAX_PATH - 1);
   }
 
   return 0;

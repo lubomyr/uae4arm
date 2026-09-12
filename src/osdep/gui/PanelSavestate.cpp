@@ -75,11 +75,19 @@ static void RefreshPanelSavestate(void)
 	
   gui_update();
 	if(strlen(screenshot_filename) > 0) {
-		FILE *f=fopen(screenshot_filename,"rb");
+		const char *shot = screenshot_filename;
+		FILE *f=fopen(shot,"rb");
+		if (!f && screenshot_filename_legacy[0]) {
+			/* Previews used to be written to a folder of their own. Show one
+			   saved by an older version rather than nothing; the next save
+			   puts it next to the state like everything else. */
+			shot = screenshot_filename_legacy;
+			f = fopen(shot, "rb");
+		}
 		if (f) {
 			fclose(f);
 			gcn::Rectangle rect = wndScreenshot->getChildrenArea();
-			SDL_Surface *loadedImage = IMG_Load(screenshot_filename);
+			SDL_Surface *loadedImage = IMG_Load(shot);
 			if(loadedImage != NULL) {
 		    SDL_Rect source = {0, 0, 0, 0 };
 		    SDL_Rect target = {0, 0, 0, 0 };

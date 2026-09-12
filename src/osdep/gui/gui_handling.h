@@ -167,6 +167,7 @@ extern void CreateDefaultDevicename(char *name);
 extern int tweakbootpri (int bp, int ab, int dnm);
 
 extern char *screenshot_filename;
+extern char screenshot_filename_legacy[];
 extern int currentStateNum;
 extern int delay_savestate_frame;
 
