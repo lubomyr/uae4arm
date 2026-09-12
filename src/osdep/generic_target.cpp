@@ -66,6 +66,7 @@ char currentDir[MAX_DPATH];
 static char config_path[MAX_DPATH];
 static char rom_path[MAX_DPATH];
 static char rp9_path[MAX_DPATH];
+static char savestate_path[MAX_DPATH];
 char last_loaded_config[MAX_DPATH] = { '\0' };
 
 int max_uae_width;
@@ -310,8 +311,14 @@ void fetch_rp9path (char *out, int size)
 
 void fetch_savestatepath(char *out, int size)
 {
-  strncpy(out, start_path_data, size - 1);
-  strncat(out, "/savestates/", size - 1);
+  strncpy(out, savestate_path, size - 1);
+}
+
+
+void set_savestatepath(char *newpath)
+{
+  strncpy(savestate_path, newpath, MAX_DPATH - 1);
+  savestate_path[MAX_DPATH - 1] = '\0';
 }
 
 
@@ -509,6 +516,9 @@ void saveAdfDir(void)
 	snprintf(buffer, MAX_DPATH - 1, "rom_path=%s\n", rom_path);
 	fputs(buffer, f);
 
+	snprintf(buffer, MAX_DPATH - 1, "savestate_path=%s\n", savestate_path);
+	fputs(buffer, f);
+
   snprintf(buffer, MAX_DPATH - 1, "ROMs=%d\n", lstAvailableROMs.size());
   fputs(buffer, f);
   for(i=0; i<lstAvailableROMs.size(); ++i)
@@ -577,6 +587,7 @@ void loadAdfDir(void)
 	snprintf(rom_path, MAX_DPATH - 1, "%s/kickstarts/", start_path_data);
 #endif
 	snprintf(rp9_path, MAX_DPATH - 1, "%s/rp9/", start_path_data);
+	snprintf(savestate_path, MAX_DPATH - 1, "%s/savestates/", start_path_data);
 
 	snprintf(path, MAX_DPATH - 1, "%s/conf/adfdir.conf", start_path_data);
   struct zfile *fh;
@@ -625,6 +636,7 @@ void loadAdfDir(void)
           cfgfile_string(option, value, "path", currentDir, sizeof(currentDir));
           cfgfile_string(option, value, "config_path", config_path, sizeof(config_path));
           cfgfile_string(option, value, "rom_path", rom_path, sizeof(rom_path));
+          cfgfile_string(option, value, "savestate_path", savestate_path, sizeof(savestate_path));
           cfgfile_intval(option, value, "ROMs", &numROMs, 1);
           cfgfile_intval(option, value, "MRUDiskList", &numDisks, 1);
           cfgfile_intval(option, value, "MRUCDList", &numCDs, 1);

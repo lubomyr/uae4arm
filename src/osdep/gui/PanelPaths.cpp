@@ -25,6 +25,9 @@ static gcn::Button *cmdSystemROMs;
 static gcn::Label *lblConfigPath;
 static gcn::TextField *txtConfigPath;
 static gcn::Button *cmdConfigPath;
+static gcn::Label *lblSavestatePath;
+static gcn::TextField *txtSavestatePath;
+static gcn::Button *cmdSavestatePath;
 static gcn::Button *cmdRescanROMs;
 
 
@@ -37,6 +40,9 @@ static void RefreshPanelPaths(void)
   
   fetch_configurationpath(tmp, MAX_PATH);
   txtConfigPath->setText(tmp);
+
+  fetch_savestatepath(tmp, MAX_PATH);
+  txtSavestatePath->setText(tmp);
 }
 
 
@@ -64,6 +70,15 @@ class PathsActionListener : public gcn::ActionListener
           RefreshPanelPaths();
         }
         cmdConfigPath->requestFocus();
+
+      } else if(actionEvent.getSource() == cmdSavestatePath) {
+        fetch_savestatepath(tmp, MAX_PATH);
+        if(SelectFolder("Folder for savestates", tmp))
+        {
+          set_savestatepath(tmp);
+          RefreshPanelPaths();
+        }
+        cmdSavestatePath->requestFocus();
 
       } else if(actionEvent.getSource() == cmdRescanROMs) {
         RescanROMs();
@@ -102,6 +117,17 @@ void InitPanelPaths(const struct _ConfigCategory& category)
   cmdConfigPath->setBaseColor(gui_baseCol);
   cmdConfigPath->addActionListener(pathsActionListener);
   
+  lblSavestatePath = new gcn::Label("Savestates:");
+  lblSavestatePath->setSize(120, LABEL_HEIGHT);
+  txtSavestatePath = new gcn::TextField();
+  txtSavestatePath->setSize(textFieldWidth, TEXTFIELD_HEIGHT);
+  txtSavestatePath->setEnabled(false);
+  cmdSavestatePath = new gcn::Button("...");
+  cmdSavestatePath->setId("SavestatePath");
+  cmdSavestatePath->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
+  cmdSavestatePath->setBaseColor(gui_baseCol);
+  cmdSavestatePath->addActionListener(pathsActionListener);
+
   category.panel->add(lblSystemROMs, DISTANCE_BORDER, yPos);
   yPos += lblSystemROMs->getHeight();
   category.panel->add(txtSystemROMs, DISTANCE_BORDER, yPos);
@@ -113,6 +139,12 @@ void InitPanelPaths(const struct _ConfigCategory& category)
   category.panel->add(txtConfigPath, DISTANCE_BORDER, yPos);
   category.panel->add(cmdConfigPath, DISTANCE_BORDER + textFieldWidth + DISTANCE_NEXT_X, yPos);
   yPos += txtConfigPath->getHeight() + DISTANCE_NEXT_Y;
+
+  category.panel->add(lblSavestatePath, DISTANCE_BORDER, yPos);
+  yPos += lblSavestatePath->getHeight();
+  category.panel->add(txtSavestatePath, DISTANCE_BORDER, yPos);
+  category.panel->add(cmdSavestatePath, DISTANCE_BORDER + textFieldWidth + DISTANCE_NEXT_X, yPos);
+  yPos += txtSavestatePath->getHeight() + DISTANCE_NEXT_Y;
 
   cmdRescanROMs = new gcn::Button("Rescan ROMs");
   cmdRescanROMs->setSize(120, BUTTON_HEIGHT);
@@ -137,6 +169,10 @@ void ExitPanelPaths(const struct _ConfigCategory& category)
   delete lblConfigPath;
   delete txtConfigPath;
   delete cmdConfigPath;
+
+  delete lblSavestatePath;
+  delete txtSavestatePath;
+  delete cmdSavestatePath;
   
   delete cmdRescanROMs;
 
@@ -147,7 +183,8 @@ void ExitPanelPaths(const struct _ConfigCategory& category)
 bool HelpPanelPaths(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("Specify the location of your kickstart roms and the folder where the configuration files should be stored.");
+  helptext.push_back("Specify the location of your kickstart roms and the folders where the configuration files and the");
+  helptext.push_back("savestates should be stored.");
   helptext.push_back("Use the \"...\" button to open a dialog to choose the folder.");
   helptext.push_back(" ");
   helptext.push_back("After changing the location of the kickstart roms, click on \"Rescan ROMS\" to refresh the list of the available");
