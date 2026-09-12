@@ -2877,35 +2877,64 @@ static void picasso_statusline (uae_u8 *dst)
   }
 }
 
-static void copyall (uae_u8 *src, uae_u8 *dst)
+static void copyline (uae_u8 *dst, uae_u8 *src, int pixels)
 {
 	struct picasso_vidbuf_description *vidinfo = &picasso_vidinfo;
 	struct picasso96_state_struct *state = &picasso96_state;
   if (state->RGBFormat == RGBFB_R5G6B5) {
     if(vidinfo->pixbytes == 2)
-      copy_screen_16bit_swap(dst, src, state->Width * state->Height * 2);
+      copy_screen_16bit_swap(dst, src, pixels * 2);
     else
-      copy_screen_16bit_to_32bit(dst, src, state->Width * state->Height * 2);
+      copy_screen_16bit_to_32bit(dst, src, pixels * 2);
   } else if(state->RGBFormat == RGBFB_CLUT) {
-    int pixels = state->Width * state->Height;
     if(vidinfo->pixbytes == 2)
       copy_screen_8bit_to_16bit(dst, src, pixels, vidinfo->clut);
     else
       copy_screen_8bit_to_32bit(dst, src, pixels, vidinfo->clut);
   } else {
-    int bytes = state->Width * state->Height * 4;
     if(vidinfo->pixbytes == 2) {
       /* The converters differ only in where the unused alpha byte sits: the
          R8G8B8A8 screens this port advertises keep it last, everything else
          keeps it first. */
       if(state->RGBFormat == RGBFB_R8G8B8A8)
-        copy_screen_32bit_to_16bit_rgba(dst, src, bytes);
+        copy_screen_32bit_to_16bit_rgba(dst, src, pixels * 4);
       else
-        copy_screen_32bit_to_16bit(dst, src, bytes);
+        copy_screen_32bit_to_16bit(dst, src, pixels * 4);
     } else
-      copy_screen_32bit_to_32bit(dst, src, bytes);
+      copy_screen_32bit_to_32bit(dst, src, pixels * 4);
   }
 }
+
+
+static void copyall (uae_u8 *src, uae_u8 *dst)
+{
+	struct picasso_vidbuf_description *vidinfo = &picasso_vidinfo;
+	struct picasso96_state_struct *state = &picasso96_state;
+  int srcbpp = state->RGBFormat == RGBFB_CLUT ? 1 :
+               (state->RGBFormat == RGBFB_R5G6B5 ? 2 : 4);
+  int srcpitch = state->BytesPerRow;
+  int dstpitch = state->Width * vidinfo->pixbytes;
+  int y;
+
+  /* Picasso96 hands out a bitmap as wide as it likes: a 592 pixel screen came
+     back with a virtual width of 640, so its rows sit 2560 bytes apart while
+     the screen is only 2368 bytes wide. Copying Width*Height in one run then
+     walks into the padding and every row lands further left than the one
+     above, which is what a mode whose width it padded looked like. Go row by
+     row when the two do not agree; when they do, a single run over the whole
+     frame is the same thing, so that stays the way it was. */
+  if(srcpitch == state->Width * srcbpp && dstpitch == vidinfo->rowbytes) {
+    copyline(dst, src, state->Width * state->Height);
+    return;
+  }
+
+  for(y = 0; y < state->Height; ++y) {
+    copyline(dst, src, state->Width);
+    src += srcpitch;
+    dst += vidinfo->rowbytes;
+  }
+}
+
 
 static bool picasso_flushpixels (uae_u8 *src, int off)
 {
