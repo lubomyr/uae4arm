@@ -834,13 +834,21 @@ int handle_msgpump (void)
             x = rEvent.motion.xrel;
     				y = rEvent.motion.yrel;
 
-    				if(rEvent.motion.x == 0 && x > -4)
+            /* A cursor pinned against the edge of the window reports no
+               motion in that axis, and the Amiga pointer would stop with it,
+               so push it along to let it carry on past the edge. Only when
+               the axis really has stopped: the old test fired whenever the
+               cursor merely touched an edge and overwrote genuine movement
+               with it. A mouse starts in the corner and sits on x = 0, so
+               every stroke was turned into "up and left" no matter which way
+               it was actually going, and the pointer never left the corner. */
+    				if(x == 0 && rEvent.motion.x == 0)
     					x = -4;
-    				if(rEvent.motion.y == 0 && y > -4)
+    				if(y == 0 && rEvent.motion.y == 0)
     					y = -4;
-    				if(rEvent.motion.x == currprefs.gfx_monitor.gfx_size.width - 1 && x < 4)
+    				if(x == 0 && rEvent.motion.x == currprefs.gfx_monitor.gfx_size.width - 1)
     					x = 4;
-    				if(rEvent.motion.y == currprefs.gfx_monitor.gfx_size.height - 1 && y < 4)
+    				if(y == 0 && rEvent.motion.y == currprefs.gfx_monitor.gfx_size.height - 1)
     					y = 4;
 
   				  setmousestate(sdlmouse, 0, x * mouseScale, 0);

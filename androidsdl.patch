@@ -76,10 +76,40 @@ index c99131b2a..6aa2cc5de 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..6a872e61e 100644
+index f0a437bb6..52e8f21cb 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
-@@ -647,6 +647,16 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -81,6 +81,10 @@ abstract class DifferentTouchInput
+ 
+ 	public static float capturedMouseX = 0;
+ 	public static float capturedMouseY = 0;
++	// While the pointer is captured the event carries the movement since the
++	// last one, not a position, and setLocation() on it does not survive as
++	// far as the hover handler - so pass the accumulated position separately.
++	public static boolean capturedMouseActive = false;
+ 
+ 	public static DifferentTouchInput touchInput = getInstance();
+ 
+@@ -315,8 +319,16 @@ abstract class DifferentTouchInput
+ 				else
+ 					action = Mouse.SDL_FINGER_HOVER;
+ 				touchEvents[0].down = false;
+-				touchEvents[0].x = (int)event.getX();
+-				touchEvents[0].y = (int)event.getY();
++				if( DifferentTouchInput.capturedMouseActive )
++				{
++					touchEvents[0].x = (int)DifferentTouchInput.capturedMouseX;
++					touchEvents[0].y = (int)DifferentTouchInput.capturedMouseY;
++				}
++				else
++				{
++					touchEvents[0].x = (int)event.getX();
++					touchEvents[0].y = (int)event.getY();
++				}
+ 				touchEvents[0].pressure = Mouse.MAX_HOVER_DISTANCE;
+ 				touchEvents[0].size = 0;
+ 				//if( event.getAxisValue(MotionEvent.AXIS_DISTANCE) != 0.0f )
+@@ -647,6 +659,16 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  				Globals.TouchscreenCalibration[2], Globals.TouchscreenCalibration[3]);
  	}
  
@@ -96,6 +126,62 @@ index f0a437bb6..6a872e61e 100644
  	int mLastPendingResize = 0;
  	public void onWindowResize(final int w, final int h)
  	{
+@@ -1122,9 +1144,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 		return true;
+ 	};
+ 
++	private static boolean relativeMouseStarted = false;
++
+ 	@Override
+ 	public boolean onGenericMotionEvent (final MotionEvent event)
+ 	{
++		if( android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
++			(event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
++		{
++			// A mouse that reports relative axes without pointer capture puts the
++			// movement since the last event in getX()/getY() rather than a position.
++			// Taken as a position it pins the pointer to the top left corner, so
++			// accumulate it the way a captured pointer is already handled.
++			if( !relativeMouseStarted )
++			{
++				relativeMouseStarted = true;
++				DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
++				DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
++			}
++			DifferentTouchInput.capturedMouseX += event.getX();
++			DifferentTouchInput.capturedMouseY += event.getY();
++			if (DifferentTouchInput.capturedMouseX < 0)
++				DifferentTouchInput.capturedMouseX = 0;
++			if (DifferentTouchInput.capturedMouseY < 0)
++				DifferentTouchInput.capturedMouseY = 0;
++			if (DifferentTouchInput.capturedMouseX >= this.getWidth())
++				DifferentTouchInput.capturedMouseX = this.getWidth() - 1;
++			if (DifferentTouchInput.capturedMouseY >= this.getHeight())
++				DifferentTouchInput.capturedMouseY = this.getHeight() - 1;
++
++			event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
++			event.setAction(MotionEvent.ACTION_HOVER_MOVE);
++		}
++
+ 		DifferentTouchInput.touchInput.processGenericEvent(event);
+ 		return true;
+ 	}
+@@ -1147,6 +1199,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
+ 		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
+ 
++		DifferentTouchInput.capturedMouseActive = true;
+ 		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
+ 		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
+ 
+@@ -1165,6 +1218,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 	{
+ 		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
+ 		super.onPointerCaptureChange(hasCapture);
++		DifferentTouchInput.capturedMouseActive = false;
+ 		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
+ 		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
+ 	}
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
 index 14d8a4dd1..175bcbdcf 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
