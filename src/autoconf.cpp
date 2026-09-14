@@ -22,6 +22,10 @@ uaecptr EXPANSION_bootcode, EXPANSION_nullfunc;
 
 /* ROM tag area memory access */
 
+#ifdef AHI
+#include "ahi_v1.h"
+#endif
+
 uaecptr rtarea_base = RTAREA_DEFAULT;
 
 DECLARE_MEMORY_FUNCTIONS(rtarea);
@@ -301,6 +305,14 @@ void rtarea_init (void)
   org (rtarea_base + 0xFF80);
   calltrap (deftrapres (getchipmemsize, TRAPFLAG_DORET, _T("getchipmemsize")));
 	dw(RTS);
+
+#ifdef AHI
+  /* Paravirtual AHI: the uae.audio driver calls whatever sits here - the same
+     place WinUAE puts it - and can also find it by name in uae.resource. */
+  org (rtarea_base + 0xFFC0);
+  calltrap (deftrapres (ahi_demux, 0, _T("ahi_winuae")));
+  dw (RTS);
+#endif
 
   org (a);
     

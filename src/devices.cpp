@@ -28,6 +28,9 @@
 #include "gui.h"
 #include "driveclick.h"
 #include "drawing.h"
+#ifdef AHI
+#include "ahi_v1.h"
+#endif
 #ifdef JIT
 #include "jit/compemu.h"
 #endif
@@ -250,6 +253,9 @@ void virtualdevice_init (void)
 #endif
 #if defined (BSDSOCKET)
 	bsdlib_install ();
+#endif
+#ifdef AHI
+	ahi_init ();
 #endif
 }
 

@@ -32,6 +32,10 @@
 // "consumer" means the actual SDL sound output, as opposed to 
 #define SOUND_CONSUMER_BUFFER_LENGTH (SNDBUFFER_LEN * SOUND_BUFFERS_COUNT / 4)
 
+#ifdef AHI
+#include "ahi_v1.h"
+#endif
+
 uae_u16 sndbuffer[SOUND_BUFFERS_COUNT][(SNDBUFFER_LEN + 32) * DEFAULT_SOUND_CHANNELS];
 uae_u16 *sndbufpt = sndbuffer[0];
 uae_u16 *render_sndbuff = sndbuffer[0];
@@ -91,6 +95,12 @@ static void sound_copy_produced_block(void *ud, Uint8 *stream, int len)
 	} else {
 	  memset(stream, 0, len);
 	}
+
+#ifdef AHI
+	/* Mixed in after Paula's block has been placed, so AHI still plays while
+	   Paula has nothing to say and her buffer comes out as silence. */
+	ahi_mix((uae_s16 *)stream, currprefs.sound_stereo ? len / 4 : len / 2, currprefs.sound_stereo != 0);
+#endif
 }
 
 
