@@ -8,7 +8,9 @@
 
 #define DEFAULT_SOUND_CHANNELS 2
 
-#define SOUND_BUFFERS_COUNT 8
+/* Enough slack for the emulator to sit a few buffers ahead of the device while
+   the rate control in sound_sdl.cpp evens the two clocks out. */
+#define SOUND_BUFFERS_COUNT 16
 #define SNDBUFFER_LEN 2048
 
 extern uae_u16 sndbuffer[SOUND_BUFFERS_COUNT][(SNDBUFFER_LEN+32)*DEFAULT_SOUND_CHANNELS];

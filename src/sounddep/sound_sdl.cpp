@@ -30,7 +30,7 @@
 #endif
 
 // "consumer" means the actual SDL sound output, as opposed to 
-#define SOUND_CONSUMER_BUFFER_LENGTH (SNDBUFFER_LEN * SOUND_BUFFERS_COUNT / 4)
+#define SOUND_CONSUMER_BUFFER_LENGTH SNDBUFFER_LEN
 
 #ifdef AHI
 #include "ahi_v1.h"
@@ -73,27 +73,88 @@ void sound_adjust(float factor)
 static int s_oldrate = 0, s_oldbits = 0, s_oldstereo = 0;
 static int sound_thread_active = 0, sound_thread_exit = 0;
 static int rdcnt = 0;
+static int snd_rdpos = 0; /* bytes already taken out of the buffer at rdcnt */
 static int wrcnt = 0;
-static const int cnt_max_diff = 4;
+static const int cnt_max_diff = 8;
+
+/* The emulator's sample clock and the sound device's are never exactly equal, so
+   the gap between them creeps up until the catch-up below throws away two whole
+   buffers - an audible crack every half minute or so. Nudging the emulated sample
+   rate by a fraction of a percent holds the gap steady instead, which is what the
+   Raspberry Pi targets do with sound_adjust() for their display rate. */
+static void adjust_sound_rate(void)
+{
+	static float fill_avg = -1.0f;
+	static float creep;          /* the standing difference between the two clocks */
+	static int cnt;
+	const float target = 4.0f;   /* buffers kept between the emulator and the device */
+	const float limit = 0.004f;  /* at most 0.4% off the nominal rate */
+
+	float fill = (float)(wrcnt - rdcnt);
+	if (fill_avg < 0.0f)
+		fill_avg = fill;
+	/* The device asks for its data unevenly, so the level swings by a buffer or two
+	   on its own - average long enough that the swings are not chased. */
+	fill_avg += (fill - fill_avg) * 0.005f;
+
+	if (++cnt < 44) /* about once every two seconds */
+		return;
+	cnt = 0;
+
+	float err = fill_avg - target;
+
+	/* The level is the running total of the rate difference, so correcting by the
+	   level alone leaves the loop free to swing. The bulk of the correction follows
+	   the level directly, which damps it; the slow part below settles the standing
+	   difference between the clocks. Both stay far too small to be heard. */
+	creep += err > 0.0f ? 0.00004f : -0.00004f;
+	if (creep < -limit)
+		creep = -limit;
+	if (creep > limit)
+		creep = limit;
+
+	float adj = 1.0f + err * 0.0004f + creep;
+	if (adj < 1.0f - limit)
+		adj = 1.0f - limit;
+	if (adj > 1.0f + limit)
+		adj = 1.0f + limit;
+
+	sound_adjust(adj);
+}
 
 
 static void sound_copy_produced_block(void *ud, Uint8 *stream, int len)
 {
-	if (currprefs.sound_stereo)
-	{
-		if (cdaudio_active && currprefs.sound_freq == 44100 && cdrdcnt < cdwrcnt)
+	/* The device's chunk size need not match the emulator's buffer, so carry on
+	   from wherever inside the current buffer the last chunk stopped. */
+	const int blocksize = (currprefs.sound_stereo ? SNDBUFFER_LEN * 2 : SNDBUFFER_LEN) * 2;
+	int done = 0;
+
+	while (done < len) {
+		if (wrcnt - rdcnt < 1) {
+			memset(stream + done, 0, len - done);
+			break;
+		}
+
+		if (snd_rdpos == 0 && currprefs.sound_stereo &&
+			cdaudio_active && currprefs.sound_freq == 44100 && cdrdcnt < cdwrcnt)
 		{
 			for (int i = 0; i < SNDBUFFER_LEN * 2; ++i)
 				sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)][i] += cdaudio_buffer[cdrdcnt & (CDAUDIO_BUFFERS - 1)][i];
-  		cdrdcnt++; 
+			cdrdcnt++;
 		}
-	}
 
-	if (wrcnt - rdcnt >= 1) {
-	  memcpy(stream, sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)], len);
-		rdcnt++;
-	} else {
-	  memset(stream, 0, len);
+		int chunk = blocksize - snd_rdpos;
+		if (chunk > len - done)
+			chunk = len - done;
+		memcpy(stream + done, (Uint8 *)sndbuffer[rdcnt & (SOUND_BUFFERS_COUNT - 1)] + snd_rdpos, chunk);
+		done += chunk;
+		snd_rdpos += chunk;
+
+		if (snd_rdpos >= blocksize) {
+			snd_rdpos = 0;
+			rdcnt++;
+		}
 	}
 
 #ifdef AHI
@@ -128,6 +189,7 @@ static void init_soundbuffer_usage(void)
 	finish_sndbuff = sndbuffer[0] + SNDBUFFER_LEN * 2;
 	rdcnt = 0;
 	wrcnt = 0;
+	snd_rdpos = 0;
   
 	cdbufpt = cdaudio_buffer[0];
 	render_cdbuff = cdaudio_buffer[0];
@@ -207,6 +269,8 @@ void finish_sound_buffer(void)
 		finish_sndbuff = sndbufpt + SNDBUFFER_LEN * 2;
 	else
 		finish_sndbuff = sndbufpt + SNDBUFFER_LEN;
+
+	adjust_sound_rate();
 
 	if (wrcnt - rdcnt > cnt_max_diff)
 	{
