@@ -25,10 +25,10 @@ index 69c7f86c2..1b089f520 100644
  	{
  		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
 diff --git a/project/java/Settings.java b/project/java/Settings.java
-index c99131b2a..6aa2cc5de 100644
+index c99131b2a..1da069f16 100644
 --- a/project/java/Settings.java
 +++ b/project/java/Settings.java
-@@ -940,6 +940,42 @@ public class Settings
+@@ -940,6 +940,52 @@ public class Settings
  
  	static final int SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0;
  	static final int SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1;
@@ -54,7 +54,17 @@ index c99131b2a..6aa2cc5de 100644
 +		// Only the theme changes the button bitmaps, and reloading them means
 +		// re-uploading every texture, so do not do it for the other options.
 +		if( reloadGraphics )
-+			DemoGLSurfaceView.SetupTouchscreenKeyboardGraphics(MainActivity.instance);
++		{
++			// With a separate video thread only that thread holds the GL context, so the
++			// textures have to be uploaded there - ask it to do it on its next frame.
++			DemoRenderer renderer = ( MainActivity.instance != null && MainActivity.instance.mGLView != null ) ?
++										MainActivity.instance.mGLView.mRenderer : null;
++			if( renderer != null &&
++				( ( Globals.SwVideoMode && Globals.MultiThreadedVideo ) || Globals.CompatibilityHacksVideo ) )
++				renderer.reloadScreenKbGraphics = true;
++			else
++				DemoGLSurfaceView.SetupTouchscreenKeyboardGraphics(MainActivity.instance);
++		}
 +		// nativeSetupScreenKeyboard() lays out every button from scratch, and a hidden
 +		// button is just one with an empty rect - so without this the call above brings
 +		// back each button the user has switched off. Apply() does the same afterwards.
@@ -71,7 +81,7 @@ index c99131b2a..6aa2cc5de 100644
  
  	public static void setConfigOptionFromSDL(int option, int value)
  	{
-@@ -951,6 +987,29 @@ public class Settings
+@@ -951,6 +997,29 @@ public class Settings
  			case SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT:
  				Globals.HorizontalOrientation = (value == 0);
  				break;
@@ -102,7 +112,7 @@ index c99131b2a..6aa2cc5de 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..f692b55b8 100644
+index f0a437bb6..bd4a7592b 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -152,7 +162,22 @@ index f0a437bb6..f692b55b8 100644
  	int mLastPendingResize = 0;
  	public void onWindowResize(final int w, final int h)
  	{
-@@ -950,6 +972,11 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -748,6 +770,14 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 			super.SwapBuffers();
+ 		}
+ 
++		// With a separate video thread only this thread has a GL context, so the app
++		// thread cannot upload the new button textures itself after a theme change -
++		// it asks us to do it here instead.
++		if( reloadScreenKbGraphics ) {
++			reloadScreenKbGraphics = false;
++			DemoGLSurfaceView.SetupTouchscreenKeyboardGraphics(context);
++		}
++
+ 		// Unblock event processing thread only after we've finished rendering
+ 		if( context.isScreenKeyboardShown() && !context.keyboardWithoutTextInputShown )
+ 		{
+@@ -950,6 +980,11 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		context.setSystemMousePointerVisible(visible);
  	}
  
@@ -164,7 +189,15 @@ index f0a437bb6..f692b55b8 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -1122,9 +1149,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -991,6 +1026,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 	private EGLSurface mEglSurface = null;
+ 	private EGLContext mEglContext = null;
+ 	private boolean mGlContextLost = false;
++	public volatile boolean reloadScreenKbGraphics = false;
+ 	public boolean mGlSurfaceCreated = false;
+ 	public boolean mPaused = false;
+ 	private boolean mFirstTimeStart = true;
+@@ -1122,9 +1158,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -204,7 +237,7 @@ index f0a437bb6..f692b55b8 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1204,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1213,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -212,7 +245,7 @@ index f0a437bb6..f692b55b8 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1223,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1232,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
