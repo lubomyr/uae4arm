@@ -6296,6 +6296,29 @@ static void framewait (void)
 
 	if (vs > 0) {
 
+		/* The display's refresh rate is the only thing pacing us here, and it is
+		   rarely the Amiga's: at 120 Hz the whole machine ran more than twice too
+		   fast. With "Fastest" the CPU throttle between scanlines keeps the frame
+		   rate right, but at a fixed CPU speed nothing does, so wait here. */
+		if (currprefs.m68k_speed >= 0 && !currprefs.turbo_emulation) {
+			static frame_time_t next_frame;
+			frame_time_t now = read_processor_time();
+
+			if (next_frame == 0 || (int)(now - next_frame) > vsynctimebase ||
+				(int)(next_frame - now) > 2 * vsynctimebase) {
+				/* first frame, or we fell behind - start counting again from here */
+				next_frame = now + vsynctimebase;
+			} else {
+				while ((int)(next_frame - read_processor_time()) > 1000) {
+					if (cpu_sleep_millis(1) < 0)
+						break;
+				}
+				while ((int)(next_frame - read_processor_time()) > 0)
+					;
+				next_frame += vsynctimebase;
+			}
+		}
+
 		if (!frame_rendered && !ad->picasso_on) {
 			frame_rendered = render_screen ();
 		}
