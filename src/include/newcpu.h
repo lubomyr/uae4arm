@@ -136,6 +136,7 @@ struct regstruct
 	uae_u32 mmu_fault_addr;
 
   uae_u32 pcr;
+  uae_u32 buscr;
   uae_u32 address_space_mask;
 
   uae_s32 pissoff;
@@ -439,6 +440,10 @@ extern void fill_prefetch (void);
 #define CPU_OP_NAME(a) op ## a
 
 /* 68040 */
+/* 68060 - the generic cores are generated at the 68060 level */
+extern const struct cputbl op_smalltbl_0[];
+extern const struct cputbl op_smalltbl_40[];
+
 extern const struct cputbl op_smalltbl_1[];
 extern const struct cputbl op_smalltbl_41[];
 /* 68030 */

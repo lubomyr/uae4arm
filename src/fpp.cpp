@@ -195,6 +195,8 @@ static struct {
 	uae_u32 grs;
 	uae_u32 wbte15;
 	uae_u32 wbtm66;
+	// 68060
+	uae_u32 v;
 } fsave_data;
 
 static void reset_fsave_data(void)
@@ -602,10 +604,13 @@ static void fp_unimp_instruction(uae_u16 opcode, uae_u16 extra, uae_u32 ea, bool
 		extra |= 1;
 
 	// data for fsave stack frame
-	regs.fpu_exp_state = 1; // 68040 UNIMP frame
+	regs.fpu_exp_state = 1; // 68060 IDLE frame, 68040 UNIMP frame
   regs.fpiar = oldpc;
 
-	if(currprefs.cpu_model == 68040) {
+	if (currprefs.cpu_model == 68060) {
+		// fsave data for 68060
+		reset_fsave_data();
+	} else if(currprefs.cpu_model == 68040) {
 		// fsave data for 68040
 		fsave_data.fpiarcu = regs.fpiar;
 
@@ -648,9 +653,17 @@ static void fp_unimp_datatype(uae_u16 opcode, uae_u16 extra, uae_u32 ea, bool ea
 
 	// data for fsave stack frame
 	reset_fsave_data();
-	regs.fpu_exp_state = 2; // 68040 BUSY frame
+	regs.fpu_exp_state = 2; // 68060 EXCP frame, 68040 BUSY frame
 
-	if (currprefs.cpu_model == 68040) {
+	if (currprefs.cpu_model == 68060) {
+		// fsave data for 68060
+		if (packed) {
+			regs.fpu_exp_state = 1; // 68060 IDLE frame
+		} else {
+			fsave_data.v = 7; // vector & 0x7
+			fpp_from_exten_fmovem(src, &fsave_data.eo[0], &fsave_data.eo[1], &fsave_data.eo[2]);
+		}
+	} else if (currprefs.cpu_model == 68040) {
 		// fsave data for 68040
 		fsave_data.cmdreg1b = extra;
 		fsave_data.fpiarcu = regs.fpiar;
@@ -688,7 +701,8 @@ static void fp_unimp_datatype(uae_u16 opcode, uae_u16 extra, uae_u32 ea, bool ea
 
 static void fpu_op_illg(uae_u16 opcode, uae_u32 ea, bool easet, uaecptr oldpc)
 {
-	if (currprefs.cpu_model == 68040 && currprefs.fpu_model == 0) {
+	if ((currprefs.cpu_model == 68060 && (currprefs.fpu_model == 0 || (regs.pcr & 2)))
+		|| (currprefs.cpu_model == 68040 && currprefs.fpu_model == 0)) {
 			regs.fp_unimp_ins  = true;
 			regs.fp_ea = ea;
 			regs.fp_ea_set = easet;
@@ -1643,7 +1657,28 @@ void fpuop_save (uae_u32 opcode)
 	if (fault_if_no_fpu (opcode, 0, ad, adset, pc))
 		return;
 
-	if (currprefs.fpu_model == 68040) {
+	if (currprefs.fpu_model == 68060) {
+
+		/* 12 byte 68060 NULL/IDLE/EXCP frame.  */
+		int frame_size = 12;
+		uae_u32 frame_id;
+
+		if (regs.fpu_exp_state > 1) {
+			frame_id = 0x0000e000 | fsave_data.v;
+		} else {
+			frame_id = regs.fpu_state == 0 ? 0x00000000 : 0x00006000;
+		}
+		if (incr < 0)
+			ad -= frame_size;
+		adp = ad;
+		x_cp_put_long (ad, (fsave_data.eo[0] & 0xffff0000) | frame_id);
+		ad += 4;
+		x_cp_put_long (ad, fsave_data.eo[1]);
+		ad += 4;
+		x_cp_put_long (ad, fsave_data.eo[2]);
+		ad += 4;
+
+	} else if (currprefs.fpu_model == 68040) {
 
 		if (!regs.fpu_exp_state) {
 			/* 4 byte 68040 NULL/IDLE frame.  */
@@ -1802,7 +1837,37 @@ void fpuop_restore (uae_u32 opcode)
 retry:
 	ad = ad_orig + 4;
 	fpu_version = get_fpu_version(fpu_model);
-	if (fpu_model == 68040) {
+	if (fpu_model == 68060) {
+		int ff = (d >> 8) & 0xff;
+		uae_u32 v = d & 0x7;
+		fsave_data.eo[0] = d & 0xffff0000;
+
+		fsave_data.eo[1] = x_cp_get_long(ad);
+		ad += 4;
+		fsave_data.eo[2] = x_cp_get_long(ad);
+		ad += 4;
+
+		regs.fp_exp_pend = 0;
+		if (ff == 0x60) {
+			regs.fpu_state = 1;
+			regs.fpu_exp_state = 0;
+		} else if (ff == 0xe0) {
+			regs.fpu_state = 1;
+			regs.fpu_exp_state = 2;
+			if (v == 7) {
+				regs.fp_unimp_pend = 1;
+			} else {
+				regs.fp_exp_pend = 48 + v;
+			}
+		} else if (ff) {
+			write_log(_T("FRESTORE invalid frame format %02x %08x ADDR=%08x\n"), ff, d, ad_orig);
+			Exception(14);
+			return;
+		} else {
+			fpu_null();
+		}
+
+	} else if (fpu_model == 68040) {
 
 		 if (frame_version == fpu_version) { // not null frame
 			uae_u32 frame_size = (d >> 16) & 0xff;
@@ -2521,6 +2586,12 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 					}
 					// 68040 hangs if FMOVEM control registers
 					// has undefined bit 10 set.
+				} else {
+					// 68060 simply ignores MODE field completely.
+					if ((opcode & 0x38) == 0x20) {
+						incr = -1;
+						regdir = -1;
+					}
 				}
 
 				if (extra & 0x2000) {
@@ -2564,8 +2635,8 @@ static void fpuop_arithmetic2 (uae_u32 opcode, uae_u16 extra)
 
 			fpsr_clear_status();
 
-			// 68040 always set FPIAR
-			if (currprefs.fpu_model == 68040) {
+			// 68040 and 68060 always set FPIAR
+			if (currprefs.fpu_model == 68040 || currprefs.fpu_model == 68060) {
 				regs.fpiar = pc;
 			}
 			
@@ -2626,7 +2697,7 @@ void fpuop_arithmetic (uae_u32 opcode, uae_u16 extra)
 
 static void get_features(void)
 {
-	if (currprefs.fpu_model == 68040) {
+	if (currprefs.fpu_model == 68040 || currprefs.fpu_model == 68060) {
 		condition_table = condition_table_040_060;
 	} else {
 		condition_table = condition_table_6888x;
@@ -2688,7 +2759,7 @@ uae_u8 *restore_fpu (uae_u8 *src)
 		regs.fp_exp_pend = (v >> 16) & 0xff;
 		regs.fp_opword = restore_u16();
 		regs.fp_ea = restore_u32();
-		if (currprefs.fpu_model >= 68881) {
+		if (currprefs.fpu_model == 68060 || currprefs.fpu_model >= 68881) {
 			fsave_data.ccr = restore_u32();
 			fsave_data.eo[0] = restore_u32();
 			fsave_data.eo[1] = restore_u32();
@@ -2757,7 +2828,7 @@ uae_u8 *save_fpu (int *len, uae_u8 *dstptr)
 	save_u16(regs.fp_opword);
 	save_u32(regs.fp_ea);
 
-	if (currprefs.fpu_model >= 68881) {
+	if (currprefs.fpu_model == 68060 || currprefs.fpu_model >= 68881) {
 		save_u32(fsave_data.ccr);
 		save_u32(fsave_data.eo[0]);
 		save_u32(fsave_data.eo[1]);

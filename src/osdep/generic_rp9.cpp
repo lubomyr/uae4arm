@@ -286,6 +286,8 @@ static void parse_peripheral(struct uae_prefs *p, xmlNode *node)
               p->address_space_24 = 0;
             if(p->cpu_model == 68040)
               p->fpu_model = 68040;
+            else if(p->cpu_model == 68060)
+              p->fpu_model = 68060;
             xmlFree(attr);
           }
           attr = xmlGetProp(curr_node, (const xmlChar *) _T("speed"));

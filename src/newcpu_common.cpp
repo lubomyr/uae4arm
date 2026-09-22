@@ -9,7 +9,14 @@ static int movec_illg (int regno)
 {
   int regno2 = regno & 0x7ff;
 
-  if (currprefs.cpu_model == 68010) {
+	if (currprefs.cpu_model == 68060) {
+		if (regno <= 8)
+			return 0;
+		if (regno == 0x800 || regno == 0x801 ||
+			regno == 0x806 || regno == 0x807 || regno == 0x808)
+			return 0;
+		return 1;
+  } else if (currprefs.cpu_model == 68010) {
   	if (regno2 < 2)
 	    return 0;
   	return 1;
@@ -38,7 +45,7 @@ static int movec_illg (int regno)
 int m68k_move2c (int regno, uae_u32 *regp)
 {
   if (movec_illg (regno)) {
-		if (!regs.s) {
+		if (currprefs.cpu_model < 68060 && !regs.s) {
 			Exception(8);
 			return 0;
 		}
@@ -61,19 +68,23 @@ int m68k_move2c (int regno, uae_u32 *regp)
       		cacr_mask = 0x00003f1f;
 	      else if (currprefs.cpu_model == 68040)
       		cacr_mask = 0x80008000;
+	      else if (currprefs.cpu_model == 68060)
+      		cacr_mask = 0xf8e0e000;
 	      regs.cacr = *regp & cacr_mask;
 	      set_cpu_caches(false);
     	}
 	    break;
-	  /* 68040 only */
+	  /* 68040/060 only */
 	  case 3: 
-      regs.tcr = *regp & 0xc000;
+      regs.tcr = *regp & (currprefs.cpu_model == 68060 ? 0xfffe : 0xc000);
 	    break;
 
   	case 4: regs.itt0 = *regp & 0xffffe364; break;
 	  case 5: regs.itt1 = *regp & 0xffffe364; break;
 	  case 6: regs.dtt0 = *regp & 0xffffe364; break;
 	  case 7: regs.dtt1 = *regp & 0xffffe364; break;
+	  /* 68060 only */
+	  case 8: regs.buscr &= 0x50000000; regs.buscr |= *regp & 0xa0000000; break;
 
 	  case 0x800: regs.usp = *regp; break;
 	  case 0x801: regs.vbr = *regp; break;
@@ -82,9 +93,24 @@ int m68k_move2c (int regno, uae_u32 *regp)
 	  case 0x804: regs.isp = *regp; if (regs.m == 0) m68k_areg(regs, 7) = regs.isp; break;
 	  /* 68040 only */
 	  case 0x805: regs.mmusr = *regp; break;
-	  /* 68040 stores all bits */
-		case 0x806: regs.urp = *regp & 0xffffffff; break;
-		case 0x807: regs.srp = *regp & 0xffffffff; break;
+	  /* 68040 stores all bits, 68060 zeroes low 9 bits */
+		case 0x806: regs.urp = *regp & (currprefs.cpu_model == 68060 ? 0xfffffe00 : 0xffffffff); break;
+		case 0x807: regs.srp = *regp & (currprefs.cpu_model == 68060 ? 0xfffffe00 : 0xffffffff); break;
+	  /* 68060 only */
+		case 0x808:
+			{
+				uae_u32 opcr = regs.pcr;
+				regs.pcr &= ~(0x40 | 2 | 1);
+				regs.pcr |= (*regp) & (0x40 | 2 | 1);
+				if (currprefs.fpu_model <= 0)
+					regs.pcr |= 2;
+				if (((opcr ^ regs.pcr) & 2) == 2) {
+					write_log (_T("68060 FPU state: %s\n"), regs.pcr & 2 ? _T("disabled") : _T("enabled"));
+					/* flush possible already translated FPU instructions */
+					flush_icache (3);
+				}
+			}
+			break;
 	  default:
 			op_illg (0x4E7B);
 			return 0;
@@ -96,7 +122,7 @@ int m68k_move2c (int regno, uae_u32 *regp)
 int m68k_movec2 (int regno, uae_u32 *regp)
 {
   if (movec_illg (regno)) {
-		if (!regs.s) {
+		if (currprefs.cpu_model < 68060 && !regs.s) {
 			Exception(8);
 			return 0;
 		}
@@ -120,6 +146,8 @@ int m68k_movec2 (int regno, uae_u32 *regp)
       		cacr_mask = 0x00003313;
   	    else if (currprefs.cpu_model == 68040)
       		cacr_mask = 0x80008000;
+  	    else if (currprefs.cpu_model == 68060)
+      		cacr_mask = 0xf880e000;
   	    *regp = v & cacr_mask;
     	}
     	break;
@@ -128,7 +156,7 @@ int m68k_movec2 (int regno, uae_u32 *regp)
   	case 5: *regp = regs.itt1; break;
   	case 6: *regp = regs.dtt0; break;
   	case 7: *regp = regs.dtt1; break;
-  	case 8: *regp = 0; break;
+  	case 8: *regp = regs.buscr; break;
 
   	case 0x800: *regp = regs.usp; break;
   	case 0x801: *regp = regs.vbr; break;
@@ -572,6 +600,8 @@ void divbyzero_special (bool issigned, uae_s32 dst)
 		}
 	} else if (currprefs.cpu_model == 68040) {
 		SET_CFLG (0);
+	} else if (currprefs.cpu_model == 68060) {
+		SET_CFLG (0);
 	} else {
 		// 68000/010
 		CLEAR_CZNV ();
@@ -600,7 +630,10 @@ void divbyzero_special (bool issigned, uae_s32 dst)
 
 void setdivuflags(uae_u32 dividend, uae_u16 divisor)
 {
-	if (currprefs.cpu_model == 68040) {
+	if (currprefs.cpu_model == 68060) {
+		SET_VFLG(1);
+		SET_CFLG(0);
+	} else if (currprefs.cpu_model == 68040) {
 		SET_VFLG(1);
 		SET_CFLG(0);
 	} else if (currprefs.cpu_model >= 68020) {
@@ -635,7 +668,10 @@ void setdivuflags(uae_u32 dividend, uae_u16 divisor)
 
 void setdivsflags(uae_s32 dividend, uae_s16 divisor)
 {
-	if (currprefs.cpu_model == 68040) {
+	if (currprefs.cpu_model == 68060) {
+		SET_VFLG(1);
+		SET_CFLG(0);
+	} else if (currprefs.cpu_model == 68040) {
 		SET_VFLG(1);
 		SET_CFLG(0);
 	} else if (currprefs.cpu_model >= 68020) {
@@ -716,6 +752,11 @@ void setchkundefinedflags(uae_s32 src, uae_s32 dst, int size)
 			}
 		}
 		SET_NFLG(dst < 0);
+	} else if (currprefs.cpu_model == 68060) {
+		SET_NFLG(0);
+		if (dst < 0 || dst > src) {
+			SET_NFLG(dst < 0);
+		}
 	}
 }
 
@@ -731,7 +772,11 @@ void setchkundefinedflags(uae_s32 src, uae_s32 dst, int size)
 // Someone else can attempt to simplify this..
 void setchk2undefinedflags(uae_s32 lower, uae_s32 upper, uae_s32 val, int size)
 {
-	if (currprefs.cpu_model == 68040) {
+	if (currprefs.cpu_model == 68060) {
+		SET_VFLG(0);
+		SET_NFLG(val < 0);
+		return;
+	} else if (currprefs.cpu_model == 68040) {
 		return;
 	}
 
@@ -1234,7 +1279,8 @@ void Exception_build_stack_frame_common(uae_u32 oldpc, uae_u32 currpc, int nr)
 		}
 	} else if (nr == 11 && regs.fp_unimp_ins) {
 		regs.fp_unimp_ins = false;
-		if (currprefs.cpu_model == 68040 && currprefs.fpu_model == 0) {
+		if ((currprefs.cpu_model == 68060 && (currprefs.fpu_model == 0 || (regs.pcr & 2))) ||
+			(currprefs.cpu_model == 68040 && currprefs.fpu_model == 0)) {
 			Exception_build_stack_frame(regs.fp_ea, currpc, regs.instruction_pc, nr, 0x4);
 		} else {
 			Exception_build_stack_frame(regs.fp_ea, currpc, 0, nr, 0x2);

@@ -52,6 +52,12 @@ static int last_di_for_exception_3;
 static bool last_notinstruction_for_exception_3;
 /* set when writing exception stack frame */
 static int exception_in_exception;
+/* 68060 processor configuration register: ID, full or EC variant */
+#define MC68060_PCR   0x04300000
+#define MC68EC060_PCR 0x04310000
+/* revision the PCR reports - WinUAE's default */
+#define MC68060_REVISION 6
+
 /* secondary SR for handling 68040 bug */
 static uae_u16 last_sr_for_exception3;
 
@@ -733,7 +739,7 @@ static uae_u32 REGPARAM2 op_illg_1 (uae_u32 opcode)
 }
 
 // generic+direct, generic+direct+jit, more compatible, cycle-exact
-static const struct cputbl *cputbls[5][4] =
+static const struct cputbl *cputbls[6][4] =
 {
 	// 68000
 	{ op_smalltbl_5, op_smalltbl_45, op_smalltbl_12, op_smalltbl_14 },
@@ -745,6 +751,8 @@ static const struct cputbl *cputbls[5][4] =
 	{ op_smalltbl_2, op_smalltbl_42, NULL, NULL },
 	// 68040
 	{ op_smalltbl_1, op_smalltbl_41, NULL, NULL },
+	// 68060
+	{ op_smalltbl_0, op_smalltbl_40, NULL, NULL },
 };
 
 static void build_cpufunctbl (void)
@@ -768,8 +776,8 @@ static void build_cpufunctbl (void)
 		m68k_pc_indirect = 0;
 	}
 	lvl = (currprefs.cpu_model - 68000) / 10;
-	if (lvl >= 5)
-		lvl = 4;
+	if (lvl >= 6)
+		lvl = 5;
 	tbl = cputbls[lvl][mode];
 
 	if (tbl == NULL) {
@@ -804,8 +812,19 @@ static void build_cpufunctbl (void)
 
 		/* unimplemented opcode? */
 		if (table->unimpclev > 0 && lvl >= table->unimpclev) {
-			cpufunctbl[opcode] = op_illg_1;
-			continue;
+			if (currprefs.cpu_model == 68060) {
+				// Instructions the 68060 dropped (unimpclev 5) keep running as they
+				// do on a 68040, as in WinUAE without its "unimplemented CPU emu"
+				// option, so software does not depend on 68060.library for them.
+				// Only instructions removed before the 68060 become illegal.
+				if (table->unimpclev < 5 || (table->clev == 4 && table->unimpclev == 5)) {
+					cpufunctbl[opcode] = op_illg_1;
+					continue;
+				}
+			} else {
+				cpufunctbl[opcode] = op_illg_1;
+				continue;
+			}
 		}
 
   	if (currprefs.fpu_model && currprefs.cpu_model < 68020) {
@@ -1587,6 +1606,9 @@ static void Exception_normal (int nr)
     m68k_areg(regs, 7) -= 2;
     x_put_word (m68k_areg(regs, 7), regs.sr);
 	}
+	if (currprefs.cpu_model == 68060 && interrupt) {
+		regs.m = 0;
+	}
 	if (currprefs.cpu_model == 68040 && nr == 3 && (last_op_for_exception_3 & 0x10000)) {
 		// Weird 68040 bug with RTR and RTE. New SR when exception starts. Stacked SR is different!
 		// Just replace it in stack, it is safe enough because we are in address error exception
@@ -1659,6 +1681,10 @@ static void ExceptionX (int nr, uaecptr oldpc)
 	else
 #endif
 	{
+		if (currprefs.cpu_model == 68060) {
+			regs.buscr &= 0xa0000000;
+			regs.buscr |= regs.buscr >> 1;
+		}
 		Exception_normal(nr);
 	}
 	regs.exception = 0;
@@ -1706,7 +1732,7 @@ static void do_interrupt (int nr)
 
 	for (;;) {
     Exception (nr + 24);
-		if (!currprefs.cpu_compatible)
+		if (!currprefs.cpu_compatible || currprefs.cpu_model == 68060)
 			break;
 		if (m68k_interrupt_delay)
 			nr = regs.ipl;
@@ -1726,6 +1752,11 @@ void NMI (void)
 
 static void maybe_disable_fpu(void)
 {
+	if (currprefs.cpu_model == 68060 && (rtarea_base != 0xf00000 || !need_uae_boot_rom(&currprefs))) {
+		// disable FPU at reset if no $f0 ROM, as a 68060 board's boot ROM does:
+		// the 68060.library switches it back on.
+		regs.pcr |= 2;
+	}
 	if (!currprefs.fpu_model) {
 		regs.pcr |= 2;
 	}
@@ -1794,7 +1825,7 @@ static void m68k_reset (bool hardreset)
 #endif
   regs.caar = regs.cacr = 0;
   regs.itt0 = regs.itt1 = regs.dtt0 = regs.dtt1 = 0;
-  regs.tcr = regs.mmusr = regs.urp = regs.srp = 0;
+  regs.tcr = regs.mmusr = regs.urp = regs.srp = regs.buscr = 0;
   if (currprefs.cpu_model == 68020) {
 	  regs.cacr |= 8;
 	  set_cpu_caches (false);
@@ -1814,8 +1845,16 @@ static void m68k_reset (bool hardreset)
   }
   fake_mmusr_030 = 0;
 
+	/* 68060 FPU is not compatible with 68040,
+	 * 68060 accelerators' boot ROM disables the FPU
+	 */
 	regs.pcr = 0;
-	
+	if (currprefs.cpu_model == 68060) {
+		regs.pcr = currprefs.fpu_model == 68060 ? MC68060_PCR : MC68EC060_PCR;
+		regs.pcr |= (MC68060_REVISION & 0xff) << 8;
+		maybe_disable_fpu();
+	}
+
   fill_prefetch ();
 }
 
@@ -2908,6 +2947,10 @@ uae_u8 *restore_cpu (uae_u8 *src)
   	regs.urp = restore_u32();
   	regs.srp = restore_u32();
   }
+  if (model >= 68060) {
+  	regs.buscr = restore_u32();
+  	regs.pcr = restore_u32();
+  }
   if (flags & 0x80000000) {
   	int khz = restore_u32();
   	if (khz < 0)
@@ -3160,6 +3203,10 @@ uae_u8 *save_cpu (int *len, uae_u8 *dstptr)
   	save_u32 (regs.tcr);				/* TCR */
   	save_u32 (regs.urp);				/* URP */
   	save_u32 (regs.srp);				/* SRP */
+  }
+  if (model >= 68060) {
+  	save_u32 (regs.buscr);				/* BUSCR */
+  	save_u32 (regs.pcr);				/* PCR */
   }
   khz = -1;
   if (currprefs.m68k_speed == 0) {

@@ -128,6 +128,10 @@ void fixup_cpu(struct uae_prefs *p)
     	if (p->fpu_model)
   	    p->fpu_model = 68040;
     	break;
+  	case 68060:
+    	if (p->fpu_model)
+  	    p->fpu_model = 68060;
+    	break;
   }
 
 	if (!p->cpu_memory_cycle_exact && p->cpu_cycle_exact)

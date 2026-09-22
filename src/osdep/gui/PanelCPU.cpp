@@ -33,6 +33,7 @@ static gcn::UaeRadioButton* optCPU68010;
 static gcn::UaeRadioButton* optCPU68020;
 static gcn::UaeRadioButton* optCPU68030;
 static gcn::UaeRadioButton* optCPU68040;
+static gcn::UaeRadioButton* optCPU68060;
 static gcn::UaeCheckBox* chk24Bit;
 static gcn::UaeCheckBox* chkCPUCompatible;
 static gcn::UaeCheckBox* chkCPUCycleExact;
@@ -66,6 +67,8 @@ static void RefreshPanelCPU(void)
     optCPU68030->setSelected(true);
   else if(workprefs.cpu_model == 68040)
     optCPU68040->setSelected(true);
+  else if(workprefs.cpu_model == 68060)
+    optCPU68060->setSelected(true);
 
   chk24Bit->setSelected(workprefs.address_space_24);
   chk24Bit->setEnabled(workprefs.cpu_model == 68020);
@@ -88,6 +91,7 @@ static void RefreshPanelCPU(void)
       optFPU68882->setSelected(true);
       break;
     case 68040:
+    case 68060:
       optFPUinternal->setSelected(true);
       break;
     default:
@@ -96,7 +100,7 @@ static void RefreshPanelCPU(void)
   }
   optFPU68881->setEnabled(workprefs.cpu_model >= 68020 && workprefs.cpu_model < 68040);
   optFPU68882->setEnabled(workprefs.cpu_model >= 68020 && workprefs.cpu_model < 68040);
-  optFPUinternal->setEnabled(workprefs.cpu_model == 68040);
+  optFPUinternal->setEnabled(workprefs.cpu_model == 68040 || workprefs.cpu_model == 68060);
   
   chkFPUstrict->setSelected(workprefs.fpu_strict);
 #ifdef USE_JIT_FPU
@@ -148,7 +152,7 @@ class CPUActionListener : public gcn::ActionListener
 
       } else if (actionEvent.getSource() == optCPU68020) {
   		  workprefs.cpu_model = 68020;
-  		  if(workprefs.fpu_model == 68040)
+  		  if(workprefs.fpu_model == 68040 || workprefs.fpu_model == 68060)
   		    workprefs.fpu_model = 68881;
   		  workprefs.cpu_compatible = 0;
 	      workprefs.cpu_cycle_exact = 0;
@@ -157,7 +161,7 @@ class CPUActionListener : public gcn::ActionListener
         
       } else if (actionEvent.getSource() == optCPU68030) {
   		  workprefs.cpu_model = 68030;
-  		  if(workprefs.fpu_model == 68040)
+  		  if(workprefs.fpu_model == 68040 || workprefs.fpu_model == 68060)
   		    workprefs.fpu_model = 68881;
   		  workprefs.address_space_24 = false;
   		  workprefs.cpu_compatible = 0;
@@ -174,6 +178,15 @@ class CPUActionListener : public gcn::ActionListener
 	      workprefs.blitter_cycle_exact = 0;
 	      workprefs.cpu_memory_cycle_exact = 0;
 
+      } else if (actionEvent.getSource() == optCPU68060) {
+  		  workprefs.cpu_model = 68060;
+  		  workprefs.fpu_model = 68060;
+  		  workprefs.address_space_24 = false;
+  		  workprefs.cpu_compatible = 0;
+	      workprefs.cpu_cycle_exact = 0;
+	      workprefs.blitter_cycle_exact = 0;
+	      workprefs.cpu_memory_cycle_exact = 0;
+
       } else if (actionEvent.getSource() == optFPUnone) {
   		  workprefs.fpu_model = 0;
 
@@ -184,7 +197,7 @@ class CPUActionListener : public gcn::ActionListener
   		  workprefs.fpu_model = 68882;
 
   		} else if(actionEvent.getSource() == optFPUinternal) {
-  		  workprefs.fpu_model = 68040;
+  		  workprefs.fpu_model = workprefs.cpu_model == 68060 ? 68060 : 68040;
 
   		} else if (actionEvent.getSource() == opt7Mhz) {
       	workprefs.m68k_speed = M68K_SPEED_7MHZ_CYCLES;
@@ -268,6 +281,8 @@ void InitPanelCPU(const struct _ConfigCategory& category)
 	optCPU68030->addActionListener(cpuActionListener);
 	optCPU68040 = new gcn::UaeRadioButton("68040", "radiocpugroup");
 	optCPU68040->addActionListener(cpuActionListener);
+	optCPU68060 = new gcn::UaeRadioButton("68060", "radiocpugroup");
+	optCPU68060->addActionListener(cpuActionListener);
 	
 	chk24Bit = new gcn::UaeCheckBox("24-bit addressing", true);
 	chk24Bit->setId("CPU24Bit");
@@ -300,20 +315,21 @@ void InitPanelCPU(const struct _ConfigCategory& category)
 	grpCPU->add(optCPU68000, 5, 10);
 	grpCPU->add(optCPU68010, 5, 40);
 	grpCPU->add(optCPU68020, 5, 70);
-	grpCPU->add(optCPU68030, 5, 100);
-	grpCPU->add(optCPU68040, 5, 130);
-	grpCPU->add(chk24Bit, 5, 170);
-	grpCPU->add(chkCPUCompatible, 5, 200);
-	grpCPU->add(chkCPUCycleExact, 5, 230);
-	grpCPU->add(chkJIT, 5, 260);
-	grpCPU->add(lblCachemem, 5, 290);
-	grpCPU->add(sldCachemem, 6, 320);
-	grpCPU->add(lblCachesize, 110, 320);
+	grpCPU->add(optCPU68030, 85, 10);
+	grpCPU->add(optCPU68040, 85, 40);
+	grpCPU->add(optCPU68060, 85, 70);
+	grpCPU->add(chk24Bit, 5, 110);
+	grpCPU->add(chkCPUCompatible, 5, 140);
+	grpCPU->add(chkCPUCycleExact, 5, 170);
+	grpCPU->add(chkJIT, 5, 200);
+	grpCPU->add(lblCachemem, 5, 230);
+	grpCPU->add(sldCachemem, 6, 260);
+	grpCPU->add(lblCachesize, 110, 260);
 	grpCPU->setMovable(false);
 #ifdef ANDROID
-	grpCPU->setSize(165, 365);
+	grpCPU->setSize(165, 305);
 #else
-	grpCPU->setSize(160, 365);
+	grpCPU->setSize(160, 305);
 #endif
   grpCPU->setBaseColor(gui_baseCol);
   
@@ -395,6 +411,7 @@ void ExitPanelCPU(const struct _ConfigCategory& category)
   delete optCPU68020;
   delete optCPU68030;
   delete optCPU68040;
+  delete optCPU68060;
   delete chk24Bit;
   delete chkCPUCompatible;
   delete chkCPUCycleExact;
@@ -425,7 +442,7 @@ void ExitPanelCPU(const struct _ConfigCategory& category)
 bool HelpPanelCPU(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("Select the required Amiga CPU (68000 - 68040).");
+  helptext.push_back("Select the required Amiga CPU (68000 - 68060).");
   helptext.push_back("If you select 68020, you can choose between 24-bit addressing (68EC020) or 32-bit addressing (68020).");
   helptext.push_back("The option \"More compatible\" is only available if 68000 or 68010 is selected and emulates simple prefetch of");
   helptext.push_back("the 68000. This may improve compatibility in few situations but is not required for most games and demos.");
@@ -435,8 +452,8 @@ bool HelpPanelCPU(std::vector<std::string> &helptext)
   helptext.push_back("The available FPU models depending on the selected CPU.");
   helptext.push_back("The option \"More compatible\" activates more accurate rounding and compare of two floats.");
   helptext.push_back("With \"CPU Speed\" you can choose the clock rate of the Amiga.");
-  helptext.push_back("In current version, you will not see a difference in the performance for 68020, 68030 and 68040 CPUs. The cpu");
-  helptext.push_back("cycles for the opcodes are based on 68020. The different cycles for 68030 and 68040 may come in a later");
+  helptext.push_back("In current version, you will not see a difference in the performance for 68020 - 68060 CPUs. The cpu");
+  helptext.push_back("cycles for the opcodes are based on 68020. The different cycles for 68030 - 68060 may come in a later");
   helptext.push_back("version.");
   return true;
 }
