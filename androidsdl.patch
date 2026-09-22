@@ -1,3 +1,15 @@
+diff --git a/project/AndroidManifestTemplate.xml b/project/AndroidManifestTemplate.xml
+index d41308eaf..bfa820fc5 100644
+--- a/project/AndroidManifestTemplate.xml
++++ b/project/AndroidManifestTemplate.xml
+@@ -10,6 +10,7 @@
+ 				 android:allowBackup="true"
+ 				 android:banner="@drawable/banner"
+ 				 android:isGame="true"
++				 android:appCategory="game"
+ 				 android:supportsRtl="true"
+ 				 android:theme="@style/AppTheme"
+ 	>
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
 index 69c7f86c2..1b089f520 100644
 --- a/project/java/MainActivity.java
