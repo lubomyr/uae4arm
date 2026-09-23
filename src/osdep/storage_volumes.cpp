@@ -395,6 +395,65 @@ static void volumes_from_files_dirs(JNIEnv *env, jobject ctx,
 
 
 /* Live: call it every time the list is shown, never keep the result. */
+/* Whether the app may actually read the user's files, as opposed to merely
+   listing directories: without this the FUSE layer still lets an app walk
+   /storage/emulated/0 and see the folders, but every file in them is hidden,
+   so a dialog opened there shows a tree with nothing in it. */
+bool HaveFullStorageAccess(void)
+{
+#ifdef ANDROID
+  JNIEnv *env = jni_begin();
+  bool granted = false;
+
+  if(env == NULL)
+    return false;
+
+  /* API 30 and later: all-files access, the permission this actually needs. */
+  {
+    jclass cls = env->FindClass("android/os/Environment");
+    if(cls != NULL) {
+      jmethodID mid = env->GetStaticMethodID(cls, "isExternalStorageManager", "()Z");
+      if(mid != NULL) {
+        jboolean b = env->CallStaticBooleanMethod(cls, mid);
+        if(!jni_failed(env)) {
+          granted = b ? true : false;
+          env->DeleteLocalRef(cls);
+          jni_end();
+          return granted;
+        }
+      } else
+        env->ExceptionClear();
+      env->DeleteLocalRef(cls);
+    } else
+      env->ExceptionClear();
+  }
+
+  /* Before that, the old read permission was enough. */
+  {
+    jobject ctx = get_context(env);
+    if(ctx != NULL) {
+      jclass ctxcls = env->GetObjectClass(ctx);
+      jmethodID mid = env->GetMethodID(ctxcls, "checkSelfPermission", "(Ljava/lang/String;)I");
+      if(mid != NULL) {
+        jstring perm = env->NewStringUTF("android.permission.READ_EXTERNAL_STORAGE");
+        jint res = env->CallIntMethod(ctx, mid, perm);
+        if(!jni_failed(env))
+          granted = (res == 0);   /* PackageManager.PERMISSION_GRANTED */
+        env->DeleteLocalRef(perm);
+      } else
+        env->ExceptionClear();
+      env->DeleteLocalRef(ctxcls);
+      env->DeleteLocalRef(ctx);
+    }
+  }
+
+  jni_end();
+  return granted;
+#else
+  return true;
+#endif
+}
+
 void GetStorageVolumes(std::vector<std::string> *names, std::vector<std::string> *paths)
 {
   names->clear();

@@ -563,6 +563,59 @@ static void trimwsa (char *s)
 }
 
 
+#ifdef ANDROID
+extern bool HaveFullStorageAccess(void);
+
+/* A path still at its default is switched to the matching folder under
+   <internal storage>/Amiga/ when that exists and the app can read it. A
+   reinstall wipes both adfdir.conf and the all-files permission, so this
+   runs on every start rather than only the first: the permission is often
+   granted only after the first run, and a path the user chose is left alone. */
+static void use_amiga_folders(const char *def_config, const char *def_rom, const char *def_savestate)
+{
+	const char *sdcard = getenv("SDCARD");
+	if(sdcard == NULL || sdcard[0] == '\0')
+		return;
+
+	struct {
+		char *path;
+		const char *def;
+		const char *dir;
+	} folders[] = {
+		{ config_path, def_config, "configs" },
+		{ rom_path, def_rom, "kickstarts" },
+		{ savestate_path, def_savestate, "savestates" },
+	};
+	const int count = sizeof(folders) / sizeof(folders[0]);
+
+	int i;
+	for(i = 0; i < count; ++i) {
+		if(!strcmp(folders[i].path, folders[i].def))
+			break;
+	}
+	if(i == count || !HaveFullStorageAccess())
+		return;
+
+	const char *sep = sdcard[strlen(sdcard) - 1] == '/' ? "" : "/";
+	for(i = 0; i < count; ++i) {
+		char candidate[MAX_DPATH];
+		if(strcmp(folders[i].path, folders[i].def))
+			continue;
+		snprintf(candidate, MAX_DPATH - 1, "%s%sAmiga/%s/", sdcard, sep, folders[i].dir);
+		DIR *dir = opendir(candidate);
+		if(dir == NULL)
+			continue;
+		closedir(dir);
+		strncpy(folders[i].path, candidate, MAX_DPATH - 1);
+		folders[i].path[MAX_DPATH - 1] = '\0';
+		/* ROMs found in the old folder are not the ones to use now; an empty
+		   list makes the GUI scan the new one when it opens. */
+		if(folders[i].path == rom_path)
+			ClearAvailableROMList();
+	}
+}
+#endif
+
 void loadAdfDir(void)
 {
 	char path[MAX_DPATH];
@@ -588,6 +641,13 @@ void loadAdfDir(void)
 #endif
 	snprintf(rp9_path, MAX_DPATH - 1, "%s/rp9/", start_path_data);
 	snprintf(savestate_path, MAX_DPATH - 1, "%s/savestates/", start_path_data);
+
+#ifdef ANDROID
+	char def_config[MAX_DPATH], def_rom[MAX_DPATH], def_savestate[MAX_DPATH];
+	strncpy(def_config, config_path, MAX_DPATH);
+	strncpy(def_rom, rom_path, MAX_DPATH);
+	strncpy(def_savestate, savestate_path, MAX_DPATH);
+#endif
 
 	snprintf(path, MAX_DPATH - 1, "%s/conf/adfdir.conf", start_path_data);
   struct zfile *fh;
@@ -646,6 +706,10 @@ void loadAdfDir(void)
     }
     zfile_fclose (fh);
   }
+
+#ifdef ANDROID
+	use_amiga_folders(def_config, def_rom, def_savestate);
+#endif
 }
 
 
