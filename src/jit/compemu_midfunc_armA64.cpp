@@ -162,6 +162,16 @@ MIDFUNC(0,make_flags_live,(void))
 }
 MENDFUNC(0,make_flags_live,(void))
 
+/* Puts the current 68k flags into regs.ccrflags, so an instruction that leaves
+   some of them unchanged - DIVU on overflow - can read them back from FLAGTMP
+   instead of from host flags that may no longer hold them. */
+MIDFUNC(0,save_flags,(void))
+{
+	make_flags_live_internal();
+	flush_flags();
+}
+MENDFUNC(0,save_flags,(void))
+
 MIDFUNC(2,mov_l_mi,(IMPTR d, IM32 s))
 {
   /* d points always to memory in regs struct */

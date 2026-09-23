@@ -1564,6 +1564,11 @@ static void gen_dbcc(uae_u32 opcode, struct instr *curi, char* ssize) {
 static void gen_divu(uae_u32 opcode, struct instr *curi, char* ssize) {
 	(void) opcode;
 	(void) ssize;
+	/* On overflow DIVU leaves flags as they were, and jff_DIVU reads them back
+	   from FLAGTMP - so they have to be there first. Ported from Amiberry,
+	   "address ARM64 JIT cputester regressions", 9ac9bbae, 2026-05-31. */
+	if (!noflags)
+		comprintf("\t save_flags();\n");
 	comprintf("\t dont_care_flags();\n");
 	genamode_new(curi->smode, "srcreg", sz_word, "src", 1, 0, 0);
   genamode_post(curi->smode, "srcreg", sz_word, "src", 1, 0);
@@ -1607,6 +1612,15 @@ static void gen_divl(uae_u32 opcode, struct instr *curi, char* ssize) {
 	comprintf("\t uae_u16 extra=%s;\n", gen_nextiword());
   comprintf("\t int r2=(extra>>12)&7;\n");
 	comprintf("\t int r3=extra&7;\n");
+	/* A 64-bit dividend is left to the interpreter. Decide that before any code
+	   for the operand is emitted: code already emitted for (An)+ or -(An) is not
+	   taken back, and the interpreter would then step An a second time. Ported
+	   from Amiberry 9ac9bbae, 2026-05-31. */
+	comprintf("\t if (extra & 0x0400) {\n");
+	comprintf("\t   FAIL(1);\n");
+	comprintf("\t   m68k_pc_offset=m68k_pc_offset_thisinst;\n");
+	comprintf("\t  " RETURN "\n");
+	comprintf("\t }\n");
 	genamode_new(curi->dmode, "dstreg", curi->size, "dst", 1, 0, 0);
   genamode_post(curi->dmode, "dstreg", curi->size, "dst", 1, 0);
   comprintf("\tregister_possible_exception();\n");
@@ -1958,12 +1972,28 @@ static void gen_mull(uae_u32 opcode, struct instr *curi, char* ssize) {
 	if (!noflags) {
 		comprintf("\t if (extra & 0x0400) {\n"); /* Need full 64 bit result */
 		comprintf("\t   int r3=(extra & 7);\n");
-		comprintf("\t   mov_l_rr(r3,dst);\n"); /* operands now in r3 and r2 */
-		comprintf("\t   if (extra & 0x0800) { \n"); /* signed */
-		comprintf("\t\t	  jff_MULS64(r2,r3);\n");
-		comprintf("\t	} else { \n");
-		comprintf("\t\t	  jff_MULU64(r2,r3);\n");
-		comprintf("\t	} \n"); /* The result is in r2/r3, with r2 holding the lower 32 bits */
+		/* With Dh and Dl the same register, loading dst into r3 would overwrite
+		   the other operand. Multiply a copy instead; which half is left in the
+		   register depends on the CPU. Ported from Amiberry 9ac9bbae. */
+		comprintf("\t   if (r2 == r3) {\n");
+		comprintf("\t     int tmp=alloc_scratch();\n");
+		comprintf("\t     mov_l_rr(tmp,r2);\n");
+		comprintf("\t     mov_l_rr(r3,dst);\n"); /* operands now in r3 and tmp */
+		comprintf("\t     if (extra & 0x0800) { \n"); /* signed */
+		comprintf("\t       jff_MULS64(tmp,r3);\n");
+		comprintf("\t     } else { \n");
+		comprintf("\t       jff_MULU64(tmp,r3);\n");
+		comprintf("\t     } \n");
+		comprintf("\t     if (currprefs.cpu_model >= 68040)\n");
+		comprintf("\t       mov_l_rr(r2,tmp);\n");
+		comprintf("\t   } else {\n");
+		comprintf("\t     mov_l_rr(r3,dst);\n"); /* operands now in r3 and r2 */
+		comprintf("\t     if (extra & 0x0800) { \n"); /* signed */
+		comprintf("\t       jff_MULS64(r2,r3);\n");
+		comprintf("\t     } else { \n");
+		comprintf("\t       jff_MULU64(r2,r3);\n");
+		comprintf("\t     } \n"); /* The result is in r2/r3, with r2 holding the lower 32 bits */
+		comprintf("\t   }\n");
 		comprintf("\t } else {\n"); /* Only want 32 bit result */
 		/* operands in dst and r2, result goes into r2 */
 		comprintf("\t   if (extra & 0x0800) { \n"); /* signed */
@@ -1976,12 +2006,28 @@ static void gen_mull(uae_u32 opcode, struct instr *curi, char* ssize) {
 	} else {
 		comprintf("\t if (extra & 0x0400) {\n"); /* Need full 64 bit result */
 		comprintf("\t   int r3=(extra & 7);\n");
-		comprintf("\t   mov_l_rr(r3,dst);\n"); /* operands now in r3 and r2 */
-		comprintf("\t   if (extra & 0x0800) { \n"); /* signed */
-		comprintf("\t\t	  jnf_MULS64(r2,r3);\n");
-		comprintf("\t	} else { \n");
-		comprintf("\t\t	  jnf_MULU64(r2,r3);\n");
-		comprintf("\t	} \n"); /* The result is in r2/r3, with r2 holding the lower 32 bits */
+		/* With Dh and Dl the same register, loading dst into r3 would overwrite
+		   the other operand. Multiply a copy instead; which half is left in the
+		   register depends on the CPU. Ported from Amiberry 9ac9bbae. */
+		comprintf("\t   if (r2 == r3) {\n");
+		comprintf("\t     int tmp=alloc_scratch();\n");
+		comprintf("\t     mov_l_rr(tmp,r2);\n");
+		comprintf("\t     mov_l_rr(r3,dst);\n"); /* operands now in r3 and tmp */
+		comprintf("\t     if (extra & 0x0800) { \n"); /* signed */
+		comprintf("\t       jnf_MULS64(tmp,r3);\n");
+		comprintf("\t     } else { \n");
+		comprintf("\t       jnf_MULU64(tmp,r3);\n");
+		comprintf("\t     } \n");
+		comprintf("\t     if (currprefs.cpu_model >= 68040)\n");
+		comprintf("\t       mov_l_rr(r2,tmp);\n");
+		comprintf("\t   } else {\n");
+		comprintf("\t     mov_l_rr(r3,dst);\n"); /* operands now in r3 and r2 */
+		comprintf("\t     if (extra & 0x0800) { \n"); /* signed */
+		comprintf("\t       jnf_MULS64(r2,r3);\n");
+		comprintf("\t     } else { \n");
+		comprintf("\t       jnf_MULU64(r2,r3);\n");
+		comprintf("\t     } \n"); /* The result is in r2/r3, with r2 holding the lower 32 bits */
+		comprintf("\t   }\n");
 		comprintf("\t } else {\n"); /* Only want 32 bit result */
 		/* operands in dst and r2, result foes into r2 */
 		comprintf("\t   if (extra & 0x0800) { \n"); /* signed */

@@ -2103,6 +2103,13 @@ void build_comp(void)
     }
     prop[opcode].set_flags = table68k[opcode].flagdead;
     prop[opcode].use_flags = table68k[opcode].flaglive;
+    /* DIVU that overflows leaves some flags as they were (see jff_DIVU), so
+       the instruction before it has to produce them, and the flag-less variant
+       cannot be used - it would not keep them. As Amiberry 9ac9bbae/826834f9. */
+    if (table68k[opcode].mnemo == i_DIVU) {
+      prop[opcode].use_flags |= FLAG_CZNV;
+      nfcompfunctbl[opcode] = compfunctbl[opcode];
+    }
     /* Unconditional jumps don't evaluate condition codes, so they
      * don't actually use any flags themselves */
     if (prop[opcode].cflow & fl_const_jump)
