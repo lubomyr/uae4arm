@@ -41,8 +41,11 @@ static gcn::Button *cmdCreateDDDisk;
 static gcn::Button *cmdCreateHDDisk;
 
 static const char *diskfile_filter[] = { ".adf", ".adz", ".ipf", ".fdi", ".zip", ".dms", ".gz", ".xz", "\0" };
-static const char *drivespeedlist[] = { "100% (compatible)", "200%", "400%", "800%" };
-static const int drivespeedvalues[] = { 100, 200, 400, 800 };
+/* 0 is turbo: each disk DMA transfer completes at once rather than at a
+   multiple of the drive's speed. */
+static const char *drivespeedlist[] = { "100% (compatible)", "200%", "400%", "800%", "Turbo" };
+static const int drivespeedvalues[] = { 100, 200, 400, 800, 0 };
+#define NUM_DRIVESPEEDS ((int)(sizeof(drivespeedvalues) / sizeof(drivespeedvalues[0])))
 
 static void AdjustDropDownControls(void);
 static bool bLoadConfigForDisk = false;
@@ -122,7 +125,7 @@ static void RefreshPanelFloppy(void)
 
   chkLoadConfig->setSelected(bLoadConfigForDisk);
   
-  for(i = 0; i < 4; ++i) {
+  for(i = 0; i < NUM_DRIVESPEEDS; ++i) {
     if(workprefs.floppy_speed == drivespeedvalues[i]) {
       sldDriveSpeed->setValue(i);
       lblDriveSpeedInfo->setCaption(drivespeedlist[i]);
@@ -450,7 +453,7 @@ void InitPanelFloppy(const struct _ConfigCategory& category)
 	}
 
 	lblDriveSpeed = new gcn::Label("Floppy Drive Emulation Speed:");
-  sldDriveSpeed = new gcn::Slider(0, 3);
+  sldDriveSpeed = new gcn::Slider(0, NUM_DRIVESPEEDS - 1);
   sldDriveSpeed->setSize(110, SLIDER_HEIGHT);
   sldDriveSpeed->setBaseColor(gui_baseCol);
 	sldDriveSpeed->setMarkerLength(20);
@@ -558,7 +561,8 @@ bool HelpPanelFloppy(std::vector<std::string> &helptext)
   helptext.push_back("Details of the current floppy can be displayed with \"?\".");
   helptext.push_back(" ");
   helptext.push_back("You can reduce the loading time for lot of games by increasing the floppy drive emulation speed. A few games");
-  helptext.push_back("will not load with higher drive speed and you have to select 100%.");
+  helptext.push_back("will not load with higher drive speed and you have to select 100%. \"Turbo\" is the fastest of all: each read or");
+  helptext.push_back("write of a track completes at once. It applies to standard disk images only, and more games fail with it.");
   helptext.push_back(" ");
   helptext.push_back("\"Save config for disk\" will create a new configuration file with the name of the disk in DF0. This configuration will");
   helptext.push_back("be loaded each time you select the disk and have the option \"Load config with same name as disk\" enabled.");
