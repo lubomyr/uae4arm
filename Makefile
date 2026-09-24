@@ -134,6 +134,7 @@ OBJS =	\
 	src-$(arch)/savestate.o \
 	src-$(arch)/scsi.o \
 	src-$(arch)/scsiemul.o \
+	src-$(arch)/sndboard.o \
 	src-$(arch)/statusline.o \
 	src-$(arch)/traps.o \
 	src-$(arch)/tinyxml2.o \

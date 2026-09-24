@@ -21,6 +21,7 @@
 #include "gayle.h"
 #include "autoconf.h"
 #include "devices.h"
+#include "sndboard.h"
 
 #define CARD_FLAG_CAN_Z3 1
 #define CARD_FLAG_UAEROM 16
@@ -368,7 +369,7 @@ static int REGPARAM2 expamem_type (void)
 	return expamem_read(0) & 0xc0;
 }
 
-static void expamem_next (addrbank *mapped, addrbank *next);
+void expamem_next (addrbank *mapped, addrbank *next);
 
 static void call_card_init(int index)
 {	
@@ -461,7 +462,17 @@ static void boardmessage(addrbank *mapped, bool success)
 		success ? _T("") : _T(" [SHUT UP]"));
 }
 
-static void expamem_next(addrbank *mapped, addrbank *next)
+/* A board that runs its own autoconfig bank tells us it was shut up. */
+void expamem_shutup(addrbank *mapped)
+{
+	if (mapped) {
+		mapped->start = 0xffffffff;
+		boardmessage(mapped, false);
+	}
+	expamem_next(mapped, NULL);
+}
+
+void expamem_next(addrbank *mapped, addrbank *next)
 {
 	if (mapped)
 		boardmessage(mapped, mapped->start != 0xffffffff);
@@ -2228,6 +2239,15 @@ static void expansion_add_autoconfig(struct uae_prefs *p)
 		cards_set[cardno].initnum = expamem_rtarea_init;
 		cards_set[cardno++].map = NULL;
   }
+#endif
+#ifdef TOCCATA
+	if (p->sound_toccata) {
+		cards_set[cardno].flags = 0;
+		cards_set[cardno].name = _T("Toccata");
+		cards_set[cardno].zorro = 2;
+		cards_set[cardno].initnum = toccata_init;
+		cards_set[cardno++].map = NULL;
+	}
 #endif
 #ifdef PICASSO96
 	struct rtgboardconfig *rbc = &p->rtgboards[0];

@@ -12,6 +12,7 @@
 #include "SelectorEntry.hpp"
 #include "UaeRadioButton.hpp"
 #include "UaeDropDown.hpp"
+#include "UaeCheckBox.hpp"
 
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -35,6 +36,9 @@ static gcn::UaeRadioButton* optSoundEmulatedBest;
 static gcn::Window *grpMode;
 static gcn::UaeRadioButton* optMono;
 static gcn::UaeRadioButton* optStereo;
+#ifdef TOCCATA
+static gcn::UaeCheckBox* chkToccata;
+#endif
 static gcn::Label* lblFrequency;
 static gcn::UaeDropDown* cboFrequency;
 static gcn::Label* lblInterpolation;
@@ -74,6 +78,10 @@ static void RefreshPanelSound(void)
 {
   char tmp[10];
   int i;
+
+#ifdef TOCCATA
+  chkToccata->setSelected(workprefs.sound_toccata);
+#endif
 
   switch(workprefs.produce_sound)
   {
@@ -183,6 +191,11 @@ class SoundActionListener : public gcn::ActionListener
 
 	    else if (actionEvent.getSource() == optStereo)
     		workprefs.sound_stereo = 1;
+
+#ifdef TOCCATA
+	    else if (actionEvent.getSource() == chkToccata)
+    		workprefs.sound_toccata = chkToccata->isSelected();
+#endif
 
 	    else if (actionEvent.getSource() == cboFrequency) {
         switch(cboFrequency->getSelected())
@@ -325,6 +338,12 @@ void InitPanelSound(const struct _ConfigCategory& category)
 	optStereo = new gcn::UaeRadioButton("Stereo", "radiosoundmodegroup");
 	optStereo->addActionListener(soundActionListener);
 
+#ifdef TOCCATA
+	chkToccata = new gcn::UaeCheckBox("Enable Toccata board", true);
+	chkToccata->setId("Toccata");
+	chkToccata->addActionListener(soundActionListener);
+#endif
+
 	grpMode = new gcn::Window("Mode");
 	grpMode->add(optMono, 5, 10);
 	grpMode->add(optStereo, 5, 40);
@@ -407,6 +426,11 @@ void InitPanelSound(const struct _ConfigCategory& category)
   int posY = DISTANCE_BORDER;
   category.panel->add(grpSound, DISTANCE_BORDER, posY);
   category.panel->add(grpMode, grpSound->getX() + grpSound->getWidth() + DISTANCE_NEXT_X, posY);
+#ifdef TOCCATA
+  /* in the space under Mode, level with the bottom of Sound Emulation */
+  category.panel->add(chkToccata, grpMode->getX() + 5,
+    posY + grpSound->getHeight() - chkToccata->getHeight() - 10);
+#endif
   posY += grpSound->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(lblFrequency, DISTANCE_BORDER, posY);
   category.panel->add(cboFrequency, lblFrequency->getX() + lblFrequency->getWidth() + 12, posY);
@@ -449,6 +473,9 @@ void ExitPanelSound(const struct _ConfigCategory& category)
   delete optMono;
   delete optStereo;
   delete grpMode;
+#ifdef TOCCATA
+  delete chkToccata;
+#endif
   delete lblFrequency;
   delete cboFrequency;
   delete lblInterpolation;
@@ -486,5 +513,10 @@ bool HelpPanelSound(std::vector<std::string> &helptext)
   helptext.push_back("start.");
   helptext.push_back(" ");
   helptext.push_back("The audio volume of the Amiga (not CD) can be adjusted with \"Paula Volume\".");
+#ifdef TOCCATA
+  helptext.push_back(" ");
+  helptext.push_back("\"Enable Toccata board\" adds a Toccata Zorro II sound card, for 16-bit sound through AHI with the toccata.audio");
+  helptext.push_back("driver. Only playback is emulated. The card appears after the next reset.");
+#endif
   return true;
 }

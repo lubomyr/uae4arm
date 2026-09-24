@@ -1084,6 +1084,9 @@ static void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type
 	cfgfile_write (f, _T("sound_volume_paula"), _T("%d"), p->sound_volume_paula);
 	if (p->sound_volume_cd >= 0)
 		cfgfile_write (f, _T("sound_volume_cd"), _T("%d"), p->sound_volume_cd);
+	/* WinUAE's name for the board, so its configurations carry over */
+	if (p->sound_toccata)
+		cfgfile_write_bool (f, _T("toccata"), p->sound_toccata);
 
 #ifdef USE_JIT_FPU
 	cfgfile_write_bool (f, _T("compfpu"), p->compfpu);
@@ -2760,6 +2763,7 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 	  || cfgfile_yesno (option, value, _T("ntsc"), &p->ntscmode)
 	  || cfgfile_yesno (option, value, _T("cpu_24bit_addressing"), &p->address_space_24)
 		|| cfgfile_yesno (option, value, _T("fpu_strict"), &p->fpu_strict)
+		|| cfgfile_yesno (option, value, _T("toccata"), &p->sound_toccata)
 #ifdef USE_JIT_FPU
 		|| cfgfile_yesno (option, value, _T("compfpu"), &p->compfpu)
 #endif
@@ -4197,6 +4201,7 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->sound_filter = FILTER_SOUND_OFF;
   p->sound_filter_type = 0;
 	p->sound_volume_cd = 20;
+	p->sound_toccata = false;
 
 #if defined(USE_JIT_FPU)
 	p->compfpu = 1;

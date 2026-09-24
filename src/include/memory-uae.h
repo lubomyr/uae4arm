@@ -354,6 +354,9 @@ extern void rtarea_setup (void);
 extern void expamem_reset(int);
 extern void set_expamem_z3_hack_mode(int);
 extern uaecptr expamem_board_pointer;
+/* for boards that run their own autoconfig bank */
+extern void expamem_next(addrbank *mapped, addrbank *next);
+extern void expamem_shutup(addrbank *mapped);
 extern uae_u32 expamem_board_size;
 
 extern uae_u32 last_custom_value1;

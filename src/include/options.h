@@ -280,6 +280,7 @@ struct uae_prefs {
   int sound_filter_type;
 	int sound_volume_paula;
 	int sound_volume_cd;
+	bool sound_toccata;
 
 	bool compfpu;
   int cachesize;

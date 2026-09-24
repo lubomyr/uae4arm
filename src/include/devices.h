@@ -7,9 +7,15 @@ void devices_vsync_pre(void);
 void devices_hsync(void);
 void devices_rethink(void);
 void update_sound (double clk);
+#ifdef TOCCATA
+void update_sndboard_sound(double clk);
+#endif
 STATIC_INLINE void devices_update_sound(double clk)
 {
   update_sound (clk);
+#ifdef TOCCATA
+  update_sndboard_sound(clk);
+#endif
 }
 
 void devices_update_sync(double svpos, double syncadjust);

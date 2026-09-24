@@ -31,6 +31,7 @@
 #define ACTION_REPLAY /* Action Replay 1/2/3 support */
 #define PICASSO96 /* Picasso96 display card emulation */
 #define AHI /* paravirtual AHI sound, for the uae.audio driver */
+#define TOCCATA /* Toccata Zorro II sound card (AD1848), playback only */
 #define UAEGFX_INTERNAL /* built-in libs:picasso96/uaegfx.card */
 #define BSDSOCKET /* bsdsocket.library emulation */
 #define CAPS /* CAPS-image support */
