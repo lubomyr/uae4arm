@@ -29,9 +29,12 @@
    indexes wrap by mask. */
 #define AHI_RING_FRAMES 65536
 #define AHI_RING_MASK   (AHI_RING_FRAMES - 1)
-/* Blocks kept queued ahead of the mixer before the driver is asked for more.
-   Android pulls audio in chunks of ~93 ms; two blocks were not enough. */
-#define AHI_TARGET_BLOCKS 6
+/* Blocks kept queued ahead of Paula's output before the driver is asked for
+   more. Counted in emulated time, so this only has to cover the driver's own
+   reaction time, not the host's. */
+#define AHI_TARGET_BLOCKS 4
+/* The old measure, the ring alone, for turbo mode where Paula makes nothing. */
+#define AHI_TARGET_BLOCKS_REALTIME 6
 /* Room left above the target for blocks already asked for but not yet seen. */
 #define AHI_HEADROOM_BLOCKS 3
 
@@ -41,6 +44,15 @@ static uae_s16 ring[AHI_RING_FRAMES * 2];
    The emulator empties the ring by asking the callback to, never by writing
    ring_rd itself. */
 static volatile uae_atomic ring_wr, ring_rd, ring_flush;
+/* Where the emulator's ring_wr stood when it asked for the flush: blocks the
+   driver hands over before the callback gets to it are kept. */
+static volatile uae_atomic ring_flush_pos;
+/* ring_rd minus the Paula frames the device had taken at the same moment,
+   published by the callback. It only moves when one of the two runs dry or
+   Paula's buffers are skipped. */
+static volatile uae_atomic mix_offset;
+/* The Paula frames the device had taken as of its last callback. */
+static volatile uae_atomic paula_consumed_pub;
 
 static volatile uae_atomic ahi_freq;  /* rate the driver opened with, 0 while closed */
 static int ahi_blksize;     /* frames in each block the driver hands over */
@@ -54,7 +66,11 @@ static int blockbuf_size;
 static double rs_pos;
 static uae_s16 rs_prev_l, rs_prev_r;
 
-static int irq_holdoff;
+/* Raised and not yet answered with a block; holds off another interrupt until
+   the driver has had one block's worth of time. */
+static bool irq_pending;
+static uae_u32 irq_raised_at;
+static int irq_lines;
 /* Set when we raise the interrupt, read back by the driver's interrupt server
    (opcode 4) to tell our interrupt from anything else sharing INT6. */
 static int intcount;
@@ -62,6 +78,9 @@ static bool warned_format;
 
 static void ahi_raise_irq(void)
 {
+	irq_pending = true;
+	irq_raised_at = sound_frames_produced();
+	irq_lines = 0;
 	intcount = 1;
 	INTREQ(0x8000 | 0x2000);
 }
@@ -85,10 +104,36 @@ static int host_block_frames(void)
 	return n < 64 ? 64 : n;
 }
 
+/* How far AHI reaches past the end of what Paula has made. Everything in the
+   ring plays after Paula's queued frames, and the callback takes from both at
+   the same pace, so this stays put while the device plays and only shrinks as
+   the emulation makes more Paula output: it runs on emulated time, the way the
+   play position of a real sound card does, and the driver is asked for blocks
+   at an even pace however unevenly the device pulls its data. */
+static inline int ahi_lead(void)
+{
+	return (int)((uae_u32)ring_wr - sound_frames_produced() - (uae_u32)mix_offset);
+}
+
+static int ahi_lead_now(void)
+{
+	/* Until the callback flushes the ring for a new open, the offset still
+	   describes the old one; count from where the flush will leave it. */
+	if (__atomic_load_n(&ring_flush, __ATOMIC_ACQUIRE))
+		return (int)((uae_u32)ring_wr - (uae_u32)ring_flush_pos
+			- (sound_frames_produced() - (uae_u32)paula_consumed_pub));
+	return ahi_lead();
+}
+
 static inline bool want_more(void)
 {
 	int blk = host_block_frames();
-	int target = AHI_TARGET_BLOCKS * blk;
+	if (!currprefs.turbo_emulation) {
+		if (!ring_flush && ring_fill() >= (uae_u32)(AHI_RING_FRAMES - AHI_HEADROOM_BLOCKS * blk))
+			return false;
+		return ahi_lead_now() < AHI_TARGET_BLOCKS * blk;
+	}
+	int target = AHI_TARGET_BLOCKS_REALTIME * blk;
 	/* A driver opened with very large blocks would otherwise ask for more
 	   than the ring holds, and the excess would be dropped. */
 	if (target > AHI_RING_FRAMES - AHI_HEADROOM_BLOCKS * blk)
@@ -108,6 +153,28 @@ static void push_frame(uae_s16 l, uae_s16 r)
 	ring[w * 2] = l;
 	ring[w * 2 + 1] = r;
 	ring_wr = ring_wr + 1;
+}
+
+/* Behind Paula with nothing left to play means the frames for this moment are
+   gone for good - on open, or once the driver fell silent long enough for the
+   ring to run dry. Fill the gap with silence where it belongs rather than have
+   the driver race to catch up on it. Merely behind, with frames still queued,
+   is not a gap yet: the device is further back still, so a late block can make
+   it in time, and padding then would cut a hole that need not be heard. */
+static void realign(bool force)
+{
+	if (currprefs.turbo_emulation)
+		return;
+	if (!force && (ring_flush || ring_fill() != 0))
+		return;
+	int lead = ahi_lead_now();
+	if (lead >= 0)
+		return;
+	int n = -lead;
+	if (n > AHI_RING_FRAMES / 4)
+		n = AHI_RING_FRAMES / 4;
+	for (int i = 0; i < n; i++)
+		push_frame(0, 0);
 }
 
 /* One input frame at ahi_freq, resampled into zero or more output frames. */
@@ -130,7 +197,8 @@ static void ahi_close(void)
 {
 	ahi_freq = 0;
 	ahi_blksize = 0;
-	ring_flush = 1;
+	ring_flush_pos = ring_wr;
+	__atomic_store_n(&ring_flush, 1, __ATOMIC_RELEASE);
 	rs_pos = 0.0;
 	rs_prev_l = rs_prev_r = 0;
 }
@@ -153,8 +221,12 @@ static int ahi_open(int freq, int blksize, int channels, int bits)
 	ahi_channels = channels;
 	ahi_bits = bits;
 	warned_format = false;
-	irq_holdoff = 0;
 	ahi_freq = freq;
+
+	/* The ring plays alongside what Paula already has queued, so start it
+	   that far in: the first block then lands where it belongs instead of the
+	   driver having to catch up on Paula's whole queue at once. */
+	realign(true);
 
 	write_log(_T("AHI: open %d Hz, %d frames per block, %d channels, %d bits, mixed at %d Hz\n"),
 		freq, blksize, channels, bits, host_rate());
@@ -178,6 +250,7 @@ static void ahi_play_block(TrapContext *ctx, uaecptr addr)
 	}
 
 	trap_get_longs(ctx, blockbuf, addr, ahi_blksize);
+	irq_pending = false;
 
 	for (int i = 0; i < ahi_blksize; i++) {
 		uae_u32 v = blockbuf[i];
@@ -244,14 +317,18 @@ uae_u32 REGPARAM2 ahi_demux (TrapContext *ctx)
 	}
 }
 
-void ahi_mix (uae_s16 *stream, int frames, bool stereo)
+void ahi_mix (uae_s16 *stream, int frames, bool stereo, uae_u32 paula_consumed)
 {
-	if (ring_flush) {
+	paula_consumed_pub = paula_consumed;
+	if (__atomic_load_n(&ring_flush, __ATOMIC_ACQUIRE)) {
+		ring_rd = ring_flush_pos;
+		mix_offset = (uae_u32)ring_rd - paula_consumed;
 		ring_flush = 0;
-		ring_rd = ring_wr;
 	}
-	if (!ahi_freq)
+	if (!ahi_freq) {
+		mix_offset = (uae_u32)ring_rd - paula_consumed;
 		return;
+	}
 
 	uae_u32 avail = ring_fill();
 	int n = frames < (int)avail ? frames : (int)avail;
@@ -271,22 +348,45 @@ void ahi_mix (uae_s16 *stream, int frames, bool stereo)
 		}
 	}
 	ring_rd = ring_rd + n;
+	mix_offset = (uae_u32)ring_rd - paula_consumed;
 }
 
 static void ahi_hsync (void)
 {
 	if (!ahi_freq)
 		return;
-	if (irq_holdoff > 0) {
-		irq_holdoff--;
+	/* Paula falls asleep after a few quiet seconds and her output clock stops
+	   with her. AHI's runs on it, so keep her awake while the driver is open,
+	   the way WinUAE's AHI buffer keeps playing whether or not it gets data. */
+	if (!currprefs.turbo_emulation)
+		audio_activate();
+	realign(false);
+	/* One interrupt per block wanted, as WinUAE gives one each time its play
+	   position moves a block. Raising it again while the driver's task is
+	   still mixing only takes time from that task. */
+	if (irq_pending && intcount) {
+		/* Raised but not yet claimed by the driver's interrupt server. When it
+		   comes while the server is still busy with the previous one, Exec
+		   clears INTREQ on the way out and takes ours with it - so keep it
+		   raised until the server has seen it. */
+		if (++irq_lines >= 4) {
+			irq_lines = 0;
+			INTREQ(0x8000 | 0x2000);
+		}
 		return;
+	}
+	if (irq_pending) {
+		/* Claimed, and the driver is making the block. Ask again only if it
+		   has not come after a block's worth of time.
+		   Turbo mode throws Paula's output away, so time runs by lines there. */
+		if (currprefs.turbo_emulation ? ++irq_lines < 4
+		    : (int)(sound_frames_produced() - irq_raised_at) < host_block_frames())
+			return;
 	}
 	/* Stands in for WinUAE's "the play position moved a block": ask the driver
 	   for more while the queue is short. */
-	if (want_more()) {
+	if (want_more())
 		ahi_raise_irq();
-		irq_holdoff = 4;
-	}
 }
 
 static void ahi_reset (int hardreset)

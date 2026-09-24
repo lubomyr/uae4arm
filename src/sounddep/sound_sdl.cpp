@@ -160,7 +160,9 @@ static void sound_copy_produced_block(void *ud, Uint8 *stream, int len)
 #ifdef AHI
 	/* Mixed in after Paula's block has been placed, so AHI still plays while
 	   Paula has nothing to say and her buffer comes out as silence. */
-	ahi_mix((uae_s16 *)stream, currprefs.sound_stereo ? len / 4 : len / 2, currprefs.sound_stereo != 0);
+	int fs = currprefs.sound_stereo ? 4 : 2;
+	ahi_mix((uae_s16 *)stream, len / fs, currprefs.sound_stereo != 0,
+		(uae_u32)rdcnt * SNDBUFFER_LEN + snd_rdpos / fs);
 #endif
 }
 
@@ -278,6 +280,16 @@ void finish_sound_buffer(void)
 		rdcnt = wrcnt - (cnt_max_diff - 1);
 	} 
 }
+
+#ifdef AHI
+/* Frames Paula has made so far, counted on the same scale as the consumed
+   count handed to ahi_mix(). Emulator thread only. */
+uae_u32 sound_frames_produced(void)
+{
+	int ch = currprefs.sound_stereo ? 2 : 1;
+	return (uae_u32)wrcnt * SNDBUFFER_LEN + (uae_u32)(sndbufpt - render_sndbuff) / ch;
+}
+#endif
 
 void pause_sound_buffer(void)
 {
