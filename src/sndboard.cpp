@@ -561,6 +561,9 @@ static void sndboard_reset(int hardreset)
 
 bool toccata_init(struct autoconfig_info *aci)
 {
+	/* WinUAE names the board through its expansion ROM table entry, which
+	   uae4arm does not have; without a label the bank's "*" is shown. */
+	aci->label = _T("Toccata");
 	aci->addrbankp = &toccata_bank;
 	aci->autoconfigp = toccata_autoconfig;
 	device_add_reset(sndboard_reset);
