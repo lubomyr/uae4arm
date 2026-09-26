@@ -2886,6 +2886,18 @@ static void copyline (uae_u8 *dst, uae_u8 *src, int pixels)
       copy_screen_16bit_swap(dst, src, pixels * 2);
     else
       copy_screen_16bit_to_32bit(dst, src, pixels * 2);
+  } else if (state->RGBFormat == RGBFB_R5G6B5PC) {
+    /* Already in the host's own byte order. */
+    if(vidinfo->pixbytes == 2)
+      memcpy(dst, src, pixels * 2);
+    else {
+      const uae_u16 *s16 = (const uae_u16 *)src;
+      uae_u32 *d32 = (uae_u32 *)dst;
+      for (int i = 0; i < pixels; i++) {
+        uae_u32 v = s16[i];
+        d32[i] = ((v & 0xf800) << 8) | ((v & 0x07e0) << 5) | ((v & 0x001f) << 3);
+      }
+    }
   } else if(state->RGBFormat == RGBFB_CLUT) {
     if(vidinfo->pixbytes == 2)
       copy_screen_8bit_to_16bit(dst, src, pixels, vidinfo->clut);
@@ -2911,7 +2923,7 @@ static void copyall (uae_u8 *src, uae_u8 *dst)
 	struct picasso_vidbuf_description *vidinfo = &picasso_vidinfo;
 	struct picasso96_state_struct *state = &picasso96_state;
   int srcbpp = state->RGBFormat == RGBFB_CLUT ? 1 :
-               (state->RGBFormat == RGBFB_R5G6B5 ? 2 : 4);
+               (state->RGBFormat == RGBFB_R5G6B5 || state->RGBFormat == RGBFB_R5G6B5PC ? 2 : 4);
   int srcpitch = state->BytesPerRow;
   int dstpitch = state->Width * vidinfo->pixbytes;
   int y;

@@ -81,7 +81,10 @@ void target_default_options (struct uae_prefs *p, int type)
   
   p->pandora_tapDelay = 10;
 
-	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
+	/* The same formats amiberry offers, so a mode saved in one works in the
+	   other. 16 bit is the little-endian R5G6B5PC that real boards and WinUAE
+	   use too, rather than the big-endian R5G6B5. */
+	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5PC | RGBFF_R8G8B8A8;
 	
 #ifdef ANDROIDSDL
 	p->onScreen = 1;
@@ -154,7 +157,7 @@ void target_fixup_options (struct uae_prefs *p)
     p->cs_cd32fmv = 1;
   }
   
-	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5 | RGBFF_R8G8B8A8;
+	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5PC | RGBFF_R8G8B8A8;
   p->gfx_resolution = p->gfx_monitor.gfx_size.width > 600 ? 1 : 0;
   
 #if defined(ANDROID) && !defined(CPU_AARCH64)
