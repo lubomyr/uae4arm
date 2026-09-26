@@ -48,9 +48,13 @@ static uae_u32 last_synctime;
 
 /* Possible screen modes (x and y resolutions) */
 #ifdef ANDROID
-#define MAX_SCREEN_MODES 11
-static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 720, 800, 800, 960, 1024, 1024, 1280, 1280, 1920 };
-static int y_size_table[MAX_SCREEN_MODES] = { 400, 480, 400, 480, 600, 540,  768,  600,  720,  800, 1080 };
+/* The low resolutions are there for programs written with an AGA screen in
+   mind: Elude's Machinist asks for 320 wide and cannot draw into anything
+   else. Their mode IDs are fixed in picasso96.cpp, so adding them moves no
+   other mode. */
+#define MAX_SCREEN_MODES 14
+static int x_size_table[MAX_SCREEN_MODES] = { 320, 320, 320, 640, 640, 720, 800, 800, 960, 1024, 1024, 1280, 1280, 1920 };
+static int y_size_table[MAX_SCREEN_MODES] = { 200, 240, 256, 400, 480, 400, 480, 600, 540,  768,  600,  720,  800, 1080 };
 #else
 #define MAX_SCREEN_MODES 6
 static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 1024, 1152, 1280 };
@@ -1001,9 +1005,10 @@ void picasso_InitResolutions (void)
         int w = ((h * screen_w / screen_h) + 8) & ~15;
         int j, already = 0;
 
-        /* Picasso96 will not open a screen narrower than 640 - it quietly
-           widens the bitmap to 640 instead, and the screen then scrolls. A
-           height that cannot reach 640 across is no use here. */
+        /* Generated shapes narrower than 640 came out as screens that
+           scrolled when these were added, so a height that cannot reach 640
+           across is left out. This is about the odd widths made here: the
+           320 wide modes in the fixed table open as they should. */
         if (w < 640 || h > screen_h * 2)
           continue;
         for (j = 0; j < num_modes; j++) {
