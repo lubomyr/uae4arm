@@ -48,13 +48,13 @@ static uae_u32 last_synctime;
 
 /* Possible screen modes (x and y resolutions) */
 #ifdef ANDROID
-/* The low resolutions are there for programs written with an AGA screen in
-   mind: Elude's Machinist asks for 320 wide and cannot draw into anything
-   else. Their mode IDs are fixed in picasso96.cpp, so adding them moves no
-   other mode. */
-#define MAX_SCREEN_MODES 14
-static int x_size_table[MAX_SCREEN_MODES] = { 320, 320, 320, 640, 640, 720, 800, 800, 960, 1024, 1024, 1280, 1280, 1920 };
-static int y_size_table[MAX_SCREEN_MODES] = { 200, 240, 256, 400, 480, 400, 480, 600, 540,  768,  600,  720,  800, 1080 };
+/* The low resolutions and 640x512 are the ones WinUAE always adds to its
+   list, for programs written with an AGA screen in mind: Elude's Machinist
+   asks for 320 wide and cannot draw into anything else. Their mode IDs are
+   fixed in picasso96.cpp, so adding them moves no other mode. */
+#define MAX_SCREEN_MODES 15
+static int x_size_table[MAX_SCREEN_MODES] = { 320, 320, 320, 640, 640, 640, 720, 800, 800, 960, 1024, 1024, 1280, 1280, 1920 };
+static int y_size_table[MAX_SCREEN_MODES] = { 200, 240, 256, 400, 480, 512, 400, 480, 600, 540,  768,  600,  720,  800, 1080 };
 #else
 #define MAX_SCREEN_MODES 6
 static int x_size_table[MAX_SCREEN_MODES] = { 640, 640, 800, 1024, 1152, 1280 };
