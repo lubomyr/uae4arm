@@ -678,6 +678,9 @@ STATIC_INLINE void chipmem_wput_indirect (uaecptr addr, uae_u32 w)
 }
 
 extern bool mapped_malloc (addrbank*);
+#if defined(JIT) && defined(ANDROID)
+extern void natmem_set_backing (uae_u8 *base, uae_u32 size, bool present);
+#endif
 extern void mapped_free (addrbank*);
 
 extern uaecptr strcpyha_safe (uaecptr dst, const uae_char *src);

@@ -824,11 +824,19 @@ err:
 }
 
 
+#if defined(JIT) && defined(ANDROID)
+static void protect_natmem_pages (addrbank *bank, int start, int size);
+#endif
+
 static void init_mem_banks (void)
 {
 	// unsigned so i << 16 won't overflow to negative when i >= 32768
   for (unsigned int i = 0; i < MEMORY_BANKS; i++)
     mem_banks[i] = &dummy_bank;
+#if defined(JIT) && defined(ANDROID)
+	/* Everything is empty now; the banks mapped next open their pages again. */
+	protect_natmem_pages (&dummy_bank, 0, 0x100);
+#endif
 }
 
 static void map_banks_set(addrbank *bank, int start, int size, int realsize)
@@ -1381,6 +1389,70 @@ void map_banks_cond (addrbank *bank, int start, int size, int realsize)
 	map_banks (bank, start, size, realsize);
 }
 
+#if defined(JIT) && defined(ANDROID)
+#include <sys/mman.h>
+
+/* The JIT decides once, when it compiles an access, whether it goes straight
+   to host memory at natmem_offset + address or through the bank's handlers,
+   by what the access hit while it was being traced. A routine traced on RAM
+   and later handed a hardware address - a copper or colour register - relies
+   on the direct access faulting, so the SIGSEGV handler can do it properly
+   and have the block recompiled. The whole 24-bit area was mapped read-write,
+   so nothing ever faulted: the write landed in plain host memory and the chip
+   never saw it. Skidmarks 2 lost its sprite colours that way, depending on
+   which code the JIT had compiled first. Make every 64 KB page that holds
+   neither memory the JIT may reach directly nor the storage of an allocated
+   bank read-only, as amiberry does: writes then fault and go to the chips,
+   while the reads the JIT's own checksums make a little past a block's end
+   still work. */
+static bool natmem_closed[0x100];
+static bool natmem_backing[0x100];
+
+static void natmem_open_page (int bnr)
+{
+	if (natmem_closed[bnr]) {
+		mprotect(regs.natmem_offset + (bnr << 16), 0x10000, PROT_READ | PROT_WRITE);
+		natmem_closed[bnr] = false;
+	}
+}
+
+/* A bank's storage in the 24-bit area. The emulator fills some of it before
+   the bank is mapped - the boot ROM, the filesystem ROM, fast RAM waiting for
+   autoconfig - so it must stay reachable whatever is mapped there. */
+void natmem_set_backing (uae_u8 *base, uae_u32 size, bool present)
+{
+	if (!regs.natmem_offset || base < regs.natmem_offset || base >= regs.natmem_offset + 0x1000000)
+		return;
+	uae_u32 off = base - regs.natmem_offset;
+	for (uae_u32 bnr = off >> 16; bnr <= ((off + size - 1) >> 16) && bnr < 0x100; bnr++) {
+		natmem_backing[bnr] = present;
+		if (present)
+			natmem_open_page(bnr);
+	}
+}
+
+static void protect_natmem_pages (addrbank *bank, int start, int size)
+{
+	if (!regs.natmem_offset)
+		return;
+	for (int bnr = start; bnr < start + size && bnr < 0x100; bnr++) {
+		uaecptr addr = bnr << 16;
+		uae_u8 *host = regs.natmem_offset + addr;
+		/* Real memory sitting at its own address. A mirror of it elsewhere
+		   is not: the JIT would reach the host bytes of the mirror, not of
+		   the memory. */
+		bool direct = bank->baseaddr &&
+			bank->baseaddr + ((addr - bank->start) & bank->mask) == host;
+		if (direct || natmem_backing[bnr]) {
+			natmem_open_page(bnr);
+		} else if (!natmem_closed[bnr]) {
+			mprotect(host, 0x10000, PROT_READ);
+			natmem_closed[bnr] = true;
+		}
+	}
+}
+#endif
+
 static void map_banks2 (addrbank *bank, int start, int size, int realsize)
 {
   int bnr;
@@ -1411,6 +1483,9 @@ static void map_banks2 (addrbank *bank, int start, int size, int realsize)
     }
   }
 	fill_ce_banks ();
+#if defined(JIT) && defined(ANDROID)
+	protect_natmem_pages (bank, start, size);
+#endif
 }
 
 void map_banks (addrbank *bank, int start, int size, int realsize)

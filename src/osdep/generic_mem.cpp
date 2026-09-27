@@ -452,6 +452,10 @@ bool mapped_malloc (addrbank *ab)
 	}
 
 	if (ab->baseaddr) {
+#if defined(JIT) && defined(ANDROID)
+		/* The barrier below lies just past the end of the bank. */
+		natmem_set_backing(ab->baseaddr, ab->reserved_size + (md.hasbarrier ? 4 : 0), true);
+#endif
 		if (md.hasbarrier) {
 			// fill end of ram with ILLEGAL to catch direct PC falling out of RAM.
 			put_long_host(ab->baseaddr + ab->reserved_size, 0x4afc4afc);
@@ -476,6 +480,10 @@ void mapped_free (addrbank *ab)
       ab->baseaddr, ab->baseaddr + ab->allocated_size, ab->name, ab->label);
     free(ab->baseaddr);
   }
+#if defined(JIT) && defined(ANDROID)
+  if (ab->baseaddr && ab->allocated_size)
+    natmem_set_backing(ab->baseaddr, ab->allocated_size, false);
+#endif
   ab->baseaddr = NULL;
   ab->allocated_size = 0;
 }
