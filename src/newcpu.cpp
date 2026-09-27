@@ -901,14 +901,29 @@ static void update_68k_cycles (void)
 {
   cycles_shift = 0;
   cycles_shift_2 = 0;
+  /* The instruction timings are the 68000's, so a later CPU at the same clock
+     has to be charged fewer of them: a 68020 does about twice the work of a
+     68000 per clock, which is why WinUAE calls the A1200 "4x" against a 3.5 MHz
+     unit. Charging a 68020 at 14 MHz like a 68000 at 14 MHz left demos made for
+     the A1200 short of time - frames dropped and CPU-driven music stalled
+     where amiberry's A1200 setting kept up. 7 MHz stays the A500 for every
+     CPU. */
   if(currprefs.m68k_speed >= 0) {
-    if(currprefs.m68k_speed == M68K_SPEED_14MHZ_CYCLES)
-      cycles_shift = 1;
-    else if(currprefs.m68k_speed == M68K_SPEED_25MHZ_CYCLES) {
+    if(currprefs.m68k_speed == M68K_SPEED_14MHZ_CYCLES) {
+      if(currprefs.cpu_model >= 68040)
+        cycles_shift = 3;         /* 1/8 */
+      else if(currprefs.cpu_model >= 68020)
+        cycles_shift = 2;         /* 1/4: the A1200 */
+      else
+        cycles_shift = 1;         /* 1/2 */
+    } else if(currprefs.m68k_speed == M68K_SPEED_25MHZ_CYCLES) {
       if(currprefs.cpu_model >= 68040) {
-        cycles_shift = 4;
+        cycles_shift = 4;         /* 1/16 */
+      } else if(currprefs.cpu_model >= 68020) {
+        cycles_shift = 3;         /* 1/8 + 1/64, about 25/14 of the A1200 */
+        cycles_shift_2 = 6;
       } else {
-        cycles_shift = 2;
+        cycles_shift = 2;         /* 1/4 + 1/32 */
         cycles_shift_2 = 5;
       }
     }
