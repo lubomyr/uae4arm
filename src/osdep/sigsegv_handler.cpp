@@ -39,6 +39,8 @@
 #include <asm/sigcontext.h>
 #include <signal.h>
 #include <dlfcn.h>
+#include <pthread.h>
+#include <stdarg.h>
 #ifndef ANDROID
 #include <execinfo.h>
 #else
@@ -157,7 +159,77 @@ static int find_build_id(struct dl_phdr_info *info, size_t size, void *data)
    addresses are useless under ASLR, while offsets can be fed straight to
    llvm-symbolizer. It goes to logcat and to a file next to the configurations,
    so a reporter who cannot run adb still has something to send. */
-static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr)
+/* PC and LR alone say only where it died. A crash inside a driver (the EGL
+   driver on a 32 bit Snapdragon, when the JIT runs on the GL thread) shows no
+   frame of ours at all, and the reporter may have no adb to fetch a tombstone.
+   So also leave the registers and every word on the faulting thread's stack
+   that points into a loaded module: the return addresses among them lead
+   back through SDL into uae4arm. Crude, but it needs no unwinder. */
+static char crash_extra[12288];
+
+static void crash_extra_add(const char *fmt, ...)
+{
+  size_t len = strlen(crash_extra);
+  if(len >= sizeof(crash_extra) - 1)
+    return;
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(crash_extra + len, sizeof(crash_extra) - len, fmt, ap);
+  va_end(ap);
+}
+
+static void crash_collect_context(void *ctx)
+{
+  crash_extra[0] = 0;
+  if(ctx == NULL)
+    return;
+  ucontext_t *uc = (ucontext_t *)ctx;
+  uintptr_t sp;
+#if defined(CPU_AARCH64)
+  crash_extra_add("  registers:\n");
+  for(int i = 0; i < 31; i++)
+    crash_extra_add("    x%-2d %016lx%s", i, (unsigned long)uc->uc_mcontext.regs[i], (i % 4) == 3 ? "\n" : "");
+  crash_extra_add("\n    sp  %016lx  pc %016lx\n", (unsigned long)uc->uc_mcontext.sp, (unsigned long)uc->uc_mcontext.pc);
+  sp = (uintptr_t)uc->uc_mcontext.sp;
+#elif defined(CPU_arm)
+  const unsigned long *r = &uc->uc_mcontext.arm_r0;
+  crash_extra_add("  registers:\n");
+  for(int i = 0; i < 16; i++)
+    crash_extra_add("    r%-2d %08lx%s", i, r[i], (i % 4) == 3 ? "\n" : "");
+  crash_extra_add("    cpsr %08lx\n", (unsigned long)uc->uc_mcontext.arm_cpsr);
+  sp = (uintptr_t)uc->uc_mcontext.arm_sp;
+#else
+  return;
+#endif
+
+  /* Only within this thread's stack, so the scan itself cannot fault. */
+  pthread_attr_t attr;
+  void *stack_lo = NULL;
+  size_t stack_size = 0;
+  if(pthread_getattr_np(pthread_self(), &attr) != 0)
+    return;
+  pthread_attr_getstack(&attr, &stack_lo, &stack_size);
+  pthread_attr_destroy(&attr);
+  uintptr_t hi = (uintptr_t)stack_lo + stack_size;
+  if(sp < (uintptr_t)stack_lo || sp >= hi)
+    return;
+
+  crash_extra_add("  stack scan from sp:\n");
+  int shown = 0;
+  for(uintptr_t a = sp; a + sizeof(uintptr_t) <= hi && a < sp + 2048 * sizeof(uintptr_t) && shown < 64; a += sizeof(uintptr_t)) {
+    void *v = (void *)*(uintptr_t *)a;
+    Dl_info di;
+    if(!dladdr(v, &di) || !di.dli_fbase || !di.dli_fname)
+      continue;
+    const char *base = strrchr(di.dli_fname, '/');
+    base = base ? base + 1 : di.dli_fname;
+    crash_extra_add("    +%04lx  0x%lx in %s\n", (unsigned long)(a - sp),
+      (unsigned long)((char *)v - (char *)di.dli_fbase), base);
+    shown++;
+  }
+}
+
+static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr, void *ctx)
 {
   Dl_info info;
   char pcoff[MAX_DPATH] = "unknown";
@@ -184,10 +256,18 @@ static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr
   __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s", msg);
 #endif
 
+  crash_collect_context(ctx);
+#ifdef ANDROID
+  if(crash_extra[0])
+    __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s", crash_extra);
+#endif
+
   if(crash_log_path[0]) {
     fd = open(crash_log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if(fd >= 0) {
       write(fd, msg, strlen(msg));
+      if(crash_extra[0])
+        write(fd, crash_extra, strlen(crash_extra));
       close(fd);
     }
   }
@@ -223,7 +303,7 @@ void signal_abort(int signum, siginfo_t* info, void* ptr)
     pc = (void *)ucontext->uc_mcontext.arm_pc;
 #endif
   }
-  report_fatal_signal(signum, info != NULL ? info->si_addr : NULL, pc, NULL);
+  report_fatal_signal(signum, info != NULL ? info->si_addr : NULL, pc, NULL, ptr);
 
   signal(signum, SIG_DFL);
   raise(signum);
@@ -542,7 +622,7 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 	  return;
 
   report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.pc,
-    (void *)ucontext->uc_mcontext.regs[30]);
+    (void *)ucontext->uc_mcontext.regs[30], ucontext);
   SDL_Quit();
   exit(1);
 }
@@ -623,7 +703,7 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
   output_log(_T("--- end exception ---\n"));
 
   report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.pc,
-    (void *)ucontext->uc_mcontext.regs[30]);
+    (void *)ucontext->uc_mcontext.regs[30], ucontext);
   SDL_Quit();
   exit(1);
 }
@@ -961,7 +1041,7 @@ void signal_segv(int signum, siginfo_t* info, void*ptr)
 	  return;
 
   report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.arm_pc,
-    (void *)ucontext->uc_mcontext.arm_lr);
+    (void *)ucontext->uc_mcontext.arm_lr, ucontext);
   SDL_Quit();
   exit(1);
 }
@@ -1061,7 +1141,7 @@ void signal_buserror(int signum, siginfo_t* info, void*ptr)
   output_log(_T("--- end exception ---\n"));
 
   report_fatal_signal(signum, info->si_addr, (void *)ucontext->uc_mcontext.arm_pc,
-    (void *)ucontext->uc_mcontext.arm_lr);
+    (void *)ucontext->uc_mcontext.arm_lr, ucontext);
   SDL_Quit();
   exit(1);
 }
