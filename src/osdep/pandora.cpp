@@ -12,6 +12,10 @@
 #include "gfxboard.h"
 
 extern bool input_initialize_alldevices (void);
+#if defined(ANDROID) && !defined(CPU_AARCH64)
+/* Set by the SDL wrapper from its "Separate thread for video" option. */
+extern "C" int SDL_ANDROID_VideoMultithreaded;
+#endif
 
 static int delayed_mousebutton = 0;
 static int doStylusRightClick = 0;
@@ -161,11 +165,14 @@ void target_fixup_options (struct uae_prefs *p)
   p->gfx_resolution = p->gfx_monitor.gfx_size.width > 600 ? 1 : 0;
   
 #if defined(ANDROID) && !defined(CPU_AARCH64)
-  /* The JIT reaches Amiga memory as natmem_offset + address with no bank check,
-     so an address outside the mapped area writes wherever that lands. In a 32
-     bit process the space is full - a user's crash landed inside the vendor EGL
-     driver - while on 64 bit the same miss falls into empty space. Keep it off. */
-  p->cachesize = 0;
+  /* In a 32 bit process the JIT only works with the SDL option "Separate thread
+     for video". Without it the emulation runs on the GL thread, and there the
+     Adreno driver on a Xiaomi Pad 5 fell over a null pointer inside
+     glDrawArrays, called from SDL_Flip, with no code of ours in the fault -
+     the same build ran fine once drawing had a thread of its own. Keep the
+     JIT off unless the video thread is on. */
+  if (!SDL_ANDROID_VideoMultithreaded)
+    p->cachesize = 0;
 #endif
 
   if(p->cachesize > 0)

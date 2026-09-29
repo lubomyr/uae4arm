@@ -23,6 +23,10 @@
 #include "gui.h"
 #include "gui_handling.h"
 
+#if defined(ANDROID) && !defined(CPU_AARCH64)
+extern "C" int SDL_ANDROID_VideoMultithreaded;
+#endif
+
 
 static const char *CacheSize_list[] = { "-", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB" };
 static const int CacheSize_values[] = { 0, 1024, 2048, 4096, 8192, 16384 };
@@ -78,8 +82,8 @@ static void RefreshPanelCPU(void)
   chkCPUCycleExact->setEnabled(workprefs.cpu_model <= 68010);
   chkJIT->setSelected(workprefs.cachesize > 0);
 #if defined(ANDROID) && !defined(CPU_AARCH64)
-  // Unsafe on 32 bit - see the note in target_fixup_options()
-  chkJIT->setEnabled(false);
+  // On 32 bit only with a separate video thread - see target_fixup_options()
+  chkJIT->setEnabled(SDL_ANDROID_VideoMultithreaded != 0);
 #endif
 
   switch(workprefs.fpu_model)
@@ -449,6 +453,9 @@ bool HelpPanelCPU(std::vector<std::string> &helptext)
   helptext.push_back("\"Cycle exact\" emulates 68000 and chipset cycle accurate. This is very slow and only required in few situations.");
   helptext.push_back("JIT enables the Just-in-time compiler. This may break compatibility in some games. With \"Cache\", you can select");
   helptext.push_back("the size of the memory for compiled code.");
+#if defined(ANDROID) && !defined(CPU_AARCH64)
+  helptext.push_back("On this 32 bit build JIT needs \"Separate thread for video\" turned on in the SDL settings.");
+#endif
   helptext.push_back("The available FPU models depending on the selected CPU.");
   helptext.push_back("The option \"More compatible\" activates more accurate rounding and compare of two floats.");
   helptext.push_back("With \"CPU Speed\" you can choose the clock rate of the Amiga.");
