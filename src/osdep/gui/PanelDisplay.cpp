@@ -44,6 +44,7 @@ static gcn::UaeCheckBox* chkLineDbl;
 static gcn::UaeCheckBox* chkFrameskip;
 #ifdef ANDROIDSDL
 static gcn::UaeCheckBox* chkKeepAspectRatio;
+extern void gui_set_screen_ratio(int keep);
 #endif
 #if defined(RASPBERRY) && !defined(USE_SDL2)
 static gcn::Label*  lblFSRatio;
@@ -140,6 +141,7 @@ class AmigaScreenActionListener : public gcn::ActionListener
 #ifdef ANDROIDSDL
       else if (actionEvent.getSource() == chkKeepAspectRatio) {
         workprefs.keepAspectRatio = chkKeepAspectRatio->isSelected() ? 1 : 0;
+        gui_set_screen_ratio(workprefs.keepAspectRatio);
 
       }
 #endif

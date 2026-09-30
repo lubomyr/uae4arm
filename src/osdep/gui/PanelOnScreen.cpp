@@ -13,7 +13,11 @@
 #include "config.h"
 #include "options.h"
 #include "gui_handling.h"
+#include "onscreen_layout.h"
 
+extern int onscreen_keeps_aspect();
+extern void onscreen_screen_size(int *w, int *h);
+extern void onscreen_default_positions(struct uae_prefs *p);
 
 static gcn::UaeCheckBox* checkBox_onscreen_control;
 static gcn::UaeCheckBox* checkBox_onscreen_textinput;
@@ -74,6 +78,57 @@ static gcn::Window *window_pos_button5;
 static gcn::Window *window_pos_button6;
 static gcn::Label* label_setup_onscreen;
 static gcn::TextField *textInput;
+
+/* The editor's inner area stands for the whole screen, drawn so that on the
+   device it has the screen's shape, with each control as big as it will be
+   there - so what is placed is what appears. Positions are still stored in
+   the ONSCREEN_SETUP_WIDTH x ONSCREEN_SETUP_HEIGHT space pandora_gfx.cpp
+   scales from, so saved layouts stay valid on any device. */
+static int setup_w = ONSCREEN_SETUP_WIDTH;   /* the editor's inner area */
+static int setup_h = ONSCREEN_SETUP_HEIGHT;
+static float screen_aspect = (float)ONSCREEN_SETUP_WIDTH / ONSCREEN_SETUP_HEIGHT;
+
+/* Sizes as fractions of the screen height, the same as pandora_gfx.cpp. */
+#define PROXY_TEXT   (1.0f / 10.0f)
+#define PROXY_DPAD   (1.0f / 2.5f)
+#define PROXY_BUTTON (1.0f / 5.0f)
+
+/* The controls are square on the screen. The menu's pixels are not - it is
+   stretched to the screen, or to 4:3 - so work out each side as its share of
+   the screen instead of in menu pixels.
+   The size shown is the drawn one: Draw size makes the wrapper draw a control
+   smaller than the area it answers to, by 2 / (Draw size + 3) around the same
+   centre (shrinkButtonRect() in SDL_touchscreenkeyboard.c), Large drawing it
+   whole. */
+static void proxy_geometry(float frac, int *base_w, int *base_h, int *size_w, int *size_h)
+{
+    float scale = workprefs.onScreen_size > 0 ? workprefs.onScreen_size / 100.0f : 1.0f;
+    if (workprefs.onScreen_drawsize > 0)
+        scale = scale * 2.0f / (workprefs.onScreen_drawsize + 3);
+    *base_h = (int)(setup_h * frac);
+    *base_w = (int)(setup_w * frac / screen_aspect);
+    *size_h = (int)(*base_h * scale);
+    *size_w = (int)(*base_w * scale);
+}
+
+/* A stored position is the corner of the control at 100%; other sizes grow
+   around its centre, as in pandora_gfx.cpp. */
+static void place_proxy(gcn::Window *w, int px, int py, float frac)
+{
+    int base_w, base_h, size_w, size_h;
+    proxy_geometry(frac, &base_w, &base_h, &size_w, &size_h);
+    w->setSize(size_w, size_h);
+    w->setPosition((int)(px * setup_w / (float)ONSCREEN_SETUP_WIDTH) - (size_w - base_w) / 2,
+                   (int)(py * setup_h / (float)ONSCREEN_SETUP_HEIGHT) - (size_h - base_h) / 2);
+}
+
+static void read_proxy(gcn::Window *w, int *px, int *py, float frac)
+{
+    int base_w, base_h, size_w, size_h;
+    proxy_geometry(frac, &base_w, &base_h, &size_w, &size_h);
+    *px = (int)((w->getX() + (size_w - base_w) / 2) * ONSCREEN_SETUP_WIDTH / (float)setup_w + 0.5f);
+    *py = (int)((w->getY() + (size_h - base_h) / 2) * ONSCREEN_SETUP_HEIGHT / (float)setup_h + 0.5f);
+}
 
 static void RefreshPanelOnScreen(void)
 {
@@ -142,29 +197,21 @@ static void RefreshPanelOnScreen(void)
     
     textInput->disableVirtualKeyboard(workprefs.disableMenuVKeyb);
     
-    window_pos_textinput->setX(workprefs.pos_x_textinput);
-    window_pos_textinput->setY(workprefs.pos_y_textinput);
+    place_proxy(window_pos_textinput, workprefs.pos_x_textinput, workprefs.pos_y_textinput, PROXY_TEXT);
     window_pos_textinput->setVisible(workprefs.onScreen_textinput);
-    window_pos_dpad->setX(workprefs.pos_x_dpad);
-    window_pos_dpad->setY(workprefs.pos_y_dpad);
+    place_proxy(window_pos_dpad, workprefs.pos_x_dpad, workprefs.pos_y_dpad, PROXY_DPAD);
     window_pos_dpad->setVisible(workprefs.onScreen_dpad);
-    window_pos_button1->setX(workprefs.pos_x_button1);
-    window_pos_button1->setY(workprefs.pos_y_button1);
+    place_proxy(window_pos_button1, workprefs.pos_x_button1, workprefs.pos_y_button1, PROXY_BUTTON);
     window_pos_button1->setVisible(workprefs.onScreen_button1);
-    window_pos_button2->setX(workprefs.pos_x_button2);
-    window_pos_button2->setY(workprefs.pos_y_button2);
+    place_proxy(window_pos_button2, workprefs.pos_x_button2, workprefs.pos_y_button2, PROXY_BUTTON);
     window_pos_button2->setVisible(workprefs.onScreen_button2);
-    window_pos_button3->setX(workprefs.pos_x_button3);
-    window_pos_button3->setY(workprefs.pos_y_button3);
+    place_proxy(window_pos_button3, workprefs.pos_x_button3, workprefs.pos_y_button3, PROXY_BUTTON);
     window_pos_button3->setVisible(workprefs.onScreen_button3);
-    window_pos_button4->setX(workprefs.pos_x_button4);
-    window_pos_button4->setY(workprefs.pos_y_button4);
+    place_proxy(window_pos_button4, workprefs.pos_x_button4, workprefs.pos_y_button4, PROXY_BUTTON);
     window_pos_button4->setVisible(workprefs.onScreen_button4);
-    window_pos_button5->setX(workprefs.pos_x_button5);
-    window_pos_button5->setY(workprefs.pos_y_button5);
+    place_proxy(window_pos_button5, workprefs.pos_x_button5, workprefs.pos_y_button5, PROXY_BUTTON);
     window_pos_button5->setVisible(workprefs.onScreen_button5);
-    window_pos_button6->setX(workprefs.pos_x_button6);
-    window_pos_button6->setY(workprefs.pos_y_button6);
+    place_proxy(window_pos_button6, workprefs.pos_x_button6, workprefs.pos_y_button6, PROXY_BUTTON);
     window_pos_button6->setVisible(workprefs.onScreen_button6);
     button_onscreen_pos->setVisible(workprefs.custom_position);
 }
@@ -280,41 +327,18 @@ class WindowPosButtonActionListener : public gcn::ActionListener
 public:
     void action(const gcn::ActionEvent& actionEvent) {
         if (actionEvent.getSource() == button_onscreen_ok) {
-            workprefs.pos_x_textinput = window_pos_textinput->getX();
-            workprefs.pos_y_textinput = window_pos_textinput->getY();
-            workprefs.pos_x_dpad = window_pos_dpad->getX();
-            workprefs.pos_y_dpad = window_pos_dpad->getY();
-            workprefs.pos_x_button1 = window_pos_button1->getX();
-            workprefs.pos_y_button1 = window_pos_button1->getY();
-            workprefs.pos_x_button2 = window_pos_button2->getX();
-            workprefs.pos_y_button2 = window_pos_button2->getY();
-            workprefs.pos_x_button3 = window_pos_button3->getX();
-            workprefs.pos_y_button3 = window_pos_button3->getY();
-            workprefs.pos_x_button4 = window_pos_button4->getX();
-            workprefs.pos_y_button4 = window_pos_button4->getY();
-            workprefs.pos_x_button5 = window_pos_button5->getX();
-            workprefs.pos_y_button5 = window_pos_button5->getY();
-            workprefs.pos_x_button6 = window_pos_button6->getX();
-            workprefs.pos_y_button6 = window_pos_button6->getY();
+            read_proxy(window_pos_textinput, &workprefs.pos_x_textinput, &workprefs.pos_y_textinput, PROXY_TEXT);
+            read_proxy(window_pos_dpad, &workprefs.pos_x_dpad, &workprefs.pos_y_dpad, PROXY_DPAD);
+            read_proxy(window_pos_button1, &workprefs.pos_x_button1, &workprefs.pos_y_button1, PROXY_BUTTON);
+            read_proxy(window_pos_button2, &workprefs.pos_x_button2, &workprefs.pos_y_button2, PROXY_BUTTON);
+            read_proxy(window_pos_button3, &workprefs.pos_x_button3, &workprefs.pos_y_button3, PROXY_BUTTON);
+            read_proxy(window_pos_button4, &workprefs.pos_x_button4, &workprefs.pos_y_button4, PROXY_BUTTON);
+            read_proxy(window_pos_button5, &workprefs.pos_x_button5, &workprefs.pos_y_button5, PROXY_BUTTON);
+            read_proxy(window_pos_button6, &workprefs.pos_x_button6, &workprefs.pos_y_button6, PROXY_BUTTON);
             window_setup_position->setVisible(false);
         }
         if (actionEvent.getSource() == button_onscreen_reset) {
-            workprefs.pos_x_textinput = 0;
-            workprefs.pos_y_textinput = 0;
-            workprefs.pos_x_dpad = 4;
-            workprefs.pos_y_dpad = 215;
-            workprefs.pos_x_button1 = 430;
-            workprefs.pos_y_button1 = 286;
-            workprefs.pos_x_button2 = 378;
-            workprefs.pos_y_button2 = 286;
-            workprefs.pos_x_button3 = 430;
-            workprefs.pos_y_button3 = 214;
-            workprefs.pos_x_button4 = 378;
-            workprefs.pos_y_button4 = 214;
-            workprefs.pos_x_button5 = 430;
-            workprefs.pos_y_button5 = 142;
-            workprefs.pos_x_button6 = 378;
-            workprefs.pos_y_button6 = 142;
+            onscreen_default_positions(&workprefs);
             window_setup_position->setVisible(false);
         }
     }
@@ -485,7 +509,6 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     window_pos_button6->setBaseColor(gui_baseCol);
 
     window_setup_position = new gcn::Window("Setup position");
-    window_setup_position->setPosition(60,20);
     window_setup_position->add(label_setup_onscreen);
     window_setup_position->add(button_onscreen_ok);
     window_setup_position->add(button_onscreen_reset);
@@ -498,7 +521,46 @@ void InitPanelOnScreen(const struct _ConfigCategory& category)
     window_setup_position->add(window_pos_button5);
     window_setup_position->add(window_pos_button6);
     window_setup_position->setMovable(false);
-    window_setup_position->setSize(ONSCREEN_SETUP_WIDTH, ONSCREEN_SETUP_HEIGHT);   
+
+    /* Fit a rectangle into the panel that shows on the device in the shape of
+       its screen - the one the controls are placed on, from pandora_gfx.cpp.
+       The GUI_WIDTH x GUI_HEIGHT menu is stretched over the whole screen, so
+       its pixels are not square. With the 4:3 screen ratio the wrapper keeps
+       the menu's own shape on a screen wider than it, and squeezes it to 4:3
+       on a narrower one. */
+    {
+        int screen_w, screen_h;
+        onscreen_screen_size(&screen_w, &screen_h);
+        if (screen_w > 0 && screen_h > 0)
+            screen_aspect = screen_w / (float)screen_h;
+        float gui_aspect = (float)GUI_WIDTH / GUI_HEIGHT;
+        float shown_aspect = screen_aspect;
+        if (onscreen_keeps_aspect())
+            shown_aspect = gui_aspect < screen_aspect ? gui_aspect : 4.0f / 3.0f;
+        float aspect = screen_aspect * gui_aspect / shown_aspect;
+
+        int pad = window_setup_position->getPadding();
+        int title = window_setup_position->getTitleBarHeight();
+        int maxw = category.panel->getWidth() - 2 * DISTANCE_BORDER - 2 * pad;
+        int maxh = category.panel->getHeight() - 2 * DISTANCE_BORDER - title - pad;
+        if (maxw > maxh * aspect) {
+            setup_h = maxh;
+            setup_w = (int)(maxh * aspect);
+        } else {
+            setup_w = maxw;
+            setup_h = (int)(maxw / aspect);
+        }
+        int winw = setup_w + 2 * pad;
+        int winh = setup_h + title + pad;
+        window_setup_position->setSize(winw, winh);
+        window_setup_position->setPosition((category.panel->getWidth() - winw) / 2,
+                                           (category.panel->getHeight() - winh) / 2);
+
+        /* The hint and the buttons where they were, relative to the height. */
+        button_onscreen_reset->setPosition((setup_w - button_onscreen_reset->getWidth()) / 2, setup_h * 105 / 370);
+        label_setup_onscreen->setPosition((setup_w - label_setup_onscreen->getWidth()) / 2, setup_h * 140 / 370);
+        button_onscreen_ok->setPosition((setup_w - button_onscreen_ok->getWidth()) / 2, setup_h * 175 / 370);
+    }
     window_setup_position->setVisible(false);
     
     category.panel->add(checkBox_onscreen_control);

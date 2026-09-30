@@ -16,6 +16,9 @@ extern bool input_initialize_alldevices (void);
 /* Set by the SDL wrapper from its "Separate thread for video" option. */
 extern "C" int SDL_ANDROID_VideoMultithreaded;
 #endif
+#ifdef ANDROIDSDL
+extern void onscreen_default_positions(struct uae_prefs *p);
+#endif
 
 static int delayed_mousebutton = 0;
 static int doStylusRightClick = 0;
@@ -109,22 +112,7 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->onScreen_transparency = 2;
 	p->keepAspectRatio = 1;
 	p->onScreen_dpad_mode = 0;
-	p->pos_x_textinput = 0;
-	p->pos_y_textinput = 0;
-	p->pos_x_dpad = 4;
-	p->pos_y_dpad = 215;
-	p->pos_x_button1 = 430;
-	p->pos_y_button1 = 286;
-	p->pos_x_button2 = 378;
-	p->pos_y_button2 = 286;
-	p->pos_x_button3 = 430;
-	p->pos_y_button3 = 214;
-	p->pos_x_button4 = 378;
-	p->pos_y_button4 = 214;
-	p->pos_x_button5 = 430;
-	p->pos_y_button5 = 142;
-	p->pos_x_button6 = 378;
-	p->pos_y_button6 = 142;
+	onscreen_default_positions(p);
 	p->extfilter = 1;
 	p->quickSwitch = 0;
 	p->floatingJoystick = 0;

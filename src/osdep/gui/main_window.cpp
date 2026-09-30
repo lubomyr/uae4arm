@@ -25,6 +25,7 @@
 #include <SDL_screenkeyboard.h>
 #include <SDL_android.h>
 #include <android/log.h>
+extern void onscreen_menu_screen_ratio(int keep);
 #endif
 
 #ifdef USE_SDL2
@@ -127,6 +128,17 @@ namespace widgets
   gcn::Button* cmdHelp;
 	gcn::Button* cmdShutdown;
 }
+
+#if defined(ANDROIDSDL) && !defined(USE_SDL2)
+// The wrapper takes the screen ratio in SDL_SetVideoMode(), so the menu's mode
+// is set again for a change of the 4:3 option to show at once.
+void gui_set_screen_ratio(int keep)
+{
+  onscreen_menu_screen_ratio(keep);
+  gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
+  gui_graphics->setTarget(gui_screen);
+}
+#endif
 
 
 static int count_HDs(struct uae_prefs *p)
@@ -303,6 +315,9 @@ namespace sdl
 			SDL_ShowCursor(SDL_ENABLE);
 		}
 #else
+#ifdef ANDROIDSDL
+		onscreen_menu_screen_ratio(workprefs.keepAspectRatio);
+#endif
 		gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
     SDL_EnableUNICODE(1);
     SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);

@@ -237,13 +237,14 @@ static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize
 //
 // Called before SDL_SetVideoMode(), which is where the wrapper picks up the
 // screen ratio - pushing it afterwards would only take effect one mode later.
+static int last_keepaspect = -1;
+
 static void update_onscreen_appearance()
 {
   static int last_theme = -1;
   static int last_controlsize = -1;
   static int last_drawsize = -1;
   static int last_transparency = -1;
-  static int last_keepaspect = -1;
 
   if (changed_prefs.onScreen_theme != last_theme) {
     last_theme = changed_prefs.onScreen_theme;
@@ -267,6 +268,86 @@ static void update_onscreen_appearance()
   }
 }
 
+// The menu is shown with the screen ratio of the preferences being edited.
+// Called before each of the menu's SDL_SetVideoMode() calls, so that the ratio
+// in effect is known - on the first start the wrapper would otherwise use the
+// one it saved last time - and Setup position can tell how the menu is
+// stretched. The next open_screen() puts the ratio of the emulation back.
+void onscreen_menu_screen_ratio(int keep)
+{
+  if (keep != last_keepaspect) {
+    last_keepaspect = keep;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO, keep);
+  }
+}
+
+int onscreen_keeps_aspect()
+{
+  return last_keepaspect > 0;
+}
+
+// The wrapper places the on-screen controls on the whole physical screen,
+// whatever the screen ratio. SDL_ListModes() cannot tell its size: the largest
+// mode is worked out once, when SDL starts, and with the 4:3 ratio on at that
+// point it is only the 4:3 part of the screen.
+extern "C" int SDL_ANDROID_sRealWindowWidth;
+extern "C" int SDL_ANDROID_sRealWindowHeight;
+
+void onscreen_screen_size(int *w, int *h)
+{
+  *w = SDL_ANDROID_sRealWindowWidth;
+  *h = SDL_ANDROID_sRealWindowHeight;
+  if (*w <= 0 || *h <= 0) {
+    SDL_Rect **modes = SDL_WasInit(SDL_INIT_VIDEO) ? SDL_ListModes(NULL, 0) : NULL;
+    if (modes && modes != (SDL_Rect **)-1 && modes[0]) {
+      *w = modes[0]->w;
+      *h = modes[0]->h;
+    } else {
+      *w = *h = 0;
+    }
+  }
+}
+
+// The default layout: the pad in the bottom left corner, the six buttons in
+// two columns of three in the bottom right. A stored position is a share of
+// the screen, but the buttons are square, so how far from the right edge the
+// columns start depends on the screen's shape. The fixed numbers used before
+// fitted a 16:9 screen, and put the outer column past the edge of a squarer
+// one.
+void onscreen_default_positions(struct uae_prefs *p)
+{
+  int w, h;
+  onscreen_screen_size(&w, &h);
+  float aspect = (w > 0 && h > 0) ? w / (float)h : 16.0f / 9.0f;
+  // A button at 100% is a fifth of the screen high (see update_onscreen()).
+  // The block sits right in the bottom right corner.
+  int button_w = (int)(ONSCREEN_SETUP_WIDTH / 5.0f / aspect + 0.5f);
+  int button_h = (int)(ONSCREEN_SETUP_HEIGHT / 5.0f + 0.5f);
+  int col1 = ONSCREEN_SETUP_WIDTH - button_w;
+  int col2 = col1 - button_w;
+  int row1 = ONSCREEN_SETUP_HEIGHT - button_h;
+  int row2 = row1 - button_h;
+  int row3 = row2 - button_h;
+
+  p->pos_x_textinput = 0;
+  p->pos_y_textinput = 0;
+  // Right in the corner: the pad is 1/2.5 of the screen high.
+  p->pos_x_dpad = 0;
+  p->pos_y_dpad = ONSCREEN_SETUP_HEIGHT - (int)(ONSCREEN_SETUP_HEIGHT / 2.5f + 0.5f);
+  p->pos_x_button1 = col1;
+  p->pos_y_button1 = row1;
+  p->pos_x_button2 = col2;
+  p->pos_y_button2 = row1;
+  p->pos_x_button3 = col1;
+  p->pos_y_button3 = row2;
+  p->pos_x_button4 = col2;
+  p->pos_y_button4 = row2;
+  p->pos_x_button5 = col1;
+  p->pos_y_button5 = row3;
+  p->pos_x_button6 = col2;
+  p->pos_y_button6 = row3;
+}
+
 void update_onscreen()
 {
 	update_onscreen_appearance();
@@ -274,8 +355,10 @@ void update_onscreen()
 	// coordinate space is ONSCREEN_SETUP_WIDTH x ONSCREEN_SETUP_HEIGHT. Scale
 	// from that space to the real screen, or the buttons land nowhere near
 	// where they were placed.
-	float widthScaler = SDL_ListModes(NULL, 0)[0]->w / (float)ONSCREEN_SETUP_WIDTH;
-	float heightScaler = SDL_ListModes(NULL, 0)[0]->h / (float)ONSCREEN_SETUP_HEIGHT;
+	int screenW, screenH;
+	onscreen_screen_size(&screenW, &screenH);
+	float widthScaler = screenW / (float)ONSCREEN_SETUP_WIDTH;
+	float heightScaler = screenH / (float)ONSCREEN_SETUP_HEIGHT;
 	float sizeScaler = changed_prefs.onScreen_size / 100.0f;
 	if (sizeScaler <= 0.0f)
 	  sizeScaler = 1.0f;
@@ -288,7 +371,6 @@ void update_onscreen()
 	{
 	  SDL_ANDROID_SetScreenKeyboardShown(1);
 	  if (changed_prefs.custom_position==1) {
-	    const float screenH = SDL_ListModes(NULL, 0)[0]->h;
 	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_TEXT, changed_prefs.pos_x_textinput, changed_prefs.pos_y_textinput, screenH / 10.0f,  widthScaler, heightScaler, sizeScaler);
 	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_DPAD, changed_prefs.pos_x_dpad,      changed_prefs.pos_y_dpad,      screenH / 2.5f,   widthScaler, heightScaler, sizeScaler);
 	    set_onscreen_button(SDL_ANDROID_SCREENKEYBOARD_BUTTON_0,    changed_prefs.pos_x_button1,   changed_prefs.pos_y_button1,   screenH / 5.0f,   widthScaler, heightScaler, sizeScaler);
