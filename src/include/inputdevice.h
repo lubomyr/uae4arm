@@ -244,6 +244,7 @@ extern uae_u16 JOYGET (int num);
 extern void inputdevice_vsync (void);
 extern void inputdevice_hsync (void);
 extern void inputdevice_reset (void);
+extern void inputdevice_hold_mouse_buttons (int frames);
 
 extern void write_inputdevice_config (struct uae_prefs *p, struct zfile *f);
 extern void read_inputdevice_config (struct uae_prefs *p, const TCHAR *option, TCHAR *value);

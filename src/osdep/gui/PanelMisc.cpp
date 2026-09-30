@@ -11,6 +11,8 @@
 #endif
 #include "SelectorEntry.hpp"
 #include "UaeCheckBox.hpp"
+#include "UaeDropDown.hpp"
+#include "GenericListModel.h"
 
 #include "sysconfig.h"
 #include "sysdeps.h"
@@ -45,6 +47,12 @@ static gcn::Slider* sldPandoraSpeed;
 #endif
 static gcn::UaeCheckBox* chkBSDSocket;
 static gcn::UaeCheckBox* chkMasterWP;
+#ifdef ANDROIDSDL
+static gcn::Label* lblResetDelay;
+static gcn::UaeDropDown* cboResetDelay;
+static const TCHAR* resetDelayLabels[] = { _T("Off"), _T("1 s"), _T("2 s"), _T("3 s") };
+static gcn::GenericListModel resetDelayList(resetDelayLabels, 4);
+#endif
 
 
 static void RefreshPanelMisc(void)
@@ -60,6 +68,9 @@ static void RefreshPanelMisc(void)
   chkShowGUI->setSelected(workprefs.start_gui);
   chkBSDSocket->setSelected(workprefs.socket_emu);
   chkMasterWP->setSelected(workprefs.floppy_read_only);
+#ifdef ANDROIDSDL
+  cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
+#endif
 
 #ifdef PANDORA
   TCHAR tmp[20];
@@ -123,6 +134,10 @@ class MiscActionListener : public gcn::ActionListener
       else if (actionEvent.getSource() == chkMasterWP) {
         workprefs.floppy_read_only = chkMasterWP->isSelected();
       }
+#ifdef ANDROIDSDL
+      else if (actionEvent.getSource() == cboResetDelay)
+        workprefs.reset_delay = cboResetDelay->getSelected();
+#endif
 
 #ifdef PANDORA
       else if (actionEvent.getSource() == sldPandoraSpeed)
@@ -198,6 +213,15 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 	chkMasterWP = new gcn::UaeCheckBox("Master floppy write protection");
   chkMasterWP->setId("MasterWP");
   chkMasterWP->addActionListener(miscActionListener);
+
+#ifdef ANDROIDSDL
+  lblResetDelay = new gcn::Label("Reset delay:");
+  cboResetDelay = new gcn::UaeDropDown(&resetDelayList);
+  cboResetDelay->setSize(60, DROPDOWN_HEIGHT);
+  cboResetDelay->setBaseColor(gui_baseCol);
+  cboResetDelay->setId("ResetDelay");
+  cboResetDelay->addActionListener(miscActionListener);
+#endif
   
   int posY = DISTANCE_BORDER;
   category.panel->add(chkShowGUI, DISTANCE_BORDER, posY);
@@ -206,6 +230,11 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   posY += chkBSDSocket->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkMasterWP, DISTANCE_BORDER, posY);
   posY += chkMasterWP->getHeight() + DISTANCE_NEXT_Y;
+#ifdef ANDROIDSDL
+  category.panel->add(lblResetDelay, DISTANCE_BORDER, posY + 2);
+  category.panel->add(cboResetDelay, DISTANCE_BORDER + lblResetDelay->getWidth() + 8, posY);
+  posY += cboResetDelay->getHeight() + DISTANCE_NEXT_Y;
+#endif
 
 	posY = DISTANCE_BORDER;
   category.panel->add(chkStatusLine, DISTANCE_BORDER + 260, posY);
@@ -254,6 +283,10 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
 #endif
   delete chkBSDSocket;
   delete chkMasterWP;
+#ifdef ANDROIDSDL
+  delete lblResetDelay;
+  delete cboResetDelay;
+#endif
 
   delete miscActionListener;
 }
@@ -278,5 +311,11 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("\"bsdsocket.library\" enables network functions (i.e. for web browsers in OS3.9).");
   helptext.push_back(" ");
   helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
+#ifdef ANDROIDSDL
+  helptext.push_back(" ");
+  helptext.push_back("\"Reset delay\" holds the Amiga for a moment after each reset, so that mouse buttons or keys can be held");
+  helptext.push_back("down before the Kickstart looks at them - both mouse buttons open the Early Startup Menu of Kickstart 2.0");
+  helptext.push_back("and later. The \"Boot menu\" button at the bottom does that for you: it resets the Amiga with both buttons held.");
+#endif
   return true;
 }

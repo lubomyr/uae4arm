@@ -26,6 +26,7 @@
 #include <SDL_android.h>
 #include <android/log.h>
 extern void onscreen_menu_screen_ratio(int keep);
+extern bool boot_menu_request;
 #endif
 
 #ifdef USE_SDL2
@@ -123,6 +124,9 @@ namespace widgets
   // Main buttons
   gcn::Button* cmdQuit;
   gcn::Button* cmdReset;
+#ifdef ANDROIDSDL
+  gcn::Button* cmdBootMenu;
+#endif
   gcn::Button* cmdRestart;
   gcn::Button* cmdStart;
   gcn::Button* cmdHelp;
@@ -624,6 +628,17 @@ namespace widgets
     			uae_reset(1, 1);
     			gui_running = false;
 
+#ifdef ANDROIDSDL
+  			}	else if(actionEvent.getSource() == cmdBootMenu) {
+          //-------------------------------------------------
+          // Reset Amiga with both mouse buttons held, which
+          // opens the Kickstart's Early Startup Menu
+          //-------------------------------------------------
+          boot_menu_request = true;
+    			uae_reset(1, 1);
+    			gui_running = false;
+#endif
+
         } else if(actionEvent.getSource() == cmdRestart) {
           //-------------------------------------------------
           // Restart emulator
@@ -776,6 +791,14 @@ namespace widgets
   	cmdReset->setId("Reset");
     cmdReset->addActionListener(mainButtonActionListener);
 
+#ifdef ANDROIDSDL
+   	cmdBootMenu = new gcn::Button("Boot menu");
+  	cmdBootMenu->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    cmdBootMenu->setBaseColor(gui_baseCol);
+  	cmdBootMenu->setId("BootMenu");
+    cmdBootMenu->addActionListener(mainButtonActionListener);
+#endif
+
    	cmdRestart = new gcn::Button("Restart");
   	cmdRestart->setSize(BUTTON_WIDTH, BUTTON_HEIGHT);
     cmdRestart->setBaseColor(gui_baseCol);
@@ -839,6 +862,10 @@ namespace widgets
 #ifndef ANDROID
     gui_top->add(cmdShutdown, DISTANCE_BORDER + 2 * BUTTON_WIDTH + 2 * DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
 #endif
+#ifdef ANDROIDSDL
+    // Where Shutdown is on the Pandora
+    gui_top->add(cmdBootMenu, DISTANCE_BORDER + 2 * BUTTON_WIDTH + 2 * DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
+#endif
     gui_top->add(cmdHelp, DISTANCE_BORDER + 3 * BUTTON_WIDTH + 3 * DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
     if(emulating)
       gui_top->add(cmdRestart, GUI_WIDTH - DISTANCE_BORDER - 2 * BUTTON_WIDTH - DISTANCE_NEXT_X, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
@@ -880,6 +907,9 @@ namespace widgets
     delete cmdQuit;
 	  delete cmdShutdown;
     delete cmdReset;
+#ifdef ANDROIDSDL
+    delete cmdBootMenu;
+#endif
     delete cmdRestart;
     delete cmdStart;
     delete cmdHelp;

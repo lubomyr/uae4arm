@@ -462,6 +462,9 @@ int extfilter;
 int quickSwitch;
 int floatingJoystick;
 int disableMenuVKeyb;
+/* Seconds the Amiga is held after a reset before it runs, with the input
+   still read, so that buttons can be held down before the Kickstart looks */
+int reset_delay;
 #endif
 
 	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];

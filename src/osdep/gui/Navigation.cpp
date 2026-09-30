@@ -49,8 +49,9 @@ static NavigationMap navMap[] =
   { "Savestates",       "State0",         "State0",         "Miscellaneous",    "OnScreen" },
   { "OnScreen",         "OnScrButton3",   "OnScrCtrl",      "Savestates",     "Reset" },
   { "Reset",            "Start",          "Quit",           "OnScreen",       "Paths" },
-  { "Quit",             "Reset",          "Help",           "OnScreen",       "Paths" },
-  { "Help",             "Quit",           "Start",          "OnScreen",       "Paths" },
+  { "Quit",             "Reset",          "BootMenu",       "OnScreen",       "Paths" },
+  { "BootMenu",         "Quit",           "Help",           "OnScreen",       "Paths" },
+  { "Help",             "BootMenu",       "Start",          "OnScreen",       "Paths" },
   { "Start",            "Help",           "Reset",          "OnScreen",       "Paths" },
 #else
   { "Savestates",       "State0",         "State0",         "Miscellaneous",    "Reset" },
@@ -288,7 +289,13 @@ static NavigationMap navMap[] =
   { "Autofire",       "cboAmigaAction", "Input",          "cboWidget",      "cboDevice" },
   
 // PanelMisc
-#ifdef PANDORA
+#if defined(ANDROIDSDL)
+  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "ResetDelay",     "BSDSocket" },
+  { "BSDSocket",      "Miscellaneous",  "StatusLineRTG",  "ShowGUI",        "MasterWP" },
+  { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "ResetDelay" },
+  { "ResetDelay",     "Miscellaneous",  "ShowFPS",        "MasterWP",       "ShowGUI" },
+  { "StatusLine",     "ShowGUI",        "Miscellaneous",  "ShowDisk",       "StatusLineRTG" },
+#elif defined(PANDORA)
   { "ShowGUI",        "Miscellaneous",  "StatusLine",     "PandSpeed",      "BSDSocket" },
   { "BSDSocket",      "Miscellaneous",  "StatusLineRTG",  "ShowGUI",        "MasterWP" },
   { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "PandSpeed" },
@@ -304,7 +311,7 @@ static NavigationMap navMap[] =
   { "ShowFPS",        "MasterWP",       "Miscellaneous",  "ShowIdle",       "ShowHD" },
   { "ShowHD",         "MasterWP",       "Miscellaneous",  "ShowFPS",        "ShowCD" },
   { "ShowCD",         "MasterWP",       "Miscellaneous",  "ShowHD",         "ShowDisk" },
-#ifdef PANDORA
+#if defined(PANDORA) && !defined(ANDROIDSDL)
   { "ShowDisk",       "MasterWP",       "Miscellaneous",  "ShowCD",         "PandSpeed" },
   { "PandSpeed",      "",               "",               "MasterWP",       "ShowGUI" },
 #else /* RASPBERRY */

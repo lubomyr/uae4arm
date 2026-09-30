@@ -46,6 +46,21 @@ extern FILE *debugfile;
 
 int pause_emulation = 0;
 
+#ifdef ANDROIDSDL
+/* Pause priority of the reset delay (see target_reset()): below the GUI's 7,
+   so that going into the GUI during the delay just ends it. */
+#define RESET_DELAY_PAUSE 3
+static uae_s64 reset_delay_end;   /* in ms, 0 when there is no delay */
+bool boot_menu_request;
+
+static uae_s64 host_millis (void)
+{
+  struct timespec ts;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return ((uae_s64) ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
+}
+#endif
+
 int quickstart_start = 1;
 int quickstart_model = 0;
 int quickstart_conf = 0;
@@ -131,6 +146,17 @@ bool handle_events (void)
 		inputdevicefunc_mouse.read ();
 		inputdevicefunc_joystick.read ();
 		inputdevice_handle_inputcode ();
+#ifdef ANDROIDSDL
+		if (reset_delay_end) {
+			if (pause_emulation != RESET_DELAY_PAUSE || host_millis () >= reset_delay_end) {
+				reset_delay_end = 0;
+				if (pause_emulation == RESET_DELAY_PAUSE)
+					pause_emulation = 0;
+			} else {
+				sleep_millis (5);
+			}
+		}
+#endif
   }
 	if (was_paused && (!pause_emulation || quit_program)) {
 		pause_emulation = was_paused;
@@ -728,6 +754,29 @@ void target_addtorecent (const TCHAR *name, int t)
 
 void target_reset (void)
 {
+#ifdef ANDROIDSDL
+  if (savestate_state)
+    return;
+  /* The Early Startup Menu of Kickstart 2.0 and later opens when both mouse
+     buttons are down while it boots. Hard to get right with fingers, and the
+     menu's own "Boot menu" button does it for you. The buttons stay down in
+     the menu for as long as they are held, so hold them no longer than the
+     Kickstart takes to get to them - which is almost at once on a fast CPU,
+     but not at 7 MHz. The frames are counted in emulated time, which stands
+     still during the reset delay below: this comes after it. */
+  if (boot_menu_request) {
+    int seconds = currprefs.m68k_speed == 0 ? 3 : 2;
+    boot_menu_request = false;
+    inputdevice_hold_mouse_buttons (seconds * (currprefs.ntscmode ? 60 : 50));
+  }
+  /* Hold the Amiga just after the reset for a moment, still reading the
+     input, so that the buttons or keys can be held down in time. */
+  int delay = std::min (std::max (currprefs.reset_delay, 0), 3);
+  if (delay > 0 && pause_emulation <= RESET_DELAY_PAUSE) {
+    pause_emulation = RESET_DELAY_PAUSE;   /* handle_events() pauses at vsync */
+    reset_delay_end = host_millis () + delay * 1000;
+  }
+#endif
 }
 
 

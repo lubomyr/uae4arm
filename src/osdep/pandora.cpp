@@ -117,6 +117,7 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->quickSwitch = 0;
 	p->floatingJoystick = 0;
 	p->disableMenuVKeyb = 0;
+	p->reset_delay = 0;
 #endif
 	
 	p->cr[0].index = 0;
@@ -214,6 +215,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.pos_y_button6", "%d", p->pos_y_button6);
   cfgfile_write (f, "pandora.floating_joystick", "%d", p->floatingJoystick);
   cfgfile_write (f, "pandora.disable_menu_vkeyb", "%d", p->disableMenuVKeyb);
+  cfgfile_write (f, "pandora.reset_delay", "%d", p->reset_delay);
 #endif
 }
 
@@ -258,6 +260,7 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "pos_y_button6", &p->pos_y_button6, 1)
     || cfgfile_intval (option, value, "floating_joystick", &p->floatingJoystick, 1)
     || cfgfile_intval (option, value, "disable_menu_vkeyb", &p->disableMenuVKeyb, 1)
+    || cfgfile_intval (option, value, "reset_delay", &p->reset_delay, 1)
 #endif
     );
   if(!result) {

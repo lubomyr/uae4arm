@@ -1683,8 +1683,19 @@ static void mousehack_helper (uae_u32 buttonmask)
 	inputdevice_mh_abs (x, y, buttonmask);
 }
 
+/* Frames for which both buttons of the mouse in port 0 read as held,
+   whatever the host input says (see inputdevice_hold_mouse_buttons()). */
+static int hold_mouse_buttons;
+
+void inputdevice_hold_mouse_buttons (int frames)
+{
+	hold_mouse_buttons = frames;
+}
+
 static int getbuttonstate (int joy, int button)
 {
+	if (hold_mouse_buttons > 0 && joy == 0 && (button == JOYBUTTON_1 || button == JOYBUTTON_2))
+		return 1;
 	return (joybutton[joy] & (1 << button)) ? 1 : 0;
 }
 
@@ -2739,6 +2750,8 @@ void inputdevice_vsync (void)
 	}
 
 	input_frame++;
+	if (hold_mouse_buttons > 0)
+		hold_mouse_buttons--;
 	mouseupdate (0, true);
 	inputread = -1;
 
