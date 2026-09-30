@@ -2802,6 +2802,10 @@ void m68k_go (int may_quit)
 		    restore_state (savestate_fname);
 #endif
 			prefs_changed_cpu();
+			/* A restored state sets the CPU speed in currprefs and changed_prefs
+			   alike, so nothing looks changed and the cycle scaling of the speed
+			   before the restore stayed in force. */
+			update_68k_cycles();
       build_cpufunctbl ();
 	    set_x_funcs ();
 			set_cycles (start_cycles);
@@ -3139,8 +3143,15 @@ uae_u8 *restore_cpu_extra (uae_u8 *src)
 	currprefs.m68k_speed = changed_prefs.m68k_speed = 0;
 	if (flags & 4)
 		currprefs.m68k_speed = changed_prefs.m68k_speed = -1;
-	if (flags & 16)
+	if (flags & 16) {
 		currprefs.m68k_speed = changed_prefs.m68k_speed = (flags >> 24) * CYCLE_UNIT;
+		/* The speed is kept in units of CYCLE_UNIT, and 25 MHz (128) is less
+		   than one, so it was saved as 0 and came back as 7 MHz. A fixed speed
+		   stored as 0 can only have been that one; this also rescues states
+		   saved before. */
+		if (currprefs.m68k_speed == 0)
+			currprefs.m68k_speed = changed_prefs.m68k_speed = M68K_SPEED_25MHZ_CYCLES;
+	}
 
 	return src;
 }
