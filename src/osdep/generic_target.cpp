@@ -762,12 +762,13 @@ void target_reset (void)
      menu's own "Boot menu" button does it for you. The buttons stay down in
      the menu for as long as they are held, so hold them no longer than the
      Kickstart takes to get to them - which is almost at once on a fast CPU,
-     but not at 7 MHz. The frames are counted in emulated time, which stands
-     still during the reset delay below: this comes after it. */
+     but not at 7 MHz, where the older 2.x Kickstarts need more than three
+     seconds. The frames are counted in emulated time, which stands still
+     during the reset delay below: this comes after it. */
   if (boot_menu_request) {
-    int seconds = currprefs.m68k_speed == 0 ? 3 : 2;
+    int tenths = currprefs.m68k_speed == 0 ? 35 : 20;
     boot_menu_request = false;
-    inputdevice_hold_mouse_buttons (seconds * (currprefs.ntscmode ? 60 : 50));
+    inputdevice_hold_mouse_buttons (tenths * (currprefs.ntscmode ? 60 : 50) / 10);
   }
   /* Hold the Amiga just after the reset for a moment, still reading the
      input, so that the buttons or keys can be held down in time. */
