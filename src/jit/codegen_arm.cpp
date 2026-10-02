@@ -314,16 +314,16 @@ STATIC_INLINE void compemu_raw_call(uintptr t)
 {
   LOAD_U32(REG_WORK1, t);
 
-	PUSH(RLR_INDEX);
+	PUSH_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));  /* keep sp 8-byte aligned (AAPCS) */
 	BLX_r(REG_WORK1);
-	POP(RLR_INDEX);
+	POP_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));
 }
 
 STATIC_INLINE void compemu_raw_call_r(RR4 r)
 {
-	PUSH(RLR_INDEX);
+	PUSH_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));  /* keep sp 8-byte aligned (AAPCS) */
 	BLX_r(r);
-	POP(RLR_INDEX);
+	POP_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));
 }
 
 STATIC_INLINE void compemu_raw_jcc_l_oponly(int cc)
@@ -926,9 +926,9 @@ LOWFUNC(NONE,NONE,3,raw_ffunc_rr,(double (*func)(double), FW d, FR s))
 
   LOAD_U32(REG_WORK1, (uintptr)func);
 
-	PUSH(RLR_INDEX);
+	PUSH_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));  /* keep sp 8-byte aligned (AAPCS) */
 	BLX_r(REG_WORK1);
-	POP(RLR_INDEX);
+	POP_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));
 
 	VMOV64_dd(d, 0);
 }
@@ -948,9 +948,9 @@ LOWFUNC(NONE,NONE,3,raw_fpowx_rr,(uae_u32 x, FW d, FR s))
 
   LOAD_U32(REG_WORK1, (uintptr)func);
 
-	PUSH(RLR_INDEX);
+	PUSH_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));  /* keep sp 8-byte aligned (AAPCS) */
 	BLX_r(REG_WORK1);
-	POP(RLR_INDEX);
+	POP_REGS((1<<R12_INDEX)|(1<<RLR_INDEX));
 
 	VMOV64_dd(d, 0);
 }
