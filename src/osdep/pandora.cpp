@@ -12,10 +12,6 @@
 #include "gfxboard.h"
 
 extern bool input_initialize_alldevices (void);
-#if defined(ANDROID) && !defined(CPU_AARCH64)
-/* Set by the SDL wrapper from its "Separate thread for video" option. */
-extern "C" int SDL_ANDROID_VideoMultithreaded;
-#endif
 #ifdef ANDROIDSDL
 extern void onscreen_default_positions(struct uae_prefs *p);
 #endif
@@ -152,17 +148,6 @@ void target_fixup_options (struct uae_prefs *p)
   
 	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5PC | RGBFF_R8G8B8A8;
   p->gfx_resolution = p->gfx_monitor.gfx_size.width > 600 ? 1 : 0;
-  
-#if defined(ANDROID) && !defined(CPU_AARCH64)
-  /* In a 32 bit process the JIT only works with the SDL option "Separate thread
-     for video". Without it the emulation runs on the GL thread, and there the
-     Adreno driver on a Xiaomi Pad 5 fell over a null pointer inside
-     glDrawArrays, called from SDL_Flip, with no code of ours in the fault -
-     the same build ran fine once drawing had a thread of its own. Keep the
-     JIT off unless the video thread is on. */
-  if (!SDL_ANDROID_VideoMultithreaded)
-    p->cachesize = 0;
-#endif
 
   if(p->cachesize > 0)
     p->fpu_no_unimplemented = 0;
