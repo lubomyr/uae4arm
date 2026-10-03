@@ -4197,7 +4197,7 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->sound_stereo_separation = 7;
   p->sound_mixed_stereo_delay = 0;
   p->sound_freq = DEFAULT_SOUND_FREQ;
-  p->sound_interpol = 0;
+  p->sound_interpol = 1; /* anti, as in WinUAE and amiberry: without it high notes fold back with a metallic ring */
   p->sound_filter = FILTER_SOUND_OFF;
   p->sound_filter_type = 0;
 	p->sound_volume_cd = 20;
