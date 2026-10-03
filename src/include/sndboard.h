@@ -14,6 +14,11 @@ extern bool sndboard_playing;
 extern void sndboard_mix_stereo(uae_u32 *left, uae_u32 *right);
 extern void sndboard_mix_mono(uae_u32 *data);
 
+/* The emulated time of the sample Paula is putting out. update_audio() works
+   through a stretch of time at once, so get_cycles() is the end of it, not
+   the instant of the sample. */
+extern uae_u32 audio_sample_cycles;
+
 #endif
 
 #endif /* UAE_SNDBOARD_H */
