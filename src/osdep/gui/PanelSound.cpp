@@ -32,7 +32,6 @@ static gcn::Window *grpSound;
 static gcn::UaeRadioButton* optSoundDisabled;
 static gcn::UaeRadioButton* optSoundDisabledEmu;
 static gcn::UaeRadioButton* optSoundEmulated;
-static gcn::UaeRadioButton* optSoundEmulatedBest;
 static gcn::Window *grpMode;
 static gcn::UaeRadioButton* optMono;
 static gcn::UaeRadioButton* optStereo;
@@ -92,10 +91,8 @@ static void RefreshPanelSound(void)
       optSoundDisabledEmu->setSelected(true);
       break;
     case 2:
-      optSoundEmulated->setSelected(true);
-      break;
     case 3:
-      optSoundEmulatedBest->setSelected(true);
+      optSoundEmulated->setSelected(true);
       break;
   }
 
@@ -180,10 +177,9 @@ class SoundActionListener : public gcn::ActionListener
 	    else if (actionEvent.getSource() == optSoundDisabledEmu)
     		workprefs.produce_sound = 1;
 
+	    /* "normal" (2) and "exact" (3) have long been the same; WinUAE
+	       shows a single Enabled too, and saves it as exact */
 	    else if (actionEvent.getSource() == optSoundEmulated)
-    		workprefs.produce_sound = 2;
-
-	    else if (actionEvent.getSource() == optSoundEmulatedBest)
     		workprefs.produce_sound = 3;
 
 	    else if (actionEvent.getSource() == optMono)
@@ -299,20 +295,15 @@ void InitPanelSound(const struct _ConfigCategory& category)
 	optSoundEmulated->setId("sndEmulate");
 	optSoundEmulated->addActionListener(soundActionListener);
 
-	optSoundEmulatedBest = new gcn::UaeRadioButton("Enabled, most accurate", "radiosoundgroup");
-	optSoundEmulatedBest->setId("sndEmuBest");
-	optSoundEmulatedBest->addActionListener(soundActionListener);
-
 	grpSound = new gcn::Window("Sound Emulation");
 	grpSound->add(optSoundDisabled, 5, 10);
 	grpSound->add(optSoundDisabledEmu, 5, 40);
 	grpSound->add(optSoundEmulated, 5, 70);
-	grpSound->add(optSoundEmulatedBest, 5, 100);
 	grpSound->setMovable(false);
 #ifdef ANDROID
-	grpSound->setSize(210, 150);
+	grpSound->setSize(210, 125);
 #else
-	grpSound->setSize(200, 150);
+	grpSound->setSize(200, 125);
 #endif
   grpSound->setBaseColor(gui_baseCol);
 
@@ -429,7 +420,7 @@ void InitPanelSound(const struct _ConfigCategory& category)
 #ifdef TOCCATA
   /* in the space under Mode, level with the bottom of Sound Emulation */
   category.panel->add(chkToccata, grpMode->getX() + 5,
-    posY + grpSound->getHeight() - chkToccata->getHeight() - 10);
+    posY + grpSound->getHeight() - chkToccata->getHeight() - 4);
 #endif
   posY += grpSound->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(lblFrequency, DISTANCE_BORDER, posY);
@@ -468,7 +459,6 @@ void ExitPanelSound(const struct _ConfigCategory& category)
   delete optSoundDisabled;
   delete optSoundDisabledEmu;
   delete optSoundEmulated;
-  delete optSoundEmulatedBest;
   delete grpSound;
   delete optMono;
   delete optStereo;
@@ -501,7 +491,8 @@ void ExitPanelSound(const struct _ConfigCategory& category)
 bool HelpPanelSound(std::vector<std::string> &helptext)
 {
   helptext.clear();
-  helptext.push_back("You can turn on sound emulation with different levels of accuracy and choose between mono and stereo.");
+  helptext.push_back("You can turn sound emulation on or off - \"Disabled, but emulated\" keeps the timing for programs that wait on it, with no");
+  helptext.push_back("sound - and choose between mono and stereo.");
   helptext.push_back(" ");
   helptext.push_back("The different types of interpolation have different impact on the performance. Play with the settings to find the");
   helptext.push_back("type you like most. You may need headphones to really hear the differences between the interpolations.");

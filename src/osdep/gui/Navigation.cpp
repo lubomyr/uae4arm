@@ -242,11 +242,10 @@ static NavigationMap navMap[] =
 //PanelSound
   { "sndDisable",     "Sound",          "Mono",           "PaulaVol", "sndDisEmu" },
   { "sndDisEmu",      "Sound",          "Stereo",         "sndDisable",     "sndEmulate" },
-  { "sndEmulate",     "Sound",          "Stereo",         "sndDisEmu",      "sndEmuBest" },
-  { "sndEmuBest",     "Sound",          "Stereo",         "sndEmulate",     "cboFrequency" },
+  { "sndEmulate",     "Sound",          "Stereo",         "sndDisEmu",      "cboFrequency" },
   { "Mono",           "sndDisable",     "Sound",          "sldStereoDelay", "Stereo" },
   { "Stereo",         "sndDisEmu",      "Sound",          "Mono",           "cboFrequency" },
-  { "cboFrequency",   "Sound",          "Sound",          "sndEmuBest",     "cboInterpol" },
+  { "cboFrequency",   "Sound",          "Sound",          "sndEmulate",     "cboInterpol" },
   { "cboInterpol",    "Sound",          "Sound",          "cboFrequency",   "cboFilter" },
   { "cboFilter",      "Sound",          "Sound",          "cboInterpol",    "sldSeparation" },
   { "sldSeparation",  "",               "",               "cboFilter",      "sldStereoDelay" },
