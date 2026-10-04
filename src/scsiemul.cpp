@@ -1292,6 +1292,18 @@ void scsidev_start_threads (void)
 	uae_sem_init (&change_sem, 0, 1);
 }
 
+/* the uaescsi.device units that are CD drives, for mounting them as CD0: etc. */
+uae_u32 scsi_get_cd_drive_mask (void)
+{
+	uae_u32 mask = 0;
+	for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
+		struct devstruct *dev = &devst[i];
+		if (dev->iscd)
+			mask |= 1 << i;
+	}
+	return mask;
+}
+
 void scsidev_reset (void)
 {
 	if (currprefs.scsi != 1)

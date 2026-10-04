@@ -83,6 +83,7 @@ void target_default_options (struct uae_prefs *p, int type)
   p->pandora_cpu_speed = defaultCpuSpeed;
   
   p->pandora_tapDelay = 10;
+  p->automount_cddrives = true;
 
 	/* The same formats amiberry offers, so a mode saved in one works in the
 	   other. 16 bit is the little-endian R5G6B5PC that real boards and WinUAE
@@ -145,6 +146,12 @@ void target_fixup_options (struct uae_prefs *p)
   if(p->cs_cd32cd && p->cartfile[0]) {
     p->cs_cd32fmv = 1;
   }
+
+  // The CD drive is mounted as CD0: through uaescsi.device, so that needs to
+  // be on (as WinUAE does for map_cd_drives). Not on a CD32, whose
+  // own drive the CD is.
+  if(p->automount_cddrives && p->cdslots[0].inuse && !p->cs_cd32cd && !p->scsi)
+    p->scsi = 1;
   
 	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5PC | RGBFF_R8G8B8A8;
   p->gfx_resolution = p->gfx_monitor.gfx_size.width > 600 ? 1 : 0;
@@ -202,6 +209,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.disable_menu_vkeyb", "%d", p->disableMenuVKeyb);
   cfgfile_write (f, "pandora.reset_delay", "%d", p->reset_delay);
 #endif
+  cfgfile_write_bool (f, "pandora.map_cd_drives", p->automount_cddrives);
 }
 
 
@@ -209,6 +217,7 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
 {
   int result = (cfgfile_intval (option, value, "cpu_speed", &p->pandora_cpu_speed, 1)
     || cfgfile_intval (option, value, "tap_delay", &p->pandora_tapDelay, 1)
+    || cfgfile_yesno (option, value, "map_cd_drives", &p->automount_cddrives)
 #ifdef ANDROIDSDL
     || cfgfile_intval (option, value, "onscreen", &p->onScreen, 1)
     || cfgfile_intval (option, value, "onscreen_textinput", &p->onScreen_textinput, 1)

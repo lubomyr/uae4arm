@@ -63,6 +63,7 @@ static gcn::Button* cmdCreateHardfile;
 static gcn::UaeCheckBox* chkHDReadOnly;
 static gcn::UaeCheckBox* chkScsi;
 static gcn::UaeCheckBox* chkCD;
+static gcn::UaeCheckBox* chkCDAutomount;
 static gcn::UaeDropDown* cboCDFile;
 static gcn::Button* cmdCDEject;
 static gcn::Button* cmdCDSelect;
@@ -173,9 +174,18 @@ static void RefreshPanelHD(void)
   
   chkHDReadOnly->setSelected(workprefs.harddrive_read_only);
   
+  // A CD mounted as CD0: goes through uaescsi.device, which
+  // target_fixup_options() turns on when the emulation starts. Show it here
+  // already, and do not offer to turn it off.
+  bool scsi_for_cd = workprefs.automount_cddrives && workprefs.cdslots[0].inuse && !workprefs.cs_cd32cd;
+  if (scsi_for_cd)
+    workprefs.scsi = 1;
   chkScsi->setSelected(workprefs.scsi);
+  chkScsi->setEnabled(!scsi_for_cd);
   
   chkCD->setSelected(workprefs.cdslots[0].inuse);
+  chkCDAutomount->setSelected(workprefs.automount_cddrives);
+  chkCDAutomount->setEnabled(workprefs.cdslots[0].inuse);
   cmdCDEject->setEnabled(workprefs.cdslots[0].inuse);
   cmdCDSelect->setEnabled(workprefs.cdslots[0].inuse);
   cboCDFile->setEnabled(workprefs.cdslots[0].inuse);
@@ -311,6 +321,9 @@ class AddHDActionListener : public gcn::ActionListener
 
       } else if(actionEvent.getSource() == chkScsi) {
         workprefs.scsi = chkScsi->isSelected();
+
+      } else if(actionEvent.getSource() == chkCDAutomount) {
+        workprefs.automount_cddrives = chkCDAutomount->isSelected();
       }
 
       RefreshPanelHD();
@@ -430,6 +443,12 @@ void InitPanelHD(const struct _ConfigCategory& category)
   chkCD = new gcn::UaeCheckBox("CD drive");
   chkCD->addActionListener(addHDActionListener);
 
+  // UAE's own CD filesystem: the CD shows up as CD0: with no CD filesystem
+  // or mountlist on the Amiga side
+  chkCDAutomount = new gcn::UaeCheckBox("Mount as CD0:");
+  chkCDAutomount->setId("chkCDAutomount");
+  chkCDAutomount->addActionListener(addHDActionListener);
+
   cmdCDEject = new gcn::Button("Eject");
   cmdCDEject->setSize(SMALL_BUTTON_WIDTH * 2, SMALL_BUTTON_HEIGHT);
   cmdCDEject->setBaseColor(gui_baseCol);
@@ -497,6 +516,7 @@ void InitPanelHD(const struct _ConfigCategory& category)
 
   posY += chkHDReadOnly->getHeight() + DISTANCE_NEXT_Y + 4;
   category.panel->add(chkCD, DISTANCE_BORDER, posY + 2);
+  category.panel->add(chkCDAutomount, DISTANCE_BORDER + chkCD->getWidth() + 3 * DISTANCE_NEXT_X, posY + 2);
   category.panel->add(cmdCDEject, category.panel->getWidth() - cmdCDEject->getWidth() - DISTANCE_NEXT_X - cmdCDSelect->getWidth() - DISTANCE_BORDER, posY);
   category.panel->add(cmdCDSelect, category.panel->getWidth() - cmdCDSelect->getWidth() - DISTANCE_BORDER, posY);
   posY += cmdCDSelect->getHeight() + DISTANCE_NEXT_Y;
@@ -536,6 +556,7 @@ void ExitPanelHD(const struct _ConfigCategory& category)
   delete chkScsi;
   
   delete chkCD;
+  delete chkCDAutomount;
   delete cmdCDEject;
   delete cmdCDSelect;
   delete cboCDFile;
@@ -564,6 +585,10 @@ bool HelpPanelHD(std::vector<std::string> &helptext)
   helptext.push_back(" ");
   helptext.push_back("Activate \"CD drive\" to emulate CD for CD32. Use \"Eject\" to remove current CD and click on \"...\" to open a dialog");
   helptext.push_back("to select the iso/cue file for CD emulation.");
+  helptext.push_back(" ");
+  helptext.push_back("On other Amigas, \"Mount as CD0:\" makes the CD show up as CD0: with UAE's own CD filesystem, so AmigaOS needs");
+  helptext.push_back("no CD filesystem or mountlist for it. It needs a reset to take effect. Turn it off if you mount the CD yourself");
+  helptext.push_back("through uaescsi.device, unit 0.");
   helptext.push_back(" ");
   helptext.push_back("In current version, WAV, MP3 and FLAC is supported for audio tracks.");
   helptext.push_back("The audio volume of the CD can be adjusted with \"CD Volume\".");

@@ -18,6 +18,7 @@ void scsidev_install (void);
 void scsidev_reset (void);
 void scsidev_start_threads (void);
 int scsi_do_disk_change (int unitnum, int insert, int *pollmode);
+uae_u32 scsi_get_cd_drive_mask (void);
 uae_u32 scsi_get_cd_drive_media_mask (void);
 
 #endif /* UAE_SCSIDEV_H */

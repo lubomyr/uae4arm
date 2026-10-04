@@ -182,6 +182,10 @@ static int gui_create_rtarea_flag(struct uae_prefs *p)
   if (p->chipmem.size > 2 * 1024 * 1024)
     flag |= 32;
 
+  // uaescsi.device, also brought in by a CD drive mounted as CD0:
+  if (p->scsi || (p->automount_cddrives && p->cdslots[0].inuse && !p->cs_cd32cd))
+    flag |= 64;
+
   return flag;
 }
 

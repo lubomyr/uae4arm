@@ -303,6 +303,10 @@ struct uae_prefs {
   int leds_on_screen;
 	int leds_on_screen_mask[2];
 	int scsi;
+	/* mount the CD drives as CD0: etc. with UAE's own CD filesystem, so that
+	   AmigaOS needs no CD filesystem or mountlist of its own (WinUAE's
+	   win32_automount_cddrives) */
+	bool automount_cddrives;
 	bool cpu_cycle_exact;
 	bool blitter_cycle_exact;
   bool cpu_memory_cycle_exact;
