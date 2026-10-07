@@ -497,7 +497,8 @@ bool HelpPanelGamePort(std::vector<std::string> &helptext)
 #ifdef ANDROIDSDL
   helptext.push_back(" ");
   helptext.push_back("\"Mouse with d-pad\" moves the mouse pointer with the d-pad of a gamepad, a trackball, the cursor keys or the");
-  helptext.push_back("on-screen d-pad, with the chosen speed and acceleration. While it is on, the d-pad does not work as a joystick.");
+  helptext.push_back("on-screen d-pad, with the chosen speed and acceleration. While it is on, the d-pad does not work as a joystick,");
+  helptext.push_back("and the right analog stick of a gamepad moves the mouse too; otherwise that stick steers like the d-pad.");
   helptext.push_back("\"A/B as mouse buttons\" makes the first two joystick buttons - A and B on a gamepad, 1 and 2 on the screen -");
   helptext.push_back("click the left and right mouse button instead.");
   helptext.push_back("It is off in this menu, so the d-pad can still move between the items here.");

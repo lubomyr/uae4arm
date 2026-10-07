@@ -311,8 +311,24 @@ index 14d8a4dd1..f668ad277 100644
  /* Control the System mouse pointer visibility */
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible);
  
+diff --git a/project/jni/sdl-1.2/include/SDL_screenkeyboard.h b/project/jni/sdl-1.2/include/SDL_screenkeyboard.h
+index f1a012a4f..4c7287e1d 100644
+--- a/project/jni/sdl-1.2/include/SDL_screenkeyboard.h
++++ b/project/jni/sdl-1.2/include/SDL_screenkeyboard.h
+@@ -195,6 +195,11 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetIndividualGamepadKeymap(int GamepadI
+ 	int LThumbUp, int LThumbDown, int LThumbLeft, int LThumbRight,
+ 	int RThumbUp, int RThumbDown, int RThumbLeft, int RThumbRight);
+ 
++/* Set the keys the directions of an analog stick send - Stick 0 is the left
++   one, 1 the right one. Unlike above, zero is a key too: SDLK_UNKNOWN, so
++   the stick sends nothing. Same condition as above about SDL_JoystickOpen(). */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetGamepadStickKeys(int GamepadId, int Stick, int Up, int Down, int Left, int Right);
++
+ /* Deprecated API, will change keymap for all gamepads */
+ extern DECLSPEC void SDLCALL SDL_ANDROID_SetGamepadKeymap(int A, int B, int X, int Y, int C, int Z, int L1, int R1, int L2, int R2, int LThumb, int RThumb);
+ 
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
-index bed900ebe..612cccb7b 100644
+index bed900ebe..0b838a79a 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
 @@ -1227,21 +1227,45 @@ void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
@@ -366,6 +382,33 @@ index bed900ebe..612cccb7b 100644
  typedef struct
  {
  		int leftClickMethod;
+@@ -1911,6 +1935,26 @@ void SDL_ANDROID_SetIndividualGamepadKeymap(int GamepadId,
+ 	}
+ }
+ 
++void SDL_ANDROID_SetGamepadStickKeys(int GamepadId, int Stick, int Up, int Down, int Left, int Right)
++{
++	if( GamepadId < 0 || GamepadId >= SDL_ANDROID_MAX_GAMEPADS )
++		return;
++	if( Stick == 0 )
++	{
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_LTHUMB_UP] = Up;
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_LTHUMB_DOWN] = Down;
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_LTHUMB_LEFT] = Left;
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_LTHUMB_RIGHT] = Right;
++	}
++	else
++	{
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_RTHUMB_UP] = Up;
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_RTHUMB_DOWN] = Down;
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_RTHUMB_LEFT] = Left;
++		SDL_android_gamepad_keymap[GamepadId][KEYCODE_RTHUMB_RIGHT] = Right;
++	}
++}
++
+ void SDL_ANDROID_SetGamepadKeymap(int A, int B, int X, int Y, int C, int Z, int L1, int R1, int L2, int R2, int LThumb, int RThumb)
+ {
+ 	int i;
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 index 30df36343..6066a44e4 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c

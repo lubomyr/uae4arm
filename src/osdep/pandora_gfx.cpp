@@ -289,6 +289,22 @@ static void update_onscreen_appearance()
     last_mouse_dpad_accel = accel;
     push_mouse_with_dpad(on, speed, accel);
   }
+
+  // The wrapper leaves the right stick of a gamepad sending nothing. Make it a
+  // second d-pad, steering the joystick - except while the d-pad moves the
+  // mouse: the wrapper then moves the mouse with the right stick, and the
+  // arrows would move it twice.
+  static int last_right_stick = -1;
+  int right_stick = !changed_prefs.mouseWithDpad;
+  if (right_stick != last_right_stick) {
+    last_right_stick = right_stick;
+    for (int pad = 0; pad < 4; pad++) {
+      if (right_stick)
+        SDL_ANDROID_SetGamepadStickKeys(pad, 1, SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT);
+      else
+        SDL_ANDROID_SetGamepadStickKeys(pad, 1, SDLK_UNKNOWN, SDLK_UNKNOWN, SDLK_UNKNOWN, SDLK_UNKNOWN);
+    }
+  }
 }
 
 // In the menu the d-pad moves between the items, so it must not move the
