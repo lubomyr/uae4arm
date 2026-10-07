@@ -238,6 +238,15 @@ static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize
 // Called before SDL_SetVideoMode(), which is where the wrapper picks up the
 // screen ratio - pushing it afterwards would only take effect one mode later.
 static int last_keepaspect = -1;
+static int last_mouse_dpad = -1;
+
+// Not part of the on-screen controls, but held by the wrapper the same way:
+// the d-pad and the other arrow keys moving the mouse (Game ports panel).
+static void push_mouse_with_dpad(int on, int speed, int accel)
+{
+  SDL_ANDROID_SetMouseEmulationMode(-1, -1, -1, -1, -1, -1, -1, -1, -1,
+    on, speed, accel, -1, -1, -1, -1, -1, -1, -1);
+}
 
 static void update_onscreen_appearance()
 {
@@ -265,6 +274,30 @@ static void update_onscreen_appearance()
   if (changed_prefs.keepAspectRatio != last_keepaspect) {
     last_keepaspect = changed_prefs.keepAspectRatio;
     SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO, last_keepaspect);
+  }
+
+  static int last_mouse_dpad_speed = -1;
+  static int last_mouse_dpad_accel = -1;
+  int on = changed_prefs.mouseWithDpad ? 1 : 0;
+  int speed = changed_prefs.mouseWithDpadSpeed;
+  int accel = changed_prefs.mouseWithDpadAccel;
+  speed = speed < 0 ? 0 : (speed > 2 ? 2 : speed);
+  accel = accel < 0 ? 0 : (accel > 3 ? 3 : accel);
+  if (on != last_mouse_dpad || speed != last_mouse_dpad_speed || accel != last_mouse_dpad_accel) {
+    last_mouse_dpad = on;
+    last_mouse_dpad_speed = speed;
+    last_mouse_dpad_accel = accel;
+    push_mouse_with_dpad(on, speed, accel);
+  }
+}
+
+// In the menu the d-pad moves between the items, so it must not move the
+// mouse there. Called when the menu opens; open_screen() turns it back on.
+void onscreen_menu_mouse_with_dpad_off()
+{
+  if (last_mouse_dpad != 0) {
+    last_mouse_dpad = 0;
+    push_mouse_with_dpad(0, -1, -1);
   }
 }
 

@@ -266,7 +266,7 @@ index f0a437bb6..bd4a7592b 100644
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..81f7fcb67 100644
+index 14d8a4dd1..f668ad277 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
 @@ -139,6 +139,14 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
@@ -284,7 +284,18 @@ index 14d8a4dd1..81f7fcb67 100644
  	/* TODO: more options, see Globals.java */
  };
  
-@@ -159,6 +167,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -146,7 +154,9 @@ enum {
+ extern DECLSPEC void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value);
+ 
+ /* Change mouse emulation mode, pass -1 to any option to keep the current value, this does not change SDL config file.
+-   Currently only relativeMovement is processed, other options are ignored  */
++   Currently only relativeMovement and moveMouseWithJoystick (with its speed 0-2 and acceleration 0-3, as in the
++   settings menu) are processed, other options are ignored.
++   moveMouseWithJoystick turns the arrow keys - d-pad, trackball, on-screen d-pad - into mouse movement. */
+ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+ 	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
+ 	int leftClickMode, int leftClickKey, int leftClickTimeout,
+@@ -159,6 +169,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -301,10 +312,50 @@ index 14d8a4dd1..81f7fcb67 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible);
  
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
-index bed900ebe..92fef6d20 100644
+index bed900ebe..612cccb7b 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
-@@ -1242,6 +1242,10 @@ int SDLCALL SDL_ANDROID_GetMouseEmulationMode() {
+@@ -1227,21 +1227,45 @@ void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+ 	int _fingerHover, int _fingerHoverJitterFilter, int _generateSubframeTouchEvents
+ )
+ {
+-	relativeMovement = _relativeMovement;
+-	if (relativeMovement)
++	if (_relativeMovement != -1)
+ 	{
+-		leftClickMethod = LEFT_CLICK_WITH_TAP_OR_TIMEOUT;
++		relativeMovement = _relativeMovement;
++		if (relativeMovement)
++		{
++			leftClickMethod = LEFT_CLICK_WITH_TAP_OR_TIMEOUT;
++		}
++		else
++		{
++			leftClickMethod = LEFT_CLICK_NORMAL;
++		}
+ 	}
+-	else
++	if (_moveMouseWithJoystick != -1)
+ 	{
+-		leftClickMethod = LEFT_CLICK_NORMAL;
++		SDL_ANDROID_moveMouseWithArrowKeys = _moveMouseWithJoystick;
++		if (!SDL_ANDROID_moveMouseWithArrowKeys)
++		{
++			// Stop a movement in progress, or the pointer keeps drifting
++			SDL_ANDROID_moveMouseWithKbActive = 0;
++			SDL_ANDROID_moveMouseWithKbSpeedX = SDL_ANDROID_moveMouseWithKbSpeedY = 0;
++			SDL_ANDROID_moveMouseWithKbAccelX = SDL_ANDROID_moveMouseWithKbAccelY = 0;
++			SDL_ANDROID_moveMouseWithKbAccelUpdateNeeded = 0;
++		}
+ 	}
++	// The same scale as the settings menu: speed 0-2, acceleration 0-3
++	if (_moveMouseWithJoystickSpeed != -1)
++		SDL_ANDROID_moveMouseWithKbSpeed = _moveMouseWithJoystickSpeed + 1;
++	if (_moveMouseWithJoystickAcceleration != -1)
++		SDL_ANDROID_moveMouseWithKbAccel = _moveMouseWithJoystickAcceleration;
+ }
+ 
+ int SDLCALL SDL_ANDROID_GetMouseEmulationMode() {
      return relativeMovement;
  }
  

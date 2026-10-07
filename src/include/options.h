@@ -469,6 +469,12 @@ int disableMenuVKeyb;
 /* Seconds the Amiga is held after a reset before it runs, with the input
    still read, so that buttons can be held down before the Kickstart looks */
 int reset_delay;
+/* The d-pad and the other arrow keys move the mouse instead - the SDL
+   wrapper's "move mouse with joystick or trackball". Speed 0-2 and
+   acceleration 0-3, as in the wrapper's menu. */
+int mouseWithDpad;
+int mouseWithDpadSpeed;
+int mouseWithDpadAccel;
 #endif
 
 	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];

@@ -26,6 +26,7 @@
 #include <SDL_android.h>
 #include <android/log.h>
 extern void onscreen_menu_screen_ratio(int keep);
+extern void onscreen_menu_mouse_with_dpad_off();
 extern bool boot_menu_request;
 #endif
 
@@ -325,6 +326,7 @@ namespace sdl
 #else
 #ifdef ANDROIDSDL
 		onscreen_menu_screen_ratio(workprefs.keepAspectRatio);
+		onscreen_menu_mouse_with_dpad_off();
 #endif
 		gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
     SDL_EnableUNICODE(1);

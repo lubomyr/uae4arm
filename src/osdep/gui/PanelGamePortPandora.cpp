@@ -44,6 +44,18 @@ static gcn::Slider* sldAutofireRate;
 static gcn::Label *lblTapDelay;
 static gcn::UaeDropDown* cboTapDelay;
 static gcn::UaeCheckBox* chkMouseHack;
+#ifdef ANDROIDSDL
+// The d-pad and the other arrow keys moving the mouse, done by the SDL wrapper
+static gcn::UaeCheckBox* chkMouseDpad;
+static gcn::Label *lblMouseDpadSpeed;
+static gcn::UaeDropDown* cboMouseDpadSpeed;
+static gcn::Label *lblMouseDpadAccel;
+static gcn::UaeDropDown* cboMouseDpadAccel;
+static const char *mouseDpadSpeedValues[] = { "Slow", "Medium", "Fast" };
+static gcn::GenericListModel mouseDpadSpeedList(mouseDpadSpeedValues, 3);
+static const char *mouseDpadAccelValues[] = { "None", "Slow", "Medium", "Fast" };
+static gcn::GenericListModel mouseDpadAccelList(mouseDpadAccelValues, 4);
+#endif
   
 
 static const char *inputport_list[12] = { "<none>", NULL };
@@ -126,6 +138,14 @@ static void RefreshPanelGamePort(void)
     cboTapDelay->setSelected(2);
   
   chkMouseHack->setSelected(workprefs.input_tablet == TABLET_MOUSEHACK);
+
+#ifdef ANDROIDSDL
+  chkMouseDpad->setSelected(workprefs.mouseWithDpad != 0);
+  cboMouseDpadSpeed->setSelected(workprefs.mouseWithDpadSpeed < 0 ? 0 : (workprefs.mouseWithDpadSpeed > 2 ? 2 : workprefs.mouseWithDpadSpeed));
+  cboMouseDpadAccel->setSelected(workprefs.mouseWithDpadAccel < 0 ? 0 : (workprefs.mouseWithDpadAccel > 3 ? 3 : workprefs.mouseWithDpadAccel));
+  cboMouseDpadSpeed->setEnabled(workprefs.mouseWithDpad != 0);
+  cboMouseDpadAccel->setEnabled(workprefs.mouseWithDpad != 0);
+#endif
 }
 
 
@@ -233,6 +253,16 @@ class GamePortActionListener : public gcn::ActionListener
 #endif
   	    workprefs.input_tablet = chkMouseHack->isSelected() ? TABLET_MOUSEHACK : TABLET_OFF;
   	  }
+#ifdef ANDROIDSDL
+      else if (actionEvent.getSource() == chkMouseDpad) {
+        workprefs.mouseWithDpad = chkMouseDpad->isSelected() ? 1 : 0;
+        RefreshPanelGamePort();
+      } else if (actionEvent.getSource() == cboMouseDpadSpeed) {
+        workprefs.mouseWithDpadSpeed = cboMouseDpadSpeed->getSelected();
+      } else if (actionEvent.getSource() == cboMouseDpadAccel) {
+        workprefs.mouseWithDpadAccel = cboMouseDpadAccel->getSelected();
+      }
+#endif
     }
 };
 static GamePortActionListener* gameportActionListener;
@@ -342,6 +372,28 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   chkMouseHack->addActionListener(gameportActionListener);
   if(emulating)
     chkMouseHack->setEnabled(false);
+
+#ifdef ANDROIDSDL
+  chkMouseDpad = new gcn::UaeCheckBox("Mouse with d-pad");
+  chkMouseDpad->setId("MouseDpad");
+  chkMouseDpad->addActionListener(gameportActionListener);
+  lblMouseDpadSpeed = new gcn::Label("Speed:");
+  lblMouseDpadSpeed->setSize(82, LABEL_HEIGHT);
+  lblMouseDpadSpeed->setAlignment(gcn::Graphics::RIGHT);
+  cboMouseDpadSpeed = new gcn::UaeDropDown(&mouseDpadSpeedList);
+  cboMouseDpadSpeed->setSize(80, DROPDOWN_HEIGHT);
+  cboMouseDpadSpeed->setBaseColor(gui_baseCol);
+  cboMouseDpadSpeed->setId("cboMouseDpadSpeed");
+  cboMouseDpadSpeed->addActionListener(gameportActionListener);
+  lblMouseDpadAccel = new gcn::Label("Accel:");
+  lblMouseDpadAccel->setSize(82, LABEL_HEIGHT);
+  lblMouseDpadAccel->setAlignment(gcn::Graphics::RIGHT);
+  cboMouseDpadAccel = new gcn::UaeDropDown(&mouseDpadAccelList);
+  cboMouseDpadAccel->setSize(80, DROPDOWN_HEIGHT);
+  cboMouseDpadAccel->setBaseColor(gui_baseCol);
+  cboMouseDpadAccel->setId("cboMouseDpadAccel");
+  cboMouseDpadAccel->addActionListener(gameportActionListener);
+#endif
     
   int posY = DISTANCE_BORDER;
   category.panel->add(lblPort0, DISTANCE_BORDER, posY);
@@ -373,6 +425,16 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   category.panel->add(cboTapDelay, 300 + lblTapDelay->getWidth() + 8, posY);
   posY += cboTapDelay->getHeight() + DISTANCE_NEXT_Y;
 
+#ifdef ANDROIDSDL
+  category.panel->add(chkMouseDpad, cboPorts[0]->getX(), posY);
+  category.panel->add(lblMouseDpadSpeed, 300, posY);
+  category.panel->add(cboMouseDpadSpeed, 300 + lblMouseDpadSpeed->getWidth() + 8, posY);
+  posY += cboMouseDpadSpeed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(lblMouseDpadAccel, 300, posY);
+  category.panel->add(cboMouseDpadAccel, 300 + lblMouseDpadAccel->getWidth() + 8, posY);
+  posY += cboMouseDpadAccel->getHeight() + DISTANCE_NEXT_Y;
+#endif
+
   values_to_dialog();
 }
 
@@ -399,6 +461,13 @@ void ExitPanelGamePort(const struct _ConfigCategory& category)
   delete lblTapDelay;
   delete cboTapDelay;
   delete chkMouseHack;
+#ifdef ANDROIDSDL
+  delete chkMouseDpad;
+  delete lblMouseDpadSpeed;
+  delete cboMouseDpadSpeed;
+  delete lblMouseDpadAccel;
+  delete cboMouseDpadAccel;
+#endif
   
   delete gameportActionListener;
 }
@@ -416,5 +485,11 @@ bool HelpPanelGamePort(std::vector<std::string> &helptext)
   helptext.push_back("this code.");
   helptext.push_back(" ");
   helptext.push_back("\"Tap Delay\" specifies the time between taping the screen and an emulated mouse button click.");
+#ifdef ANDROIDSDL
+  helptext.push_back(" ");
+  helptext.push_back("\"Mouse with d-pad\" moves the mouse pointer with the d-pad of a gamepad, a trackball, the cursor keys or the");
+  helptext.push_back("on-screen d-pad, with the chosen speed and acceleration. While it is on, the d-pad does not work as a joystick.");
+  helptext.push_back("It is off in this menu, so the d-pad can still move between the items here.");
+#endif
   return true;
 }
