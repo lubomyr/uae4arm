@@ -118,6 +118,7 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->mouseWithDpad = 0;
 	p->mouseWithDpadSpeed = 1;
 	p->mouseWithDpadAccel = 0;
+	p->mouseButtonsAB = 0;
 #endif
 	
 	p->cr[0].index = 0;
@@ -214,6 +215,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.mouse_with_dpad", "%d", p->mouseWithDpad);
   cfgfile_write (f, "pandora.mouse_with_dpad_speed", "%d", p->mouseWithDpadSpeed);
   cfgfile_write (f, "pandora.mouse_with_dpad_accel", "%d", p->mouseWithDpadAccel);
+  cfgfile_write (f, "pandora.mouse_buttons_ab", "%d", p->mouseButtonsAB);
 #endif
   cfgfile_write_bool (f, "pandora.map_cd_drives", p->automount_cddrives);
 }
@@ -264,6 +266,7 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "mouse_with_dpad", &p->mouseWithDpad, 1)
     || cfgfile_intval (option, value, "mouse_with_dpad_speed", &p->mouseWithDpadSpeed, 1)
     || cfgfile_intval (option, value, "mouse_with_dpad_accel", &p->mouseWithDpadAccel, 1)
+    || cfgfile_intval (option, value, "mouse_buttons_ab", &p->mouseButtonsAB, 1)
 #endif
     );
   if(!result) {

@@ -628,6 +628,13 @@ static TCHAR *get_joystick_uniquename (int joy)
 	return pi_joystick[joy].configname;
 }
 
+#ifdef ANDROIDSDL
+/* "A/B as mouse buttons" (Game ports): the first two joystick buttons click
+   the left and right mouse button instead. Only changes are passed on, so a
+   button held by a touch on the screen is not let go of. */
+static int dpad_mouse_button[2];
+#endif
+
 static void read_joystick (void)
 {
   int i, j;
@@ -649,8 +656,21 @@ static void read_joystick (void)
       axis = (keystate[SDLK_UP] ? -32767 : (keystate[SDLK_DOWN] ? 32767 : 0));
       setjoystickstate (i, 1, axis, 32767);
     }
-    for (j = 0; j < pid->buttons; ++j)
-      setjoybuttonstate (i, j, keystate[pid->button_keycode[j]]);
+    for (j = 0; j < pid->buttons; ++j) {
+      int state = keystate[pid->button_keycode[j]];
+#ifdef ANDROIDSDL
+      if (i == 0 && j < 2) {
+        int as_mouse = changed_prefs.mouseButtonsAB ? state : 0;
+        if (as_mouse != dpad_mouse_button[j] && get_sdlmouse() >= 0) {
+          dpad_mouse_button[j] = as_mouse;
+          setmousebuttonstate (get_sdlmouse(), j, as_mouse);
+        }
+        if (changed_prefs.mouseButtonsAB)
+          state = 0;
+      }
+#endif
+      setjoybuttonstate (i, j, state);
+    }
 	}
 }
 

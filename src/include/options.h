@@ -475,6 +475,9 @@ int reset_delay;
 int mouseWithDpad;
 int mouseWithDpadSpeed;
 int mouseWithDpadAccel;
+/* The first two joystick buttons - A and B on a gamepad, 1 and 2 on the
+   screen - click the left and right mouse button instead */
+int mouseButtonsAB;
 #endif
 
 	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];

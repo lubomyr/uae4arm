@@ -47,6 +47,7 @@ static gcn::UaeCheckBox* chkMouseHack;
 #ifdef ANDROIDSDL
 // The d-pad and the other arrow keys moving the mouse, done by the SDL wrapper
 static gcn::UaeCheckBox* chkMouseDpad;
+static gcn::UaeCheckBox* chkMouseButtonsAB;
 static gcn::Label *lblMouseDpadSpeed;
 static gcn::UaeDropDown* cboMouseDpadSpeed;
 static gcn::Label *lblMouseDpadAccel;
@@ -141,6 +142,7 @@ static void RefreshPanelGamePort(void)
 
 #ifdef ANDROIDSDL
   chkMouseDpad->setSelected(workprefs.mouseWithDpad != 0);
+  chkMouseButtonsAB->setSelected(workprefs.mouseButtonsAB != 0);
   cboMouseDpadSpeed->setSelected(workprefs.mouseWithDpadSpeed < 0 ? 0 : (workprefs.mouseWithDpadSpeed > 2 ? 2 : workprefs.mouseWithDpadSpeed));
   cboMouseDpadAccel->setSelected(workprefs.mouseWithDpadAccel < 0 ? 0 : (workprefs.mouseWithDpadAccel > 3 ? 3 : workprefs.mouseWithDpadAccel));
   cboMouseDpadSpeed->setEnabled(workprefs.mouseWithDpad != 0);
@@ -257,6 +259,8 @@ class GamePortActionListener : public gcn::ActionListener
       else if (actionEvent.getSource() == chkMouseDpad) {
         workprefs.mouseWithDpad = chkMouseDpad->isSelected() ? 1 : 0;
         RefreshPanelGamePort();
+      } else if (actionEvent.getSource() == chkMouseButtonsAB) {
+        workprefs.mouseButtonsAB = chkMouseButtonsAB->isSelected() ? 1 : 0;
       } else if (actionEvent.getSource() == cboMouseDpadSpeed) {
         workprefs.mouseWithDpadSpeed = cboMouseDpadSpeed->getSelected();
       } else if (actionEvent.getSource() == cboMouseDpadAccel) {
@@ -377,6 +381,9 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   chkMouseDpad = new gcn::UaeCheckBox("Mouse with d-pad");
   chkMouseDpad->setId("MouseDpad");
   chkMouseDpad->addActionListener(gameportActionListener);
+  chkMouseButtonsAB = new gcn::UaeCheckBox("A/B as mouse buttons");
+  chkMouseButtonsAB->setId("MouseButtonsAB");
+  chkMouseButtonsAB->addActionListener(gameportActionListener);
   lblMouseDpadSpeed = new gcn::Label("Speed:");
   lblMouseDpadSpeed->setSize(82, LABEL_HEIGHT);
   lblMouseDpadSpeed->setAlignment(gcn::Graphics::RIGHT);
@@ -430,6 +437,7 @@ void InitPanelGamePort(const struct _ConfigCategory& category)
   category.panel->add(lblMouseDpadSpeed, 300, posY);
   category.panel->add(cboMouseDpadSpeed, 300 + lblMouseDpadSpeed->getWidth() + 8, posY);
   posY += cboMouseDpadSpeed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkMouseButtonsAB, cboPorts[0]->getX(), posY);
   category.panel->add(lblMouseDpadAccel, 300, posY);
   category.panel->add(cboMouseDpadAccel, 300 + lblMouseDpadAccel->getWidth() + 8, posY);
   posY += cboMouseDpadAccel->getHeight() + DISTANCE_NEXT_Y;
@@ -463,6 +471,7 @@ void ExitPanelGamePort(const struct _ConfigCategory& category)
   delete chkMouseHack;
 #ifdef ANDROIDSDL
   delete chkMouseDpad;
+  delete chkMouseButtonsAB;
   delete lblMouseDpadSpeed;
   delete cboMouseDpadSpeed;
   delete lblMouseDpadAccel;
@@ -489,6 +498,8 @@ bool HelpPanelGamePort(std::vector<std::string> &helptext)
   helptext.push_back(" ");
   helptext.push_back("\"Mouse with d-pad\" moves the mouse pointer with the d-pad of a gamepad, a trackball, the cursor keys or the");
   helptext.push_back("on-screen d-pad, with the chosen speed and acceleration. While it is on, the d-pad does not work as a joystick.");
+  helptext.push_back("\"A/B as mouse buttons\" makes the first two joystick buttons - A and B on a gamepad, 1 and 2 on the screen -");
+  helptext.push_back("click the left and right mouse button instead.");
   helptext.push_back("It is off in this menu, so the d-pad can still move between the items here.");
 #endif
   return true;

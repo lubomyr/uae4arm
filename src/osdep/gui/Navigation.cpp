@@ -256,9 +256,9 @@ static NavigationMap navMap[] =
 //  active            move left           move right          move up           move down
 // PanelGamePort
 #ifdef PANDORA
-  { "cboPort0",       "Game ports",     "cboPortMode0",   "MouseDpad",      "cboPort1" },
+  { "cboPort0",       "Game ports",     "cboPortMode0",   "MouseButtonsAB", "cboPort1" },
   { "cboPort1",       "Game ports",     "cboPortMode1",   "cboPort0",       "MouseSpeed" },
-  { "cboPortMode0",   "cboPort0",       "cboAutofire0",   "MouseDpad",      "cboPortMode1" },
+  { "cboPortMode0",   "cboPort0",       "cboAutofire0",   "MouseButtonsAB", "cboPortMode1" },
   { "cboPortMode1",   "cboPort1",       "cboAutofire1",   "cboPortMode0",   "MouseSpeed" },
   { "cboAutofire0",   "cboPortMode0",   "Game ports",     "cboMouseDpadAccel", "cboAutofire1" },
   { "cboAutofire1",   "cboPortMode1",   "Game ports",     "cboAutofire0",   "AutofireRate" },
@@ -266,9 +266,10 @@ static NavigationMap navMap[] =
   { "AutofireRate",   "",               "",               "cboAutofire1",   "cboTapDelay" },
   { "MouseHack",      "Game ports",     "cboTapDelay",    "MouseSpeed",     "MouseDpad" },
   { "cboTapDelay",    "MouseHack",      "Game ports",     "AutofireRate",   "cboMouseDpadSpeed" },
-  { "MouseDpad",      "Game ports",     "cboMouseDpadSpeed", "MouseHack",   "cboPort0" },
+  { "MouseDpad",      "Game ports",     "cboMouseDpadSpeed", "MouseHack",   "MouseButtonsAB" },
+  { "MouseButtonsAB", "Game ports",     "cboMouseDpadAccel", "MouseDpad",   "cboPort0" },
   { "cboMouseDpadSpeed", "MouseDpad",   "Game ports",     "cboTapDelay",    "cboMouseDpadAccel" },
-  { "cboMouseDpadAccel", "MouseDpad",   "Game ports",     "cboMouseDpadSpeed", "cboAutofire0" },
+  { "cboMouseDpadAccel", "MouseButtonsAB", "Game ports",   "cboMouseDpadSpeed", "cboAutofire0" },
 #else /* RASPBERRY */
   { "cboPort0",       "Game ports",     "cboPortMode0",   "MouseSpeed",     "cboPort1" },
   { "cboPort1",       "Game ports",     "cboPortMode1",   "cboPort0",       "cboPort2" },
