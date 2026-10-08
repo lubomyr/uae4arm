@@ -58,8 +58,10 @@ static void setCpuSpeed()
 
 	if(currprefs.pandora_cpu_speed != lastCpuSpeed)
 	{
+#ifndef LINUX_HOST /* the Pandora's own CPU clock, not to be touched on a PC */
 		snprintf((char*)speedCmd, 127, "unset DISPLAY; echo y | sudo -n /usr/pandora/scripts/op_cpuspeed.sh %d", currprefs.pandora_cpu_speed);
 		system(speedCmd);
+#endif
 		lastCpuSpeed = currprefs.pandora_cpu_speed;
 		cpuSpeedChanged = true;
 	}
@@ -425,7 +427,11 @@ static int translate_pandora_keys(int sdlkeycode, int *sdlmodifier)
      own. Until now that only happened while the right shoulder was held, which
      is the sole path that ever produced AK_UP and friends - so switching the
      joystick feed off alone left the d-pad doing nothing at all. */
+#ifdef ANDROIDSDL
   if (changed_prefs.onScreen_dpad_mode == 1) {
+#else
+  if (false) {
+#endif
     switch(sdlkeycode) {
       case SDLK_UP:
         return AK_UP;

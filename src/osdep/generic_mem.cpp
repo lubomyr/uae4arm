@@ -13,6 +13,7 @@
 #include <sys/mman.h>
 #include <SDL.h>
 #include <unistd.h>
+#include <malloc.h>
 
 #define valloc(x) memalign(getpagesize(), x)
 

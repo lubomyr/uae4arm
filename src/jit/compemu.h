@@ -32,6 +32,10 @@
 #ifndef COMPEMU_H
 #define COMPEMU_H
 
+/* Included by a few files without a JIT guard of their own; the Linux PC
+   build has no JIT, and no code generator for its CPU either. */
+#ifdef JIT
+
 #if defined(CPU_AARCH64)
 typedef uae_u64 uintptr;
 #else
@@ -387,4 +391,5 @@ typedef fptype fpu_register;
 
 void jit_abort(const TCHAR *format,...);
 
+#endif /* JIT */
 #endif /* COMPEMU_H */

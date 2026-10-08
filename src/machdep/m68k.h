@@ -124,7 +124,9 @@ STATIC_INLINE int cctrue (int cc)
 
 #endif /* REGS_DEFINED */
 
-#elif defined(CPU_arm) && (defined(ARMV6_ASSEMBLY) || defined(CPU_AARCH64))
+#elif (defined(CPU_arm) && (defined(ARMV6_ASSEMBLY) || defined(CPU_AARCH64))) || defined(LINUX_HOST)
+/* Plain C. The Linux PC build takes it too, as the generated CPU cores use
+   nzcv directly in places. */
 
 #ifndef REGS_DEFINED
 

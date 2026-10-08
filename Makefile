@@ -1,18 +1,28 @@
-DEFS += -DANDROID
 ifeq ($(arch),armeabi-v7a)
 	CPU_FLAGS += -mfpu=vfp
-	DEFS += -DANDROIDSDL -DUSE_SDL -DPANDORA
+	DEFS += -DANDROID -DANDROIDSDL -DUSE_SDL -DPANDORA
     DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV
 	ANDROID = 1
 	USE_SDL_VERSION = sdl1
 	PROFILER_PATH = /storage/sdcard0/profile/
 else ifeq ($(arch),arm64-v8a)
-	DEFS += -DANDROIDSDL -DUSE_SDL -DPANDORA
+	DEFS += -DANDROID -DANDROIDSDL -DUSE_SDL -DPANDORA
     DEFS += -DCPU_AARCH64
 	ANDROID = 1
     AARCH64 = 1
 	USE_SDL_VERSION = sdl1
 	PROFILER_PATH = /storage/sdcard0/profile/
+else ifeq ($(arch),linux)
+	# A desktop build for trying out emulation problems on the PC: the old
+	# Pandora path on plain SDL 1.2, without the Android wrapper or the JIT.
+	# Built by LinuxBuild.sh.
+	DEFS += -DUSE_SDL -DPANDORA -DLINUX_HOST
+	LINUX_HOST = 1
+	USE_SDL_VERSION = sdl1
+	MORE_CFLAGS += `sdl-config --cflags` `pkg-config --cflags libxml-2.0` -I../../guichan/include -g
+	LDFLAGS += -Lbuild-linux `sdl-config --libs` -lSDL_image -lmpeg2convert
+	FLAC_LIB = -lFLAC
+	STRIP = strip
 else
 	USE_SDL_VERSION = sdl1
 endif
@@ -48,7 +58,8 @@ MORE_CFLAGS += -DWITH_LOGGING
 endif
 #MORE_CFLAGS += -fuse-ld=gold
 
-LDFLAGS +=  -lm -lz -lflac -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
+FLAC_LIB ?= -lflac
+LDFLAGS +=  -lm -lz $(FLAC_LIB) -logg -lpng -lmpg123 -lmpeg2 -lSDL_ttf -lguichan -lxml2
 #LDFLAGS += -ldl -lgcov --coverage
 
 ifndef DEBUG
@@ -256,6 +267,8 @@ ifdef AARCH64
     OBJS += src-$(arch)/osdep/aarch64_helper.o
 else ifeq ($(ANDROID), 1)
 	OBJS += src-$(arch)/osdep/arm_helper.o
+else ifdef LINUX_HOST
+	OBJS += src-$(arch)/osdep/host_helper.o
 else
 	OBJS += src-$(arch)/osdep/neon_helper.o
 endif
@@ -271,10 +284,15 @@ OBJS += src-$(arch)/cpuemu_11.o
 OBJS += src-$(arch)/cpuemu_13.o
 OBJS += src-$(arch)/cpuemu_40.o
 OBJS += src-$(arch)/cpuemu_44.o
+ifdef LINUX_HOST
+# ARM register and instruction decoding throughout
+OBJS := $(filter-out src-$(arch)/osdep/sigsegv_handler.o,$(OBJS))
+else
 OBJS += src-$(arch)/jit/compemu.o
 OBJS += src-$(arch)/jit/compstbl.o
 OBJS += src-$(arch)/jit/compemu_fpp.o
 OBJS += src-$(arch)/jit/compemu_support.o
+endif
 
 ifdef TRACER
 src-$(arch)/trace.o: src-$(arch)/trace.c

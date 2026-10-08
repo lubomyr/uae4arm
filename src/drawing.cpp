@@ -2411,14 +2411,14 @@ static int render_thread (void *unused)
     render_thread_busy = true;
     switch(signal) {
       case RENDER_SIGNAL_PARTIAL:
-#ifndef ANDROID
+#if !defined(ANDROID) && !defined(LINUX_HOST)
         if(!flip_in_progess)
 #endif
           partial_draw_frame();
         break;
 
       case RENDER_SIGNAL_FRAME_DONE:
-#ifndef ANDROID
+#if !defined(ANDROID) && !defined(LINUX_HOST)
         while(flip_in_progess)
           sleep_micros(1);
 #endif

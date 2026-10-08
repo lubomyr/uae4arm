@@ -7,3 +7,5 @@ src/threaddep
 src/machdep
 src/sounddep
 src-*/
+build-linux/
+uae4arm-linux

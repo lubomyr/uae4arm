@@ -18,7 +18,7 @@
 #include <png.h>
 #include <SDL.h>
 #include <SDL/SDL_image.h>
-#ifndef ANDROID
+#if !defined(ANDROID) && !defined(LINUX_HOST)
 #include <SDL/SDL_gfxPrimitives.h>
 #endif
 #include <SDL/SDL_ttf.h>
@@ -202,6 +202,7 @@ static int CalcPandoraWidth(struct uae_prefs *p)
     pandWidth = 800;
   return pandWidth;
 }
+#ifdef ANDROIDSDL
 // Places one on-screen control. Positions are stored as the top left corner of
 // a 100% sized button, so the size is scaled around its centre - otherwise
 // changing the size drags the control up-left or down-right.
@@ -228,7 +229,6 @@ static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize
 }
 
 
-#ifdef ANDROIDSDL
 // Theme, size, draw size and transparency of the on-screen controls, plus the
 // 4:3 screen ratio, belong to the SDL wrapper, which owns the button graphics
 // and stores all of them in its own settings file. Push our copies across, but
@@ -535,8 +535,10 @@ static bool SetVSyncRate(int hz)
 
   if(currVSyncRate != hz && (hz == 50 || hz == 60))
   {
+#ifndef LINUX_HOST /* the Pandora's LCD refresh, not to be touched on a PC */
     snprintf((char*)cmd, 63, "sudo /usr/pandora/scripts/op_lcdrate.sh %d", hz);
     system(cmd);
+#endif
     currVSyncRate = hz;
     return true;
   }

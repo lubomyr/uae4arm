@@ -10,7 +10,9 @@
 #include <vector>
 #include <stdlib.h>
 #include <stdarg.h>
+#ifndef LINUX_HOST
 #include <asm/sigcontext.h>
+#endif
 #include <signal.h>
 #include <dlfcn.h>
 #ifndef ANDROID
@@ -71,6 +73,10 @@ extern void init_crash_report(void);
 extern void signal_buserror(int signum, siginfo_t* info, void*ptr);
 extern void signal_abort(int signum, siginfo_t* info, void*ptr);
 extern void signal_term(int signum, siginfo_t* info, void*ptr);
+#ifdef LINUX_HOST
+/* sigsegv_handler.cpp is ARM only and not built for the PC */
+void init_max_signals(void) {}
+#endif
 extern void gui_force_rtarea_hdchange(void);
 
 extern void SetLastActiveConfig(const char *filename);
@@ -800,7 +806,9 @@ uae_u32 emulib_target_getcpurate (uae_u32 v, uae_u32 *low)
 
 static void target_shutdown(void)
 {
+#ifndef LINUX_HOST /* switching off the Pandora - never the PC */
 	system("sudo poweroff");
+#endif
 }
 
 
@@ -871,6 +879,7 @@ int generic_main (int argc, char *argv[])
   snprintf(savestate_fname, MAX_PATH - 1, "%s/saves/default.ads", start_path_data);
 	logging_init ();
   
+#ifndef LINUX_HOST
   init_crash_report();
 
   memset(&action, 0, sizeof(action));
@@ -913,6 +922,7 @@ int generic_main (int argc, char *argv[])
     printf("Failed to set signal handler (SIGTERM).\n");
     abort();
   }
+#endif /* !LINUX_HOST: no crash handler on the PC, gdb and ASan see the crash */
 
   alloc_AmigaMem();
   RescanROMs();
