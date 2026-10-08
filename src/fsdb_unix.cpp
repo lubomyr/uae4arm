@@ -82,9 +82,11 @@ int fsdb_fill_file_attrs (a_inode *base, a_inode *aino)
 		  | (S_IWUSR & statbuf.st_mode ? 0 : A_FIBF_WRITE)
 		  | (S_IRUSR & statbuf.st_mode ? 0 : A_FIBF_READ));
 
-#if defined(WIN32) || defined(ANDROIDSDL) || defined(RASPBERRY)
+#if defined(WIN32) || defined(ANDROIDSDL) || defined(RASPBERRY) || defined(LINUX_HOST)
   // Always give execute & read permission
   // Temporary do this for raspberry...
+  // And on the Linux PC: files copied there seldom carry the host's x bit,
+  // and without it C: has nothing AmigaDOS will run.
   aino->amigaos_mode &= ~A_FIBF_EXECUTE;
   aino->amigaos_mode &= ~A_FIBF_READ;
 #endif

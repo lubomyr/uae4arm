@@ -13,7 +13,9 @@
 // stdout is discarded on Android, so printf() based logging is invisible.
 #define UAE_LOG(buf) __android_log_print(ANDROID_LOG_INFO, "uae4arm", "%s", buf)
 #else
-#define UAE_LOG(buf) printf("%s", buf)
+// Flushed at once: with the output going to a file, as when running under
+// gdb, the last lines before a hang or crash would otherwise be lost.
+#define UAE_LOG(buf) do { fputs(buf, stdout); fflush(stdout); } while (0)
 #endif
 
 #define WRITE_LOG_BUF_SIZE 4096
