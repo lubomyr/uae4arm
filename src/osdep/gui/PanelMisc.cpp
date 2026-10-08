@@ -26,7 +26,9 @@
 #include "gui.h"
 #include "gui_handling.h"
 
-#ifdef ANDROID
+/* "Pandora Speed" clocks the Pandora handheld's own CPU - nothing to do on
+   Android or a PC */
+#if defined(ANDROID) || defined(LINUX_HOST)
 #undef PANDORA
 #endif
 

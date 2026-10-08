@@ -299,7 +299,7 @@ static NavigationMap navMap[] =
   { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "ResetDelay" },
   { "ResetDelay",     "Miscellaneous",  "ShowFPS",        "MasterWP",       "ShowGUI" },
   { "StatusLine",     "ShowGUI",        "Miscellaneous",  "ShowDisk",       "StatusLineRTG" },
-#elif defined(PANDORA)
+#elif defined(PANDORA) && !defined(LINUX_HOST)
   { "ShowGUI",        "Miscellaneous",  "StatusLine",     "PandSpeed",      "BSDSocket" },
   { "BSDSocket",      "Miscellaneous",  "StatusLineRTG",  "ShowGUI",        "MasterWP" },
   { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "PandSpeed" },
@@ -315,7 +315,7 @@ static NavigationMap navMap[] =
   { "ShowFPS",        "MasterWP",       "Miscellaneous",  "ShowIdle",       "ShowHD" },
   { "ShowHD",         "MasterWP",       "Miscellaneous",  "ShowFPS",        "ShowCD" },
   { "ShowCD",         "MasterWP",       "Miscellaneous",  "ShowHD",         "ShowDisk" },
-#if defined(PANDORA) && !defined(ANDROIDSDL)
+#if defined(PANDORA) && !defined(ANDROIDSDL) && !defined(LINUX_HOST)
   { "ShowDisk",       "MasterWP",       "Miscellaneous",  "ShowCD",         "PandSpeed" },
   { "PandSpeed",      "",               "",               "MasterWP",       "ShowGUI" },
 #else /* RASPBERRY */
