@@ -14,6 +14,7 @@
 #include <sstream>
 #include "SelectorEntry.hpp"
 
+#include <limits.h>
 #include "sysconfig.h"
 #include "sysdeps.h"
 #include "config.h"
@@ -160,7 +161,10 @@ static bool showVolumeListIfAtRoot(const char *dir)
 static void checkfoldername (char *current)
 {
 	char *ptr;
-	char actualpath [MAX_PATH];
+	/* realpath() may write up to PATH_MAX bytes. With MAX_PATH here, glibc's
+	   fortified realpath() aborts at once; bionic does not check, and a long
+	   path would simply overrun the stack. */
+	char actualpath [PATH_MAX];
 	DIR *dir;
 	
 	if (dir = opendir(current)) { 
@@ -169,7 +173,7 @@ static void checkfoldername (char *current)
 	  showingVolumes = false;
 #endif
 	  ptr = realpath(current, actualpath);
-	  strncpy(workingDir, ptr, MAX_PATH - 1);
+	  strncpy(workingDir, ptr ? ptr : current, MAX_PATH - 1);
 	  closedir(dir);
 	} else
   {
