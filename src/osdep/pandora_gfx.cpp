@@ -484,6 +484,8 @@ static void open_screen(struct uae_prefs *p)
     if(picasso_vidinfo.width != 0 && picasso_vidinfo.height != 0)
 #ifdef ANDROIDSDL
   	    prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_SWSURFACE|SDL_FULLSCREEN);
+#elif defined(LINUX_HOST)
+  	    prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_SWSURFACE);
 #else
     	prSDLScreen = SDL_SetVideoMode(picasso_vidinfo.width, picasso_vidinfo.height, 16, SDL_HWSURFACE|SDL_FULLSCREEN|SDL_DOUBLEBUF);
 #endif
@@ -1006,6 +1008,12 @@ void target_detect_displaysize(void)
     nativeScreenHeight = vid_info->current_h;
 		nativeScreenDepth = vid_info->vfmt->BitsPerPixel;
   }
+#ifdef LINUX_HOST
+  /* The screen is always opened with 16 bits (open_screen()), as on Android,
+     where the wrapper reports 16 bits as well. A PC desktop has 32, which made
+     RTG convert to 32 bits into a 16-bit surface - twice its size. */
+  nativeScreenDepth = 16;
+#endif
 }
 
 #ifdef PICASSO96

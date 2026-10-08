@@ -22,6 +22,10 @@ else ifeq ($(arch),linux)
 	MORE_CFLAGS += `sdl-config --cflags` `pkg-config --cflags libxml-2.0` -I../../guichan/include -g
 	LDFLAGS += -Lbuild-linux `sdl-config --libs` -lSDL_image -lmpeg2convert
 	FLAC_LIB = -lFLAC
+	ifdef ASAN
+		MORE_CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+		LDFLAGS += -fsanitize=address
+	endif
 	STRIP = strip
 else
 	USE_SDL_VERSION = sdl1

@@ -7,6 +7,7 @@
 #
 # ./LinuxBuild.sh            build ./uae4arm-linux, logging to the console
 # WITH_LOGGING= ./LinuxBuild.sh   the same without the log
+# ASAN=1 ./LinuxBuild.sh     with AddressSanitizer, which stops at the bad access
 # ./LinuxBuild.sh clean      remove the build
 #
 # The first build also unpacks AndroidData into build-linux/run; run it from
@@ -40,9 +41,10 @@ fi
 # is on unless WITH_LOGGING= is given. make does not see a change of flags,
 # so a change of it rebuilds everything.
 WITH_LOGGING=${WITH_LOGGING-1}
-if [ "`cat build-linux/logging 2>/dev/null`" != "$WITH_LOGGING" ]; then
+FLAGS="logging=$WITH_LOGGING asan=$ASAN"
+if [ "`cat build-linux/flags 2>/dev/null`" != "$FLAGS" ]; then
 	rm -rf src-linux uae4arm-linux
-	echo "$WITH_LOGGING" > build-linux/logging
+	echo "$FLAGS" > build-linux/flags
 fi
 
 # the same tree of links to src/ as AndroidBuild.sh
@@ -65,7 +67,7 @@ for d in . archivers jit machdep osdep osdep/gui sounddep; do
 	done
 done
 
-make -j$JOBS arch=linux KEEPSYMBOLS=1 WITH_LOGGING=$WITH_LOGGING || exit 1
+make -j$JOBS arch=linux KEEPSYMBOLS=1 WITH_LOGGING=$WITH_LOGGING ASAN=$ASAN || exit 1
 
 # somewhere to run it, with the data the Android app unpacks on first start
 if [ ! -d build-linux/run/data ]; then

@@ -37,6 +37,13 @@ extern void check_error_sdl(bool check, const char* message);
 #endif
 
 bool gui_running = false;
+
+/* On the Linux PC the menu is a window of its own size, 800x480 */
+#ifdef LINUX_HOST
+#define GUI_FULLSCREEN 0
+#else
+#define GUI_FULLSCREEN SDL_FULLSCREEN
+#endif
 static int last_active_panel = 2;
 
 #define MAX_STARTUP_TITLE 64
@@ -140,7 +147,7 @@ namespace widgets
 void gui_set_screen_ratio(int keep)
 {
   onscreen_menu_screen_ratio(keep);
-  gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
+  gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | GUI_FULLSCREEN);
   gui_graphics->setTarget(gui_screen);
 }
 #endif
@@ -328,7 +335,7 @@ namespace sdl
 		onscreen_menu_screen_ratio(workprefs.keepAspectRatio);
 		onscreen_menu_mouse_with_dpad_off();
 #endif
-		gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
+		gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | GUI_FULLSCREEN);
     SDL_EnableUNICODE(1);
     SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
 #ifdef ANDROIDSDL
