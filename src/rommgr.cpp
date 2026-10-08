@@ -852,7 +852,8 @@ struct romdata *getromdatabyzfile (struct zfile *f)
   pos = zfile_ftell (f);
   zfile_fseek (f, 0, SEEK_END);
   size = zfile_ftell (f);
-	if (size > 2048 * 1024)
+	/* -1 when there is no size to tell - a directory, say */
+	if (size <= 0 || size > 2048 * 1024)
 		return NULL;
   p = xmalloc (uae_u8, size);
   if (!p)
