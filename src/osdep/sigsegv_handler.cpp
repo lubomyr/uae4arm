@@ -35,6 +35,9 @@
 #include "jit/compemu.h"
 #endif
 #include "uae.h"
+#include "xwin.h"
+#include "gfxboard.h"
+#include "picasso96.h"
 
 #include <asm/sigcontext.h>
 #include <signal.h>
@@ -53,6 +56,9 @@ void backtrace_symbols_fd(void* const*,int,int){}
 #include <link.h>
 #ifdef ANDROID
 #include <android/log.h>
+#endif
+#ifdef ANDROIDSDL
+extern "C" int SDL_ANDROID_VideoMultithreaded;
 #endif
 
 #ifdef JIT
@@ -229,6 +235,50 @@ static void crash_collect_context(void *ctx)
   }
 }
 
+/* Which machine the reporter ran. Issue #50 crashed only in an 8 bit RTG mode,
+   which the report left to guesswork. Only plain fields of currprefs and the
+   RTG state are read here, nothing that allocates; the full .uae cannot be
+   written from a signal handler. */
+static char crash_config[640];
+
+static void crash_collect_config(void)
+{
+  struct uae_prefs *p = &currprefs;
+  const char *kick = strrchr(p->romfile, '/');
+  kick = kick ? kick + 1 : p->romfile;
+  char speed[16];
+  if(p->m68k_speed < 0)
+    strcpy(speed, "max");
+  else if(p->m68k_speed == 0)
+    strcpy(speed, "real");
+  else
+    snprintf(speed, sizeof(speed), "%d", p->m68k_speed);
+
+  char screen[64];
+#ifdef PICASSO96
+  if(adisplays.picasso_on)
+    snprintf(screen, sizeof(screen), "rtg %dx%dx%d", picasso96_state.Width, picasso96_state.Height,
+      picasso96_state.BytesPerPixel * 8);
+  else
+#endif
+    snprintf(screen, sizeof(screen), "native %dx%d", p->gfx_monitor.gfx_size.width, p->gfx_monitor.gfx_size.height);
+
+  int video_thread = -1;
+#ifdef ANDROIDSDL
+  video_thread = SDL_ANDROID_VideoMultithreaded;
+#endif
+
+  snprintf(crash_config, sizeof(crash_config) - 1,
+    "  config: cpu=%d fpu=%d 24bit=%d jit=%d compfpu=%d speed=%s compatible=%d chipset=%s\n"
+    "          chip=%uK slow=%uK fast=%uK z3=%uM rtg=%uM/%s hd=%d kick=%s\n"
+    "  screen: %s video_thread=%d sound=%d/%d toccata=%d\n",
+    p->cpu_model, p->fpu_model, p->address_space_24, p->cachesize, p->compfpu, speed, p->cpu_compatible,
+    (p->chipset_mask & CSMASK_AGA) ? "aga" : (p->chipset_mask & CSMASK_ECS_AGNUS) ? "ecs" : "ocs",
+    p->chipmem.size >> 10, p->bogomem.size >> 10, p->fastmem[0].size >> 10, p->z3fastmem[0].size >> 20,
+    p->rtgboards[0].rtgmem_size >> 20, p->rtgboards[0].rtgmem_type == GFXBOARD_UAE_Z3 ? "Z3" : "Z2",
+    p->mountitems, kick, screen, video_thread, p->produce_sound, p->sound_freq, p->sound_toccata);
+}
+
 static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr, void *ctx)
 {
   Dl_info info;
@@ -252,8 +302,10 @@ static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr
     "  PC offset = %s\n  LR offset = %s\n",
     signum, fault_addr, crash_build_id, layout, pcoff, lroff);
 
+  crash_collect_config();
+
 #ifdef ANDROID
-  __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s", msg);
+  __android_log_print(ANDROID_LOG_FATAL, "uae4arm", "%s%s", msg, crash_config);
 #endif
 
   crash_collect_context(ctx);
@@ -266,6 +318,7 @@ static void report_fatal_signal(int signum, void *fault_addr, void *pc, void *lr
     fd = open(crash_log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if(fd >= 0) {
       write(fd, msg, strlen(msg));
+      write(fd, crash_config, strlen(crash_config));
       if(crash_extra[0])
         write(fd, crash_extra, strlen(crash_extra));
       close(fd);
