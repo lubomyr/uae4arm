@@ -695,6 +695,14 @@ void picasso_handle_vsync(void)
 	picasso_trigger_vblank();
 }
 
+/* p96_blit.cpp works a word at a time from any pixel, so in 8, 16 and 24 bit
+   modes its pointers are often not word aligned. ARMv7 takes that from a plain
+   LDR/STR, but clang merges neighbouring accesses into LDRD/STRD, which fault
+   on such an address (SIGBUS, issue #50). Telling the compiler the alignment is
+   1 keeps it from merging them; on arm64 the code stays the same. */
+typedef uae_u32 __attribute__((aligned(1))) uae_u32_ua;
+typedef uae_u16 __attribute__((aligned(1))) uae_u16_ua;
+
 #define BLT_SIZE 4
 #define BLT_MULT 1
 #define BLT_NAME BLIT_FALSE_32
