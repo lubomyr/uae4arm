@@ -211,7 +211,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..da56030e1 100644
+index f0a437bb6..d837b3720 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -308,7 +308,74 @@ index f0a437bb6..da56030e1 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1122,9 +1163,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1052,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 		setContentDescription(context.getResources().getString(R.string.app_name));
+ 	}
+ 
++	// The right mouse button came as BACK and is held, see onKeyDown()
++	private boolean rightMouseButtonAsBack = false;
++	private boolean menuSwallowed = false;
++
+ 	@Override
+ 	public boolean onKeyDown(int keyCode, final KeyEvent event)
+ 	{
+@@ -1025,10 +1070,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
+ 					mouseInput = true;
+ 			}
+-			if( mouseInput )
++			// Stupid Samsung and stupid Acer remaps right mouse button to BACK key.
++			// While the button is held some of them repeat BACK without the mouse
++			// source, which would reach the app as the BACK key.
++			if( mouseInput || rightMouseButtonAsBack )
+ 			{
+-				// Stupid Samsung and stupid Acer remaps right mouse button to BACK key
+-				nativeMouseButtonsPressed(2, 1);
++				if( !rightMouseButtonAsBack )
++					nativeMouseButtonsPressed(2, 1);
++				rightMouseButtonAsBack = true;
+ 				return true;
+ 			}
+ 			else if( mParent.keyboardWithoutTextInputShown )
+@@ -1036,6 +1085,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 				return true;
+ 			}
+ 		}
++		// Some send MENU on a long press of BACK, i.e. of the right mouse button
++		if( keyCode == KeyEvent.KEYCODE_MENU && (rightMouseButtonAsBack || menuSwallowed) )
++		{
++			menuSwallowed = true;
++			return true;
++		}
+ 
+ 		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
+ 			return super.onKeyDown(keyCode, event);
+@@ -1056,10 +1111,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
+ 					mouseInput = true;
+ 			}
+-			if( mouseInput )
++			if( mouseInput || rightMouseButtonAsBack )
+ 			{
+ 				// Stupid Samsung and stupid Acer remaps right mouse button to BACK key
+ 				nativeMouseButtonsPressed(2, 0);
++				rightMouseButtonAsBack = false;
+ 				return true;
+ 			}
+ 			else if( mParent.keyboardWithoutTextInputShown )
+@@ -1068,6 +1124,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 				return true;
+ 			}
+ 		}
++		if( keyCode == KeyEvent.KEYCODE_MENU && menuSwallowed )
++		{
++			menuSwallowed = false;
++			return true;
++		}
+ 
+ 		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
+ 			return super.onKeyUp(keyCode, event);
+@@ -1122,9 +1183,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -348,7 +415,7 @@ index f0a437bb6..da56030e1 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1218,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1238,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -356,7 +423,7 @@ index f0a437bb6..da56030e1 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1237,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1257,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
