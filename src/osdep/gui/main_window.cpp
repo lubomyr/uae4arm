@@ -466,7 +466,7 @@ namespace sdl
         gcn::FocusHandler* focusHdl;
         gcn::Widget* activeWidget;
           
-#ifndef PANDORA
+#if !defined(PANDORA) || defined(LINUX_HOST)
 				if (gui_event.key.keysym.sym == SDLK_F12)
 #else
 				if (gui_event.key.keysym.sym == SDLK_LCTRL)

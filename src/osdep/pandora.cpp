@@ -294,7 +294,7 @@ static void moveVertical(int value)
 static bool handle_internal_functions(int sdlkeycode, int sdlmodifier)
 {
   int i;
-#ifdef ANDROIDSDL
+#if defined(ANDROIDSDL) || defined(LINUX_HOST)
   if (sdlkeycode == SDLK_F12) { // Select key
 #else
   if (sdlkeycode == SDLK_LCTRL) { // Select key
@@ -608,7 +608,7 @@ int handle_msgpump (void)
 				  case SDLK_LSHIFT: // Shift key
             inputdevice_do_keyboard(AK_LSH, 1);
             break;
-  #ifdef ANDROID
+#if defined(ANDROID) || defined(LINUX_HOST)
 		    case SDLK_LCTRL:
                         inputdevice_do_keyboard(AK_CTRL, 1);
                         break;
@@ -676,7 +676,7 @@ int handle_msgpump (void)
                         inputdevice_do_keyboard(AK_NP9, 1);
                         break;
 #endif           
-#ifdef ANDROIDSDL
+#if defined(ANDROIDSDL) || defined(LINUX_HOST)
 				  case SDLK_F13: // Left shoulder button
 #else
 				  case SDLK_RSHIFT: // Left shoulder button
@@ -710,7 +710,7 @@ int handle_msgpump (void)
   		    continue;
 
   	    switch(rEvent.key.keysym.sym) {
-#ifdef ANDROIDSDL
+#if defined(ANDROIDSDL) || defined(LINUX_HOST)
   		    case SDLK_F12: // Select key
 #else
   		    case SDLK_LCTRL: // Select key
@@ -720,7 +720,7 @@ int handle_msgpump (void)
 				  case SDLK_LSHIFT: // Shift key
             inputdevice_do_keyboard(AK_LSH, 0);
             break;
-#ifdef ANDROID
+#if defined(ANDROID) || defined(LINUX_HOST)
 		    case SDLK_LCTRL:
                         inputdevice_do_keyboard(AK_CTRL, 0);
                         break;
@@ -788,7 +788,7 @@ int handle_msgpump (void)
                         inputdevice_do_keyboard(AK_NP9, 0);
                         break;
 #endif           
-#ifdef ANDROIDSDL
+#if defined(ANDROIDSDL) || defined(LINUX_HOST)
 				  case SDLK_F13: // Left shoulder button
 #else
 				  case SDLK_RSHIFT: // Left shoulder button
