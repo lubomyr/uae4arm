@@ -265,6 +265,24 @@ index f0a437bb6..bd4a7592b 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
+diff --git a/project/jni/guichan/src/sdl/sdlinput.cpp b/project/jni/guichan/src/sdl/sdlinput.cpp
+index 168dec92c..6cb496f0e 100755
+--- a/project/jni/guichan/src/sdl/sdlinput.cpp
++++ b/project/jni/guichan/src/sdl/sdlinput.cpp
+@@ -111,6 +111,13 @@ namespace gcn
+                 if (value == -1)
+                 {
+                     value = (int)event.key.keysym.unicode;
++#ifdef ANDROID
++                    // The keyboard built into SDL presses Shift as a key of
++                    // its own and sends the letter without it, so its
++                    // character comes lower case.
++                    if ((event.key.keysym.mod & KMOD_SHIFT) && value >= 'a' && value <= 'z')
++                        value -= 'a' - 'A';
++#endif
+                 } 
+                
+                 keyInput.setKey(Key(value));
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
 index 14d8a4dd1..f668ad277 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
