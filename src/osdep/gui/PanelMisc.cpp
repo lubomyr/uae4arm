@@ -25,6 +25,10 @@
 #include "statusline.h"
 #include "gui.h"
 #include "gui_handling.h"
+#ifdef ANDROIDSDL
+#include <SDL_android.h>
+extern "C" int SDL_ANDROID_VideoMultithreaded;
+#endif
 
 /* "Pandora Speed" clocks the Pandora handheld's own CPU - nothing to do on
    Android or a PC */
@@ -54,6 +58,7 @@ static gcn::Label* lblResetDelay;
 static gcn::UaeDropDown* cboResetDelay;
 static const TCHAR* resetDelayLabels[] = { _T("Off"), _T("1 s"), _T("2 s"), _T("3 s") };
 static gcn::GenericListModel resetDelayList(resetDelayLabels, 4);
+static gcn::UaeCheckBox* chkVideoThread;
 #endif
 
 
@@ -72,6 +77,7 @@ static void RefreshPanelMisc(void)
   chkMasterWP->setSelected(workprefs.floppy_read_only);
 #ifdef ANDROIDSDL
   cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
+  chkVideoThread->setSelected(SDL_ANDROID_VideoMultithreaded != 0);
 #endif
 
 #ifdef PANDORA
@@ -139,6 +145,19 @@ class MiscActionListener : public gcn::ActionListener
 #ifdef ANDROIDSDL
       else if (actionEvent.getSource() == cboResetDelay)
         workprefs.reset_delay = cboResetDelay->getSelected();
+      else if (actionEvent.getSource() == chkVideoThread) {
+        // An option of the SDL wrapper, not of the configuration: it takes a
+        // restart, and if the app does not come up with the thread, the next
+        // start turns it off again.
+        int on = chkVideoThread->isSelected();
+        if (ShowMessage("Separate thread for video", "uae4arm restarts to apply this.",
+            "Changes not saved to a configuration are lost.", "Restart", "Cancel")) {
+          SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED, on);
+          SDL_ANDROID_RestartMyself(NULL);
+        } else {
+          chkVideoThread->setSelected(!on);
+        }
+      }
 #endif
 
 #ifdef PANDORA
@@ -223,6 +242,9 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   cboResetDelay->setBaseColor(gui_baseCol);
   cboResetDelay->setId("ResetDelay");
   cboResetDelay->addActionListener(miscActionListener);
+  chkVideoThread = new gcn::UaeCheckBox("Separate thread for video");
+  chkVideoThread->setId("VideoThread");
+  chkVideoThread->addActionListener(miscActionListener);
 #endif
   
   int posY = DISTANCE_BORDER;
@@ -236,6 +258,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   category.panel->add(lblResetDelay, DISTANCE_BORDER, posY + 2);
   category.panel->add(cboResetDelay, DISTANCE_BORDER + lblResetDelay->getWidth() + 8, posY);
   posY += cboResetDelay->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkVideoThread, DISTANCE_BORDER, posY);
+  posY += chkVideoThread->getHeight() + DISTANCE_NEXT_Y;
 #endif
 
 	posY = DISTANCE_BORDER;
@@ -288,6 +312,7 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
 #ifdef ANDROIDSDL
   delete lblResetDelay;
   delete cboResetDelay;
+  delete chkVideoThread;
 #endif
 
   delete miscActionListener;
@@ -318,6 +343,10 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("\"Reset delay\" holds the Amiga for a moment after each reset, so that mouse buttons or keys can be held");
   helptext.push_back("down before the Kickstart looks at them - both mouse buttons open the Early Startup Menu of Kickstart 2.0");
   helptext.push_back("and later. The \"Boot menu\" button at the bottom does that for you: it resets the Amiga with both buttons held.");
+  helptext.push_back(" ");
+  helptext.push_back("\"Separate thread for video\" draws the screen on a thread of its own, which makes the emulation faster.");
+  helptext.push_back("It is the same option as in the SDL settings and takes a restart of the app. It crashes on some devices:");
+  helptext.push_back("if the app does not get to the menu with it, the next start turns it off again.");
 #endif
   return true;
 }

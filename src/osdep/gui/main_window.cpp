@@ -960,6 +960,8 @@ void run_gui(void)
 #ifdef ANDROIDSDL
   SDL_ANDROID_SetScreenKeyboardShown(0);
   SDL_ANDROID_SetSystemMousePointerVisible(1);
+  // The app got this far, so a video thread on trial stays on
+  SDL_ANDROID_ConfirmConfigOptions();
 #endif
   gui_running = true;
   gui_rtarea_flags_onenter = gui_create_rtarea_flag(&currprefs);

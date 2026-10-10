@@ -294,10 +294,11 @@ static NavigationMap navMap[] =
   
 // PanelMisc
 #if defined(ANDROIDSDL)
-  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "ResetDelay",     "BSDSocket" },
+  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "VideoThread",    "BSDSocket" },
   { "BSDSocket",      "Miscellaneous",  "StatusLineRTG",  "ShowGUI",        "MasterWP" },
   { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "ResetDelay" },
-  { "ResetDelay",     "Miscellaneous",  "ShowFPS",        "MasterWP",       "ShowGUI" },
+  { "ResetDelay",     "Miscellaneous",  "ShowFPS",        "MasterWP",       "VideoThread" },
+  { "VideoThread",    "Miscellaneous",  "ShowHD",         "ResetDelay",     "ShowGUI" },
   { "StatusLine",     "ShowGUI",        "Miscellaneous",  "ShowDisk",       "StatusLineRTG" },
 #elif defined(PANDORA) && !defined(LINUX_HOST)
   { "ShowGUI",        "Miscellaneous",  "StatusLine",     "PandSpeed",      "BSDSocket" },

@@ -24,7 +24,7 @@
 #include "androidsdl_event.h"
 #endif
 
-#define DIALOG_WIDTH 340
+#define DIALOG_WIDTH 380
 #define DIALOG_HEIGHT 140
 
 static bool dialogResult = false;

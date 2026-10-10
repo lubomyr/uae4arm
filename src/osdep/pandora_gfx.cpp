@@ -685,6 +685,13 @@ void show_screen (int mode)
 
   last_synctime = read_processor_time();
   SDL_Flip(prSDLScreen);
+#ifdef ANDROIDSDL
+  // A configuration that starts without the menu never shows it, so a
+  // video thread on trial is also kept once the emulation runs for a while
+  static int frames_until_confirm = 250;
+  if (frames_until_confirm > 0 && --frames_until_confirm == 0)
+    SDL_ANDROID_ConfirmConfigOptions();
+#endif
 
   idletime += last_synctime - start;
 

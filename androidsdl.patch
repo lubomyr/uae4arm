@@ -37,10 +37,18 @@ index 69c7f86c2..1b089f520 100644
  	{
  		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
 diff --git a/project/java/Settings.java b/project/java/Settings.java
-index c99131b2a..1da069f16 100644
+index c99131b2a..f8c87722b 100644
 --- a/project/java/Settings.java
 +++ b/project/java/Settings.java
-@@ -940,6 +940,52 @@ public class Settings
+@@ -613,6 +613,7 @@ public class Settings
+ 		}
+ 		if( Globals.SwVideoMode )
+ 			nativeSetVideoForceSoftwareMode();
++		checkVideoThreadTrial(p);
+ 		if( Globals.SwVideoMode && Globals.MultiThreadedVideo )
+ 			nativeSetVideoMultithreaded();
+ 		applyMouseEmulationOptions();
+@@ -940,6 +941,127 @@ public class Settings
  
  	static final int SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0;
  	static final int SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1;
@@ -49,6 +57,7 @@ index c99131b2a..1da069f16 100644
 +	static final int SDL_ANDROID_CONFIG_SCREENKB_DRAWSIZE = 4;
 +	static final int SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5;
 +	static final int SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO = 6;
++	static final int SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED = 7;
 +
 +	// Re-applies the on-screen control settings to the running app. The settings menu
 +	// only ever applies them at startup, but an app that offers them in its own UI
@@ -90,10 +99,84 @@ index c99131b2a..1da069f16 100644
 +		for( int i = 0; i < Globals.ScreenKbControlsShown.length; i++ )
 +			nativeSetScreenKbKeyUsed(i, Globals.ScreenKbControlsShown[i] ? 1 : 0);
 +	}
++
++	// The separate video thread crashes on some devices, so an app that turns
++	// it on gets it on trial: a file says so until the app confirms it started
++	// fine. A start that finds the trial already begun means the one before
++	// never got that far, and turns the thread off again.
++	static final String VIDEO_THREAD_TRIAL_FILE = "video-thread-trial";
++	static final String VIDEO_THREAD_TRIAL_PENDING = "pending";
++	static final String VIDEO_THREAD_TRIAL_STARTED = "started";
++
++	static void setVideoThreadTrial(MainActivity p, String state)
++	{
++		File f = new File(p.getFilesDir(), VIDEO_THREAD_TRIAL_FILE);
++		if( state == null )
++		{
++			f.delete();
++			return;
++		}
++		try
++		{
++			FileOutputStream out = new FileOutputStream(f);
++			out.write(state.getBytes());
++			out.close();
++		}
++		catch( IOException e )
++		{
++			Log.e("SDL", "Cannot write " + f + ": " + e);
++		}
++	}
++
++	static void checkVideoThreadTrial(final MainActivity p)
++	{
++		File f = new File(p.getFilesDir(), VIDEO_THREAD_TRIAL_FILE);
++		if( !f.exists() )
++			return;
++		String state = "";
++		try
++		{
++			BufferedReader in = new BufferedReader(new FileReader(f));
++			String line = in.readLine();
++			in.close();
++			if( line != null )
++				state = line.trim();
++		}
++		catch( IOException e )
++		{
++		}
++		if( state.equals(VIDEO_THREAD_TRIAL_PENDING) )
++		{
++			Log.i("SDL", "Trying out the separate video thread");
++			setVideoThreadTrial(p, VIDEO_THREAD_TRIAL_STARTED);
++			return;
++		}
++		Log.i("SDL", "The last start with the separate video thread did not get through, turning it off");
++		Globals.MultiThreadedVideo = false;
++		setVideoThreadTrial(p, null);
++		Save(p);
++		p.runOnUiThread(new Runnable()
++		{
++			public void run()
++			{
++				Toast.makeText(p, "Separate thread for video was turned off: the app did not start with it", Toast.LENGTH_LONG).show();
++			}
++		});
++	}
++
++	static void confirmConfigOptions(MainActivity p)
++	{
++		File f = new File(p.getFilesDir(), VIDEO_THREAD_TRIAL_FILE);
++		if( f.exists() )
++		{
++			Log.i("SDL", "The app started fine with the separate video thread, keeping it");
++			f.delete();
++		}
++	}
  
  	public static void setConfigOptionFromSDL(int option, int value)
  	{
-@@ -951,6 +997,29 @@ public class Settings
+@@ -951,6 +1073,33 @@ public class Settings
  			case SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT:
  				Globals.HorizontalOrientation = (value == 0);
  				break;
@@ -120,11 +203,15 @@ index c99131b2a..1da069f16 100644
 +				else
 +					Globals.KeepAspectRatio = (value != 0);
 +				break;
++			case SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED:
++				Globals.MultiThreadedVideo = (value != 0);
++				setVideoThreadTrial(MainActivity.instance, value != 0 ? VIDEO_THREAD_TRIAL_PENDING : null);
++				break;
  			default:
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..bd4a7592b 100644
+index f0a437bb6..da56030e1 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -201,7 +288,19 @@ index f0a437bb6..bd4a7592b 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -991,6 +1026,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +998,11 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 		Settings.setConfigOptionFromSDL(option, value);
+ 	}
+ 
++	public void confirmConfigOptions() // Called from native code
++	{
++		Settings.confirmConfigOptions(context);
++	}
++
+ 	private int PowerOf2(int i)
+ 	{
+ 		int value = 1;
+@@ -991,6 +1031,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -209,7 +308,7 @@ index f0a437bb6..bd4a7592b 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1122,9 +1158,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1163,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -249,7 +348,7 @@ index f0a437bb6..bd4a7592b 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1213,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1218,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -257,7 +356,7 @@ index f0a437bb6..bd4a7592b 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1232,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1237,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -284,10 +383,10 @@ index 168dec92c..6cb496f0e 100755
                 
                  keyInput.setKey(Key(value));
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..f668ad277 100644
+index 14d8a4dd1..9e1bd790e 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,6 +139,14 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,32 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -299,12 +398,20 @@ index 14d8a4dd1..f668ad277 100644
 +	SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5, /* 0 = invisible to 4 = opaque */
 +	SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO = 6, /* 0 = stretch to the whole screen, 1 = keep 4:3 with black bars.
 +	                                             Read by SDL_SetVideoMode(), so set it before changing the mode. */
++	SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED = 7, /* 1 = draw on a separate video thread, needs SDL_ANDROID_RestartMyself().
++	                                               It crashes on some devices, so it is turned on for a trial: unless the
++	                                               app calls SDL_ANDROID_ConfirmConfigOptions() on the first start with it,
++	                                               the start after that turns it off again. */
  	/* TODO: more options, see Globals.java */
  };
  
-@@ -146,7 +154,9 @@ enum {
+ /* Set SDL Android-specifc option, and save it to SDL config file, such as video depth or mouse emulation mode. Most options require restarting the app. */
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value);
  
++/* Tell that the app started fine, for options on trial such as SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED.
++   Call it once the app is up, e.g. when its menu shows. */
++extern DECLSPEC void SDLCALL SDL_ANDROID_ConfirmConfigOptions(void);
++
  /* Change mouse emulation mode, pass -1 to any option to keep the current value, this does not change SDL config file.
 -   Currently only relativeMovement is processed, other options are ignored  */
 +   Currently only relativeMovement and moveMouseWithJoystick (with its speed 0-2 and acceleration 0-3, as in the
@@ -313,7 +420,7 @@ index 14d8a4dd1..f668ad277 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +169,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +177,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -428,26 +535,43 @@ index bed900ebe..0b838a79a 100644
  {
  	int i;
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..6066a44e4 100644
+index 30df36343..7678b1829 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-@@ -122,6 +122,7 @@ static jmethodID JavaRequestOpenExternalApp = NULL;
+@@ -121,7 +121,9 @@ static jmethodID JavaRequestCloudLoad = NULL;
+ static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
++static jmethodID JavaConfirmConfigOptions = NULL;
  static jmethodID JavaSetSystemMousePointerVisible = NULL;
 +static jmethodID JavaSetMouseCaptured = NULL;
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -429,6 +430,7 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +430,9 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+ 	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
++	JavaConfirmConfigOptions = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "confirmConfigOptions", "()V");
  	JavaSetSystemMousePointerVisible = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setSystemMousePointerVisible", "(I)V");
 +	JavaSetMouseCaptured = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setMouseCaptured", "(I)V");
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -697,6 +699,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -686,6 +690,12 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+ 	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
+ }
+ 
++void SDLCALL SDL_ANDROID_ConfirmConfigOptions(void)
++{
++	JNIEnv *JavaEnv = GetJavaEnv();
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaConfirmConfigOptions );
++}
++
+ void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
+ {
+ 	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
+@@ -697,6 +707,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  
