@@ -475,6 +475,9 @@ static int translate_pandora_keys(int sdlkeycode, int *sdlmodifier)
     }
   }
 
+#if !defined(ANDROIDSDL) && !defined(LINUX_HOST)
+  /* The Pandora's own keyboard gives brackets and the tilde with Shift and a
+     digit. Any other keyboard means @, #, $, ( and ) by that (issue #52). */
   if(*sdlmodifier == KMOD_LSHIFT) {
     // Shift button pressed
     switch(sdlkeycode) {
@@ -499,6 +502,7 @@ static int translate_pandora_keys(int sdlkeycode, int *sdlmodifier)
         return AK_RBRACKET;
     }
   }
+#endif
   
   switch(sdlkeycode) {
     case SDLK_PAGEUP: // button Y -> Space
