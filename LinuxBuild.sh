@@ -23,7 +23,9 @@ fi
 
 # guichan from the androidsdl tree, as a static library
 GUICHAN=../../guichan
-if [ ! -f build-linux/libguichan.a ]; then
+# again when guichan has changed, as the Android wrapper's patch changes it
+if [ ! -f build-linux/libguichan.a ] || [ -n "`find $GUICHAN/src $GUICHAN/include -newer build-linux/libguichan.a -type f | head -1`" ]; then
+	rm -rf build-linux/guichan build-linux/libguichan.a
 	mkdir -p build-linux/guichan
 	# contrib/ is left out: uae4arm has its own sdltruetypefont, and this one
 	# pulls in android/log.h

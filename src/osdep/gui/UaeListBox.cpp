@@ -14,6 +14,9 @@
 #endif
 
 
+// The theme's color for the selected row of a list without the focus
+extern gcn::Color gui_inactiveSelectionCol;
+
 namespace gcn
 {
 
@@ -102,7 +105,7 @@ namespace gcn
                 if(isFocused())
                   graphics->setColor(getSelectionColor());
                 else
-                  graphics->setColor(0xd0d0d0);
+                  graphics->setColor(gui_inactiveSelectionCol);
                 graphics->fillRectangle(Rectangle(x, y, getWidth(), rowHeight));
            } else if(col > 0) {
                 graphics->setColor(getBackgroundColor());

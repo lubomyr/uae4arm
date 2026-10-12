@@ -121,6 +121,7 @@ gcn::Color gui_baseCol;
 gcn::Color gui_baseColLabel;
 gcn::Color colSelectorInactive;
 gcn::Color colSelectorActive;
+gcn::Color gui_inactiveSelectionCol;
 SDL_Surface* gui_screen;
 gcn::SDLGraphics* gui_graphics;
 gcn::SDLInput* gui_input;
@@ -139,6 +140,9 @@ namespace widgets
   gcn::Button* cmdStart;
   gcn::Button* cmdHelp;
 	gcn::Button* cmdShutdown;
+
+  void gui_init();
+  void gui_halt();
 }
 
 #if defined(ANDROIDSDL) && !defined(USE_SDL2)
@@ -208,6 +212,51 @@ void gui_restart(void)
 }
 
 static void (*refreshFuncAfterDraw)(void) = NULL;
+
+// The menu theme, from adfdir.conf: 0 = light, 1 = dark
+static void apply_gui_theme(void)
+{
+  gcn::Color text, field, base, selection;
+  if (gui_theme == 1) {
+    gui_baseCol = gcn::Color(60, 60, 68);
+    colSelectorInactive = gcn::Color(44, 44, 50);
+    colSelectorActive = gcn::Color(72, 82, 130);
+    gui_inactiveSelectionCol = gcn::Color(72, 72, 80);
+    text = gcn::Color(220, 220, 225);
+    field = gcn::Color(36, 36, 40);
+    base = gcn::Color(90, 90, 100);
+    selection = gcn::Color(64, 88, 140);
+  } else {
+    gui_baseCol = gcn::Color(192, 192, 208);
+    colSelectorInactive = gcn::Color(255, 255, 255);
+    colSelectorActive = gcn::Color(192, 192, 255);
+    gui_inactiveSelectionCol = gcn::Color(0xd0d0d0);
+    // guichan's own defaults
+    text = gcn::Color(0x000000);
+    field = gcn::Color(0xffffff);
+    base = gcn::Color(0x808090);
+    selection = gcn::Color(0xc3d9ff);
+  }
+  gui_baseColLabel = gui_baseCol;
+  gui_baseColLabel.a = 192;
+  gcn::Widget::setDefaultColors(text, field, base, selection);
+}
+
+static bool gui_rebuilding = false;
+
+// After a change of the theme: the widgets take their colors when they are
+// made, so make the menu again, on the same panel. Run it through
+// RegisterRefreshFunc(), not from a widget's own action.
+void gui_rebuild_for_theme(void)
+{
+  gui_rebuilding = true;
+  // Let go of the old top first: setTop() would otherwise reach into it
+  // after widgets::gui_halt() has deleted it.
+  uae_gui->setTop(NULL);
+  widgets::gui_halt();
+  widgets::gui_init();
+  gui_rebuilding = false;
+}
 
 void RegisterRefreshFunc(void (*func)(void))
 {
@@ -731,19 +780,7 @@ namespace widgets
     //-------------------------------------------------
     // Define base colors
     //-------------------------------------------------
-    gui_baseCol.r = 192;
-    gui_baseCol.g = 192;
-    gui_baseCol.b = 208;
-    gui_baseColLabel.r = gui_baseCol.r;
-    gui_baseColLabel.g = gui_baseCol.g;
-    gui_baseColLabel.b = gui_baseCol.b;
-    gui_baseColLabel.a = 192;
-    colSelectorInactive.r = 255;
-    colSelectorInactive.g = 255;
-    colSelectorInactive.b = 255;
-    colSelectorActive.r = 192;
-    colSelectorActive.g = 192;
-    colSelectorActive.b = 255;
+    apply_gui_theme();
 
     //-------------------------------------------------
     // Create container for main page
@@ -899,7 +936,7 @@ namespace widgets
   	//--------------------------------------------------
   	// Activate last active panel
   	//--------------------------------------------------
-  	if(!emulating && quickstart_start)
+  	if(!emulating && quickstart_start && !gui_rebuilding)
   	  last_active_panel = 1;
   	categories[last_active_panel].selector->requestFocus();
   	cmdHelp->setVisible(categories[last_active_panel].HelpFunc != NULL);

@@ -44,7 +44,7 @@ namespace gcn
 
         if (isFocused())
         {
-            graphics->setColor(Color(0x000000));
+            graphics->setColor(getForegroundColor());
             graphics->drawRectangle(Rectangle(0,
                                               0,
                                               getWidth(),

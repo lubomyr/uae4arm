@@ -51,6 +51,10 @@ static gcn::Label* lblPandoraSpeed;
 static gcn::Label* lblPandoraSpeedInfo;
 static gcn::Slider* sldPandoraSpeed;
 #endif
+static gcn::Label* lblMenuTheme;
+static gcn::UaeDropDown* cboMenuTheme;
+static const TCHAR* menuThemeLabels[] = { _T("Light"), _T("Dark") };
+static gcn::GenericListModel menuThemeList(menuThemeLabels, 2);
 static gcn::UaeCheckBox* chkBSDSocket;
 static gcn::UaeCheckBox* chkMasterWP;
 #ifdef ANDROIDSDL
@@ -75,6 +79,7 @@ static void RefreshPanelMisc(void)
   chkShowGUI->setSelected(workprefs.start_gui);
   chkBSDSocket->setSelected(workprefs.socket_emu);
   chkMasterWP->setSelected(workprefs.floppy_read_only);
+  cboMenuTheme->setSelected(gui_theme == 1 ? 1 : 0);
 #ifdef ANDROIDSDL
   cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
   chkVideoThread->setSelected(SDL_ANDROID_VideoMultithreaded != 0);
@@ -141,6 +146,16 @@ class MiscActionListener : public gcn::ActionListener
         
       else if (actionEvent.getSource() == chkMasterWP) {
         workprefs.floppy_read_only = chkMasterWP->isSelected();
+      }
+      else if (actionEvent.getSource() == cboMenuTheme) {
+        // Of the app, not of the configuration. The menu is made again in
+        // the new colors once this action is over.
+        int theme = cboMenuTheme->getSelected();
+        if (theme != gui_theme) {
+          gui_theme = theme;
+          saveAdfDir();
+          RegisterRefreshFunc(gui_rebuild_for_theme);
+        }
       }
 #ifdef ANDROIDSDL
       else if (actionEvent.getSource() == cboResetDelay)
@@ -235,6 +250,13 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   chkMasterWP->setId("MasterWP");
   chkMasterWP->addActionListener(miscActionListener);
 
+  lblMenuTheme = new gcn::Label("Menu theme:");
+  cboMenuTheme = new gcn::UaeDropDown(&menuThemeList);
+  cboMenuTheme->setSize(80, DROPDOWN_HEIGHT);
+  cboMenuTheme->setBaseColor(gui_baseCol);
+  cboMenuTheme->setId("MenuTheme");
+  cboMenuTheme->addActionListener(miscActionListener);
+
 #ifdef ANDROIDSDL
   lblResetDelay = new gcn::Label("Reset delay:");
   cboResetDelay = new gcn::UaeDropDown(&resetDelayList);
@@ -261,6 +283,9 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   category.panel->add(chkVideoThread, DISTANCE_BORDER, posY);
   posY += chkVideoThread->getHeight() + DISTANCE_NEXT_Y;
 #endif
+  category.panel->add(lblMenuTheme, DISTANCE_BORDER, posY + 2);
+  category.panel->add(cboMenuTheme, DISTANCE_BORDER + lblMenuTheme->getWidth() + 8, posY);
+  posY += cboMenuTheme->getHeight() + DISTANCE_NEXT_Y;
 
 	posY = DISTANCE_BORDER;
   category.panel->add(chkStatusLine, DISTANCE_BORDER + 260, posY);
@@ -309,6 +334,8 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
 #endif
   delete chkBSDSocket;
   delete chkMasterWP;
+  delete lblMenuTheme;
+  delete cboMenuTheme;
 #ifdef ANDROIDSDL
   delete lblResetDelay;
   delete cboResetDelay;
@@ -338,6 +365,8 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("\"bsdsocket.library\" enables network functions (i.e. for web browsers in OS3.9).");
   helptext.push_back(" ");
   helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
+  helptext.push_back(" ");
+  helptext.push_back("\"Menu theme\" chooses light or dark colors for this menu. It is kept for the app, not in the configuration.");
 #ifdef ANDROIDSDL
   helptext.push_back(" ");
   helptext.push_back("\"Reset delay\" holds the Amiga for a moment after each reset, so that mouse buttons or keys can be held");

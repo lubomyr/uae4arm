@@ -294,11 +294,12 @@ static NavigationMap navMap[] =
   
 // PanelMisc
 #if defined(ANDROIDSDL)
-  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "VideoThread",    "BSDSocket" },
+  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "MenuTheme",      "BSDSocket" },
   { "BSDSocket",      "Miscellaneous",  "StatusLineRTG",  "ShowGUI",        "MasterWP" },
   { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "ResetDelay" },
   { "ResetDelay",     "Miscellaneous",  "ShowFPS",        "MasterWP",       "VideoThread" },
-  { "VideoThread",    "Miscellaneous",  "ShowHD",         "ResetDelay",     "ShowGUI" },
+  { "VideoThread",    "Miscellaneous",  "ShowHD",         "ResetDelay",     "MenuTheme" },
+  { "MenuTheme",      "Miscellaneous",  "ShowCD",         "VideoThread",    "ShowGUI" },
   { "StatusLine",     "ShowGUI",        "Miscellaneous",  "ShowDisk",       "StatusLineRTG" },
 #elif defined(PANDORA) && !defined(LINUX_HOST)
   { "ShowGUI",        "Miscellaneous",  "StatusLine",     "PandSpeed",      "BSDSocket" },
@@ -306,9 +307,10 @@ static NavigationMap navMap[] =
   { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "PandSpeed" },
   { "StatusLine",     "ShowGUI",        "Miscellaneous",  "PandSpeed",      "StatusLineRTG" },
 #else /* RASPBERRY */
-  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "MasterWP",       "BSDSocket" },
+  { "ShowGUI",        "Miscellaneous",  "StatusLine",     "MenuTheme",      "BSDSocket" },
   { "BSDSocket",      "Miscellaneous",  "StatusLineRTG",  "ShowGUI",        "MasterWP" },
-  { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "ShowGUI" },
+  { "MasterWP",       "Miscellaneous",  "ShowIdle",       "BSDSocket",      "MenuTheme" },
+  { "MenuTheme",      "Miscellaneous",  "ShowFPS",        "MasterWP",       "ShowGUI" },
   { "StatusLine",     "ShowGUI",        "Miscellaneous",  "ShowDisk",       "StatusLineRTG" },
 #endif
   { "StatusLineRTG",  "BSDSocket",      "Miscellaneous",  "StatusLine",     "ShowIdle" },

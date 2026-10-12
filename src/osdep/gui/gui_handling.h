@@ -53,6 +53,8 @@ extern char currentDir[MAX_DPATH];
 extern char last_loaded_config[MAX_DPATH];
 
 extern int quickstart_start;
+extern int gui_theme;
+void gui_rebuild_for_theme(void);
 extern int quickstart_model;
 extern int quickstart_conf;
 extern char last_active_config[MAX_PATH];

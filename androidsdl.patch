@@ -431,6 +431,40 @@ index f0a437bb6..d837b3720 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
+diff --git a/project/jni/guichan/include/guichan/widget.hpp b/project/jni/guichan/include/guichan/widget.hpp
+index e702ffd62..490ddcbbe 100755
+--- a/project/jni/guichan/include/guichan/widget.hpp
++++ b/project/jni/guichan/include/guichan/widget.hpp
+@@ -661,6 +661,14 @@ namespace gcn
+          */
+         static void setGlobalFont(Font* font);
+ 
++        /**
++         * Sets the colors that widgets created from now on start with, so that
++         * an application can give all of them a theme, a dark one for example.
++         * Widgets that exist already keep their colors.
++         */
++        static void setDefaultColors(const Color& foreground, const Color& background,
++                                     const Color& base, const Color& selection);
++
+         /**
+          * Sets the font for the widget. If NULL is passed, the global font 
+          * will be used.
+@@ -1188,6 +1196,14 @@ namespace gcn
+          * Holds a list of all instances of widgets.
+          */
+         static std::list<Widget*> mWidgets;
++
++        /**
++         * The colors new widgets start with, see setDefaultColors.
++         */
++        static Color mDefaultForegroundColor;
++        static Color mDefaultBackgroundColor;
++        static Color mDefaultBaseColor;
++        static Color mDefaultSelectionColor;
+     };
+ }
+ 
 diff --git a/project/jni/guichan/src/sdl/sdlinput.cpp b/project/jni/guichan/src/sdl/sdlinput.cpp
 index 168dec92c..4f3f6dfe4 100755
 --- a/project/jni/guichan/src/sdl/sdlinput.cpp
@@ -466,6 +500,47 @@ index 168dec92c..4f3f6dfe4 100755
                  } 
                 
                  keyInput.setKey(Key(value));
+diff --git a/project/jni/guichan/src/widget.cpp b/project/jni/guichan/src/widget.cpp
+index 97978a7ac..127fb1d84 100755
+--- a/project/jni/guichan/src/widget.cpp
++++ b/project/jni/guichan/src/widget.cpp
+@@ -67,12 +67,16 @@ namespace gcn
+     Font* Widget::mGlobalFont = NULL;
+     DefaultFont Widget::mDefaultFont;
+     std::list<Widget*> Widget::mWidgets;
++    Color Widget::mDefaultForegroundColor(0x000000);
++    Color Widget::mDefaultBackgroundColor(0xffffff);
++    Color Widget::mDefaultBaseColor(0x808090);
++    Color Widget::mDefaultSelectionColor(0xc3d9ff);
+ 
+     Widget::Widget()
+-            : mForegroundColor(0x000000),
+-              mBackgroundColor(0xffffff),
+-              mBaseColor(0x808090),
+-              mSelectionColor(0xc3d9ff),
++            : mForegroundColor(mDefaultForegroundColor),
++              mBackgroundColor(mDefaultBackgroundColor),
++              mBaseColor(mDefaultBaseColor),
++              mSelectionColor(mDefaultSelectionColor),
+               mFocusHandler(NULL),
+               mInternalFocusHandler(NULL),
+               mParent(NULL),
+@@ -479,6 +483,15 @@ namespace gcn
+         return mCurrentFont;
+     }
+ 
++    void Widget::setDefaultColors(const Color& foreground, const Color& background,
++                                  const Color& base, const Color& selection)
++    {
++        mDefaultForegroundColor = foreground;
++        mDefaultBackgroundColor = background;
++        mDefaultBaseColor = base;
++        mDefaultSelectionColor = selection;
++    }
++
+     void Widget::setGlobalFont(Font* font)
+     {
+         mGlobalFont = font;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
 index 14d8a4dd1..9e1bd790e 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h

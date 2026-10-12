@@ -64,6 +64,7 @@ static uae_s64 host_millis (void)
 #endif
 
 int quickstart_start = 1;
+int gui_theme = 0;
 int quickstart_model = 0;
 int quickstart_conf = 0;
 bool host_poweroff = false;
@@ -581,6 +582,8 @@ void saveAdfDir(void)
 
   snprintf(buffer, MAX_DPATH - 1, "Quickstart=%d\n", quickstart_start);
   fputs(buffer, f);
+  snprintf(buffer, MAX_DPATH - 1, "MenuTheme=%d\n", gui_theme);
+  fputs(buffer, f);
 
 	fclose(f);
 }
@@ -733,6 +736,7 @@ void loadAdfDir(void)
           cfgfile_intval(option, value, "MRUDiskList", &numDisks, 1);
           cfgfile_intval(option, value, "MRUCDList", &numCDs, 1);
           cfgfile_intval(option, value, "Quickstart", &quickstart_start, 1);
+          cfgfile_intval(option, value, "MenuTheme", &gui_theme, 1);
         }
     	}
     }
