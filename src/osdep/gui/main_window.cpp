@@ -883,13 +883,20 @@ namespace widgets
 #endif
   	int panelStartX = DISTANCE_BORDER + selectors->getWidth() + 2 + 11;
 
+  	// 24 pixels a row, less where that does not fit: Android has one
+  	// category more (OnScreen), and 17 rows of 24 took 5 pixels too many
+  	int numCategories = 0;
+  	while(categories[numCategories].category != NULL)
+  	  ++numCategories;
+  	int selectorHeight = std::min(24, (workAreaHeight - 2) / numCategories);
+
   	panelFocusListener = new PanelFocusListener();
     for(i=0; categories[i].category != NULL; ++i)
     {
       categories[i].selector = new gcn::SelectorEntry(categories[i].category, categories[i].imagepath);
       categories[i].selector->setActiveColor(colSelectorActive);
       categories[i].selector->setInactiveColor(colSelectorInactive);
-      categories[i].selector->setSize(150, 24);
+      categories[i].selector->setSize(150, selectorHeight);
       categories[i].selector->addFocusListener(panelFocusListener);
       
       categories[i].panel = new gcn::Container();
@@ -922,7 +929,7 @@ namespace widgets
     gui_top->add(cmdStart, GUI_WIDTH - DISTANCE_BORDER - BUTTON_WIDTH, GUI_HEIGHT - DISTANCE_BORDER - BUTTON_HEIGHT);
 
     gui_top->add(selectors, DISTANCE_BORDER + 1, DISTANCE_BORDER + 1);
-    for(i=0, yPos=0; categories[i].category != NULL; ++i, yPos += 24)
+    for(i=0, yPos=0; categories[i].category != NULL; ++i, yPos += selectorHeight)
     {
       selectors->add(categories[i].selector,  0,  yPos);
       gui_top->add(categories[i].panel, panelStartX, DISTANCE_BORDER + 1);
