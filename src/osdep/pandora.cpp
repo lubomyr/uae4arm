@@ -104,9 +104,11 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->onScreen_button6 = 0;
 	p->custom_position = 0;
 	p->onScreen_size = 100;
-	/* Same defaults as the SDL wrapper uses in Globals.java */
-	p->onScreen_theme = 2;
-	p->onScreen_controlsize = 1;
+	/* Simple theme, tiny controls. The theme is also TouchscreenKeysTheme in
+	   AndroidAppSettings.cfg, so that the wrapper starts with it; the sizes
+	   reach the wrapper from here (update_onscreen_appearance()). */
+	p->onScreen_theme = 1;
+	p->onScreen_controlsize = 3;
 	p->onScreen_drawsize = 2;
 	p->onScreen_transparency = 2;
 	p->keepAspectRatio = 1;
