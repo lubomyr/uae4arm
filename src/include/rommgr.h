@@ -10,6 +10,7 @@ extern int decode_cloanto_rom_do (uae_u8 *mem, int size, int real_size);
 #define ROMTYPE_KICK		0x00000100
 #define ROMTYPE_KICKCD32	0x00000200
 #define ROMTYPE_EXTCD32		0x00000400
+#define ROMTYPE_EXTCDTV		0x00000800
 #define ROMTYPE_KEY			0x00001000
 #define ROMTYPE_CD32CART	0x00008000
 #define ROMTYPE_SPECIALKICK	0x00010000
@@ -26,6 +27,7 @@ extern int decode_cloanto_rom_do (uae_u8 *mem, int size, int real_size);
 #define ROMTYPE_RAMZ3		0x00100041
 #define ROMTYPE_MB_IDE		0x00100044
 #define ROMTYPE_MB_PCMCIA	0x00100047
+#define ROMTYPE_CDTVDMAC	0x0010004c
 
 #define ROMTYPE_NOT			0x00800000
 #define ROMTYPE_EVEN		0x02000000
@@ -36,7 +38,7 @@ extern int decode_cloanto_rom_do (uae_u8 *mem, int size, int real_size);
 #define ROMTYPE_NONE		0x80000000
 
 #define ROMTYPE_ALL_KICK (ROMTYPE_KICK | ROMTYPE_KICKCD32 | ROMTYPE_CD32)
-#define ROMTYPE_ALL_EXT (ROMTYPE_EXTCD32)
+#define ROMTYPE_ALL_EXT (ROMTYPE_EXTCD32 | ROMTYPE_EXTCDTV)
 #define ROMTYPE_ALL_CART (ROMTYPE_AR | ROMTYPE_HRTMON | ROMTYPE_NORDIC | ROMTYPE_XPOWER | ROMTYPE_CD32CART)
 
 struct romheader {

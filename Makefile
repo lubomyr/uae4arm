@@ -99,6 +99,7 @@ MY_CFLAGS  = $(CFLAGS)
 
 OBJS =	\
 	src-$(arch)/akiko.o \
+	src-$(arch)/cdtv.o \
 	src-$(arch)/ar.o \
 	src-$(arch)/aros.rom.o \
 	src-$(arch)/audio.o \

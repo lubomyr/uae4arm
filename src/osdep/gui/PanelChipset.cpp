@@ -55,6 +55,7 @@ struct chipset {
 static struct chipset chipsets [] = {
   { CP_GENERIC, "Generic" },
   { CP_CD32,    "CD32" },
+  { CP_CDTV,    "CDTV" },
   { CP_A500,    "A500" },
   { CP_A500P,   "A500+" },
   { CP_A600,    "A600" },
@@ -63,7 +64,7 @@ static struct chipset chipsets [] = {
   { CP_A4000,   "A4000" },
   { -1, "" }
 };
-static const int numChipsets = 8;
+static const int numChipsets = 9;
 
 
 static gcn::GenericListModel chipsetList;

@@ -177,7 +177,7 @@ static void RefreshPanelHD(void)
   // A CD mounted as CD0: goes through uaescsi.device, which
   // target_fixup_options() turns on when the emulation starts. Show it here
   // already, and do not offer to turn it off.
-  bool scsi_for_cd = workprefs.automount_cddrives && workprefs.cdslots[0].inuse && !workprefs.cs_cd32cd;
+  bool scsi_for_cd = workprefs.automount_cddrives && workprefs.cdslots[0].inuse && !workprefs.cs_cd32cd && !workprefs.cs_cdtvcd;
   if (scsi_for_cd)
     workprefs.scsi = 1;
   chkScsi->setSelected(workprefs.scsi);

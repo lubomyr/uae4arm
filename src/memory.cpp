@@ -356,6 +356,7 @@ static void REGPARAM2 kickmem_bput (uaecptr addr, uae_u32 b)
 static int extendedkickmem_type;
 
 #define EXTENDED_ROM_CD32 1
+#define EXTENDED_ROM_CDTV 2
 #define EXTENDED_ROM_KS 3
 
 static void REGPARAM3 extendedkickmem_lput (uaecptr, uae_u32) REGPARAM;
@@ -642,6 +643,8 @@ static bool load_extendedkickstart (const TCHAR *romextfile, int type)
 	if (type == 0) {
 		if (currprefs.cs_cd32cd) {
 			extendedkickmem_type = EXTENDED_ROM_CD32;
+		} else if (currprefs.cs_cdtvcd || currprefs.cs_cdtvram) {
+			extendedkickmem_type = EXTENDED_ROM_CDTV;
     } else if (size > 300000) {
     	extendedkickmem_type = EXTENDED_ROM_CD32;
     } 
@@ -651,6 +654,13 @@ static bool load_extendedkickstart (const TCHAR *romextfile, int type)
 	if (extendedkickmem_type) {
     zfile_fseek (f, off, SEEK_SET);
     switch (extendedkickmem_type) {
+#ifdef CDTV
+		case EXTENDED_ROM_CDTV:
+			extendedkickmem_bank.label = _T("rom_f0");
+			mapped_malloc (&extendedkickmem_bank);
+			extendedkickmem_bank.start = 0xf00000;
+			break;
+#endif
     case EXTENDED_ROM_CD32:
 			extendedkickmem_bank.label = _T("rom_e0");
 			mapped_malloc (&extendedkickmem_bank);
@@ -1210,7 +1220,7 @@ void memory_reset (void)
   }
 	if (currprefs.cs_rtc == 3) // A2000 clock
 		map_banks (&clock_bank, 0xD8, 4, 0);
-	if (currprefs.cs_rtc == 1 || currprefs.cs_rtc == 2)
+	if (currprefs.cs_rtc == 1 || currprefs.cs_rtc == 2 || currprefs.cs_cdtvram)
     map_banks (&clock_bank, 0xDC, 1, 0);
 	else if (currprefs.cs_ksmirror_a8 || currprefs.cs_ide > 0 || currprefs.cs_pcmcia)
 		map_banks (&clock_bank, 0xDC, 1, 0); /* none clock */
@@ -1251,6 +1261,11 @@ void memory_reset (void)
     case EXTENDED_ROM_KS:
 		  map_banks_set(&extendedkickmem_bank, 0xE0, 8, 0);
       break;
+#ifdef CDTV
+	  case EXTENDED_ROM_CDTV:
+		  map_banks_set(&extendedkickmem_bank, 0xF0, extendedkickmem_bank.allocated_size == 2 * ROM_SIZE_512 ? 16 : 8, 0);
+		  break;
+#endif
 #ifdef CD32
 	  case EXTENDED_ROM_CD32:
 		  map_banks_set(&extendedkickmem_bank, 0xE0, 8, 0);

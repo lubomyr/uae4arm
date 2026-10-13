@@ -1811,7 +1811,7 @@ uae_u8 *save_cd (int num, int *len)
 	memset(st->play_qcode, 0, SUBQ_SIZE);
 	if (!currprefs.cdslots[num].inuse || num >= MAX_TOTAL_SCSI_DEVICES)
 		return NULL;
-	if (!currprefs.cs_cd32cd && !currprefs.scsi)
+	if (!currprefs.cs_cd32cd && !currprefs.cs_cdtvcd && !currprefs.scsi)
 		return NULL;
 	dstbak = dst = xmalloc (uae_u8, 4 + MAX_DPATH + 4 + 4 + 4 + SUBQ_SIZE + 2 * MAX_DPATH);
 	save_u32 (4 | 8 | 16);

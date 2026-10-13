@@ -99,10 +99,17 @@ static struct amigamodels amodels[] = {
          " ", " ", " ", " ",
 #endif
 	     "\0" } },
+	{ "CDTV", { 
+	     "CDTV", 
+	     "CDTV with floppy drive",
+#ifdef ANDROID
+         " ", " ", " ", " ",
+#endif
+	     "\0" } },
 	{ "\0" }
 };
 
-static const int numModels = 6;
+static const int numModels = 7;
 static int numModelConfigs = 0;
 static bool bIgnoreListChange = true;
 
@@ -154,6 +161,13 @@ static void SetControlState(int model)
       df1Visible = false;
       cdVisible = true;
       break;
+
+    case 6: // CDTV
+      // CD available, a floppy drive only in the second configuration
+      df0Editable = workprefs.floppyslots[0].dfxtype != DRV_NONE;
+      df1Visible = false;
+      cdVisible = true;
+      break;
   }
 
   chkDFxWriteProtect[0]->setEnabled(df0Editable && !workprefs.floppy_read_only);
@@ -198,6 +212,13 @@ static void AdjustPrefs(void)
     case 5: // CD32
       // No floppy drive available, CD available
       workprefs.floppyslots[0].dfxtype = DRV_NONE;
+      workprefs.floppyslots[1].dfxtype = DRV_NONE;
+      workprefs.cdslots[0].inuse = true;
+      workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
+      break;
+
+    case 6: // CDTV
+      // CD available, df0 as built_in_prefs() set it
       workprefs.floppyslots[1].dfxtype = DRV_NONE;
       workprefs.cdslots[0].inuse = true;
       workprefs.cdslots[0].type = SCSI_UNIT_IMAGE;
@@ -264,6 +285,11 @@ static void SetModelFromConfig(void)
         quickstart_conf = 1;
       else
         quickstart_conf = 0;
+      break;
+
+    case CP_CDTV:
+      quickstart_model = 6;
+      quickstart_conf = workprefs.floppyslots[0].dfxtype != DRV_NONE ? 1 : 0;
       break;
       
     default:

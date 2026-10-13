@@ -18,6 +18,7 @@
 #include "savestate.h"
 #include "gfxboard.h"
 #include "cd32_fmv.h"
+#include "cdtv.h"
 #include "gayle.h"
 #include "autoconf.h"
 #include "devices.h"
@@ -1606,6 +1607,9 @@ static uaecptr check_boot_rom (struct uae_prefs *p, int *boot_rom_type)
 	if (p->boot_rom == 1)
 		return 0;
 	*boot_rom_type = 1;
+	// the CDTV extended ROM sits at 0xf00000
+	if (p->cs_cdtvcd)
+		b = RTAREA_BACKUP;
   ab = &get_mem_bank (RTAREA_DEFAULT);
   if (ab) {
   	if (valid_address (RTAREA_DEFAULT, 65536))
@@ -2591,6 +2595,13 @@ const struct expansionromtype expansionroms[] = {
 		expamem_init_cd32fmv, NULL, ROMTYPE_CD32CART, BOARD_AUTOCONFIG_Z2, 
 		EXPANSIONTYPE_INTERNAL
 	},
+#ifdef CDTV
+	{
+		_T("cdtvdmac"), _T("CDTV DMAC"), _T("Commodore"),
+		cdtv_init, NULL, ROMTYPE_CDTVDMAC | ROMTYPE_NOT, BOARD_AUTOCONFIG_Z2,
+		EXPANSIONTYPE_INTERNAL
+	},
+#endif
 	{
 		_T("ide_mb"), _T("A600/A1200/A4000 IDE"), _T("Commodore"),
 		gayle_ide_init, gayle_add_ide_unit, ROMTYPE_MB_IDE | ROMTYPE_NOT, BOARD_NONAUTOCONFIG_BEFORE,

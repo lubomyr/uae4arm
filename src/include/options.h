@@ -184,7 +184,7 @@ struct uaedev_config_data
 };
 
 enum { CP_GENERIC = 1, CP_CD32, CP_A500, CP_A500P, CP_A600,
-	CP_A1200, CP_A2000, CP_A4000 };
+	CP_A1200, CP_A2000, CP_A4000, CP_CDTV };
 
 #define IDE_A600A1200 1
 #define IDE_A4000 2
@@ -331,6 +331,8 @@ struct uae_prefs {
 	bool cs_cd32nvram;
 	bool cs_cd32fmv;
 	int cs_cd32nvram_size;
+	bool cs_cdtvcd;
+	bool cs_cdtvram;
 	int cs_ide;
 	bool cs_pcmcia;
 	int cs_fatgaryrev;

@@ -173,7 +173,7 @@ extern int isaudiotrack (struct cd_toc_head*, int block);
 extern int isdatatrack (struct cd_toc_head*, int block);
 void sub_to_interleaved (const uae_u8 *s, uae_u8 *d);
 
-enum cd_standard_unit { CD_STANDARD_UNIT_DEFAULT, CD_STANDARD_UNIT_AUDIO, CD_STANDARD_UNIT_CD32 };
+enum cd_standard_unit { CD_STANDARD_UNIT_DEFAULT, CD_STANDARD_UNIT_AUDIO, CD_STANDARD_UNIT_CD32, CD_STANDARD_UNIT_CDTV };
 
 extern int get_standard_cd_unit (enum cd_standard_unit csu);
 extern void blkdev_cd_change (int unitnum, const TCHAR *name);

@@ -337,6 +337,11 @@ volatile uae_atomic uae_int_requested = 0;
 void rtarea_setup(void)
 {
   uaecptr base = need_uae_boot_rom (&currprefs);
+  // The rtarea's memory sits at rtarea_base in natmem whether it is mapped or
+  // not, and rtarea_reset() writes into it. The CDTV extended ROM is at
+  // 0xf00000, so keep the rtarea off it even when the boot ROM is not needed.
+  if (!base && currprefs.cs_cdtvcd)
+    base = RTAREA_BACKUP;
   if (base) {
   	write_log (_T("RTAREA located at %08X\n"), base);
 	  rtarea_base = base;

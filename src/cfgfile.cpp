@@ -61,7 +61,7 @@ static const TCHAR *rtctype[] = { _T("none"), _T("MSM6242B"), _T("RP5C01A"), _T(
 static const TCHAR *ciaatodmode[] = { _T("vblank"), _T("50hz"), _T("60hz"), 0 };
 static const TCHAR *cscompa[] = {
 	_T("-"), _T("Generic"), _T("CD32"), _T("A500"), _T("A500+"), _T("A600"),
-	_T("A1200"), _T("A2000"), _T("A4000"), 
+	_T("A1200"), _T("A2000"), _T("A4000"), _T("CDTV"),
 	NULL
 };
 static const TCHAR *qsmodes[] = {
@@ -1183,6 +1183,8 @@ static void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type
 	cfgfile_dwrite_bool (f, _T("cd32c2p"), p->cs_cd32c2p);
 	cfgfile_dwrite_bool (f, _T("cd32nvram"), p->cs_cd32nvram);
 	cfgfile_dwrite (f, _T("cd32nvram_size"), _T("%d"), p->cs_cd32nvram_size / 1024);
+	cfgfile_dwrite_bool (f, _T("cdtvcd"), p->cs_cdtvcd);
+	cfgfile_dwrite_bool (f, _T("cdtvram"), p->cs_cdtvram);
 	cfgfile_dwrite(f, _T("fatgary"), _T("%d"), p->cs_fatgaryrev);
 	cfgfile_dwrite(f, _T("ramsey"), _T("%d"), p->cs_ramseyrev);
 	cfgfile_dwrite_bool(f, _T("pcmcia"), p->cs_pcmcia);
@@ -2754,6 +2756,8 @@ static int cfgfile_parse_hardware (struct uae_prefs *p, const TCHAR *option, TCH
 		|| cfgfile_yesno (option, value, _T("cd32cd"), &p->cs_cd32cd)
 		|| cfgfile_yesno (option, value, _T("cd32c2p"), &p->cs_cd32c2p)
 		|| cfgfile_yesno (option, value, _T("cd32nvram"), &p->cs_cd32nvram)
+		|| cfgfile_yesno (option, value, _T("cdtvcd"), &p->cs_cdtvcd)
+		|| cfgfile_yesno (option, value, _T("cdtvram"), &p->cs_cdtvram)
 		|| cfgfile_yesno(option, value, _T("cia_overlay"), &p->cs_ciaoverlay)
 		|| cfgfile_yesno(option, value, _T("ksmirror_e0"), &p->cs_ksmirror_e0)
 		|| cfgfile_yesno(option, value, _T("ksmirror_a8"), &p->cs_ksmirror_a8)
@@ -3053,6 +3057,8 @@ void cfgfile_compatibility_romtype(struct uae_prefs *p)
 	addbcromtype(p, ROMTYPE_MB_IDE, p->cs_ide != 0, NULL, 0);
 
 	addbcromtype(p, ROMTYPE_CD32CART, p->cs_cd32fmv, p->cartfile,0);
+
+	addbcromtype(p, ROMTYPE_CDTVDMAC, p->cs_cdtvcd, NULL, 0);
 }
 
 static int getconfigstoreline (const TCHAR *option, TCHAR *value);
@@ -4242,6 +4248,7 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	p->cs_fatgaryrev = -1;
 	p->cs_ramseyrev = -1;
 	p->cs_cd32c2p = p->cs_cd32cd = p->cs_cd32nvram = p->cs_cd32fmv = false;
+	p->cs_cdtvcd = p->cs_cdtvram = false;
 	p->cs_cd32nvram_size = 1024;
 	p->cs_pcmcia = 0;
 	p->cs_ksmirror_e0 = 1;
@@ -4407,6 +4414,7 @@ static void buildin_default_prefs (struct uae_prefs *p)
 	p->cs_fatgaryrev = -1;
 	p->cs_ramseyrev = -1;
 	p->cs_cd32c2p = p->cs_cd32cd = p->cs_cd32nvram = p->cs_cd32fmv = false;
+	p->cs_cdtvcd = p->cs_cdtvram = false;
 	p->cs_ide = 0;
 	p->cs_pcmcia = 0;
 	p->cs_ksmirror_e0 = 1;
@@ -4632,6 +4640,40 @@ static int bip_a500p (struct uae_prefs *p, int config, int compa, int romcheck)
 	p->chipset_mask = CSMASK_ECS_AGNUS | CSMASK_ECS_DENISE;
   return configure_rom (p, roms, romcheck);
 }
+/* From WinUAE, without the memory card and the CDTV-CR */
+static int bip_cdtv (struct uae_prefs *p, int config, int compa, int romcheck)
+{
+	int roms[4];
+
+	p->bogomem.size = 0;
+	p->chipmem.size = 0x100000;
+	p->chipset_mask = CSMASK_ECS_AGNUS;
+	p->cs_cdtvcd = p->cs_cdtvram = 1;
+	p->cs_rtc = 1;
+	p->nr_floppies = 0;
+	p->floppyslots[0].dfxtype = DRV_NONE;
+	if (config > 0)
+		p->floppyslots[0].dfxtype = DRV_35_DD;
+	p->floppyslots[1].dfxtype = DRV_NONE;
+	set_68000_compa (p, compa);
+	p->cs_compatible = CP_CDTV;
+	built_in_chipset_prefs (p);
+	fetch_datapath (p->flashfile, sizeof (p->flashfile) / sizeof (TCHAR));
+	_tcscat (p->flashfile, _T("cdtv.nvr"));
+	roms[0] = 6;
+	roms[1] = 32;
+	roms[2] = -1;
+	if (!configure_rom (p, roms, romcheck))
+		return 0;
+	roms[0] = 20;
+	roms[1] = 21;
+	roms[2] = 22;
+	roms[3] = -1;
+	if (!configure_rom (p, roms, romcheck))
+		return 0;
+	return 1;
+}
+
 static int bip_a500 (struct uae_prefs *p, int config, int compa, int romcheck)
 {
   int roms[4];
@@ -4714,6 +4756,9 @@ int built_in_prefs (struct uae_prefs *p, int model, int config, int compa, int r
 	  case 5:
 		  v = bip_cd32 (p, config, compa, romcheck);
 		  break;
+	  case 6:
+		  v = bip_cdtv (p, config, compa, romcheck);
+		  break;
   }
 	if ((p->cpu_model >= 68020 || !p->cpu_cycle_exact || !p->cpu_memory_cycle_exact) && !p->immediate_blits)
 		p->waiting_blits = 1;
@@ -4731,6 +4776,7 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 		return 1;
 
 	p->cs_cd32c2p = p->cs_cd32cd = p->cs_cd32nvram = 0;
+	p->cs_cdtvcd = p->cs_cdtvram = 0;
 	p->cs_fatgaryrev = -1;
 	p->cs_ide = 0;
 	p->cs_ramseyrev = -1;
@@ -4774,6 +4820,12 @@ int built_in_chipset_prefs (struct uae_prefs *p)
 		  p->cs_ksmirror_a8 = 1;
 		  p->cs_ciaoverlay = 0;
 		  p->cs_unmapped_space = 1;
+		  break;
+	  case CP_CDTV: // CDTV
+		  p->cs_rtc = 1;
+		  p->cs_cdtvcd = p->cs_cdtvram = 1;
+		  p->cs_df0idhw = 1;
+		  p->cs_ksmirror_e0 = 0;
 		  break;
 	  case CP_A500: // A500
     	p->cs_df0idhw = 0;

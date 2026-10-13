@@ -156,9 +156,9 @@ void target_fixup_options (struct uae_prefs *p)
   }
 
   // The CD drive is mounted as CD0: through uaescsi.device, so that needs to
-  // be on (as WinUAE does for map_cd_drives). Not on a CD32, whose
+  // be on (as WinUAE does for map_cd_drives). Not on a CD32 or a CDTV, whose
   // own drive the CD is.
-  if(p->automount_cddrives && p->cdslots[0].inuse && !p->cs_cd32cd && !p->scsi)
+  if(p->automount_cddrives && p->cdslots[0].inuse && !p->cs_cd32cd && !p->cs_cdtvcd && !p->scsi)
     p->scsi = 1;
   
 	p->picasso96_modeflags = RGBFF_CLUT | RGBFF_R5G6B5PC | RGBFF_R8G8B8A8;

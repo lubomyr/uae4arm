@@ -23,6 +23,7 @@
 #define ECS_DENISE /* ECS DENISE new features */
 #define AGA /* AGA chipset emulation (ECS_DENISE must be enabled) */
 #define CD32 /* CD32 emulation */
+#define CDTV /* CDTV emulation */
 #define SCSIEMU /* uaescsi.device emulation */
 #define FPUEMU /* FPU emulation */
 /* #define FPU_UAE */

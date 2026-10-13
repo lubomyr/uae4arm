@@ -23,6 +23,7 @@
 #include "audio.h"
 #include "keyboard.h"
 #include "rtc.h"
+#include "cdtv.h"
 
 /* Akiko internal CIA differences:
 
@@ -1592,6 +1593,11 @@ static uae_u32 REGPARAM2 clock_bget (uaecptr addr)
 	if ((addr & 0xffff) >= 0x8000 && currprefs.cs_fatgaryrev >= 0)
 		return dummy_get(addr, 1, false, 0);
 
+#ifdef CDTV
+	if (currprefs.cs_cdtvram && (addr & 0xffff) >= 0x8000)
+		return cdtv_battram_read(addr);
+#endif
+
   addr &= 0x3f;
 	if ((addr & 3) == 2 || (addr & 3) == 0 || currprefs.cs_rtc == 0) {
 		return dummy_get_safe(addr, 1, false, v);
@@ -1627,6 +1633,13 @@ static void REGPARAM2 clock_bput (uaecptr addr, uae_u32 value)
 	if ((addr & 0xffff) >= 0x8000 && currprefs.cs_fatgaryrev >= 0) {
 		return;
 	}
+
+#ifdef CDTV
+	if (currprefs.cs_cdtvram && (addr & 0xffff) >= 0x8000) {
+		cdtv_battram_write(addr, value);
+		return;
+	}
+#endif
 
   addr &= 0x3f;
 	if ((addr & 1) != 1 || currprefs.cs_rtc == 0)
