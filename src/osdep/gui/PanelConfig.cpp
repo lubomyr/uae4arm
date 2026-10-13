@@ -133,9 +133,13 @@ class ConfigActionListener : public gcn::ActionListener
         //-----------------------------------------------
         char msg[256];
         i = lstConfigs->getSelected();
-        if(i >= 0 && strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME)) {
+        if(i >= 0) {
+          // uaeconfig is the one loaded at start; without it uae4arm starts
+          // with the default settings, so it may go like any other (issue #54)
+          bool startup = !strcmp(ConfigFilesList[i]->Name, OPTIONSFILENAME);
           snprintf(msg, 255, "Do you want to delete '%s' ?", ConfigFilesList[i]->Name);
-          if(ShowMessage("Delete Configuration", msg, "", "Yes", "No")) {
+          if(ShowMessage("Delete Configuration", msg,
+              startup ? "uae4arm then starts with the default settings." : "", "Yes", "No")) {
             remove(ConfigFilesList[i]->FullPath);
             if(!strcmp(last_active_config, ConfigFilesList[i]->Name)) {
               txtName->setText("");
