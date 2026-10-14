@@ -1156,7 +1156,12 @@ void picasso_InitResolutions (void)
         /* Generated shapes narrower than 640 came out as screens that
            scrolled when these were added, so a height that cannot reach 640
            across is left out. This is about the odd widths made here: the
-           320 wide modes in the fixed table open as they should. */
+           320 wide modes in the fixed table open as they should.
+           A shape more than twice as tall as the screen is left out too:
+           shown full screen it would be shrunk by more than half, and text
+           on it is no longer readable. Only screens under 512 lines lose
+           anything, the 1024 high shape. amiberry uses the same rule, so
+           the two offer the same modes. */
         if (w < 640 || h > screen_h * 2)
           continue;
         for (j = 0; j < num_modes; j++) {
