@@ -146,11 +146,24 @@ namespace widgets
 }
 
 #if defined(ANDROIDSDL) && !defined(USE_SDL2)
+// The menu's own screen ratio, from adfdir.conf: 0 = that of the
+// configuration, 1 = always the whole screen, 2 = always 4:3 (the default).
+// Some keep 4:3 for the emulation but want the menu to fill the screen
+// (issue #54).
+static int gui_menu_keeps_aspect(int keep)
+{
+  if (gui_aspect == 1)
+    return 0;
+  if (gui_aspect == 2)
+    return 1;
+  return keep;
+}
+
 // The wrapper takes the screen ratio in SDL_SetVideoMode(), so the menu's mode
 // is set again for a change of the 4:3 option to show at once.
 void gui_set_screen_ratio(int keep)
 {
-  onscreen_menu_screen_ratio(keep);
+  onscreen_menu_screen_ratio(gui_menu_keeps_aspect(keep));
   gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | GUI_FULLSCREEN);
   gui_graphics->setTarget(gui_screen);
 }
@@ -381,7 +394,7 @@ namespace sdl
 		}
 #else
 #ifdef ANDROIDSDL
-		onscreen_menu_screen_ratio(workprefs.keepAspectRatio);
+		onscreen_menu_screen_ratio(gui_menu_keeps_aspect(workprefs.keepAspectRatio));
 		onscreen_menu_mouse_with_dpad_off();
 #endif
 		gui_screen = SDL_SetVideoMode(GUI_WIDTH, GUI_HEIGHT, 16, SDL_SWSURFACE | GUI_FULLSCREEN);

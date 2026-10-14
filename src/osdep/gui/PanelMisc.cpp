@@ -63,6 +63,11 @@ static gcn::UaeDropDown* cboResetDelay;
 static const TCHAR* resetDelayLabels[] = { _T("Off"), _T("1 s"), _T("2 s"), _T("3 s") };
 static gcn::GenericListModel resetDelayList(resetDelayLabels, 4);
 static gcn::UaeCheckBox* chkVideoThread;
+static gcn::Label* lblMenuAspect;
+static gcn::UaeDropDown* cboMenuAspect;
+static const TCHAR* menuAspectLabels[] = { _T("Like config"), _T("Full screen"), _T("4:3") };
+static gcn::GenericListModel menuAspectList(menuAspectLabels, 3);
+extern void gui_set_screen_ratio(int keep);
 #endif
 
 
@@ -83,6 +88,7 @@ static void RefreshPanelMisc(void)
 #ifdef ANDROIDSDL
   cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
   chkVideoThread->setSelected(SDL_ANDROID_VideoMultithreaded != 0);
+  cboMenuAspect->setSelected(std::min(std::max(gui_aspect, 0), 2));
 #endif
 
 #ifdef PANDORA
@@ -147,6 +153,17 @@ class MiscActionListener : public gcn::ActionListener
       else if (actionEvent.getSource() == chkMasterWP) {
         workprefs.floppy_read_only = chkMasterWP->isSelected();
       }
+#ifdef ANDROIDSDL
+      else if (actionEvent.getSource() == cboMenuAspect) {
+        // Of the app, like the theme; shows at once
+        int aspect = cboMenuAspect->getSelected();
+        if (aspect != gui_aspect) {
+          gui_aspect = aspect;
+          saveAdfDir();
+          gui_set_screen_ratio(workprefs.keepAspectRatio);
+        }
+      }
+#endif
       else if (actionEvent.getSource() == cboMenuTheme) {
         // Of the app, not of the configuration. The menu is made again in
         // the new colors once this action is over.
@@ -256,6 +273,14 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   cboMenuTheme->setBaseColor(gui_baseCol);
   cboMenuTheme->setId("MenuTheme");
   cboMenuTheme->addActionListener(miscActionListener);
+#ifdef ANDROIDSDL
+  lblMenuAspect = new gcn::Label("Menu aspect:");
+  cboMenuAspect = new gcn::UaeDropDown(&menuAspectList);
+  cboMenuAspect->setSize(110, DROPDOWN_HEIGHT);
+  cboMenuAspect->setBaseColor(gui_baseCol);
+  cboMenuAspect->setId("MenuAspect");
+  cboMenuAspect->addActionListener(miscActionListener);
+#endif
 
 #ifdef ANDROIDSDL
   lblResetDelay = new gcn::Label("Reset delay:");
@@ -286,6 +311,11 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   category.panel->add(lblMenuTheme, DISTANCE_BORDER, posY + 2);
   category.panel->add(cboMenuTheme, DISTANCE_BORDER + lblMenuTheme->getWidth() + 8, posY);
   posY += cboMenuTheme->getHeight() + DISTANCE_NEXT_Y;
+#ifdef ANDROIDSDL
+  category.panel->add(lblMenuAspect, DISTANCE_BORDER, posY + 2);
+  category.panel->add(cboMenuAspect, DISTANCE_BORDER + lblMenuAspect->getWidth() + 8, posY);
+  posY += cboMenuAspect->getHeight() + DISTANCE_NEXT_Y;
+#endif
 
 	posY = DISTANCE_BORDER;
   category.panel->add(chkStatusLine, DISTANCE_BORDER + 260, posY);
@@ -337,6 +367,10 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
   delete lblMenuTheme;
   delete cboMenuTheme;
 #ifdef ANDROIDSDL
+  delete lblMenuAspect;
+  delete cboMenuAspect;
+#endif
+#ifdef ANDROIDSDL
   delete lblResetDelay;
   delete cboResetDelay;
   delete chkVideoThread;
@@ -367,6 +401,10 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
   helptext.push_back(" ");
   helptext.push_back("\"Menu theme\" chooses light or dark colors for this menu. It is kept for the app, not in the configuration.");
+#ifdef ANDROIDSDL
+  helptext.push_back("\"Menu aspect\" shows this menu with the 4:3 setting of the configuration, always on the whole screen, or");
+  helptext.push_back("always in 4:3. It is kept for the app too.");
+#endif
 #ifdef ANDROIDSDL
   helptext.push_back(" ");
   helptext.push_back("\"Reset delay\" holds the Amiga for a moment after each reset, so that mouse buttons or keys can be held");
