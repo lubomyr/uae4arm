@@ -38,10 +38,10 @@ index 69c7f86c2..1b089f520 100644
  		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
 diff --git a/project/java/Midi.java b/project/java/Midi.java
 new file mode 100644
-index 000000000..b06658ded
+index 000000000..48f11daaa
 --- /dev/null
 +++ b/project/java/Midi.java
-@@ -0,0 +1,287 @@
+@@ -0,0 +1,350 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, MIDI for the Android port
@@ -77,6 +77,7 @@ index 000000000..b06658ded
 +import android.os.HandlerThread;
 +import android.util.Log;
 +import android.widget.Toast;
++import java.util.HashSet;
 +
 +// MIDI for the app through android.media.midi, Android 6 and later: a USB MIDI
 +// device, or an app with a MIDI synthesizer. The app sends raw MIDI bytes to
@@ -89,11 +90,17 @@ index 000000000..b06658ded
 +	private static HandlerThread thread = null;
 +	private static Handler handler = null;
 +	private static Context context = null;
++	private static int retries = 0;
++	// Devices asked to open and not answered yet: an app with a synthesizer may
++	// take its time to start, and the system turns away more asks meanwhile
++	private static final HashSet<Integer> opening = new HashSet<Integer>();
 +
 +	// The device the app sends to, and the device it receives from; can be the same one
 +	private static MidiDevice outDevice = null, inDevice = null;
 +	private static volatile MidiInputPort outPort = null;
 +	private static MidiOutputPort inPort = null;
++	// For the app to show
++	private static volatile String outName = null, inName = null;
 +
 +	private static final MidiReceiver receiver = new MidiReceiver()
 +	{
@@ -109,6 +116,7 @@ index 000000000..b06658ded
 +		@Override
 +		public void onDeviceAdded(MidiDeviceInfo info)
 +		{
++			retries = 0;
 +			openDevice(info);
 +		}
 +
@@ -138,6 +146,7 @@ index 000000000..b06658ded
 +		try
 +		{
 +			context = ctx;
++			retries = 0;
 +			manager = (MidiManager) ctx.getSystemService(Context.MIDI_SERVICE);
 +			if (manager == null)
 +			{
@@ -177,6 +186,7 @@ index 000000000..b06658ded
 +			{
 +				closeOut();
 +				closeIn();
++				opening.clear();
 +				t.quitSafely();
 +			}
 +		});
@@ -204,7 +214,15 @@ index 000000000..b06658ded
 +	{
 +		if (manager == null)
 +			return;
-+		MidiDeviceInfo[] devices = manager.getDevices();
++		MidiDeviceInfo[] devices;
++		try
++		{
++			devices = manager.getDevices();
++		}
++		catch (Exception e)
++		{
++			return;
++		}
 +		// A USB or Bluetooth device first: it is what someone plugs in for this
 +		for (int pass = 0; pass < 2; pass++)
 +			for (MidiDeviceInfo info: devices)
@@ -222,59 +240,103 @@ index 000000000..b06658ded
 +			return;
 +		if (info.getType() == MidiDeviceInfo.TYPE_BLUETOOTH)
 +			return; // these have to be paired with openBluetoothDevice(), not done yet
-+		manager.openDevice(info, new MidiManager.OnDeviceOpenedListener()
++		if (!opening.add(info.getId()))
++			return;
++		try
 +		{
-+			public void onDeviceOpened(MidiDevice device)
++			manager.openDevice(info, new MidiManager.OnDeviceOpenedListener()
 +			{
-+				if (device == null)
++				public void onDeviceOpened(MidiDevice device)
 +				{
-+					Log.i("SDL", "MIDI: cannot open " + deviceName(info));
-+					return;
-+				}
-+				boolean used = false;
-+				if (manager != null && takesBytes && outDevice == null)
-+				{
-+					MidiInputPort port = device.openInputPort(0);
-+					if (port != null)
-+					{
-+						outDevice = device;
-+						outPort = port;
-+						used = true;
-+						Log.i("SDL", "MIDI: sending to " + deviceName(info));
-+						showToast("MIDI out: " + deviceName(info));
-+					}
-+				}
-+				if (manager != null && sendsBytes && inDevice == null)
-+				{
-+					MidiOutputPort port = device.openOutputPort(0);
-+					if (port != null)
-+					{
-+						port.connect(receiver);
-+						inDevice = device;
-+						inPort = port;
-+						used = true;
-+						Log.i("SDL", "MIDI: receiving from " + deviceName(info));
-+						showToast("MIDI in: " + deviceName(info));
-+					}
-+				}
-+				if (!used)
-+				{
++					opening.remove(info.getId());
 +					try
 +					{
-+						device.close();
++						deviceOpened(info, device, takesBytes, sendsBytes);
 +					}
 +					catch (Exception e)
 +					{
++						Log.i("SDL", "MIDI: cannot use " + deviceName(info) + ": " + e);
++						retryLater();
 +					}
 +				}
++			}, handler);
++		}
++		catch (Exception e)
++		{
++			// A device that is being installed or removed comes and goes: an app
++			// with a synthesizer is told of while it is still being installed
++			Log.i("SDL", "MIDI: cannot open " + deviceName(info) + ": " + e);
++			opening.remove(info.getId());
++			retryLater();
++		}
++	}
++
++	// A few times, then it waits for the next device to come
++	private static void retryLater()
++	{
++		if (handler == null || ++retries > 5)
++			return;
++		handler.postDelayed(new Runnable() { public void run() { openAllDevices(); } }, 1000);
++	}
++
++	private static void deviceOpened(MidiDeviceInfo info, MidiDevice device, boolean takesBytes, boolean sendsBytes)
++	{
++		if (device == null)
++		{
++			Log.i("SDL", "MIDI: cannot open " + deviceName(info));
++			retryLater();
++			return;
++		}
++		boolean used = false;
++		if (manager != null && takesBytes && outDevice == null)
++		{
++			MidiInputPort port = device.openInputPort(0);
++			if (port != null)
++			{
++				outDevice = device;
++				outPort = port;
++				outName = deviceName(info);
++				used = true;
++				Log.i("SDL", "MIDI: sending to " + outName);
 +			}
-+		}, handler);
++		}
++		if (manager != null && sendsBytes && inDevice == null)
++		{
++			MidiOutputPort port = device.openOutputPort(0);
++			if (port != null)
++			{
++				port.connect(receiver);
++				inDevice = device;
++				inPort = port;
++				inName = deviceName(info);
++				used = true;
++				Log.i("SDL", "MIDI: receiving from " + inName);
++			}
++		}
++		if (used)
++			showToast("MIDI: " + deviceName(info));
++		else
++		{
++			try
++			{
++				device.close();
++			}
++			catch (Exception e)
++			{
++			}
++		}
++	}
++
++	static String deviceName(boolean input)
++	{
++		return input ? inName : outName;
 +	}
 +
 +	private static void closeOut()
 +	{
 +		MidiInputPort port = outPort;
 +		outPort = null;
++		outName = null;
 +		try
 +		{
 +			if (port != null)
@@ -305,6 +367,7 @@ index 000000000..b06658ded
 +		}
 +		inPort = null;
 +		inDevice = null;
++		inName = null;
 +	}
 +
 +	private static String deviceName(MidiDeviceInfo info)
@@ -504,7 +567,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..59bdd891c 100644
+index f0a437bb6..40d8451bf 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -581,7 +644,7 @@ index f0a437bb6..59bdd891c 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +998,30 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +998,37 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -609,10 +672,17 @@ index f0a437bb6..59bdd891c 100644
 +			Midi.send(data, count);
 +	}
 +
++	public String midiDeviceName(int input) // Called from native code
++	{
++		if (Build.VERSION.SDK_INT < 23)
++			return null;
++		return Midi.deviceName(input != 0);
++	}
++
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1040,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1047,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -620,7 +690,7 @@ index f0a437bb6..59bdd891c 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1051,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1058,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -628,7 +698,7 @@ index f0a437bb6..59bdd891c 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1072,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1079,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -639,7 +709,7 @@ index f0a437bb6..59bdd891c 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1090,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1097,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -657,7 +727,7 @@ index f0a437bb6..59bdd891c 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1105,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1112,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -670,7 +740,7 @@ index f0a437bb6..59bdd891c 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1131,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1138,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -683,7 +753,7 @@ index f0a437bb6..59bdd891c 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1144,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1151,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -695,7 +765,7 @@ index f0a437bb6..59bdd891c 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1122,9 +1203,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1210,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -735,7 +805,7 @@ index f0a437bb6..59bdd891c 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1258,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1265,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -743,7 +813,7 @@ index f0a437bb6..59bdd891c 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1277,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1284,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -862,10 +932,10 @@ index 97978a7ac..127fb1d84 100755
      {
          mGlobalFont = font;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..7ae0436de 100644
+index 14d8a4dd1..3f4a7bc42 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,42 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,45 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -895,11 +965,14 @@ index 14d8a4dd1..7ae0436de 100644
 +   synthesizer. Bytes are raw MIDI; give whole messages to SDL_ANDROID_MidiSend(), some synthesizer apps want that.
 +   It sends to the first device that takes MIDI and receives from the first one that sends it, and picks up
 +   devices plugged in later. SDL_ANDROID_MidiOpen() returns 0 if the system has no MIDI.
-+   SDL_ANDROID_MidiReceive() does not wait, it returns the number of bytes it put to data. */
++   SDL_ANDROID_MidiReceive() does not wait, it returns the number of bytes it put to data.
++   SDL_ANDROID_MidiDeviceName() gives the name of the device sent to (input 0) or received from (input 1),
++   an empty string if there is none yet. */
 +extern DECLSPEC int SDLCALL SDL_ANDROID_MidiOpen(void);
 +extern DECLSPEC void SDLCALL SDL_ANDROID_MidiClose(void);
 +extern DECLSPEC void SDLCALL SDL_ANDROID_MidiSend(const unsigned char *data, int len);
 +extern DECLSPEC int SDLCALL SDL_ANDROID_MidiReceive(unsigned char *data, int len);
++extern DECLSPEC void SDLCALL SDL_ANDROID_MidiDeviceName(int input, char *name, int size);
 +
  /* Change mouse emulation mode, pass -1 to any option to keep the current value, this does not change SDL config file.
 -   Currently only relativeMovement is processed, other options are ignored  */
@@ -909,7 +982,7 @@ index 14d8a4dd1..7ae0436de 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +187,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +190,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -1024,7 +1097,7 @@ index bed900ebe..0b838a79a 100644
  {
  	int i;
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..2036a06c9 100644
+index 30df36343..0698b144e 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -1035,7 +1108,7 @@ index 30df36343..2036a06c9 100644
  
  #include "SDL_opengles.h"
  
-@@ -121,7 +122,12 @@ static jmethodID JavaRequestCloudLoad = NULL;
+@@ -121,7 +122,13 @@ static jmethodID JavaRequestCloudLoad = NULL;
  static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
@@ -1043,12 +1116,13 @@ index 30df36343..2036a06c9 100644
 +static jmethodID JavaMidiOpen = NULL;
 +static jmethodID JavaMidiClose = NULL;
 +static jmethodID JavaMidiSend = NULL;
++static jmethodID JavaMidiDeviceName = NULL;
  static jmethodID JavaSetSystemMousePointerVisible = NULL;
 +static jmethodID JavaSetMouseCaptured = NULL;
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -428,7 +434,12 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +435,13 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
  	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
@@ -1056,12 +1130,13 @@ index 30df36343..2036a06c9 100644
 +	JavaMidiOpen = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiOpen", "()I");
 +	JavaMidiClose = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiClose", "()V");
 +	JavaMidiSend = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiSend", "([BI)V");
++	JavaMidiDeviceName = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiDeviceName", "(I)Ljava/lang/String;");
  	JavaSetSystemMousePointerVisible = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setSystemMousePointerVisible", "(I)V");
 +	JavaSetMouseCaptured = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setMouseCaptured", "(I)V");
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +697,125 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +699,149 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
@@ -1146,6 +1221,30 @@ index 30df36343..2036a06c9 100644
 +	}
 +}
 +
++void SDLCALL SDL_ANDROID_MidiDeviceName(int input, char *name, int size)
++{
++	JNIEnv *JavaEnv = GetJavaEnvAttached();
++	jstring s;
++	if( size <= 0 )
++		return;
++	name[0] = 0;
++	if( !JavaEnv || !JavaRenderer )
++		return;
++	(*JavaEnv)->PushLocalFrame(JavaEnv, 1);
++	s = (jstring) (*JavaEnv)->CallObjectMethod( JavaEnv, JavaRenderer, JavaMidiDeviceName, (jint) input );
++	if( s )
++	{
++		const char *c = (*JavaEnv)->GetStringUTFChars(JavaEnv, s, NULL);
++		if( c )
++		{
++			strncpy(name, c, size - 1);
++			name[size - 1] = 0;
++			(*JavaEnv)->ReleaseStringUTFChars(JavaEnv, s, c);
++		}
++	}
++	(*JavaEnv)->PopLocalFrame(JavaEnv, NULL);
++}
++
 +int SDLCALL SDL_ANDROID_MidiReceive(unsigned char *data, int len)
 +{
 +	unsigned int r = midiInRead;
@@ -1187,7 +1286,7 @@ index 30df36343..2036a06c9 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +827,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +853,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  

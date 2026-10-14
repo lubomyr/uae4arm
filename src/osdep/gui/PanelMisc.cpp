@@ -25,6 +25,7 @@
 #include "statusline.h"
 #include "gui.h"
 #include "gui_handling.h"
+#include "midi_host.h"
 #ifdef ANDROIDSDL
 #include <SDL_android.h>
 extern "C" int SDL_ANDROID_VideoMultithreaded;
@@ -58,6 +59,62 @@ static gcn::GenericListModel menuThemeList(menuThemeLabels, 2);
 static gcn::UaeCheckBox* chkBSDSocket;
 static gcn::UaeCheckBox* chkMasterWP;
 static gcn::UaeCheckBox* chkMidi;
+
+/* What MIDI goes to under its checkbox; a device can come or go while the
+   menu shows, so it looks again now and then */
+class MidiStatusLabel : public gcn::Label
+{
+public:
+  MidiStatusLabel() : gcn::Label(""), frames(0) {}
+  void update(void)
+  {
+    TCHAR out[128], in[128], text[300];
+    frames = 30;
+    if (!workprefs.midi_serial)
+      text[0] = 0;
+    else if (!midi_host_is_open())
+      _tcscpy(text, _T("MIDI is not available"));
+    else {
+      midi_host_device(false, out, sizeof out);
+      midi_host_device(true, in, sizeof in);
+      if (!out[0] && !in[0])
+#ifdef ANDROIDSDL
+        _tcscpy(text, _T("No device, waiting for one"));
+#else
+        _tcscpy(text, _T("Not connected, see aconnect"));
+#endif
+      else if (!_tcscmp(out, in))
+        _sntprintf(text, sizeof text, _T("Device: %s"), out);
+      else if (!in[0])
+        _sntprintf(text, sizeof text, _T("Out: %s"), out);
+      else if (!out[0])
+        _sntprintf(text, sizeof text, _T("In: %s"), in);
+      else
+        _sntprintf(text, sizeof text, _T("Out: %s, in: %s"), out, in);
+    }
+    if (getCaption() != text)
+      setCaption(text);
+  }
+  virtual void logic(void)
+  {
+    if (--frames <= 0)
+      update();
+  }
+private:
+  int frames;
+};
+static MidiStatusLabel* lblMidiStatus;
+
+/* Open MIDI as soon as it is ticked, to show what it reaches; the emulation
+   keeps it open or closes it again when it goes on */
+static void sync_midi(void)
+{
+  if (workprefs.midi_serial)
+    midi_host_open();
+  else
+    midi_host_close();
+  lblMidiStatus->update();
+}
 #ifdef ANDROIDSDL
 static gcn::Label* lblResetDelay;
 static gcn::UaeDropDown* cboResetDelay;
@@ -86,6 +143,7 @@ static void RefreshPanelMisc(void)
   chkBSDSocket->setSelected(workprefs.socket_emu);
   chkMasterWP->setSelected(workprefs.floppy_read_only);
   chkMidi->setSelected(workprefs.midi_serial);
+  sync_midi();
   cboMenuTheme->setSelected(gui_theme == 1 ? 1 : 0);
 #ifdef ANDROIDSDL
   cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
@@ -156,8 +214,10 @@ class MiscActionListener : public gcn::ActionListener
         workprefs.floppy_read_only = chkMasterWP->isSelected();
       }
 
-      else if (actionEvent.getSource() == chkMidi)
+      else if (actionEvent.getSource() == chkMidi) {
         workprefs.midi_serial = chkMidi->isSelected();
+        sync_midi();
+      }
 #ifdef ANDROIDSDL
       else if (actionEvent.getSource() == cboMenuAspect) {
         // Of the app, like the theme; shows at once
@@ -275,6 +335,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
 	chkMidi = new gcn::UaeCheckBox("MIDI on serial port");
   chkMidi->setId("Midi");
   chkMidi->addActionListener(miscActionListener);
+  lblMidiStatus = new MidiStatusLabel();
+  lblMidiStatus->setSize(230, LABEL_HEIGHT);
 
   lblMenuTheme = new gcn::Label("Menu theme:");
   cboMenuTheme = new gcn::UaeDropDown(&menuThemeList);
@@ -311,7 +373,9 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   category.panel->add(chkMasterWP, DISTANCE_BORDER, posY);
   posY += chkMasterWP->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkMidi, DISTANCE_BORDER, posY);
-  posY += chkMidi->getHeight() + DISTANCE_NEXT_Y;
+  posY += chkMidi->getHeight() + 4;
+  category.panel->add(lblMidiStatus, DISTANCE_BORDER + 24, posY);
+  posY += lblMidiStatus->getHeight() + DISTANCE_NEXT_Y;
 #ifdef ANDROIDSDL
   category.panel->add(lblResetDelay, DISTANCE_BORDER, posY + 2);
   category.panel->add(cboResetDelay, DISTANCE_BORDER + lblResetDelay->getWidth() + 8, posY);
@@ -376,6 +440,7 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
   delete chkBSDSocket;
   delete chkMasterWP;
   delete chkMidi;
+  delete lblMidiStatus;
   delete lblMenuTheme;
   delete cboMenuTheme;
 #ifdef ANDROIDSDL
@@ -415,9 +480,11 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
 #ifdef ANDROIDSDL
   helptext.push_back("\"MIDI on serial port\" connects the Amiga's serial port to MIDI, as an Amiga MIDI interface does, for");
   helptext.push_back("sequencers and music programs: a USB MIDI device, or an app with a MIDI synthesizer (Android 6 and later).");
+  helptext.push_back("Below it shows the device it reaches, or that it waits for one to be plugged in or installed.");
 #else
   helptext.push_back("\"MIDI on serial port\" connects the Amiga's serial port to MIDI, as an Amiga MIDI interface does, for");
   helptext.push_back("sequencers and music programs: the ALSA port \"uae4arm\" is connected to the first synthesizer found.");
+  helptext.push_back("Below it shows what the port is connected to.");
 #endif
   helptext.push_back(" ");
   helptext.push_back("\"Menu theme\" chooses light or dark colors for this menu. It is kept for the app, not in the configuration.");

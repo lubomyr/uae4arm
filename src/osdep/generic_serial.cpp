@@ -37,22 +37,24 @@ static uae_u16 serdatr;
    sent go to the host's MIDI, bytes from it are received. A byte takes 320us
    at 31250 baud, about five lines; the next one is not handed over sooner. */
 #define MIDI_BYTE_HSYNCS 5
-static int midi_on;
+static bool midi_failed;
 static int midi_rx_wait;
 
 static bool midi_active(void)
 {
-	// Turned on or off in the menu while running
+	// Turned on or off in the menu while running; the menu opens and closes
+	// it too, to show the device
 	currprefs.midi_serial = changed_prefs.midi_serial;
 	if (!currprefs.midi_serial) {
-		if (midi_on)
-			midi_host_close();
-		midi_on = 0;
+		midi_host_close();
+		midi_failed = false;
 		return false;
 	}
-	if (!midi_on)
-		midi_on = midi_host_open() ? 1 : -1;
-	return midi_on > 0;
+	if (midi_failed)
+		return false; // not tried again on every line
+	if (!midi_host_open())
+		midi_failed = true;
+	return !midi_failed;
 }
 
 void SERPER (uae_u16 w)

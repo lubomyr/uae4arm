@@ -8,9 +8,15 @@
 #ifndef MIDI_HOST_H
 #define MIDI_HOST_H
 
-/* Open the host side; false if there is none. Opening again does nothing. */
+/* Open the host side; false if there is none. Opening or closing again does
+   nothing. */
 extern bool midi_host_open(void);
 extern void midi_host_close(void);
+extern bool midi_host_is_open(void);
+
+/* The name of what the bytes go to (input false) or come from (input true),
+   an empty string while there is nothing */
+extern void midi_host_device(bool input, TCHAR *name, int size);
 
 /* One byte of the MIDI stream the Amiga sends */
 extern void midi_host_out(uae_u8 b);

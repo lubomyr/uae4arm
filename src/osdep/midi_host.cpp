@@ -94,6 +94,39 @@ void midi_host_close(void)
 	port = -1;
 }
 
+bool midi_host_is_open(void)
+{
+	return seq != NULL;
+}
+
+void midi_host_device(bool input, TCHAR *name, int size)
+{
+	snd_seq_query_subscribe_t *subs;
+	snd_seq_client_info_t *cinfo;
+	snd_seq_addr_t addr;
+	int len = 0;
+
+	name[0] = 0;
+	if (!seq)
+		return;
+	snd_seq_query_subscribe_alloca(&subs);
+	snd_seq_client_info_alloca(&cinfo);
+	addr.client = snd_seq_client_id(seq);
+	addr.port = port;
+	snd_seq_query_subscribe_set_root(subs, &addr);
+	// Those reading from the port get what the Amiga sends
+	snd_seq_query_subscribe_set_type(subs, input ? SND_SEQ_QUERY_SUBS_WRITE : SND_SEQ_QUERY_SUBS_READ);
+	snd_seq_query_subscribe_set_index(subs, 0);
+	while (snd_seq_query_port_subscribers(seq, subs) >= 0) {
+		const snd_seq_addr_t *other = snd_seq_query_subscribe_get_addr(subs);
+		if (snd_seq_get_any_client_info(seq, other->client, cinfo) >= 0)
+			len += snprintf(name + len, size - len, "%s%s", len ? ", " : "", snd_seq_client_info_get_name(cinfo));
+		if (len >= size - 1)
+			break;
+		snd_seq_query_subscribe_set_index(subs, snd_seq_query_subscribe_get_index(subs) + 1);
+	}
+}
+
 void midi_host_out(uae_u8 b)
 {
 	snd_seq_event_t ev;
@@ -188,6 +221,18 @@ void midi_host_close(void)
 	midi_open = false;
 }
 
+bool midi_host_is_open(void)
+{
+	return midi_open;
+}
+
+void midi_host_device(bool input, TCHAR *name, int size)
+{
+	name[0] = 0;
+	if (midi_open)
+		SDL_ANDROID_MidiDeviceName(input ? 1 : 0, name, size);
+}
+
 void midi_host_out(uae_u8 b)
 {
 	if (!midi_open)
@@ -260,6 +305,16 @@ bool midi_host_open(void)
 
 void midi_host_close(void)
 {
+}
+
+bool midi_host_is_open(void)
+{
+	return false;
+}
+
+void midi_host_device(bool input, TCHAR *name, int size)
+{
+	name[0] = 0;
 }
 
 void midi_host_out(uae_u8 b)
