@@ -481,6 +481,8 @@ int mouseWithDpadAccel;
    screen - click the left and right mouse button instead */
 int mouseButtonsAB;
 #endif
+/* MIDI through the serial port, to and from the host's MIDI */
+bool midi_serial;
 
 	struct uae_input_device joystick_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];
 	struct uae_input_device mouse_settings[MAX_INPUT_SETTINGS][MAX_INPUT_DEVICES];

@@ -124,6 +124,7 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->mouseWithDpadAccel = 0;
 	p->mouseButtonsAB = 0;
 #endif
+	p->midi_serial = false;
 	
 	p->cr[0].index = 0;
 	p->cr[0].rate = 60.0;
@@ -221,6 +222,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.mouse_with_dpad_accel", "%d", p->mouseWithDpadAccel);
   cfgfile_write (f, "pandora.mouse_buttons_ab", "%d", p->mouseButtonsAB);
 #endif
+  cfgfile_write_bool (f, "pandora.midi", p->midi_serial);
   cfgfile_write_bool (f, "pandora.map_cd_drives", p->automount_cddrives);
 }
 
@@ -273,6 +275,8 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "mouse_buttons_ab", &p->mouseButtonsAB, 1)
 #endif
     );
+  if(!result)
+    result = cfgfile_yesno (option, value, "midi", &p->midi_serial);
   if(!result) {
     result = cfgfile_intval (option, value, "move_y", &p->gfx_monitor.gfx_size.y, 1); // For compatibility only
     if(result)

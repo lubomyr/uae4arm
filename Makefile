@@ -20,7 +20,7 @@ else ifeq ($(arch),linux)
 	LINUX_HOST = 1
 	USE_SDL_VERSION = sdl1
 	MORE_CFLAGS += `sdl-config --cflags` `pkg-config --cflags libxml-2.0` -I../../guichan/include -g
-	LDFLAGS += -Lbuild-linux `sdl-config --libs` -lSDL_image -lmpeg2convert
+	LDFLAGS += -Lbuild-linux `sdl-config --libs` -lSDL_image -lmpeg2convert -lasound
 	FLAC_LIB = -lFLAC
 	ifdef ASAN
 		MORE_CFLAGS += -fsanitize=address -fno-omit-frame-pointer
@@ -218,6 +218,7 @@ OBJS =	\
 	src-$(arch)/osdep/generic_gui.o \
 	src-$(arch)/osdep/generic_rp9.o \
 	src-$(arch)/osdep/generic_serial.o \
+	src-$(arch)/osdep/midi_host.o \
 	src-$(arch)/osdep/generic_mem.o \
 	src-$(arch)/osdep/sigsegv_handler.o \
 	src-$(arch)/osdep/storage_volumes.o \

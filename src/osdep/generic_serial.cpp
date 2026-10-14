@@ -18,6 +18,7 @@
 #include "newcpu.h"
 #include "cia.h"
 #include "serial.h"
+#include "midi_host.h"
 
 static int data_in_serdat; /* new data written to SERDAT */
 static int data_in_sershift; /* data transferred from SERDAT to shift register */
@@ -28,6 +29,31 @@ static int lastbitcycle_active_hsyncs;
 static unsigned int lastbitcycle;
 
 uae_u16 serper, serdat;
+
+/* The received byte, with its stop bit, until the Amiga takes it */
+static uae_u16 serdatr;
+
+/* MIDI through the serial port, as an Amiga MIDI interface does it: bytes
+   sent go to the host's MIDI, bytes from it are received. A byte takes 320us
+   at 31250 baud, about five lines; the next one is not handed over sooner. */
+#define MIDI_BYTE_HSYNCS 5
+static int midi_on;
+static int midi_rx_wait;
+
+static bool midi_active(void)
+{
+	// Turned on or off in the menu while running
+	currprefs.midi_serial = changed_prefs.midi_serial;
+	if (!currprefs.midi_serial) {
+		if (midi_on)
+			midi_host_close();
+		midi_on = 0;
+		return false;
+	}
+	if (!midi_on)
+		midi_on = midi_host_open() ? 1 : -1;
+	return midi_on > 0;
+}
 
 void SERPER (uae_u16 w)
 {
@@ -89,6 +115,8 @@ static void serdatcopy(void)
 	if (data_in_sershift || !data_in_serdat)
 		return;
 	serdatshift = serdat;
+	if (midi_active())
+		midi_host_out(serdatshift & 0xff);
 	bits = 8;
 	if ((serdatshift & 0xff80) == 0x80) {
 		bits = 7;
@@ -127,6 +155,19 @@ static void serdatcopy(void)
 
 void serial_hsynchandler (void)
 {
+	// A received byte waits until the Amiga has taken the one before: until
+	// it clears RBF in INTREQ.
+	if (midi_active()) {
+		uae_u8 b;
+		if (midi_rx_wait > 0)
+			midi_rx_wait--;
+		else if (!(intreq & 0x0800) && midi_host_in(&b)) {
+			serdatr = b | 0x100;
+			INTREQ(0x8000 | 0x0800);
+			midi_rx_wait = MIDI_BYTE_HSYNCS;
+		}
+	}
+
 	if (lastbitcycle_active_hsyncs > 0)
 		lastbitcycle_active_hsyncs--;
 	if (serial_period_hsyncs == 0)
@@ -155,7 +196,10 @@ void SERDAT (uae_u16 w)
 
 uae_u16 SERDATR(void)
 {
-  uae_u16 serdatr = 0;
+  uae_u16 serdatr = ::serdatr & 0x03ff;
+	if (intreq & 0x0800) {
+		serdatr |= 0x4000; // RBF
+	}
 	if (!data_in_serdat) {
 		serdatr |= 0x2000;
 	}

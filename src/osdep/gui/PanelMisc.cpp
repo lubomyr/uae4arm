@@ -57,6 +57,7 @@ static const TCHAR* menuThemeLabels[] = { _T("Light"), _T("Dark") };
 static gcn::GenericListModel menuThemeList(menuThemeLabels, 2);
 static gcn::UaeCheckBox* chkBSDSocket;
 static gcn::UaeCheckBox* chkMasterWP;
+static gcn::UaeCheckBox* chkMidi;
 #ifdef ANDROIDSDL
 static gcn::Label* lblResetDelay;
 static gcn::UaeDropDown* cboResetDelay;
@@ -84,6 +85,7 @@ static void RefreshPanelMisc(void)
   chkShowGUI->setSelected(workprefs.start_gui);
   chkBSDSocket->setSelected(workprefs.socket_emu);
   chkMasterWP->setSelected(workprefs.floppy_read_only);
+  chkMidi->setSelected(workprefs.midi_serial);
   cboMenuTheme->setSelected(gui_theme == 1 ? 1 : 0);
 #ifdef ANDROIDSDL
   cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
@@ -153,6 +155,9 @@ class MiscActionListener : public gcn::ActionListener
       else if (actionEvent.getSource() == chkMasterWP) {
         workprefs.floppy_read_only = chkMasterWP->isSelected();
       }
+
+      else if (actionEvent.getSource() == chkMidi)
+        workprefs.midi_serial = chkMidi->isSelected();
 #ifdef ANDROIDSDL
       else if (actionEvent.getSource() == cboMenuAspect) {
         // Of the app, like the theme; shows at once
@@ -267,6 +272,10 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   chkMasterWP->setId("MasterWP");
   chkMasterWP->addActionListener(miscActionListener);
 
+	chkMidi = new gcn::UaeCheckBox("MIDI on serial port");
+  chkMidi->setId("Midi");
+  chkMidi->addActionListener(miscActionListener);
+
   lblMenuTheme = new gcn::Label("Menu theme:");
   cboMenuTheme = new gcn::UaeDropDown(&menuThemeList);
   cboMenuTheme->setSize(80, DROPDOWN_HEIGHT);
@@ -301,6 +310,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   posY += chkBSDSocket->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkMasterWP, DISTANCE_BORDER, posY);
   posY += chkMasterWP->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkMidi, DISTANCE_BORDER, posY);
+  posY += chkMidi->getHeight() + DISTANCE_NEXT_Y;
 #ifdef ANDROIDSDL
   category.panel->add(lblResetDelay, DISTANCE_BORDER, posY + 2);
   category.panel->add(cboResetDelay, DISTANCE_BORDER + lblResetDelay->getWidth() + 8, posY);
@@ -364,6 +375,7 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
 #endif
   delete chkBSDSocket;
   delete chkMasterWP;
+  delete chkMidi;
   delete lblMenuTheme;
   delete cboMenuTheme;
 #ifdef ANDROIDSDL
@@ -399,6 +411,14 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("\"bsdsocket.library\" enables network functions (i.e. for web browsers in OS3.9).");
   helptext.push_back(" ");
   helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
+  helptext.push_back(" ");
+#ifdef ANDROIDSDL
+  helptext.push_back("\"MIDI on serial port\" connects the Amiga's serial port to MIDI, as an Amiga MIDI interface does, for");
+  helptext.push_back("sequencers and music programs: a USB MIDI device, or an app with a MIDI synthesizer (Android 6 and later).");
+#else
+  helptext.push_back("\"MIDI on serial port\" connects the Amiga's serial port to MIDI, as an Amiga MIDI interface does, for");
+  helptext.push_back("sequencers and music programs: the ALSA port \"uae4arm\" is connected to the first synthesizer found.");
+#endif
   helptext.push_back(" ");
   helptext.push_back("\"Menu theme\" chooses light or dark colors for this menu. It is kept for the app, not in the configuration.");
 #ifdef ANDROIDSDL
