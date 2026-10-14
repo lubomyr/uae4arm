@@ -59,6 +59,7 @@ static gcn::GenericListModel menuThemeList(menuThemeLabels, 2);
 static gcn::UaeCheckBox* chkBSDSocket;
 static gcn::UaeCheckBox* chkMasterWP;
 static gcn::UaeCheckBox* chkMidi;
+static gcn::UaeCheckBox* chkKeyboardAmiga;
 
 /* What MIDI goes to under its checkbox; a device can come or go while the
    menu shows, so it looks again now and then */
@@ -145,6 +146,7 @@ static void RefreshPanelMisc(void)
   chkMidi->setSelected(workprefs.midi_serial);
   sync_midi();
   cboMenuTheme->setSelected(gui_theme == 1 ? 1 : 0);
+  chkKeyboardAmiga->setSelected(keyboard_amiga_only != 0);
 #ifdef ANDROIDSDL
   cboResetDelay->setSelected(std::min(std::max(workprefs.reset_delay, 0), 3));
   chkVideoThread->setSelected(SDL_ANDROID_VideoMultithreaded != 0);
@@ -229,6 +231,11 @@ class MiscActionListener : public gcn::ActionListener
         }
       }
 #endif
+      else if (actionEvent.getSource() == chkKeyboardAmiga) {
+        // Of the app: a keyboard belongs to the device, not to a game
+        keyboard_amiga_only = chkKeyboardAmiga->isSelected() ? 1 : 0;
+        saveAdfDir();
+      }
       else if (actionEvent.getSource() == cboMenuTheme) {
         // Of the app, not of the configuration. The menu is made again in
         // the new colors once this action is over.
@@ -338,6 +345,10 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   lblMidiStatus = new MidiStatusLabel();
   lblMidiStatus->setSize(230, LABEL_HEIGHT);
 
+  chkKeyboardAmiga = new gcn::UaeCheckBox("Keyboard: Amiga keys only");
+  chkKeyboardAmiga->setId("KeyboardAmiga");
+  chkKeyboardAmiga->addActionListener(miscActionListener);
+
   lblMenuTheme = new gcn::Label("Menu theme:");
   cboMenuTheme = new gcn::UaeDropDown(&menuThemeList);
   cboMenuTheme->setSize(80, DROPDOWN_HEIGHT);
@@ -383,6 +394,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   category.panel->add(chkVideoThread, DISTANCE_BORDER, posY);
   posY += chkVideoThread->getHeight() + DISTANCE_NEXT_Y;
 #endif
+  category.panel->add(chkKeyboardAmiga, DISTANCE_BORDER, posY);
+  posY += chkKeyboardAmiga->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(lblMenuTheme, DISTANCE_BORDER, posY + 2);
   category.panel->add(cboMenuTheme, DISTANCE_BORDER + lblMenuTheme->getWidth() + 8, posY);
   posY += cboMenuTheme->getHeight() + DISTANCE_NEXT_Y;
@@ -440,6 +453,7 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
   delete chkBSDSocket;
   delete chkMasterWP;
   delete chkMidi;
+  delete chkKeyboardAmiga;
   delete lblMidiStatus;
   delete lblMenuTheme;
   delete cboMenuTheme;
@@ -486,6 +500,12 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("sequencers and music programs: the ALSA port \"uae4arm\" is connected to the first synthesizer found.");
   helptext.push_back("Below it shows what the port is connected to.");
 #endif
+  helptext.push_back(" ");
+  helptext.push_back("\"Keyboard: Amiga keys only\" makes a real keyboard type only for the Amiga. Without it some of its keys");
+  helptext.push_back("also work the joystick, as the controls of the Pandora handheld did: the cursor keys, Home, End, PgUp, PgDn,");
+  helptext.push_back("right Ctrl and left Alt. With it the cursor keys are cursor keys, right Ctrl is Ctrl, Home is right Amiga,");
+  helptext.push_back("PgDn and Insert are Help, and End and PgUp do nothing. The on-screen buttons and gamepads still work the");
+  helptext.push_back("joystick. It is kept for the app, not in the configuration.");
   helptext.push_back(" ");
   helptext.push_back("\"Menu theme\" chooses light or dark colors for this menu. It is kept for the app, not in the configuration.");
 #ifdef ANDROIDSDL

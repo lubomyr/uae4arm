@@ -397,6 +397,14 @@ static void unacquire_mouse (int num)
 	}
 }
 
+/* A key down for the joystick, or the mouse it stands in for - not one of a
+   keyboard that only types for the Amiga, see keyboard_as_amiga() */
+extern bool keyboard_key_held[SDLK_LAST];
+static inline int joystick_key(const Uint8 *keystate, int key)
+{
+  return key > 0 && key < SDLK_LAST && keystate[key] && !keyboard_key_held[key];
+}
+
 static void read_mouse (void)
 {
   int i;
@@ -425,18 +433,18 @@ static void read_mouse (void)
   	  keystate = SDL_GetKeyState(NULL);
 
 	  // x axis
-    if(keystate[VK_LEFT])
+    if(joystick_key(keystate, VK_LEFT))
       setmousestate(i, 0, -mouseScale, 0);
-    if(keystate[VK_RIGHT])
+    if(joystick_key(keystate, VK_RIGHT))
       setmousestate(i, 0, mouseScale, 0);
     // y axis
-    if(keystate[VK_UP])
+    if(joystick_key(keystate, VK_UP))
       setmousestate(i, 1, -mouseScale, 0);
-    if(keystate[VK_DOWN])
+    if(joystick_key(keystate, VK_DOWN))
       setmousestate(i, 1, mouseScale, 0);
 
-    setmousebuttonstate (i, 0, keystate[VK_A]);
-    setmousebuttonstate (i, 1, keystate[VK_B]);
+    setmousebuttonstate (i, 0, joystick_key(keystate, VK_A));
+    setmousebuttonstate (i, 1, joystick_key(keystate, VK_B));
   }
 }
 
@@ -651,17 +659,17 @@ static void read_joystick (void)
     // The d-pad drives the joystick unless the panel says to leave it as cursor
     // keys, and holding the sixth on-screen button suspends it either way.
 #ifdef ANDROIDSDL
-    if(changed_prefs.onScreen_dpad_mode == 0 && !keystate[SDLK_RCTRL]) {
+    if(changed_prefs.onScreen_dpad_mode == 0 && !joystick_key(keystate, SDLK_RCTRL)) {
 #else
-    if(!keystate[SDLK_RCTRL]) {
+    if(!joystick_key(keystate, SDLK_RCTRL)) {
 #endif
-      int axis = (keystate[SDLK_LEFT] ? -32767 : (keystate[SDLK_RIGHT] ? 32767 : 0));
+      int axis = (joystick_key(keystate, SDLK_LEFT) ? -32767 : (joystick_key(keystate, SDLK_RIGHT) ? 32767 : 0));
       setjoystickstate (i, 0, axis, 32767);
-      axis = (keystate[SDLK_UP] ? -32767 : (keystate[SDLK_DOWN] ? 32767 : 0));
+      axis = (joystick_key(keystate, SDLK_UP) ? -32767 : (joystick_key(keystate, SDLK_DOWN) ? 32767 : 0));
       setjoystickstate (i, 1, axis, 32767);
     }
     for (j = 0; j < pid->buttons; ++j) {
-      int state = keystate[pid->button_keycode[j]];
+      int state = joystick_key(keystate, pid->button_keycode[j]);
 #ifdef ANDROIDSDL
       if (i == 0 && j < 2) {
         int as_mouse = changed_prefs.mouseButtonsAB ? state : 0;

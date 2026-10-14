@@ -66,6 +66,7 @@ static uae_s64 host_millis (void)
 int quickstart_start = 1;
 int gui_theme = 0;
 int gui_aspect = 2;
+int keyboard_amiga_only = 0;
 int quickstart_model = 0;
 int quickstart_conf = 0;
 bool host_poweroff = false;
@@ -587,6 +588,8 @@ void saveAdfDir(void)
   fputs(buffer, f);
   snprintf(buffer, MAX_DPATH - 1, "MenuAspect=%d\n", gui_aspect);
   fputs(buffer, f);
+  snprintf(buffer, MAX_DPATH - 1, "KeyboardAmigaOnly=%d\n", keyboard_amiga_only);
+  fputs(buffer, f);
 
 	fclose(f);
 }
@@ -741,6 +744,7 @@ void loadAdfDir(void)
           cfgfile_intval(option, value, "Quickstart", &quickstart_start, 1);
           cfgfile_intval(option, value, "MenuTheme", &gui_theme, 1);
           cfgfile_intval(option, value, "MenuAspect", &gui_aspect, 1);
+          cfgfile_intval(option, value, "KeyboardAmigaOnly", &keyboard_amiga_only, 1);
         }
     	}
     }

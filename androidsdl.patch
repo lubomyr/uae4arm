@@ -932,10 +932,10 @@ index 97978a7ac..127fb1d84 100755
      {
          mGlobalFont = font;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..3f4a7bc42 100644
+index 14d8a4dd1..a7d69a785 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,45 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,54 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -961,6 +961,15 @@ index 14d8a4dd1..3f4a7bc42 100644
 +   Call it once the app is up, e.g. when its menu shows. */
 +extern DECLSPEC void SDLCALL SDL_ANDROID_ConfirmConfigOptions(void);
 +
++/* event.key.which of a key that came from a keyboard - a physical one, or Android's on-screen keyboard
++   of the app. The on-screen buttons and the text from the system's keyboard give 0, the rest - gamepads,
++   gestures, the mouse wheel turned into keys - give 1. */
++#define SDL_ANDROID_KEY_FROM_KEYBOARD 3
++
++/* Whether the arrow keys of a keyboard move the mouse as well, when SDL_ANDROID_SetMouseEmulationMode() has
++   the arrow keys move it - they do by default. The on-screen d-pad and gamepads keep moving it either way. */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetKeyboardArrowsMoveMouse(int move);
++
 +/* MIDI through the system's MIDI service, Android 6 and later: a USB MIDI device, or an app with a MIDI
 +   synthesizer. Bytes are raw MIDI; give whole messages to SDL_ANDROID_MidiSend(), some synthesizer apps want that.
 +   It sends to the first device that takes MIDI and receives from the first one that sends it, and picks up
@@ -982,7 +991,7 @@ index 14d8a4dd1..3f4a7bc42 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +190,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +199,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -1014,11 +1023,61 @@ index f1a012a4f..4c7287e1d 100644
  /* Deprecated API, will change keymap for all gamepads */
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetGamepadKeymap(int A, int B, int X, int Y, int C, int Z, int L1, int R1, int L2, int R2, int LThumb, int RThumb);
  
+diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidinput-queue-fast.c b/project/jni/sdl-1.2/src/video/android/SDL_androidinput-queue-fast.c
+index ad8a66a66..696412561 100644
+--- a/project/jni/sdl-1.2/src/video/android/SDL_androidinput-queue-fast.c
++++ b/project/jni/sdl-1.2/src/video/android/SDL_androidinput-queue-fast.c
+@@ -99,13 +99,21 @@ extern void SDL_ANDROID_MainThreadPushMouseButton(int pressed, int button)
+ 		SDL_ANDROID_currentMouseButtons &= ~(SDL_BUTTON(button));
+ }
+ 
++static int keyboardArrowsMoveMouse = 1;
++
++DECLSPEC void SDLCALL SDL_ANDROID_SetKeyboardArrowsMoveMouse(int move)
++{
++	keyboardArrowsMoveMouse = move;
++}
++
+ extern void SDL_ANDROID_MainThreadPushKeyboardKey(int pressed, SDL_scancode key, int unicode, int deviceId)
+ {
+ 	SDL_keysym keysym;
+ 
+ 	if( SDL_ANDROID_moveMouseWithArrowKeys && (
+ 		key == SDL_KEY(UP) || key == SDL_KEY(DOWN) ||
+-		key == SDL_KEY(LEFT) || key == SDL_KEY(RIGHT) ) )
++		key == SDL_KEY(LEFT) || key == SDL_KEY(RIGHT) ) &&
++		( keyboardArrowsMoveMouse || deviceId != SDL_ANDROID_KEY_FROM_KEYBOARD ) )
+ 	{
+ 		if( !SDL_ANDROID_moveMouseWithKbActive )
+ 		{
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
-index bed900ebe..0b838a79a 100644
+index bed900ebe..da77e331f 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.c
-@@ -1227,21 +1227,45 @@ void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -1023,15 +1023,20 @@ JAVA_EXPORT_NAME(DemoGLSurfaceView_nativeKey) ( JNIEnv*  env, jobject thiz, jint
+ 	if( (int)keycode == SDLK_NO_REMAP || (keycode == SDLK_UNKNOWN && unicode == 0) )
+ 		return 0;
+ 
++	// Tell a keyboard's keys from those of a gamepad, which may come without the gamepad source
++	int deviceId = ( gamepadId == 0 &&
++		!( key >= KEYCODE_BUTTON_A && key <= KEYCODE_BUTTON_MODE ) &&
++		!( key >= KEYCODE_BUTTON_1 && key <= KEYCODE_BUTTON_16 ) ) ? SDL_ANDROID_KEY_FROM_KEYBOARD : 1;
++
+ 	if( keycode == SDLK_UNKNOWN || unicode != unshifted )
+ 	{
+ 		if ((unshifted & 0xFF80) == 0)
+ 			keycode = unshifted;
+ 		if (unicode != unshifted)
+-			SDL_ANDROID_MainThreadPushKeyboardKey( action ? SDL_PRESSED : SDL_RELEASED, SDLK_LSHIFT, 0, 1 );
++			SDL_ANDROID_MainThreadPushKeyboardKey( action ? SDL_PRESSED : SDL_RELEASED, SDLK_LSHIFT, 0, deviceId );
+ 	}
+ 
+-	SDL_ANDROID_MainThreadPushKeyboardKey( action ? SDL_PRESSED : SDL_RELEASED, keycode, unicode, 1 );
++	SDL_ANDROID_MainThreadPushKeyboardKey( action ? SDL_PRESSED : SDL_RELEASED, keycode, unicode, deviceId );
+ 	return 1;
+ }
+ 
+@@ -1227,21 +1232,45 @@ void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int _fingerHover, int _fingerHoverJitterFilter, int _generateSubframeTouchEvents
  )
  {
@@ -1069,7 +1128,7 @@ index bed900ebe..0b838a79a 100644
  typedef struct
  {
  		int leftClickMethod;
-@@ -1911,6 +1935,26 @@ void SDL_ANDROID_SetIndividualGamepadKeymap(int GamepadId,
+@@ -1911,6 +1940,26 @@ void SDL_ANDROID_SetIndividualGamepadKeymap(int GamepadId,
  	}
  }
  
@@ -1096,6 +1155,21 @@ index bed900ebe..0b838a79a 100644
  void SDL_ANDROID_SetGamepadKeymap(int A, int B, int X, int Y, int C, int Z, int L1, int R1, int L2, int R2, int LThumb, int RThumb)
  {
  	int i;
+diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.h b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.h
+index e60943edf..9a7accf6d 100644
+--- a/project/jni/sdl-1.2/src/video/android/SDL_androidinput.h
++++ b/project/jni/sdl-1.2/src/video/android/SDL_androidinput.h
+@@ -551,6 +551,10 @@ extern int SDL_ANDROID_isTouchscreenKeyboardUsed;
+ extern void SDL_ANDROID_MainThreadPushMouseMotion(int x, int y);
+ extern void SDL_ANDROID_MainThreadPushMouseButton(int pressed, int button);
+ extern void SDL_ANDROID_MainThreadPushKeyboardKey(int pressed, SDL_scancode key, int unicode, int deviceId);
++// deviceId of the keys of a keyboard, the same as in SDL_android.h
++#ifndef SDL_ANDROID_KEY_FROM_KEYBOARD
++#define SDL_ANDROID_KEY_FROM_KEYBOARD 3
++#endif
+ extern void SDL_ANDROID_MainThreadPushMultitouchButton(int id, int pressed, int x, int y, int force); // SDL 1.3 only
+ extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
+ extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 index 30df36343..0698b144e 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c

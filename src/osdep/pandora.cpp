@@ -10,6 +10,9 @@
 #include "rtgmodes.h"
 #include "savestate.h"
 #include "gfxboard.h"
+#ifdef ANDROIDSDL
+#include <SDL_android.h>
+#endif
 
 extern bool input_initialize_alldevices (void);
 #ifdef ANDROIDSDL
@@ -580,6 +583,103 @@ static int translate_pandora_keys(int sdlkeycode, int *sdlmodifier)
 }
 
 
+/* "Keyboard: Amiga keys only" (keyboard_amiga_only, of the app): the keys that
+   stand in for the Pandora's controls - the cursor keys for its d-pad, Home,
+   End, PgDn and PgUp for its A, B, X and Y, right Ctrl and left Alt for a
+   shoulder button and Start - are Amiga keys and nothing else when they come
+   from a keyboard, and the PC keys the Amiga lacks get WinUAE's meaning. The
+   on-screen buttons and gamepads send the same keys and still work the
+   joystick. The keys held down this way are kept out of read_joystick(). */
+extern int keyboard_amiga_only;
+bool keyboard_key_held[SDLK_LAST];
+
+static bool key_from_keyboard(const SDL_KeyboardEvent &key)
+{
+#ifdef ANDROIDSDL
+  return key.which == SDL_ANDROID_KEY_FROM_KEYBOARD;
+#else
+  return true;
+#endif
+}
+
+/* The Amiga key for a keyboard key in that mode, 0 for none, -1 to treat it
+   as before */
+static int keyboard_amiga_key(int sym)
+{
+  switch(sym) {
+    case SDLK_UP:         return AK_UP;
+    case SDLK_DOWN:       return AK_DN;
+    case SDLK_LEFT:       return AK_LF;
+    case SDLK_RIGHT:      return AK_RT;
+    case SDLK_LSHIFT:     return AK_LSH;
+    case SDLK_RSHIFT:     return AK_RSH;
+    case SDLK_LCTRL:
+    case SDLK_RCTRL:      return AK_CTRL;
+    case SDLK_LALT:       return AK_LALT;
+    case SDLK_RALT:       return AK_RALT;
+    case SDLK_LMETA:
+    case SDLK_LSUPER:     return AK_LAMI;
+    case SDLK_RMETA:
+    case SDLK_RSUPER:
+    case SDLK_MENU:       return AK_RAMI;
+    case SDLK_CAPSLOCK:   return AK_CAPSLOCK;
+    case SDLK_DELETE:     return AK_DEL;
+    case SDLK_INSERT:     return AK_HELP;
+    case SDLK_HOME:       return AK_RAMI;  // as in WinUAE
+    case SDLK_PAGEDOWN:   return AK_HELP;  // as in WinUAE
+    case SDLK_END:
+    case SDLK_PAGEUP:     return 0;
+    case SDLK_KP0:        return AK_NP0;
+    case SDLK_KP1:        return AK_NP1;
+    case SDLK_KP2:        return AK_NP2;
+    case SDLK_KP3:        return AK_NP3;
+    case SDLK_KP4:        return AK_NP4;
+    case SDLK_KP5:        return AK_NP5;
+    case SDLK_KP6:        return AK_NP6;
+    case SDLK_KP7:        return AK_NP7;
+    case SDLK_KP8:        return AK_NP8;
+    case SDLK_KP9:        return AK_NP9;
+    case SDLK_KP_DIVIDE:  return AK_NPDIV;
+    case SDLK_KP_MULTIPLY: return AK_NPMUL;
+    case SDLK_KP_MINUS:   return AK_NPSUB;
+    case SDLK_KP_PLUS:    return AK_NPADD;
+    case SDLK_KP_ENTER:   return AK_ENT;
+    case SDLK_KP_PERIOD:  return AK_NPDEL;
+  }
+  return -1;
+}
+
+static void keyboard_as_amiga(const SDL_keysym &keysym, int state)
+{
+  int sym = keysym.sym;
+  if (sym > 0 && sym < SDLK_LAST)
+    keyboard_key_held[sym] = state;
+
+  int ak = keyboard_amiga_key(sym);
+  if (ak > 0) {
+    inputdevice_do_keyboard(ak, state);
+    return;
+  }
+  if (ak == 0)
+    return;
+
+  // Symbols the wrapper hands over as keys of their own, like '@'
+  int modifier = keysym.mod;
+  int keycode = translate_pandora_keys(sym, &modifier);
+  if (keycode) {
+    if (state) {
+      inputdevice_do_keyboard(AK_LSH, modifier == KMOD_SHIFT);
+      inputdevice_do_keyboard(keycode, 1);
+    } else {
+      inputdevice_do_keyboard(keycode, 0);
+      if (modifier == KMOD_SHIFT)
+        inputdevice_do_keyboard(AK_LSH, 0);
+    }
+  } else {
+    inputdevice_translatekeycode(get_sdlkbd(), sym, state, !state);
+  }
+}
+
 int handle_msgpump (void)
 {
 	int got = 0;
@@ -590,6 +690,15 @@ int handle_msgpump (void)
   int i;
   int sdlmouse = get_sdlmouse();
   int sdlkbd = get_sdlkbd();
+
+#ifdef ANDROIDSDL
+  // Keyboard arrows are cursor keys then, not the mouse with the d-pad
+  static int arrows_move_mouse = -1;
+  if (arrows_move_mouse != !keyboard_amiga_only) {
+    arrows_move_mouse = !keyboard_amiga_only;
+    SDL_ANDROID_SetKeyboardArrowsMoveMouse(arrows_move_mouse);
+  }
+#endif
 
   if(delayed_mousebutton) {
     --delayed_mousebutton;
@@ -607,6 +716,11 @@ int handle_msgpump (void)
   			break;
   			
   		case SDL_KEYDOWN:
+  		  if (keyboard_amiga_only && key_from_keyboard(rEvent.key) && rEvent.key.keysym.sym != SDLK_F12) {
+  		    if (sdlkbd >= 0)
+  		      keyboard_as_amiga(rEvent.key.keysym, 1);
+  		    break;
+  		  }
   		  if (handle_internal_functions(rEvent.key.keysym.sym, rEvent.key.keysym.mod))
   		    continue;
         
@@ -642,6 +756,9 @@ int handle_msgpump (void)
                         break;
 		    case SDLK_INSERT:
                         inputdevice_do_keyboard(AK_HELP, 1);
+                        break;
+		    case SDLK_DELETE:
+                        inputdevice_do_keyboard(AK_DEL, 1);
                         break;
 		    case SDLK_KP_DIVIDE:
                         inputdevice_do_keyboard(AK_NPDIV, 1);
@@ -718,6 +835,12 @@ int handle_msgpump (void)
   	  case SDL_KEYUP:
   		  if (sdlkbd < 0)
   		    continue;
+  		  // As it went down, even if the option changed meanwhile
+  		  if (rEvent.key.keysym.sym > 0 && rEvent.key.keysym.sym < SDLK_LAST &&
+  		      keyboard_key_held[rEvent.key.keysym.sym] && key_from_keyboard(rEvent.key)) {
+  		    keyboard_as_amiga(rEvent.key.keysym, 0);
+  		    break;
+  		  }
 
   	    switch(rEvent.key.keysym.sym) {
 #if defined(ANDROIDSDL) || defined(LINUX_HOST)
@@ -754,6 +877,9 @@ int handle_msgpump (void)
                         break;
 		    case SDLK_INSERT:
                         inputdevice_do_keyboard(AK_HELP, 0);
+                        break;
+		    case SDLK_DELETE:
+                        inputdevice_do_keyboard(AK_DEL, 0);
                         break;
 		    case SDLK_KP_DIVIDE:
                         inputdevice_do_keyboard(AK_NPDIV, 0);
