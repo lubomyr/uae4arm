@@ -345,7 +345,7 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   lblMidiStatus = new MidiStatusLabel();
   lblMidiStatus->setSize(230, LABEL_HEIGHT);
 
-  chkKeyboardAmiga = new gcn::UaeCheckBox("Keyboard: Amiga keys only");
+  chkKeyboardAmiga = new gcn::UaeCheckBox("Keyboard: no joystick keys");
   chkKeyboardAmiga->setId("KeyboardAmiga");
   chkKeyboardAmiga->addActionListener(miscActionListener);
 
@@ -501,11 +501,11 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back("Below it shows what the port is connected to.");
 #endif
   helptext.push_back(" ");
-  helptext.push_back("\"Keyboard: Amiga keys only\" makes a real keyboard type only for the Amiga. Without it some of its keys");
-  helptext.push_back("also work the joystick, as the controls of the Pandora handheld did: the cursor keys, Home, End, PgUp, PgDn,");
-  helptext.push_back("right Ctrl and left Alt. With it the cursor keys are cursor keys, right Ctrl is Ctrl, Home is right Amiga,");
-  helptext.push_back("PgDn and Insert are Help, and End and PgUp do nothing. The on-screen buttons and gamepads still work the");
-  helptext.push_back("joystick. It is kept for the app, not in the configuration.");
+  helptext.push_back("\"Keyboard: no joystick keys\" is for a real keyboard. Without it some of its keys also work the joystick,");
+  helptext.push_back("as the controls of the Pandora handheld did: the cursor keys, Home, End, PgUp, PgDn, right Ctrl and left Alt.");
+  helptext.push_back("With it all keys of the keyboard are only keys of the Amiga: the cursor keys are cursor keys, right Ctrl is");
+  helptext.push_back("Ctrl, Home is right Amiga, PgDn and Insert are Help, and End and PgUp do nothing. The on-screen buttons and");
+  helptext.push_back("gamepads still work the joystick. It is kept for the app, not in the configuration.");
   helptext.push_back(" ");
   helptext.push_back("\"Menu theme\" chooses light or dark colors for this menu. It is kept for the app, not in the configuration.");
 #ifdef ANDROIDSDL

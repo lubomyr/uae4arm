@@ -583,7 +583,7 @@ static int translate_pandora_keys(int sdlkeycode, int *sdlmodifier)
 }
 
 
-/* "Keyboard: Amiga keys only" (keyboard_amiga_only, of the app): the keys that
+/* "Keyboard: no joystick keys" (keyboard_amiga_only, of the app): the keys that
    stand in for the Pandora's controls - the cursor keys for its d-pad, Home,
    End, PgDn and PgUp for its A, B, X and Y, right Ctrl and left Alt for a
    shoulder button and Start - are Amiga keys and nothing else when they come
