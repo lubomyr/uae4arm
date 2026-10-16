@@ -1689,3 +1689,30 @@ index 400c01b8a..f41e34d67 100644
    );
  }
  
+diff --git a/project/jni/sdl_main/sdl_main.c b/project/jni/sdl_main/sdl_main.c
+index 05c7f7acf..fcdebc33f 100644
+--- a/project/jni/sdl_main/sdl_main.c
++++ b/project/jni/sdl_main/sdl_main.c
+@@ -1,6 +1,7 @@
+ 
+ #include <unistd.h>
+ #include <stdlib.h>
++#include <stdio.h>
+ #include <limits.h>
+ #include <jni.h>
+ #include <android/log.h>
+@@ -57,8 +58,12 @@ int threadedMain(void * unused)
+ 	static JNIEnv *JavaEnv = NULL;
+ 	(*SDL_ANDROID_JavaVM())->AttachCurrentThread(SDL_ANDROID_JavaVM(), &JavaEnv, NULL);
+ 	SDL_main( argc, argv );
+-	__android_log_print(ANDROID_LOG_INFO, "libSDL", "Application closed, calling exit(0)");
+-	exit(0);
++	__android_log_print(ANDROID_LOG_INFO, "libSDL", "Application closed, calling _exit(0)");
++	// Not exit(): it runs the destructors of the system libraries while their own threads -
++	// those of libhwui, for one - still run, and these abort on a destroyed mutex. The app has
++	// saved what it keeps by now; only the buffered files are left to write.
++	fflush(NULL);
++	_exit(0);
+ }
+ 
+ extern C_LINKAGE void
