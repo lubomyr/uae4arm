@@ -38,10 +38,10 @@ index 69c7f86c2..1b089f520 100644
  		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
 diff --git a/project/java/Midi.java b/project/java/Midi.java
 new file mode 100644
-index 000000000..71d66dd65
+index 000000000..9b9ce94be
 --- /dev/null
 +++ b/project/java/Midi.java
-@@ -0,0 +1,459 @@
+@@ -0,0 +1,569 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, MIDI for the Android port
@@ -113,10 +113,75 @@ index 000000000..71d66dd65
 +	private static volatile long sendingSince = 0;
 +	private static final long SEND_STUCK_MS = 1500;
 +	// MIUI pauses the sound of an app that has played only silence for a minute, and an app with
-+	// a synthesizer then takes the notes and plays nothing. Opening it again - as switching MIDI
-+	// off and on does - starts its sound anew: done before the first bytes after a quiet while.
++	// a synthesizer then takes the notes and plays nothing. Opening its port again starts its
++	// sound anew, as such an app plays while a port is open: done before the first bytes after
++	// a quiet while. Not the whole device: FluidSynth MIDI may crash when its service goes.
 +	private static volatile long lastSent = 0;
 +	private static final long QUIET_REOPEN_MS = 30000;
++	// A synthesizer that went away, crashed, fails the writes: open it again, not too often
++	private static long lastRecovery = 0;
++	private static final long RECOVERY_MS = 2000;
++	// What the channels were set to, for a synthesizer that starts anew: a player sets the
++	// instruments, volumes and so on once, at the start of a song. -1 for not set.
++	private static final int[] channelProgram = new int[16];
++	private static final int[][] channelControl = new int[16][120]; // not the channel mode messages
++	private static final int[] channelBend = new int[16];
++	// Set when the port or the device was opened again
++	private static volatile boolean replayNeeded = false;
++
++	private static void forgetChannels()
++	{
++		for (int ch = 0; ch < 16; ch++)
++		{
++			channelProgram[ch] = -1;
++			channelBend[ch] = -1;
++			for (int c = 0; c < 120; c++)
++				channelControl[ch][c] = -1;
++		}
++	}
++
++	private static void noteChannels(byte[] m)
++	{
++		if (m.length < 2 || (m[0] & 0x80) == 0)
++			return;
++		int status = m[0] & 0xf0, ch = m[0] & 0x0f;
++		if (status == 0xc0)
++			channelProgram[ch] = m[1] & 0x7f;
++		else if (status == 0xb0 && m.length >= 3 && (m[1] & 0x7f) < 120)
++			channelControl[ch][m[1] & 0x7f] = m[2] & 0x7f;
++		else if (status == 0xb0 && m.length >= 3 && (m[1] & 0x7f) == 121) // reset all controllers
++		{
++			for (int c = 0; c < 120; c++)
++				channelControl[ch][c] = -1;
++			channelBend[ch] = -1;
++		}
++		else if (status == 0xe0 && m.length >= 3)
++			channelBend[ch] = (m[1] & 0x7f) | ((m[2] & 0x7f) << 7);
++	}
++
++	// Sets a new synthesizer up as the old one was: bank, instrument, controllers, pitch bend
++	private static void replayChannels(MidiInputPort port)
++	{
++		try
++		{
++			for (int ch = 0; ch < 16; ch++)
++			{
++				for (int c: new int[] { 0, 32 })
++					if (channelControl[ch][c] >= 0)
++						port.send(new byte[] { (byte)(0xb0 | ch), (byte)c, (byte)channelControl[ch][c] }, 0, 3);
++				if (channelProgram[ch] >= 0)
++					port.send(new byte[] { (byte)(0xc0 | ch), (byte)channelProgram[ch] }, 0, 2);
++				for (int c = 1; c < 120; c++)
++					if (c != 32 && channelControl[ch][c] >= 0)
++						port.send(new byte[] { (byte)(0xb0 | ch), (byte)c, (byte)channelControl[ch][c] }, 0, 3);
++				if (channelBend[ch] >= 0)
++					port.send(new byte[] { (byte)(0xe0 | ch), (byte)(channelBend[ch] & 0x7f), (byte)(channelBend[ch] >> 7) }, 0, 3);
++			}
++		}
++		catch (Exception e)
++		{
++		}
++	}
 +
 +	private static final MidiReceiver receiver = new MidiReceiver()
 +	{
@@ -176,6 +241,7 @@ index 000000000..71d66dd65
 +			handler.post(new Runnable() { public void run() { openAllDevices(); } });
 +			outQueue.clear();
 +			lastSent = 0;
++			forgetChannels();
 +			outThread = new Thread(new Runnable() { public void run() { sendLoop(); } }, "MIDI out");
 +			outThread.setDaemon(true); // a write stuck in a frozen device does not hold the app
 +			outThread.start();
@@ -248,29 +314,45 @@ index 000000000..71d66dd65
 +			if (lastSent != 0 && SystemClock.uptimeMillis() - lastSent > QUIET_REOPEN_MS &&
 +				device != null && device.getInfo().getType() == MidiDeviceInfo.TYPE_VIRTUAL)
 +			{
-+				Log.i("SDL", "MIDI: " + outName + " was quiet for a while, opening it again");
-+				if (!reopenAndWait())
++				Log.i("SDL", "MIDI: " + outName + " was quiet for a while, opening its port again");
++				if (!reopenAndWait(true))
 +					return;
 +			}
 +			MidiInputPort port = outPort;
 +			if (port == null)
 +				continue;
++			if (replayNeeded)
++			{
++				replayNeeded = false;
++				replayChannels(port);
++			}
++			noteChannels(bytes);
 +			sendingSince = SystemClock.uptimeMillis();
++			boolean failed = false;
 +			try
 +			{
 +				port.send(bytes, 0, bytes.length);
 +			}
 +			catch (Exception e)
 +			{
++				failed = true;
 +			}
 +			sendingSince = 0;
 +			lastSent = SystemClock.uptimeMillis();
++			if (failed && port == outPort && lastSent - lastRecovery > RECOVERY_MS)
++			{
++				lastRecovery = lastSent;
++				Log.i("SDL", "MIDI: " + outName + " does not take the bytes anymore, opening it again");
++				if (!reopenAndWait(false))
++					return;
++
++			}
 +		}
 +	}
 +
-+	// Closes and opens the devices on the MIDI thread, and waits for the new output port; false
-+	// when the sending thread is to stop
-+	private static boolean reopenAndWait()
++	// Opens the port again on the MIDI thread - or with portOnly false, or if that fails, the
++	// devices - and waits for the new port; false when the sending thread is to stop
++	private static boolean reopenAndWait(final boolean portOnly)
 +	{
 +		Handler h = handler;
 +		if (h == null)
@@ -280,6 +362,33 @@ index 000000000..71d66dd65
 +		{
 +			public void run()
 +			{
++				MidiDevice device = outDevice;
++				if (portOnly && device != null && old != null)
++				{
++					outPort = null;
++					try
++					{
++						old.close();
++					}
++					catch (Exception e)
++					{
++					}
++					MidiInputPort port = null;
++					try
++					{
++						port = device.openInputPort(0);
++					}
++					catch (Exception e)
++					{
++					}
++					if (port != null)
++					{
++						replayNeeded = true;
++						outPort = port;
++						return;
++					}
++				}
++				replayNeeded = true;
 +				closeOut();
 +				closeIn();
 +				openAllDevices();
@@ -309,6 +418,7 @@ index 000000000..71d66dd65
 +			{
 +				Log.i("SDL", "MIDI: " + outName + " does not take the bytes, opening it again");
 +				sendingSince = 0;
++				replayNeeded = true;
 +				closeOut();
 +				openAllDevices();
 +			}
