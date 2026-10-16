@@ -38,10 +38,10 @@ index 69c7f86c2..1b089f520 100644
  		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
 diff --git a/project/java/Midi.java b/project/java/Midi.java
 new file mode 100644
-index 000000000..48f11daaa
+index 000000000..71d66dd65
 --- /dev/null
 +++ b/project/java/Midi.java
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,459 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, MIDI for the Android port
@@ -75,9 +75,11 @@ index 000000000..48f11daaa
 +import android.os.Bundle;
 +import android.os.Handler;
 +import android.os.HandlerThread;
++import android.os.SystemClock;
 +import android.util.Log;
 +import android.widget.Toast;
 +import java.util.HashSet;
++import java.util.concurrent.ArrayBlockingQueue;
 +
 +// MIDI for the app through android.media.midi, Android 6 and later: a USB MIDI
 +// device, or an app with a MIDI synthesizer. The app sends raw MIDI bytes to
@@ -101,6 +103,20 @@ index 000000000..48f11daaa
 +	private static MidiOutputPort inPort = null;
 +	// For the app to show
 +	private static volatile String outName = null, inName = null;
++
++	// The bytes go out on a thread of their own: writing to a device blocks while its process is
++	// frozen - MIUI freezes an app with a synthesizer after a while in the background - and the
++	// app's thread must not wait for that. A write that hangs gets the device opened again,
++	// which wakes the process up, as switching MIDI off and on does.
++	private static final ArrayBlockingQueue<byte[]> outQueue = new ArrayBlockingQueue<byte[]>(4096);
++	private static Thread outThread = null;
++	private static volatile long sendingSince = 0;
++	private static final long SEND_STUCK_MS = 1500;
++	// MIUI pauses the sound of an app that has played only silence for a minute, and an app with
++	// a synthesizer then takes the notes and plays nothing. Opening it again - as switching MIDI
++	// off and on does - starts its sound anew: done before the first bytes after a quiet while.
++	private static volatile long lastSent = 0;
++	private static final long QUIET_REOPEN_MS = 30000;
 +
 +	private static final MidiReceiver receiver = new MidiReceiver()
 +	{
@@ -158,6 +174,12 @@ index 000000000..48f11daaa
 +			handler = new Handler(thread.getLooper());
 +			manager.registerDeviceCallback(deviceCallback, handler);
 +			handler.post(new Runnable() { public void run() { openAllDevices(); } });
++			outQueue.clear();
++			lastSent = 0;
++			outThread = new Thread(new Runnable() { public void run() { sendLoop(); } }, "MIDI out");
++			outThread.setDaemon(true); // a write stuck in a frozen device does not hold the app
++			outThread.start();
++			handler.postDelayed(watchdog, 1000);
 +			return true;
 +		}
 +		catch (Exception e)
@@ -180,6 +202,11 @@ index 000000000..48f11daaa
 +		{
 +		}
 +		final HandlerThread t = thread;
++		handler.removeCallbacks(watchdog);
++		if (outThread != null)
++			outThread.interrupt();
++		outThread = null;
++		outQueue.clear();
 +		handler.post(new Runnable()
 +		{
 +			public void run()
@@ -197,17 +224,98 @@ index 000000000..48f11daaa
 +
 +	static void send(byte[] data, int count)
 +	{
-+		MidiInputPort port = outPort;
-+		if (port == null)
++		if (outPort == null)
 +			return;
-+		try
++		byte[] copy = new byte[count];
++		System.arraycopy(data, 0, copy, 0, count);
++		outQueue.offer(copy); // dropped when the device has not taken the bytes for long
++	}
++
++	private static void sendLoop()
++	{
++		while (!Thread.currentThread().isInterrupted())
 +		{
-+			port.send(data, 0, count);
-+		}
-+		catch (Exception e)
-+		{
++			byte[] bytes;
++			try
++			{
++				bytes = outQueue.take();
++			}
++			catch (InterruptedException e)
++			{
++				return;
++			}
++			MidiDevice device = outDevice;
++			if (lastSent != 0 && SystemClock.uptimeMillis() - lastSent > QUIET_REOPEN_MS &&
++				device != null && device.getInfo().getType() == MidiDeviceInfo.TYPE_VIRTUAL)
++			{
++				Log.i("SDL", "MIDI: " + outName + " was quiet for a while, opening it again");
++				if (!reopenAndWait())
++					return;
++			}
++			MidiInputPort port = outPort;
++			if (port == null)
++				continue;
++			sendingSince = SystemClock.uptimeMillis();
++			try
++			{
++				port.send(bytes, 0, bytes.length);
++			}
++			catch (Exception e)
++			{
++			}
++			sendingSince = 0;
++			lastSent = SystemClock.uptimeMillis();
 +		}
 +	}
++
++	// Closes and opens the devices on the MIDI thread, and waits for the new output port; false
++	// when the sending thread is to stop
++	private static boolean reopenAndWait()
++	{
++		Handler h = handler;
++		if (h == null)
++			return true;
++		final MidiInputPort old = outPort;
++		h.post(new Runnable()
++		{
++			public void run()
++			{
++				closeOut();
++				closeIn();
++				openAllDevices();
++			}
++		});
++		long until = SystemClock.uptimeMillis() + 3000;
++		while (SystemClock.uptimeMillis() < until && (outPort == null || outPort == old))
++		{
++			try
++			{
++				Thread.sleep(20);
++			}
++			catch (InterruptedException e)
++			{
++				return false;
++			}
++		}
++		return true;
++	}
++
++	private static final Runnable watchdog = new Runnable()
++	{
++		public void run()
++		{
++			long since = sendingSince;
++			if (since != 0 && SystemClock.uptimeMillis() - since > SEND_STUCK_MS && outDevice != null)
++			{
++				Log.i("SDL", "MIDI: " + outName + " does not take the bytes, opening it again");
++				sendingSince = 0;
++				closeOut();
++				openAllDevices();
++			}
++			if (handler != null)
++				handler.postDelayed(this, 1000);
++		}
++	};
 +
 +	@SuppressWarnings("deprecation")
 +	private static void openAllDevices()
@@ -296,6 +404,7 @@ index 000000000..48f11daaa
 +				outDevice = device;
 +				outPort = port;
 +				outName = deviceName(info);
++				lastSent = SystemClock.uptimeMillis(); // quiet since it was opened
 +				used = true;
 +				Log.i("SDL", "MIDI: sending to " + outName);
 +			}
