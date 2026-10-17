@@ -1098,10 +1098,10 @@ index f0a437bb6..4e70f19f1 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..ccd26cc85
+index 000000000..ab1a00cac
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,531 @@
+@@ -0,0 +1,557 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1162,6 +1162,7 @@ index 000000000..ccd26cc85
 +	private SeekBar seek;
 +	private MediaPlayer player = null;
 +	private boolean prepared = false; // asking the player anything before is an error
++	private boolean seeking = false; // the position bar is held
 +	private Surface surface = null;
 +	private String path = null;
 +	private int videoWidth = 16, videoHeight = 9;
@@ -1390,10 +1391,17 @@ index 000000000..ccd26cc85
 +			public void onProgressChanged(SeekBar s, int value, boolean fromUser)
 +			{
 +				if (fromUser && player != null && prepared)
-+					player.seekTo(value);
++					time.setText(clock(value) + " / " + clock(s.getMax()));
 +			}
-+			public void onStartTrackingTouch(SeekBar s) { }
-+			public void onStopTrackingTouch(SeekBar s) { }
++			public void onStartTrackingTouch(SeekBar s)
++			{
++				seeking = true;
++			}
++			public void onStopTrackingTouch(SeekBar s)
++			{
++				seeking = false;
++				seekTo(s.getProgress());
++			}
 +		});
 +		bottom.addView(seek, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 +		time = new TextView(context);
@@ -1560,6 +1568,24 @@ index 000000000..ccd26cc85
 +		}
 +	}
 +
++	// To the very place: by default the player goes to the key frame before it, which can be the
++	// start of a short video
++	private void seekTo(int ms)
++	{
++		if (player == null || !prepared)
++			return;
++		try
++		{
++			if (android.os.Build.VERSION.SDK_INT >= 26)
++				player.seekTo((long) ms, MediaPlayer.SEEK_CLOSEST);
++			else
++				player.seekTo(ms);
++		}
++		catch (Exception e)
++		{
++		}
++	}
++
 +	private void releasePlayer()
 +	{
 +		prepared = false;
@@ -1620,7 +1646,7 @@ index 000000000..ccd26cc85
 +				return;
 +			try
 +			{
-+				if (player != null && prepared && player.getDuration() > 0)
++				if (player != null && prepared && !seeking && player.getDuration() > 0)
 +				{
 +					seek.setProgress(player.getCurrentPosition());
 +					time.setText(clock(player.getCurrentPosition()) + " / " + clock(player.getDuration()));
