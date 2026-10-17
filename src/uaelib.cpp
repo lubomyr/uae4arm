@@ -18,6 +18,12 @@
 #include "gensound.h"
 #include "picasso96.h"
 #include "filesys.h"
+#if defined(ANDROIDSDL)
+#include <SDL_android.h>
+#elif defined(LINUX_HOST)
+#include <unistd.h>
+#include <sys/wait.h>
+#endif
 
 /*
  * Returns UAE Version
@@ -283,6 +289,42 @@ static int native_dos_op(TrapContext *ctx, uae_u32 mode, uae_u32 p1, uae_u32 p2,
   return 0;
 }
 
+/* uae4arm: a file of a folder drive shown by the host, AndroidPlay on the Amiga
+   side calls it. what = 1 plays a video in a window over the Amiga screen;
+   lock = dos.library Lock of the file. 1 done, 2 not a file of a folder drive,
+   3 the host cannot show it - not 0, which is what an emulator without this
+   gives back. */
+static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 lock)
+{
+	TCHAR path[MAX_DPATH];
+
+	if (what != 1)
+		return 3;
+	if (get_native_path(ctx, lock, path))
+		return 2;
+	write_log(_T("uaelib: the host plays %s\n"), path);
+#if defined(ANDROIDSDL)
+	return SDL_ANDROID_PlayVideo(path) ? 1 : 3;
+#elif defined(LINUX_HOST)
+	// The desktop's player, detached so that the emulation does not wait
+	pid_t pid = fork();
+	if (pid == 0) {
+		if (fork() == 0) {
+			setsid();
+			execlp("xdg-open", "xdg-open", path, (char *)NULL);
+			_exit(127);
+		}
+		_exit(0);
+	}
+	if (pid < 0)
+		return 3;
+	waitpid(pid, NULL, 0);
+	return 1;
+#else
+	return 3;
+#endif
+}
+
 static uae_u32 uaelib_demux_common(TrapContext *ctx, uae_u32 ARG0, uae_u32 ARG1, uae_u32 ARG2, uae_u32 ARG3, uae_u32 ARG4, uae_u32 ARG5)
 {
 	switch (ARG0) {
@@ -307,6 +349,7 @@ static uae_u32 uaelib_demux_common(TrapContext *ctx, uae_u32 ARG0, uae_u32 ARG1,
 		case 81: return cfgfile_uaelib(ctx, ARG1, ARG2, ARG3, ARG4);
 		case 82: return cfgfile_uaelib_modify(ctx, ARG1, ARG2, ARG3, ARG4, ARG5);
 		case 85: return native_dos_op(ctx, ARG1, ARG2, ARG3, ARG4);
+		case 200: return emulib_HostShow(ctx, ARG1, ARG2);
     case 86:
    	  if (valid_address(ARG1, 1)) {
 			  uae_char tmp[MAX_DPATH];
