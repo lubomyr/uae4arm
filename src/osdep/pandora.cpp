@@ -982,6 +982,11 @@ int handle_msgpump (void)
     		    int mouseScale = currprefs.input_joymouse_multiplier / 2;
             x = rEvent.motion.xrel;
     				y = rEvent.motion.yrel;
+            /* No movement at all, as the system sends again after a view over
+               the screen was laid out: nothing to push along the edge either.
+               With the video window open the cursor crept to the left by it. */
+            if(x == 0 && y == 0)
+              break;
 
             /* A cursor pinned against the edge of the window reports no
                motion in that axis, and the Amiga pointer would stop with it,

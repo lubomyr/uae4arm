@@ -11,10 +11,53 @@ index d41308eaf..bfa820fc5 100644
  				 android:theme="@style/AppTheme"
  	>
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..0bf392aae 100644
+index 69c7f86c2..9f5dda991 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
-@@ -597,6 +597,8 @@ public class MainActivity extends Activity
+@@ -543,6 +543,18 @@ public class MainActivity extends Activity
+ 		mGLView.nativeScreenVisibleRect(r.left, r.top, r.right, r.bottom);
+ 		_videoLayout.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener()
+ 		{
++			// The area told last: every layout of any view in the window comes here, a window moved
++			// over the app as well, and telling it moves the app's mouse by a pixel
++			private final Rect told = new Rect();
++
++			private void tell(Rect area)
++			{
++				if( area.equals(told) )
++					return;
++				told.set(area);
++				mGLView.nativeScreenVisibleRect(area.left, area.top, area.width(), area.height());
++			}
++
+ 			public void onGlobalLayout()
+ 			{
+ 				final Rect r = new Rect();
+@@ -575,12 +587,13 @@ public class MainActivity extends Activity
+ 				Log.v("SDL", "videoLayout: " + _videoLayout.getLeft() + ":" + _videoLayout.getTop() + ":" + _videoLayout.getWidth() + ":" + _videoLayout.getHeight() +
+ 						" videoLayout.getRootView() " + _videoLayout.getRootView().getLeft() + ":" + _videoLayout.getRootView().getTop() + ":" +
+ 						_videoLayout.getRootView().getWidth() + ":" + _videoLayout.getRootView().getHeight());
++				final Rect area = new Rect(r.left + widthDiff, r.top + heightDiff, r.left + widthDiff + r.width(), r.top + heightDiff + r.height());
+ 				_videoLayout.postDelayed( new Runnable()
+ 				{
+ 					public void run()
+ 					{
+ 						DimSystemStatusBar.dim(_videoLayout, getWindow());
+-						mGLView.nativeScreenVisibleRect(r.left + widthDiff, r.top + heightDiff, r.width(), r.height());
++						tell(area);
+ 					}
+ 				}, 300 );
+ 				_videoLayout.postDelayed( new Runnable()
+@@ -588,7 +601,7 @@ public class MainActivity extends Activity
+ 					public void run()
+ 					{
+ 						DimSystemStatusBar.dim(_videoLayout, getWindow());
+-						mGLView.nativeScreenVisibleRect(r.left + widthDiff, r.top + heightDiff, r.width(), r.height());
++						tell(area);
+ 					}
+ 				}, 600 );
+ 			}
+@@ -597,6 +610,8 @@ public class MainActivity extends Activity
  
  	@Override
  	protected void onPause() {
@@ -23,7 +66,7 @@ index 69c7f86c2..0bf392aae 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +695,36 @@ public class MainActivity extends Activity
+@@ -693,6 +708,36 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
@@ -60,7 +103,7 @@ index 69c7f86c2..0bf392aae 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1622,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1635,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -1098,10 +1141,10 @@ index f0a437bb6..4e70f19f1 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..ab1a00cac
+index 000000000..b8c046e91
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,557 @@
+@@ -0,0 +1,562 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1331,7 +1374,8 @@ index 000000000..ab1a00cac
 +		title.setPadding(px(10), 0, px(4), 0);
 +		bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 +		playButton = button("⏸", new View.OnClickListener() { public void onClick(View v) { togglePlay(); } });
-+		bar.addView(playButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(40)));
++		// A fixed size, as for the time below: ▶ and ⏸ differ in width, and a layout moved the app's mouse
++		bar.addView(playButton, new LinearLayout.LayoutParams(px(44), px(40)));
 +		bar.addView(icon(ICON_FULLSCREEN, new View.OnClickListener() { public void onClick(View v) { toggleFullScreen(); } }),
 +			new LinearLayout.LayoutParams(px(44), px(40)));
 +		bar.addView(button("✕", new View.OnClickListener() { public void onClick(View v) { close(); } }),
@@ -1408,7 +1452,11 @@ index 000000000..ab1a00cac
 +		time.setTextColor(Color.WHITE);
 +		time.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
 +		time.setPadding(px(4), 0, px(4), 0);
-+		bottom.addView(time, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++		// A fixed size, so that the text changing twice a second does not lay the views out again:
++		// after each layout the system sends the mouse position again, which moved the app's mouse
++		time.setGravity(Gravity.CENTER);
++		time.setSingleLine(true);
++		bottom.addView(time, new LinearLayout.LayoutParams(px(96), px(40)));
 +		View corner = icon(ICON_RESIZE, null);
 +		corner.setOnTouchListener(new View.OnTouchListener()
 +		{
