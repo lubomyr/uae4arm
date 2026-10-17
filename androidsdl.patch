@@ -11,7 +11,7 @@ index d41308eaf..bfa820fc5 100644
  				 android:theme="@style/AppTheme"
  	>
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..a12e548fc 100644
+index 69c7f86c2..0bf392aae 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -597,6 +597,8 @@ public class MainActivity extends Activity
@@ -23,12 +23,24 @@ index 69c7f86c2..a12e548fc 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +695,24 @@ public class MainActivity extends Activity
+@@ -693,6 +695,36 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
 +	// A video the app shows in a window of its own over its screen, see VideoWindow
 +	private VideoWindow videoWindow = null;
++
++	public void setVideoWindowHidden(final boolean hide)
++	{
++		runOnUiThread(new Runnable()
++		{
++			public void run()
++			{
++				if( videoWindow != null )
++					videoWindow.setHidden(hide);
++			}
++		});
++	}
 +
 +	public void playVideo(final String path)
 +	{
@@ -48,7 +60,7 @@ index 69c7f86c2..a12e548fc 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1610,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1622,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -820,7 +832,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..4ca4b2b02 100644
+index f0a437bb6..4e70f19f1 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -897,7 +909,7 @@ index f0a437bb6..4ca4b2b02 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +998,42 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +998,47 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -909,6 +921,11 @@ index f0a437bb6..4ca4b2b02 100644
 +	public void playVideo(String path) // Called from native code
 +	{
 +		context.playVideo(path);
++	}
++
++	public void setVideoWindowHidden(int hide) // Called from native code
++	{
++		context.setVideoWindowHidden(hide != 0);
 +	}
 +
 +	public int midiOpen() // Called from native code
@@ -940,7 +957,7 @@ index f0a437bb6..4ca4b2b02 100644
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1052,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1057,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -948,7 +965,7 @@ index f0a437bb6..4ca4b2b02 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1063,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1068,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -956,7 +973,7 @@ index f0a437bb6..4ca4b2b02 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1084,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1089,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -967,7 +984,7 @@ index f0a437bb6..4ca4b2b02 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1102,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1107,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -985,7 +1002,7 @@ index f0a437bb6..4ca4b2b02 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1117,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1122,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -998,7 +1015,7 @@ index f0a437bb6..4ca4b2b02 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1143,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1148,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -1011,7 +1028,7 @@ index f0a437bb6..4ca4b2b02 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1156,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1161,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -1023,7 +1040,7 @@ index f0a437bb6..4ca4b2b02 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1122,9 +1215,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1220,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -1063,7 +1080,7 @@ index f0a437bb6..4ca4b2b02 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1270,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1275,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -1071,7 +1088,7 @@ index f0a437bb6..4ca4b2b02 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1289,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1294,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -1081,10 +1098,10 @@ index f0a437bb6..4ca4b2b02 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..05a44a163
+index 000000000..99b802e51
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,484 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1148,6 +1165,7 @@ index 000000000..05a44a163
 +	private int videoWidth = 16, videoHeight = 9;
 +	private int width; // of the window, the height follows the video
 +	private boolean fullScreen = false;
++	private boolean hidden = false, playingWhenHidden = false;
 +	private float savedX, savedY;
 +	private int savedWidth;
 +	private final Handler handler = new Handler(Looper.getMainLooper());
@@ -1159,10 +1177,45 @@ index 000000000..05a44a163
 +		this.dp = context.getResources().getDisplayMetrics().density;
 +	}
 +
++	// Hides the window, paused, while the app shows something else, such as its menu; showing it
++	// again goes on playing if it played
++	void setHidden(boolean hide)
++	{
++		if (hide == hidden)
++			return;
++		hidden = hide;
++		if (window == null)
++			return;
++		if (hide)
++		{
++			playingWhenHidden = false;
++			try
++			{
++				playingWhenHidden = player != null && prepared && player.isPlaying();
++			}
++			catch (Exception e)
++			{
++			}
++			pause();
++			window.setVisibility(View.GONE);
++		}
++		else
++		{
++			window.setVisibility(View.VISIBLE);
++			if (playingWhenHidden && player != null && prepared)
++			{
++				player.start();
++				updateButtons();
++			}
++		}
++	}
++
 +	void play(String path)
 +	{
++		hidden = false;
 +		if (window == null)
 +			create();
++		window.setVisibility(View.VISIBLE);
 +		this.path = path;
 +		title.setText(new File(path).getName());
 +		if (surface != null)
@@ -1245,8 +1298,8 @@ index 000000000..05a44a163
 +				{
 +					downX = e.getRawX();
 +					downY = e.getRawY();
-+					startX = window.getX();
-+					startY = window.getY();
++					startX = left();
++					startY = top();
 +				}
 +				else if (e.getActionMasked() == MotionEvent.ACTION_MOVE)
 +					moveTo(startX + e.getRawX() - downX, startY + e.getRawY() - downY);
@@ -1328,8 +1381,7 @@ index 000000000..05a44a163
 +		parent.addView(window, new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
 +		layout();
 +		// Bottom right at first
-+		window.setX(parent.getWidth() - width - px(16));
-+		window.setY(Math.max(0, parent.getHeight() - windowHeight() - px(16)));
++		moveTo(parent.getWidth() - width - px(16), parent.getHeight() - windowHeight() - px(16));
 +		handler.post(progress);
 +	}
 +
@@ -1356,15 +1408,28 @@ index 000000000..05a44a163
 +		}
 +		window.setLayoutParams(lp);
 +		if (!fullScreen)
-+			moveTo(window.getX(), window.getY());
++			moveTo(left(), top());
 +	}
 +
++	// By the margins, not by setX(): the app draws on a SurfaceView, which leaves room for the
++	// views over it only as it lays them out, and a window moved without a layout was drawn over
++	// by the app at the places it moved to until it stopped
 +	private void moveTo(float x, float y)
 +	{
-+		x = Math.max(0, Math.min(parent.getWidth() - width, x));
-+		y = Math.max(0, Math.min(parent.getHeight() - Math.min(parent.getHeight(), windowHeight()), y));
-+		window.setX(x);
-+		window.setY(y);
++		FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
++		lp.leftMargin = (int) Math.max(0, Math.min(parent.getWidth() - width, x));
++		lp.topMargin = (int) Math.max(0, Math.min(parent.getHeight() - Math.min(parent.getHeight(), windowHeight()), y));
++		window.setLayoutParams(lp);
++	}
++
++	private float left()
++	{
++		return ((FrameLayout.LayoutParams) window.getLayoutParams()).leftMargin;
++	}
++
++	private float top()
++	{
++		return ((FrameLayout.LayoutParams) window.getLayoutParams()).topMargin;
 +	}
 +
 +	private void toggleFullScreen()
@@ -1372,19 +1437,21 @@ index 000000000..05a44a163
 +		fullScreen = !fullScreen;
 +		if (fullScreen)
 +		{
-+			savedX = window.getX();
-+			savedY = window.getY();
++			savedX = left();
++			savedY = top();
 +			savedWidth = width;
-+			window.setX(0);
-+			window.setY(0);
++			FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
++			lp.leftMargin = 0;
++			lp.topMargin = 0;
++			window.setLayoutParams(lp);
 +		}
 +		else
 +		{
 +			width = savedWidth;
-+			window.setX(savedX);
-+			window.setY(savedY);
 +		}
 +		layout();
++		if (!fullScreen)
++			moveTo(savedX, savedY);
 +	}
 +
 +	private void open()
@@ -1630,10 +1697,10 @@ index 97978a7ac..127fb1d84 100755
      {
          mGlobalFont = font;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..3c3219bf1 100644
+index 14d8a4dd1..bca5382c1 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,58 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,60 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -1671,6 +1738,8 @@ index 14d8a4dd1..3c3219bf1 100644
 +/* Plays a video file with the decoder of the system in a window over the app, which can be moved,
 +   resized, made full screen and closed; the app goes on underneath. Returns 0 if it cannot. */
 +extern DECLSPEC int SDLCALL SDL_ANDROID_PlayVideo(const char *path);
++/* Hides that window, paused, while the app shows something else - its menu, say - and shows it again */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetVideoWindowHidden(int hide);
 +
 +/* MIDI through the system's MIDI service, Android 6 and later: a USB MIDI device, or an app with a MIDI
 +   synthesizer. Bytes are raw MIDI; give whole messages to SDL_ANDROID_MidiSend(), some synthesizer apps want that.
@@ -1693,7 +1762,7 @@ index 14d8a4dd1..3c3219bf1 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +203,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +205,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -1873,7 +1942,7 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..bb9fbd6e9 100644
+index 30df36343..9a00648c9 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -1884,13 +1953,14 @@ index 30df36343..bb9fbd6e9 100644
  
  #include "SDL_opengles.h"
  
-@@ -121,7 +122,14 @@ static jmethodID JavaRequestCloudLoad = NULL;
+@@ -121,7 +122,15 @@ static jmethodID JavaRequestCloudLoad = NULL;
  static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
 +static jmethodID JavaConfirmConfigOptions = NULL;
 +static jmethodID JavaMidiOpen = NULL;
 +static jmethodID JavaPlayVideo = NULL;
++static jmethodID JavaSetVideoWindowHidden = NULL;
 +static jmethodID JavaMidiClose = NULL;
 +static jmethodID JavaMidiSend = NULL;
 +static jmethodID JavaMidiDeviceName = NULL;
@@ -1899,13 +1969,14 @@ index 30df36343..bb9fbd6e9 100644
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -428,7 +436,14 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +437,15 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
  	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
 +	JavaConfirmConfigOptions = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "confirmConfigOptions", "()V");
 +	JavaMidiOpen = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiOpen", "()I");
 +	JavaPlayVideo = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "playVideo", "(Ljava/lang/String;)V");
++	JavaSetVideoWindowHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setVideoWindowHidden", "(I)V");
 +	JavaMidiClose = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiClose", "()V");
 +	JavaMidiSend = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiSend", "([BI)V");
 +	JavaMidiDeviceName = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiDeviceName", "(I)Ljava/lang/String;");
@@ -1914,7 +1985,7 @@ index 30df36343..bb9fbd6e9 100644
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +701,161 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +703,169 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
@@ -1971,6 +2042,14 @@ index 30df36343..bb9fbd6e9 100644
 +	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaPlayVideo, s );
 +	(*JavaEnv)->DeleteLocalRef( JavaEnv, s );
 +	return 1;
++}
++
++void SDLCALL SDL_ANDROID_SetVideoWindowHidden(int hide)
++{
++	JNIEnv *JavaEnv = GetJavaEnvAttached();
++	if( !JavaEnv || !JavaRenderer || !JavaSetVideoWindowHidden )
++		return;
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetVideoWindowHidden, (jint) hide );
 +}
 +
 +int SDLCALL SDL_ANDROID_MidiOpen(void)
@@ -2076,7 +2155,7 @@ index 30df36343..bb9fbd6e9 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +867,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +877,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  
