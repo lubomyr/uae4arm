@@ -1098,10 +1098,10 @@ index f0a437bb6..4e70f19f1 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..99b802e51
+index 000000000..ccd26cc85
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,484 @@
+@@ -0,0 +1,531 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1125,7 +1125,9 @@ index 000000000..99b802e51
 +
 +package net.sourceforge.clonekeenplus;
 +
++import android.graphics.Canvas;
 +import android.graphics.Color;
++import android.graphics.Paint;
 +import android.graphics.SurfaceTexture;
 +import android.media.MediaPlayer;
 +import android.os.Handler;
@@ -1246,6 +1248,52 @@ index 000000000..99b802e51
 +		return (int)(v * dp + 0.5f);
 +	}
 +
++	// Icons drawn to a size, not characters of the font: those come out in all sizes
++	private static final int ICON_RESIZE = 0, ICON_FULLSCREEN = 1;
++
++	private View icon(final int kind, View.OnClickListener click)
++	{
++		View v = new View(context)
++		{
++			final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
++			@Override
++			protected void onDraw(Canvas c)
++			{
++				float w = getWidth(), h = getHeight(), cx = w / 2, cy = h / 2;
++				paint.setStrokeWidth(px(2.5f));
++				paint.setStrokeCap(Paint.Cap.ROUND);
++				if (kind == ICON_RESIZE)
++				{
++					// Three strokes in the corner, the grip of desktop windows
++					paint.setColor(Color.LTGRAY);
++					float m = px(6);
++					for (int i = 0; i < 3; i++)
++					{
++						float d = m + i * px(8.5f);
++						c.drawLine(w - m, h - d, w - d, h - m, paint);
++					}
++				}
++				else
++				{
++					// The four corners of a frame
++					paint.setColor(Color.WHITE);
++					float r = px(7), l = px(4);
++					float[][] corners = { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
++					for (float[] k: corners)
++					{
++						float x = cx + k[0] * r, y = cy + k[1] * r;
++						c.drawLine(x, y, x - k[0] * l, y, paint);
++						c.drawLine(x, y, x, y - k[1] * l, paint);
++					}
++				}
++			}
++		};
++		if (click != null)
++			v.setOnClickListener(click);
++		v.setFocusable(false);
++		return v;
++	}
++
 +	private TextView button(String label, View.OnClickListener click)
 +	{
 +		TextView b = new TextView(context);
@@ -1283,8 +1331,8 @@ index 000000000..99b802e51
 +		bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 +		playButton = button("⏸", new View.OnClickListener() { public void onClick(View v) { togglePlay(); } });
 +		bar.addView(playButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(40)));
-+		bar.addView(button("⤢", new View.OnClickListener() { public void onClick(View v) { toggleFullScreen(); } }),
-+			new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(40)));
++		bar.addView(icon(ICON_FULLSCREEN, new View.OnClickListener() { public void onClick(View v) { toggleFullScreen(); } }),
++			new LinearLayout.LayoutParams(px(44), px(40)));
 +		bar.addView(button("✕", new View.OnClickListener() { public void onClick(View v) { close(); } }),
 +			new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(40)));
 +		bar.setOnTouchListener(new View.OnTouchListener()
@@ -1353,8 +1401,7 @@ index 000000000..99b802e51
 +		time.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
 +		time.setPadding(px(4), 0, px(4), 0);
 +		bottom.addView(time, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-+		TextView corner = button("◢", null);
-+		corner.setTextColor(Color.GRAY);
++		View corner = icon(ICON_RESIZE, null);
 +		corner.setOnTouchListener(new View.OnTouchListener()
 +		{
 +			float downX; int startWidth;
