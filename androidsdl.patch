@@ -12,10 +12,10 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..4806fc81a
+index 000000000..d5f294d59
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,279 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a browser window over the app for the Android port
@@ -100,6 +100,26 @@ index 000000000..4806fc81a
 +		}
 +	}
 +
++	// The screen of a page is the window it is in; YouTube lays its player out to it. Its window is
++	// as large as the device's screen, except for the size of YouTube's player in its full screen:
++	// YouTube takes its player for one in picture in picture, and pauses it at every start, when the
++	// window covers too little of the largest of the screen and the window it has seen - with the
++	// window as large as the page it did after the page was made larger and smaller again.
++	private static final String SCREEN_IS_WINDOW =
++		"(function() {" +
++		" if (window.__uae4armScreen) return; window.__uae4armScreen = true;" +
++		" var p = Object.getPrototypeOf(screen);" +
++		" var sw = Object.getOwnPropertyDescriptor(p, 'width').get, sh = Object.getOwnPropertyDescriptor(p, 'height').get;" +
++		" function forPlayer() { return /getPlayerSize/.test(String(new Error().stack)); }" +
++		" try {" +
++		"  Object.defineProperty(window, 'outerWidth', { get: function() { return forPlayer() ? window.innerWidth : sw.call(screen); }, configurable: true });" +
++		"  Object.defineProperty(window, 'outerHeight', { get: function() { return forPlayer() ? window.innerHeight : sh.call(screen); }, configurable: true });" +
++		" } catch (e) { }" +
++		" var w = function() { return window.innerWidth; }, h = function() { return window.innerHeight; };" +
++		" ['width', 'availWidth'].forEach(function(n) { Object.defineProperty(p, n, { get: w, configurable: true }); });" +
++		" ['height', 'availHeight'].forEach(function(n) { Object.defineProperty(p, n, { get: h, configurable: true }); });" +
++		"})();";
++
 +	// "aminet.net" means https://aminet.net
 +	private static String withScheme(String url)
 +	{
@@ -131,7 +151,6 @@ index 000000000..4806fc81a
 +			return;
 +		area.removeView(fullView);
 +		fullView = null;
-+		web.setVisibility(View.VISIBLE);
 +		WebChromeClient.CustomViewCallback done = fullDone;
 +		fullDone = null;
 +		if (done != null)
@@ -208,6 +227,9 @@ index 000000000..4806fc81a
 +		s.setBuiltInZoomControls(true);
 +		s.setDisplayZoomControls(false);
 +		s.setAllowFileAccess(true); // files of the Amiga's folder drives
++		// Pages start their videos a moment after the tap, once they fetched something - YouTube
++		// does - which WebView no longer counts as the user's and stops
++		s.setMediaPlaybackRequiresUserGesture(false);
 +		web.setWebViewClient(new WebViewClient()
 +		{
 +			// Pages open here; other schemes, such as mailto: or market:, go to their apps
@@ -224,6 +246,11 @@ index 000000000..4806fc81a
 +				{
 +				}
 +				return true;
++			}
++			@Override
++			public void onPageFinished(WebView view, String url)
++			{
++				view.evaluateJavascript(SCREEN_IS_WINDOW, null);
 +			}
 +			@Override
 +			public void onPageStarted(WebView view, String url, Bitmap favicon)
@@ -251,7 +278,9 @@ index 000000000..4806fc81a
 +				}
 +				fullView = view;
 +				fullDone = done;
-+				web.setVisibility(View.INVISIBLE);
++				// Over the page, which stays visible: hidden, the page counts as a tab in the
++				// background, and YouTube pauses its video then, again at every start
++				view.setBackgroundColor(android.graphics.Color.BLACK);
 +				area.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 +			}
 +			@Override
