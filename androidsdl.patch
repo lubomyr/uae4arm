@@ -12,10 +12,10 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..c2c23abf0
+index 000000000..4806fc81a
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
-@@ -0,0 +1,237 @@
+@@ -0,0 +1,250 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a browser window over the app for the Android port
@@ -77,10 +77,18 @@ index 000000000..c2c23abf0
 +		super(context, parent);
 +	}
 +
-+	// An address, an empty one to ask for it, or with file set the path of a file
-+	void open(String what, boolean file)
++	// An address, an empty one to ask for it, or with file set the path of a file; without the
++	// address field if asked to, unless there is no address
++	void open(String what, boolean file, boolean showAddress)
 +	{
 +		show();
++		if (!file && what.length() == 0)
++			showAddress = true;
++		if ((address.getVisibility() == View.VISIBLE) != showAddress)
++		{
++			address.setVisibility(showAddress ? View.VISIBLE : View.GONE);
++			layout();
++		}
 +		if (file)
 +			load(Uri.fromFile(new File(what)).toString());
 +		else if (what.length() > 0)
@@ -147,9 +155,15 @@ index 000000000..c2c23abf0
 +		addButton(bar, button("⟳", new View.OnClickListener() { public void onClick(View v) { web.reload(); } }));
 +	}
 +
++	@Override
++	protected int rowsHeight()
++	{
++		return address.getVisibility() == View.VISIBLE ? px(36) : 0;
++	}
++
 +	// The address: Enter goes there
 +	@Override
-+	protected int addRows(LinearLayout window)
++	protected void addRows(LinearLayout window)
 +	{
 +		address = new EditText(context);
 +		address.setSingleLine(true);
@@ -180,7 +194,6 @@ index 000000000..c2c23abf0
 +			}
 +		});
 +		window.addView(address, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(36)));
-+		return px(36);
 +	}
 +
 +	@Override
@@ -255,10 +268,10 @@ index 000000000..c2c23abf0
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..e17812e5c
+index 000000000..b82874fc5
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,349 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -321,8 +334,9 @@ index 000000000..e17812e5c
 +	protected abstract View content();
 +	// Buttons of the title bar, before full screen and close
 +	protected void addTitleButtons(LinearLayout bar) { }
-+	// Rows between the title bar and the content
-+	protected int addRows(LinearLayout window) { return 0; } // their height
++	// Rows between the title bar and the content, and their height as it is now
++	protected void addRows(LinearLayout window) { }
++	protected int rowsHeight() { return 0; }
 +	// The bottom bar, before the corner
 +	protected void addBottom(LinearLayout bottom) { }
 +	// The height of the content for a width, when it keeps a shape of its own (a video); -1 if not
@@ -443,8 +457,6 @@ index 000000000..e17812e5c
 +		bar.addView(b, new LinearLayout.LayoutParams(px(44), px(40)));
 +	}
 +
-+	private int rowsHeight;
-+
 +	private void create()
 +	{
 +		width = Math.max(px(240), parent.getWidth() * 2 / 5);
@@ -492,7 +504,7 @@ index 000000000..e17812e5c
 +		});
 +		window.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
 +
-+		rowsHeight = addRows(window);
++		addRows(window);
 +		window.addView(content(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 +
 +		// The bottom bar with a corner to drag for the size
@@ -540,7 +552,7 @@ index 000000000..e17812e5c
 +	private int windowHeight()
 +	{
 +		int h = shapedHeight(width);
-+		return (h >= 0 ? h : contentHeight) + rowsHeight + px(80);
++		return (h >= 0 ? h : contentHeight) + rowsHeight() + px(80);
 +	}
 +
 +	// The size follows the width, and the shape of the content if it keeps one
@@ -610,7 +622,7 @@ index 000000000..e17812e5c
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..ebee82558 100644
+index 69c7f86c2..2585f0ecc 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -543,6 +543,18 @@ public class MainActivity extends Activity
@@ -688,7 +700,7 @@ index 69c7f86c2..ebee82558 100644
 +		});
 +	}
 +
-+	public void openBrowser(final String what, final boolean file)
++	public void openBrowser(final String what, final boolean file, final boolean showAddress)
 +	{
 +		runOnUiThread(new Runnable()
 +		{
@@ -698,7 +710,7 @@ index 69c7f86c2..ebee82558 100644
 +					return;
 +				if( browserWindow == null )
 +					browserWindow = new BrowserWindow(MainActivity.this, _videoLayout);
-+				browserWindow.open(what, file);
++				browserWindow.open(what, file, showAddress);
 +			}
 +		});
 +	}
@@ -1510,7 +1522,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..ec9b70303 100644
+index f0a437bb6..72ae18b01 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -1606,9 +1618,9 @@ index f0a437bb6..ec9b70303 100644
 +		context.setFloatingWindowsHidden(hide != 0);
 +	}
 +
-+	public void openBrowser(String what, int file) // Called from native code
++	public void openBrowser(String what, int file, int flags) // Called from native code
 +	{
-+		context.openBrowser(what, file != 0);
++		context.openBrowser(what, file != 0, (flags & 1) == 0); // SDL_ANDROID_BROWSER_NO_ADDRESS
 +	}
 +
 +	public int midiOpen() // Called from native code
@@ -2245,10 +2257,10 @@ index 97978a7ac..127fb1d84 100755
      {
          mGlobalFont = font;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..e8ab47cf1 100644
+index 14d8a4dd1..5e1e1e879 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,65 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,67 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -2288,8 +2300,10 @@ index 14d8a4dd1..e8ab47cf1 100644
 +extern DECLSPEC int SDLCALL SDL_ANDROID_PlayVideo(const char *path);
 +/* Shows a web page in a window over the app, like the video window: an address ("aminet.net" means
 +   https://aminet.net), an empty one to ask for it, or with file set the path of a file to show.
++   flags: SDL_ANDROID_BROWSER_NO_ADDRESS leaves out the address field, when there is an address.
 +   Returns 0 if it cannot. */
-+extern DECLSPEC int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file);
++enum { SDL_ANDROID_BROWSER_NO_ADDRESS = 1 };
++extern DECLSPEC int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file, int flags);
 +/* Hides those windows - a video paused - while the app shows something else, its menu say, and
 +   shows them again */
 +extern DECLSPEC void SDLCALL SDL_ANDROID_SetFloatingWindowsHidden(int hide);
@@ -2315,7 +2329,7 @@ index 14d8a4dd1..e8ab47cf1 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +210,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +212,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -2495,7 +2509,7 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..cb189c36f 100644
+index 30df36343..df2da19d0 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -2531,7 +2545,7 @@ index 30df36343..cb189c36f 100644
 +	JavaMidiOpen = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiOpen", "()I");
 +	JavaPlayVideo = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "playVideo", "(Ljava/lang/String;)V");
 +	JavaSetFloatingWindowsHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setFloatingWindowsHidden", "(I)V");
-+	JavaOpenBrowser = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openBrowser", "(Ljava/lang/String;I)V");
++	JavaOpenBrowser = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openBrowser", "(Ljava/lang/String;II)V");
 +	JavaMidiClose = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiClose", "()V");
 +	JavaMidiSend = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiSend", "([BI)V");
 +	JavaMidiDeviceName = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiDeviceName", "(I)Ljava/lang/String;");
@@ -2607,14 +2621,14 @@ index 30df36343..cb189c36f 100644
 +	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetFloatingWindowsHidden, (jint) hide );
 +}
 +
-+int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file)
++int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file, int flags)
 +{
 +	JNIEnv *JavaEnv = GetJavaEnvAttached();
 +	jstring s;
 +	if( !JavaEnv || !JavaRenderer || !JavaOpenBrowser || !what )
 +		return 0;
 +	s = (*JavaEnv)->NewStringUTF(JavaEnv, what);
-+	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaOpenBrowser, s, (jint) file );
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaOpenBrowser, s, (jint) file, (jint) flags );
 +	(*JavaEnv)->DeleteLocalRef( JavaEnv, s );
 +	return 1;
 +}

@@ -315,19 +315,24 @@ static bool host_open(const TCHAR *what)
    1 plays a video, arg = dos.library Lock of a file of a folder drive;
    2 shows a web page, arg = its address, a string - empty asks for one;
    3 shows a file of a folder drive as a web page, arg = its Lock.
+   Above the low byte of what: $100 leaves out the address field of the web
+   page's window.
    1 done, 2 not a file of a folder drive, 3 the host cannot show it - not 0,
    which is what an emulator without this gives back. */
 static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg)
 {
 	TCHAR path[MAX_DPATH];
+	int noaddress = (what & 0x100) != 0;
 
+	(void)noaddress; // only the Android window has the field
+	what &= 0xff;
 	if (what == 2) {
 		char url[2048];
 		trap_get_string(ctx, url, arg, sizeof url);
 		url[sizeof url - 1] = 0;
 		write_log(_T("uaelib: the host shows %s\n"), url);
 #if defined(ANDROIDSDL)
-		return SDL_ANDROID_OpenBrowser(url, 0) ? 1 : 3;
+		return SDL_ANDROID_OpenBrowser(url, 0, noaddress ? SDL_ANDROID_BROWSER_NO_ADDRESS : 0) ? 1 : 3;
 #elif defined(LINUX_HOST)
 		if (!url[0])
 			return 3;
@@ -349,7 +354,7 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg)
 #if defined(ANDROIDSDL)
 	if (what == 1)
 		return SDL_ANDROID_PlayVideo(path) ? 1 : 3;
-	return SDL_ANDROID_OpenBrowser(path, 1) ? 1 : 3;
+	return SDL_ANDROID_OpenBrowser(path, 1, noaddress ? SDL_ANDROID_BROWSER_NO_ADDRESS : 0) ? 1 : 3;
 #elif defined(LINUX_HOST)
 	return host_open(path) ? 1 : 3;
 #else
