@@ -297,10 +297,10 @@ index 000000000..d5f294d59
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..b82874fc5
+index 000000000..4632c777e
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,413 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -337,8 +337,9 @@ index 000000000..b82874fc5
 +import android.widget.TextView;
 +
 +// A window over the app, such as the video window: a title bar to move it by, buttons for full
-+// screen and to close it, the content, and a bottom bar with a corner to drag for the size. The app
-+// goes on underneath; the window hides while the app shows its menu. Made and used on the UI thread.
++// screen and to close it, and the content, with a bar of controls over its bottom and a corner to
++// drag for the size over its bottom right. The app goes on underneath; the window hides while the
++// app shows its menu. Made and used on the UI thread.
 +abstract class FloatingWindow
 +{
 +	protected final MainActivity context;
@@ -349,6 +350,9 @@ index 000000000..b82874fc5
 +	protected TextView title;
 +	protected int width, contentHeight; // the height when the content does not keep its own shape
 +	private boolean fullScreen = false, hidden = false;
++	private LinearLayout bottom;
++	private View corner;
++	private boolean controlsHidden = false;
 +	private float savedX, savedY;
 +	private int savedWidth, savedContentHeight;
 +
@@ -366,8 +370,12 @@ index 000000000..b82874fc5
 +	// Rows between the title bar and the content, and their height as it is now
 +	protected void addRows(LinearLayout window) { }
 +	protected int rowsHeight() { return 0; }
-+	// The bottom bar, before the corner
++	// The controls of the bar over the bottom of the content; without any, no bar
 +	protected void addBottom(LinearLayout bottom) { }
++	// The bar and the corner hide a moment after the last touch, if the window wants them to (a
++	// video), unless they are still wanted then (a paused video)
++	protected boolean hidesControls() { return false; }
++	protected boolean keepsControls() { return false; }
 +	// The height of the content for a width, when it keeps a shape of its own (a video); -1 if not
 +	protected int shapedHeight(int width) { return -1; }
 +	protected void onHidden(boolean hide) { }
@@ -411,6 +419,7 @@ index 000000000..b82874fc5
 +		if (window == null)
 +			return;
 +		context.releaseOverlayFocus();
++		window.removeCallbacks(hideControls);
 +		onClosed();
 +		parent.removeView(window);
 +		window = null;
@@ -534,15 +543,30 @@ index 000000000..b82874fc5
 +		window.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
 +
 +		addRows(window);
-+		window.addView(content(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
++		FrameLayout stack = new FrameLayout(context);
++		stack.addView(content(), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 +
-+		// The bottom bar with a corner to drag for the size
-+		LinearLayout bottom = new LinearLayout(context);
++		// The bar over the bottom of the content, the content showing through it, with room for the corner
++		bottom = new LinearLayout(context);
 +		bottom.setOrientation(LinearLayout.HORIZONTAL);
 +		bottom.setGravity(Gravity.CENTER_VERTICAL);
-+		bottom.setBackgroundColor(Color.rgb(0x20, 0x20, 0x20));
++		bottom.setBackgroundColor(Color.argb(0x99, 0, 0, 0));
 +		addBottom(bottom);
-+		View corner = icon(ICON_RESIZE, null);
++		if (bottom.getChildCount() > 0)
++		{
++			bottom.setPadding(0, 0, px(40), 0);
++			stack.addView(bottom, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40), Gravity.BOTTOM));
++		}
++
++		// The corner to drag for the size, seen over a light page as well
++		corner = icon(ICON_RESIZE, null);
++		if (bottom.getChildCount() == 0)
++		{
++			android.graphics.drawable.GradientDrawable shade = new android.graphics.drawable.GradientDrawable();
++			shade.setColor(Color.argb(0x99, 0, 0, 0));
++			shade.setCornerRadius(px(6));
++			corner.setBackground(shade);
++		}
 +		corner.setOnTouchListener(new View.OnTouchListener()
 +		{
 +			float downX, downY; int startWidth, startHeight;
@@ -550,6 +574,7 @@ index 000000000..b82874fc5
 +			{
 +				if (fullScreen)
 +					return true;
++				showControls();
 +				if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
 +				{
 +					downX = e.getRawX();
@@ -566,22 +591,60 @@ index 000000000..b82874fc5
 +				return true;
 +			}
 +		});
-+		// Pushed to the right end whatever the bar holds
-+		View gap = new View(context);
-+		bottom.addView(gap, new LinearLayout.LayoutParams(0, 0, bottom.getChildCount() == 0 ? 1 : 0));
-+		bottom.addView(corner, new LinearLayout.LayoutParams(px(40), px(40)));
-+		window.addView(bottom, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
++		stack.addView(corner, new FrameLayout.LayoutParams(px(40), px(40), Gravity.BOTTOM | Gravity.RIGHT));
++		window.addView(stack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 +
 +		parent.addView(window, new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
 +		layout();
 +		// Bottom right at first
 +		moveTo(parent.getWidth() - width - px(16), parent.getHeight() - windowHeight() - px(16));
++		showControls();
++	}
++
++	// Shows the bar and the corner, until a moment after the last touch if they hide
++	protected void showControls()
++	{
++		if (window == null)
++			return;
++		setControlsVisible(true);
++		window.removeCallbacks(hideControls);
++		if (hidesControls())
++			window.postDelayed(hideControls, CONTROLS_SHOWN_MS);
++	}
++
++	protected boolean controlsShown()
++	{
++		return !controlsHidden;
++	}
++
++	private static final int CONTROLS_SHOWN_MS = 2000;
++
++	private final Runnable hideControls = new Runnable()
++	{
++		public void run()
++		{
++			if (window == null)
++				return;
++			if (keepsControls())
++				window.postDelayed(this, CONTROLS_SHOWN_MS);
++			else
++				setControlsVisible(false);
++		}
++	};
++
++	// Invisible, not gone: the window is not laid out again, which had the system send the mouse
++	// position again and move the app's mouse. No corner in full screen, where the size is fixed.
++	private void setControlsVisible(boolean show)
++	{
++		controlsHidden = !show;
++		bottom.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
++		corner.setVisibility(show && !fullScreen ? View.VISIBLE : View.INVISIBLE);
 +	}
 +
 +	private int windowHeight()
 +	{
 +		int h = shapedHeight(width);
-+		return (h >= 0 ? h : contentHeight) + rowsHeight() + px(80);
++		return (h >= 0 ? h : contentHeight) + rowsHeight() + px(40);
 +	}
 +
 +	// The size follows the width, and the shape of the content if it keeps one
@@ -648,6 +711,7 @@ index 000000000..b82874fc5
 +		layout();
 +		if (!fullScreen)
 +			moveTo(savedX, savedY);
++		setControlsVisible(!controlsHidden);
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
@@ -1831,10 +1895,10 @@ index f0a437bb6..72ae18b01 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..685de47c2
+index 000000000..b72ec6042
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,375 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1906,6 +1970,7 @@ index 000000000..685de47c2
 +			handler.post(progress);
 +		this.path = path;
 +		title.setText(new File(path).getName());
++		showControls();
 +		if (surface != null)
 +			open();
 +	}
@@ -1942,6 +2007,31 @@ index 000000000..685de47c2
 +		}
 +	}
 +
++	// The position bar hides while the video plays, not while it is paused or held
++	@Override
++	protected boolean hidesControls()
++	{
++		return true;
++	}
++
++	@Override
++	protected boolean keepsControls()
++	{
++		return seeking || !isPlaying();
++	}
++
++	private boolean isPlaying()
++	{
++		try
++		{
++			return player != null && prepared && player.isPlaying();
++		}
++		catch (Exception e)
++		{
++			return false;
++		}
++	}
++
 +	@Override
 +	protected void onClosed()
 +	{
@@ -1957,7 +2047,7 @@ index 000000000..685de47c2
 +		addButton(bar, playButton);
 +	}
 +
-+	// The picture; a tap pauses and goes on
++	// The picture; a tap shows the position bar, and with it shown pauses and goes on
 +	@Override
 +	protected View content()
 +	{
@@ -1979,7 +2069,15 @@ index 000000000..685de47c2
 +			}
 +			public void onSurfaceTextureUpdated(SurfaceTexture st) { }
 +		});
-+		video.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { togglePlay(); } });
++		video.setOnClickListener(new View.OnClickListener()
++		{
++			public void onClick(View v)
++			{
++				if (controlsShown())
++					togglePlay();
++				showControls();
++			}
++		});
 +		return video;
 +	}
 +
@@ -2003,6 +2101,7 @@ index 000000000..685de47c2
 +			public void onStopTrackingTouch(SeekBar s)
 +			{
 +				seeking = false;
++				showControls();
 +				seekTo(s.getProgress());
 +			}
 +		});
