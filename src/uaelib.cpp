@@ -289,37 +289,69 @@ static int native_dos_op(TrapContext *ctx, uae_u32 mode, uae_u32 p1, uae_u32 p2,
   return 0;
 }
 
-/* uae4arm: a file of a folder drive shown by the host, AndroidPlay on the Amiga
-   side calls it. what = 1 plays a video in a window over the Amiga screen;
-   lock = dos.library Lock of the file. 1 done, 2 not a file of a folder drive,
-   3 the host cannot show it - not 0, which is what an emulator without this
-   gives back. */
-static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 lock)
+#if defined(LINUX_HOST)
+/* The desktop's own program for a file or an address, detached so that the
+   emulation does not wait */
+static bool host_open(const TCHAR *what)
 {
-	TCHAR path[MAX_DPATH];
-
-	if (what != 1)
-		return 3;
-	if (get_native_path(ctx, lock, path))
-		return 2;
-	write_log(_T("uaelib: the host plays %s\n"), path);
-#if defined(ANDROIDSDL)
-	return SDL_ANDROID_PlayVideo(path) ? 1 : 3;
-#elif defined(LINUX_HOST)
-	// The desktop's player, detached so that the emulation does not wait
 	pid_t pid = fork();
 	if (pid == 0) {
 		if (fork() == 0) {
 			setsid();
-			execlp("xdg-open", "xdg-open", path, (char *)NULL);
+			execlp("xdg-open", "xdg-open", what, (char *)NULL);
 			_exit(127);
 		}
 		_exit(0);
 	}
 	if (pid < 0)
-		return 3;
+		return false;
 	waitpid(pid, NULL, 0);
-	return 1;
+	return true;
+}
+#endif
+
+/* uae4arm: the host shows something in a window over the Amiga screen, for
+   AndroidPlay and AndroidBrowser on the Amiga side. what and arg:
+   1 plays a video, arg = dos.library Lock of a file of a folder drive;
+   2 shows a web page, arg = its address, a string - empty asks for one;
+   3 shows a file of a folder drive as a web page, arg = its Lock.
+   1 done, 2 not a file of a folder drive, 3 the host cannot show it - not 0,
+   which is what an emulator without this gives back. */
+static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg)
+{
+	TCHAR path[MAX_DPATH];
+
+	if (what == 2) {
+		char url[2048];
+		trap_get_string(ctx, url, arg, sizeof url);
+		url[sizeof url - 1] = 0;
+		write_log(_T("uaelib: the host shows %s\n"), url);
+#if defined(ANDROIDSDL)
+		return SDL_ANDROID_OpenBrowser(url, 0) ? 1 : 3;
+#elif defined(LINUX_HOST)
+		if (!url[0])
+			return 3;
+		if (strstr(url, "://"))
+			return host_open(url) ? 1 : 3;
+		{
+			std::string https = std::string("https://") + url;
+			return host_open(https.c_str()) ? 1 : 3;
+		}
+#else
+		return 3;
+#endif
+	}
+	if (what != 1 && what != 3)
+		return 3;
+	if (get_native_path(ctx, arg, path))
+		return 2;
+	write_log(_T("uaelib: the host shows %s\n"), path);
+#if defined(ANDROIDSDL)
+	if (what == 1)
+		return SDL_ANDROID_PlayVideo(path) ? 1 : 3;
+	return SDL_ANDROID_OpenBrowser(path, 1) ? 1 : 3;
+#elif defined(LINUX_HOST)
+	return host_open(path) ? 1 : 3;
 #else
 	return 3;
 #endif

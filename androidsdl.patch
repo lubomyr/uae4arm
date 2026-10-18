@@ -10,8 +10,566 @@ index d41308eaf..bfa820fc5 100644
  				 android:supportsRtl="true"
  				 android:theme="@style/AppTheme"
  	>
+diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
+new file mode 100644
+index 000000000..ce51caf62
+--- /dev/null
++++ b/project/java/BrowserWindow.java
+@@ -0,0 +1,196 @@
++/*
++Simple DirectMedia Layer
++Java source code, a browser window over the app for the Android port
++
++This software is provided 'as-is', without any express or implied
++warranty.  In no event will the authors be held liable for any damages
++arising from the use of this software.
++
++Permission is granted to anyone to use this software for any purpose,
++including commercial applications, and to alter it and redistribute it
++freely, subject to the following restrictions:
++
++1. The origin of this software must not be misrepresented; you must not
++   claim that you wrote the original software. If you use this software
++   in a product, an acknowledgment in the product documentation would be
++   appreciated but is not required.
++2. Altered source versions must be plainly marked as such, and must not be
++   misrepresented as being the original software.
++3. This notice may not be removed or altered from any source distribution.
++*/
++
++package net.sourceforge.clonekeenplus;
++
++import android.content.Intent;
++import android.graphics.Bitmap;
++import android.graphics.Color;
++import android.net.Uri;
++import android.text.InputType;
++import android.util.TypedValue;
++import android.view.KeyEvent;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.inputmethod.EditorInfo;
++import android.view.inputmethod.InputMethodManager;
++import android.webkit.WebChromeClient;
++import android.webkit.WebSettings;
++import android.webkit.WebView;
++import android.webkit.WebViewClient;
++import android.widget.EditText;
++import android.widget.FrameLayout;
++import android.widget.LinearLayout;
++import android.widget.TextView;
++import java.io.File;
++
++// A window with a web page over the app: the app asks for it with an address, or with a file of
++// its own. Back, forward and reload in the title bar, the address under it.
++class BrowserWindow extends FloatingWindow
++{
++	private WebView web;
++	private EditText address;
++
++	BrowserWindow(MainActivity context, FrameLayout parent)
++	{
++		super(context, parent);
++	}
++
++	// An address, an empty one to ask for it, or with file set the path of a file
++	void open(String what, boolean file)
++	{
++		show();
++		if (file)
++			load(Uri.fromFile(new File(what)).toString());
++		else if (what.length() > 0)
++			load(withScheme(what));
++		else if (web.getUrl() == null)
++		{
++			title.setText("AndroidBrowser");
++			address.requestFocus();
++		}
++	}
++
++	// "aminet.net" means https://aminet.net
++	private static String withScheme(String url)
++	{
++		url = url.trim();
++		if (url.contains("://") || url.startsWith("about:") || url.startsWith("data:") || url.startsWith("javascript:"))
++			return url;
++		return "https://" + url;
++	}
++
++	private void load(String url)
++	{
++		address.setText(url);
++		web.loadUrl(url);
++	}
++
++	@Override
++	protected void onHidden(boolean hide)
++	{
++		if (hide)
++			web.onPause();
++		else
++			web.onResume();
++	}
++
++	@Override
++	protected void onClosed()
++	{
++		web.stopLoading();
++		web.destroy();
++		web = null;
++	}
++
++	@Override
++	protected void addTitleButtons(LinearLayout bar)
++	{
++		addButton(bar, button("‹", new View.OnClickListener() { public void onClick(View v) { if (web.canGoBack()) web.goBack(); } }));
++		addButton(bar, button("›", new View.OnClickListener() { public void onClick(View v) { if (web.canGoForward()) web.goForward(); } }));
++		addButton(bar, button("⟳", new View.OnClickListener() { public void onClick(View v) { web.reload(); } }));
++	}
++
++	// The address: Enter goes there
++	@Override
++	protected int addRows(LinearLayout window)
++	{
++		address = new EditText(context);
++		address.setSingleLine(true);
++		address.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
++		address.setTextColor(Color.BLACK);
++		address.setBackgroundColor(Color.WHITE);
++		address.setPadding(px(8), 0, px(8), 0);
++		address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
++		address.setImeOptions(EditorInfo.IME_ACTION_GO);
++		address.setSelectAllOnFocus(true);
++		address.setOnEditorActionListener(new TextView.OnEditorActionListener()
++		{
++			public boolean onEditorAction(TextView v, int action, KeyEvent e)
++			{
++				if (action == EditorInfo.IME_ACTION_GO || action == EditorInfo.IME_ACTION_DONE ||
++					(e != null && e.getKeyCode() == KeyEvent.KEYCODE_ENTER && e.getAction() == KeyEvent.ACTION_DOWN))
++				{
++					String url = address.getText().toString().trim();
++					if (url.length() > 0)
++						load(withScheme(url));
++					web.requestFocus();
++					InputMethodManager im = (InputMethodManager) context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
++					if (im != null)
++						im.hideSoftInputFromWindow(address.getWindowToken(), 0);
++					return true;
++				}
++				return false;
++			}
++		});
++		window.addView(address, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(36)));
++		return px(36);
++	}
++
++	@Override
++	protected View content()
++	{
++		web = new WebView(context);
++		WebSettings s = web.getSettings();
++		s.setJavaScriptEnabled(true);
++		s.setDomStorageEnabled(true);
++		s.setLoadWithOverviewMode(true);
++		s.setUseWideViewPort(true);
++		s.setBuiltInZoomControls(true);
++		s.setDisplayZoomControls(false);
++		s.setAllowFileAccess(true); // files of the Amiga's folder drives
++		web.setWebViewClient(new WebViewClient()
++		{
++			// Pages open here; other schemes, such as mailto: or market:, go to their apps
++			@Override
++			public boolean shouldOverrideUrlLoading(WebView view, String url)
++			{
++				if (url.startsWith("http:") || url.startsWith("https:") || url.startsWith("file:") || url.startsWith("about:"))
++					return false;
++				try
++				{
++					context.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
++				}
++				catch (Exception e)
++				{
++				}
++				return true;
++			}
++			@Override
++			public void onPageStarted(WebView view, String url, Bitmap favicon)
++			{
++				if (!address.hasFocus())
++					address.setText(url);
++				title.setText(url);
++			}
++		});
++		web.setWebChromeClient(new WebChromeClient()
++		{
++			@Override
++			public void onReceivedTitle(WebView view, String t)
++			{
++				if (t != null && t.length() > 0)
++					title.setText(t);
++			}
++		});
++		return web;
++	}
++}
+diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
+new file mode 100644
+index 000000000..e17812e5c
+--- /dev/null
++++ b/project/java/FloatingWindow.java
+@@ -0,0 +1,350 @@
++/*
++Simple DirectMedia Layer
++Java source code, windows over the app for the Android port
++
++This software is provided 'as-is', without any express or implied
++warranty.  In no event will the authors be held liable for any damages
++arising from the use of this software.
++
++Permission is granted to anyone to use this software for any purpose,
++including commercial applications, and to alter it and redistribute it
++freely, subject to the following restrictions:
++
++1. The origin of this software must not be misrepresented; you must not
++   claim that you wrote the original software. If you use this software
++   in a product, an acknowledgment in the product documentation would be
++   appreciated but is not required.
++2. Altered source versions must be plainly marked as such, and must not be
++   misrepresented as being the original software.
++3. This notice may not be removed or altered from any source distribution.
++*/
++
++package net.sourceforge.clonekeenplus;
++
++import android.graphics.Canvas;
++import android.graphics.Color;
++import android.graphics.Paint;
++import android.util.TypedValue;
++import android.view.Gravity;
++import android.view.MotionEvent;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.FrameLayout;
++import android.widget.LinearLayout;
++import android.widget.TextView;
++
++// A window over the app, such as the video window: a title bar to move it by, buttons for full
++// screen and to close it, the content, and a bottom bar with a corner to drag for the size. The app
++// goes on underneath; the window hides while the app shows its menu. Made and used on the UI thread.
++abstract class FloatingWindow
++{
++	protected final MainActivity context;
++	protected final FrameLayout parent;
++	private final float dp;
++
++	protected LinearLayout window = null;
++	protected TextView title;
++	protected int width, contentHeight; // the height when the content does not keep its own shape
++	private boolean fullScreen = false, hidden = false;
++	private float savedX, savedY;
++	private int savedWidth, savedContentHeight;
++
++	FloatingWindow(MainActivity context, FrameLayout parent)
++	{
++		this.context = context;
++		this.parent = parent;
++		this.dp = context.getResources().getDisplayMetrics().density;
++	}
++
++	// What the window holds, made once
++	protected abstract View content();
++	// Buttons of the title bar, before full screen and close
++	protected void addTitleButtons(LinearLayout bar) { }
++	// Rows between the title bar and the content
++	protected int addRows(LinearLayout window) { return 0; } // their height
++	// The bottom bar, before the corner
++	protected void addBottom(LinearLayout bottom) { }
++	// The height of the content for a width, when it keeps a shape of its own (a video); -1 if not
++	protected int shapedHeight(int width) { return -1; }
++	protected void onHidden(boolean hide) { }
++	protected void onClosed() { }
++
++	boolean isOpen()
++	{
++		return window != null;
++	}
++
++	// Has the focus for keys, which the app then does not get
++	boolean hasFocus()
++	{
++		return window != null && window.findFocus() != null;
++	}
++
++	protected void show()
++	{
++		hidden = false;
++		if (window == null)
++			create();
++		window.setVisibility(View.VISIBLE);
++	}
++
++	// Hides the window while the app shows something else, such as its menu, and shows it again
++	void setHidden(boolean hide)
++	{
++		if (hide == hidden)
++			return;
++		hidden = hide;
++		if (window == null)
++			return;
++		if (hide)
++			context.releaseOverlayFocus();
++		window.setVisibility(hide ? View.GONE : View.VISIBLE);
++		onHidden(hide);
++	}
++
++	void close()
++	{
++		if (window == null)
++			return;
++		context.releaseOverlayFocus();
++		onClosed();
++		parent.removeView(window);
++		window = null;
++	}
++
++	protected int px(float v)
++	{
++		return (int)(v * dp + 0.5f);
++	}
++
++	// Icons drawn to a size, not characters of the font: those come out in all sizes
++	private static final int ICON_RESIZE = 0, ICON_FULLSCREEN = 1;
++
++	private View icon(final int kind, View.OnClickListener click)
++	{
++		View v = new View(context)
++		{
++			final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
++			@Override
++			protected void onDraw(Canvas c)
++			{
++				float w = getWidth(), h = getHeight(), cx = w / 2, cy = h / 2;
++				paint.setStrokeWidth(px(2.5f));
++				paint.setStrokeCap(Paint.Cap.ROUND);
++				if (kind == ICON_RESIZE)
++				{
++					// Three strokes in the corner, the grip of desktop windows
++					paint.setColor(Color.LTGRAY);
++					float m = px(6);
++					for (int i = 0; i < 3; i++)
++					{
++						float d = m + i * px(8.5f);
++						c.drawLine(w - m, h - d, w - d, h - m, paint);
++					}
++				}
++				else
++				{
++					// The four corners of a frame
++					paint.setColor(Color.WHITE);
++					float r = px(7), l = px(4);
++					float[][] corners = { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
++					for (float[] k: corners)
++					{
++						float x = cx + k[0] * r, y = cy + k[1] * r;
++						c.drawLine(x, y, x - k[0] * l, y, paint);
++						c.drawLine(x, y, x, y - k[1] * l, paint);
++					}
++				}
++			}
++		};
++		if (click != null)
++			v.setOnClickListener(click);
++		v.setFocusable(false);
++		return v;
++	}
++
++	// A button of the title bar: a fixed size, as a layout - a label changing its width, say -
++	// has the system send the mouse position again, which moved the app's mouse
++	protected TextView button(String label, View.OnClickListener click)
++	{
++		TextView b = new TextView(context);
++		b.setText(label);
++		b.setTextColor(Color.WHITE);
++		b.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
++		b.setGravity(Gravity.CENTER);
++		b.setOnClickListener(click);
++		b.setFocusable(false);
++		return b;
++	}
++
++	protected void addButton(LinearLayout bar, View b)
++	{
++		bar.addView(b, new LinearLayout.LayoutParams(px(44), px(40)));
++	}
++
++	private int rowsHeight;
++
++	private void create()
++	{
++		width = Math.max(px(240), parent.getWidth() * 2 / 5);
++		contentHeight = width * 3 / 4;
++
++		window = new LinearLayout(context);
++		window.setOrientation(LinearLayout.VERTICAL);
++		window.setBackgroundColor(Color.BLACK);
++		window.setFocusable(false);
++		if (android.os.Build.VERSION.SDK_INT >= 21)
++			window.setElevation(px(8));
++
++		// Title bar: drag it to move the window
++		LinearLayout bar = new LinearLayout(context);
++		bar.setOrientation(LinearLayout.HORIZONTAL);
++		bar.setBackgroundColor(Color.rgb(0x2a, 0x5d, 0x9f));
++		bar.setGravity(Gravity.CENTER_VERTICAL);
++		title = new TextView(context);
++		title.setTextColor(Color.WHITE);
++		title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
++		title.setSingleLine(true);
++		title.setPadding(px(10), 0, px(4), 0);
++		bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
++		addTitleButtons(bar);
++		addButton(bar, icon(ICON_FULLSCREEN, new View.OnClickListener() { public void onClick(View v) { toggleFullScreen(); } }));
++		addButton(bar, button("✕", new View.OnClickListener() { public void onClick(View v) { close(); } }));
++		bar.setOnTouchListener(new View.OnTouchListener()
++		{
++			float downX, downY, startX, startY;
++			public boolean onTouch(View v, MotionEvent e)
++			{
++				if (fullScreen)
++					return true;
++				if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
++				{
++					downX = e.getRawX();
++					downY = e.getRawY();
++					startX = left();
++					startY = top();
++				}
++				else if (e.getActionMasked() == MotionEvent.ACTION_MOVE)
++					moveTo(startX + e.getRawX() - downX, startY + e.getRawY() - downY);
++				return true;
++			}
++		});
++		window.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
++
++		rowsHeight = addRows(window);
++		window.addView(content(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
++
++		// The bottom bar with a corner to drag for the size
++		LinearLayout bottom = new LinearLayout(context);
++		bottom.setOrientation(LinearLayout.HORIZONTAL);
++		bottom.setGravity(Gravity.CENTER_VERTICAL);
++		bottom.setBackgroundColor(Color.rgb(0x20, 0x20, 0x20));
++		addBottom(bottom);
++		View corner = icon(ICON_RESIZE, null);
++		corner.setOnTouchListener(new View.OnTouchListener()
++		{
++			float downX, downY; int startWidth, startHeight;
++			public boolean onTouch(View v, MotionEvent e)
++			{
++				if (fullScreen)
++					return true;
++				if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
++				{
++					downX = e.getRawX();
++					downY = e.getRawY();
++					startWidth = width;
++					startHeight = contentHeight;
++				}
++				else if (e.getActionMasked() == MotionEvent.ACTION_MOVE)
++				{
++					width = Math.max(px(200), Math.min(parent.getWidth(), startWidth + (int)(e.getRawX() - downX)));
++					contentHeight = Math.max(px(100), startHeight + (int)(e.getRawY() - downY));
++					layout();
++				}
++				return true;
++			}
++		});
++		// Pushed to the right end whatever the bar holds
++		View gap = new View(context);
++		bottom.addView(gap, new LinearLayout.LayoutParams(0, 0, bottom.getChildCount() == 0 ? 1 : 0));
++		bottom.addView(corner, new LinearLayout.LayoutParams(px(40), px(40)));
++		window.addView(bottom, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
++
++		parent.addView(window, new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
++		layout();
++		// Bottom right at first
++		moveTo(parent.getWidth() - width - px(16), parent.getHeight() - windowHeight() - px(16));
++	}
++
++	private int windowHeight()
++	{
++		int h = shapedHeight(width);
++		return (h >= 0 ? h : contentHeight) + rowsHeight + px(80);
++	}
++
++	// The size follows the width, and the shape of the content if it keeps one
++	protected void layout()
++	{
++		if (window == null)
++			return;
++		FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
++		if (fullScreen)
++		{
++			lp.width = parent.getWidth();
++			lp.height = parent.getHeight();
++		}
++		else
++		{
++			lp.width = width;
++			lp.height = Math.min(parent.getHeight(), windowHeight());
++		}
++		window.setLayoutParams(lp);
++		if (!fullScreen)
++			moveTo(left(), top());
++	}
++
++	// By the margins, not by setX(): the app draws on a SurfaceView, which leaves room for the
++	// views over it only as it lays them out, and a window moved without a layout was drawn over
++	// by the app at the places it moved to until it stopped
++	private void moveTo(float x, float y)
++	{
++		FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
++		lp.leftMargin = (int) Math.max(0, Math.min(parent.getWidth() - width, x));
++		lp.topMargin = (int) Math.max(0, Math.min(parent.getHeight() - Math.min(parent.getHeight(), windowHeight()), y));
++		window.setLayoutParams(lp);
++	}
++
++	private float left()
++	{
++		return ((FrameLayout.LayoutParams) window.getLayoutParams()).leftMargin;
++	}
++
++	private float top()
++	{
++		return ((FrameLayout.LayoutParams) window.getLayoutParams()).topMargin;
++	}
++
++	private void toggleFullScreen()
++	{
++		fullScreen = !fullScreen;
++		if (fullScreen)
++		{
++			savedX = left();
++			savedY = top();
++			savedWidth = width;
++			savedContentHeight = contentHeight;
++			FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
++			lp.leftMargin = 0;
++			lp.topMargin = 0;
++			window.setLayoutParams(lp);
++		}
++		else
++		{
++			width = savedWidth;
++			contentHeight = savedContentHeight;
++		}
++		layout();
++		if (!fullScreen)
++			moveTo(savedX, savedY);
++	}
++}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..9f5dda991 100644
+index 69c7f86c2..ebee82558 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -543,6 +543,18 @@ public class MainActivity extends Activity
@@ -66,14 +624,16 @@ index 69c7f86c2..9f5dda991 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +708,36 @@ public class MainActivity extends Activity
+@@ -693,6 +708,72 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
-+	// A video the app shows in a window of its own over its screen, see VideoWindow
++	// A video and a web page the app shows in windows of their own over its screen, see
++	// FloatingWindow
 +	private VideoWindow videoWindow = null;
++	private BrowserWindow browserWindow = null;
 +
-+	public void setVideoWindowHidden(final boolean hide)
++	public void setFloatingWindowsHidden(final boolean hide)
 +	{
 +		runOnUiThread(new Runnable()
 +		{
@@ -81,8 +641,42 @@ index 69c7f86c2..9f5dda991 100644
 +			{
 +				if( videoWindow != null )
 +					videoWindow.setHidden(hide);
++				if( browserWindow != null )
++					browserWindow.setHidden(hide);
 +			}
 +		});
++	}
++
++	public void openBrowser(final String what, final boolean file)
++	{
++		runOnUiThread(new Runnable()
++		{
++			public void run()
++			{
++				if( _videoLayout == null )
++					return;
++				if( browserWindow == null )
++					browserWindow = new BrowserWindow(MainActivity.this, _videoLayout);
++				browserWindow.open(what, file);
++			}
++		});
++	}
++
++	// The keys go to the app again, not to a window over it that has them - its address field,
++	// say: called when its screen is touched, and when such a window goes
++	void releaseOverlayFocus()
++	{
++		if( (videoWindow == null || !videoWindow.hasFocus()) && (browserWindow == null || !browserWindow.hasFocus()) )
++			return;
++		View focused = getCurrentFocus();
++		if( focused != null )
++		{
++			if( _inputManager != null )
++				_inputManager.hideSoftInputFromWindow(focused.getWindowToken(), 0);
++			focused.clearFocus();
++		}
++		if( _videoLayout != null )
++			_videoLayout.requestFocus();
 +	}
 +
 +	public void playVideo(final String path)
@@ -103,7 +697,7 @@ index 69c7f86c2..9f5dda991 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1635,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1671,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -875,7 +1469,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..4e70f19f1 100644
+index f0a437bb6..ec9b70303 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -952,7 +1546,7 @@ index f0a437bb6..4e70f19f1 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +998,47 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +998,52 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -966,9 +1560,14 @@ index f0a437bb6..4e70f19f1 100644
 +		context.playVideo(path);
 +	}
 +
-+	public void setVideoWindowHidden(int hide) // Called from native code
++	public void setFloatingWindowsHidden(int hide) // Called from native code
 +	{
-+		context.setVideoWindowHidden(hide != 0);
++		context.setFloatingWindowsHidden(hide != 0);
++	}
++
++	public void openBrowser(String what, int file) // Called from native code
++	{
++		context.openBrowser(what, file != 0);
 +	}
 +
 +	public int midiOpen() // Called from native code
@@ -1000,7 +1599,7 @@ index f0a437bb6..4e70f19f1 100644
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1057,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1062,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -1008,7 +1607,7 @@ index f0a437bb6..4e70f19f1 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1068,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1073,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -1016,7 +1615,7 @@ index f0a437bb6..4e70f19f1 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1089,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1094,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -1027,7 +1626,7 @@ index f0a437bb6..4e70f19f1 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1107,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1112,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -1045,7 +1644,7 @@ index f0a437bb6..4e70f19f1 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1122,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1127,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -1058,7 +1657,7 @@ index f0a437bb6..4e70f19f1 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1148,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1153,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -1071,7 +1670,7 @@ index f0a437bb6..4e70f19f1 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1161,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1166,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -1083,7 +1682,16 @@ index f0a437bb6..4e70f19f1 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1122,9 +1220,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1106,6 +1209,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 	@Override
+ 	public boolean onTouchEvent(final MotionEvent event)
+ 	{
++		if( event.getActionMasked() == MotionEvent.ACTION_DOWN )
++			mParent.releaseOverlayFocus();
+ 		if( mParent.keyboardWithoutTextInputShown && mParent._screenKeyboard != null &&
+ 			mParent._screenKeyboard.getY() <= event.getY() )
+ 		{
+@@ -1122,9 +1227,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -1123,7 +1731,7 @@ index f0a437bb6..4e70f19f1 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1275,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1282,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -1131,7 +1739,7 @@ index f0a437bb6..4e70f19f1 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1294,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1301,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -1141,10 +1749,10 @@ index f0a437bb6..4e70f19f1 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..b8c046e91
+index 000000000..685de47c2
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,562 @@
+@@ -0,0 +1,340 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1168,9 +1776,7 @@ index 000000000..b8c046e91
 +
 +package net.sourceforge.clonekeenplus;
 +
-+import android.graphics.Canvas;
 +import android.graphics.Color;
-+import android.graphics.Paint;
 +import android.graphics.SurfaceTexture;
 +import android.media.MediaPlayer;
 +import android.os.Handler;
@@ -1178,7 +1784,6 @@ index 000000000..b8c046e91
 +import android.util.Log;
 +import android.util.TypedValue;
 +import android.view.Gravity;
-+import android.view.MotionEvent;
 +import android.view.Surface;
 +import android.view.TextureView;
 +import android.view.View;
@@ -1191,77 +1796,32 @@ index 000000000..b8c046e91
 +import java.io.File;
 +
 +// A window that plays a video over the app, with the decoder of the system: the app asks for it
-+// with a file of its own, the window can be moved, resized, made full screen and closed, and the
-+// app goes on underneath. Made and used on the UI thread only.
-+class VideoWindow
++// with a file of its own. It pauses while hidden behind the app's menu.
++class VideoWindow extends FloatingWindow
 +{
-+	private final MainActivity context;
-+	private final FrameLayout parent;
-+	private final float dp;
-+
-+	private LinearLayout window = null;
 +	private TextureView video;
-+	private TextView title, playButton, time;
++	private TextView playButton, time;
 +	private SeekBar seek;
 +	private MediaPlayer player = null;
 +	private boolean prepared = false; // asking the player anything before is an error
 +	private boolean seeking = false; // the position bar is held
++	private boolean playingWhenHidden = false;
 +	private Surface surface = null;
 +	private String path = null;
 +	private int videoWidth = 16, videoHeight = 9;
-+	private int width; // of the window, the height follows the video
-+	private boolean fullScreen = false;
-+	private boolean hidden = false, playingWhenHidden = false;
-+	private float savedX, savedY;
-+	private int savedWidth;
 +	private final Handler handler = new Handler(Looper.getMainLooper());
 +
 +	VideoWindow(MainActivity context, FrameLayout parent)
 +	{
-+		this.context = context;
-+		this.parent = parent;
-+		this.dp = context.getResources().getDisplayMetrics().density;
-+	}
-+
-+	// Hides the window, paused, while the app shows something else, such as its menu; showing it
-+	// again goes on playing if it played
-+	void setHidden(boolean hide)
-+	{
-+		if (hide == hidden)
-+			return;
-+		hidden = hide;
-+		if (window == null)
-+			return;
-+		if (hide)
-+		{
-+			playingWhenHidden = false;
-+			try
-+			{
-+				playingWhenHidden = player != null && prepared && player.isPlaying();
-+			}
-+			catch (Exception e)
-+			{
-+			}
-+			pause();
-+			window.setVisibility(View.GONE);
-+		}
-+		else
-+		{
-+			window.setVisibility(View.VISIBLE);
-+			if (playingWhenHidden && player != null && prepared)
-+			{
-+				player.start();
-+				updateButtons();
-+			}
-+		}
++		super(context, parent);
 +	}
 +
 +	void play(String path)
 +	{
-+		hidden = false;
-+		if (window == null)
-+			create();
-+		window.setVisibility(View.VISIBLE);
++		boolean created = !isOpen();
++		show();
++		if (created)
++			handler.post(progress);
 +		this.path = path;
 +		title.setText(new File(path).getName());
 +		if (surface != null)
@@ -1277,131 +1837,48 @@ index 000000000..b8c046e91
 +		}
 +	}
 +
-+	void close()
++	// Paused while hidden; it goes on playing when shown again if it played
++	@Override
++	protected void onHidden(boolean hide)
++	{
++		if (hide)
++		{
++			playingWhenHidden = false;
++			try
++			{
++				playingWhenHidden = player != null && prepared && player.isPlaying();
++			}
++			catch (Exception e)
++			{
++			}
++			pause();
++		}
++		else if (playingWhenHidden && player != null && prepared)
++		{
++			player.start();
++			updateButtons();
++		}
++	}
++
++	@Override
++	protected void onClosed()
 +	{
 +		handler.removeCallbacks(progress);
 +		releasePlayer();
-+		if (window != null)
-+			parent.removeView(window);
-+		window = null;
 +		surface = null;
 +	}
 +
-+	private int px(float v)
++	@Override
++	protected void addTitleButtons(LinearLayout bar)
 +	{
-+		return (int)(v * dp + 0.5f);
-+	}
-+
-+	// Icons drawn to a size, not characters of the font: those come out in all sizes
-+	private static final int ICON_RESIZE = 0, ICON_FULLSCREEN = 1;
-+
-+	private View icon(final int kind, View.OnClickListener click)
-+	{
-+		View v = new View(context)
-+		{
-+			final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-+			@Override
-+			protected void onDraw(Canvas c)
-+			{
-+				float w = getWidth(), h = getHeight(), cx = w / 2, cy = h / 2;
-+				paint.setStrokeWidth(px(2.5f));
-+				paint.setStrokeCap(Paint.Cap.ROUND);
-+				if (kind == ICON_RESIZE)
-+				{
-+					// Three strokes in the corner, the grip of desktop windows
-+					paint.setColor(Color.LTGRAY);
-+					float m = px(6);
-+					for (int i = 0; i < 3; i++)
-+					{
-+						float d = m + i * px(8.5f);
-+						c.drawLine(w - m, h - d, w - d, h - m, paint);
-+					}
-+				}
-+				else
-+				{
-+					// The four corners of a frame
-+					paint.setColor(Color.WHITE);
-+					float r = px(7), l = px(4);
-+					float[][] corners = { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
-+					for (float[] k: corners)
-+					{
-+						float x = cx + k[0] * r, y = cy + k[1] * r;
-+						c.drawLine(x, y, x - k[0] * l, y, paint);
-+						c.drawLine(x, y, x, y - k[1] * l, paint);
-+					}
-+				}
-+			}
-+		};
-+		if (click != null)
-+			v.setOnClickListener(click);
-+		v.setFocusable(false);
-+		return v;
-+	}
-+
-+	private TextView button(String label, View.OnClickListener click)
-+	{
-+		TextView b = new TextView(context);
-+		b.setText(label);
-+		b.setTextColor(Color.WHITE);
-+		b.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-+		b.setGravity(Gravity.CENTER);
-+		b.setMinWidth(px(44));
-+		b.setOnClickListener(click);
-+		b.setFocusable(false);
-+		return b;
-+	}
-+
-+	private void create()
-+	{
-+		width = Math.max(px(240), parent.getWidth() * 2 / 5);
-+
-+		window = new LinearLayout(context);
-+		window.setOrientation(LinearLayout.VERTICAL);
-+		window.setBackgroundColor(Color.BLACK);
-+		window.setFocusable(false);
-+		if (android.os.Build.VERSION.SDK_INT >= 21)
-+			window.setElevation(px(8));
-+
-+		// Title bar: drag it to move the window
-+		LinearLayout bar = new LinearLayout(context);
-+		bar.setOrientation(LinearLayout.HORIZONTAL);
-+		bar.setBackgroundColor(Color.rgb(0x2a, 0x5d, 0x9f));
-+		bar.setGravity(Gravity.CENTER_VERTICAL);
-+		title = new TextView(context);
-+		title.setTextColor(Color.WHITE);
-+		title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-+		title.setSingleLine(true);
-+		title.setPadding(px(10), 0, px(4), 0);
-+		bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 +		playButton = button("⏸", new View.OnClickListener() { public void onClick(View v) { togglePlay(); } });
-+		// A fixed size, as for the time below: ▶ and ⏸ differ in width, and a layout moved the app's mouse
-+		bar.addView(playButton, new LinearLayout.LayoutParams(px(44), px(40)));
-+		bar.addView(icon(ICON_FULLSCREEN, new View.OnClickListener() { public void onClick(View v) { toggleFullScreen(); } }),
-+			new LinearLayout.LayoutParams(px(44), px(40)));
-+		bar.addView(button("✕", new View.OnClickListener() { public void onClick(View v) { close(); } }),
-+			new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(40)));
-+		bar.setOnTouchListener(new View.OnTouchListener()
-+		{
-+			float downX, downY, startX, startY;
-+			public boolean onTouch(View v, MotionEvent e)
-+			{
-+				if (fullScreen)
-+					return true;
-+				if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
-+				{
-+					downX = e.getRawX();
-+					downY = e.getRawY();
-+					startX = left();
-+					startY = top();
-+				}
-+				else if (e.getActionMasked() == MotionEvent.ACTION_MOVE)
-+					moveTo(startX + e.getRawX() - downX, startY + e.getRawY() - downY);
-+				return true;
-+			}
-+		});
-+		window.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
++		addButton(bar, playButton);
++	}
 +
-+		// The picture; a tap pauses and goes on
++	// The picture; a tap pauses and goes on
++	@Override
++	protected View content()
++	{
 +		video = new TextureView(context);
 +		video.setSurfaceTextureListener(new TextureView.SurfaceTextureListener()
 +		{
@@ -1421,13 +1898,13 @@ index 000000000..b8c046e91
 +			public void onSurfaceTextureUpdated(SurfaceTexture st) { }
 +		});
 +		video.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { togglePlay(); } });
-+		window.addView(video, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
++		return video;
++	}
 +
-+		// Position, time, and a corner to drag for the size
-+		LinearLayout bottom = new LinearLayout(context);
-+		bottom.setOrientation(LinearLayout.HORIZONTAL);
-+		bottom.setGravity(Gravity.CENTER_VERTICAL);
-+		bottom.setBackgroundColor(Color.rgb(0x20, 0x20, 0x20));
++	// Position and time
++	@Override
++	protected void addBottom(LinearLayout bottom)
++	{
 +		seek = new SeekBar(context);
 +		seek.setFocusable(false);
 +		seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener()
@@ -1457,104 +1934,13 @@ index 000000000..b8c046e91
 +		time.setGravity(Gravity.CENTER);
 +		time.setSingleLine(true);
 +		bottom.addView(time, new LinearLayout.LayoutParams(px(96), px(40)));
-+		View corner = icon(ICON_RESIZE, null);
-+		corner.setOnTouchListener(new View.OnTouchListener()
-+		{
-+			float downX; int startWidth;
-+			public boolean onTouch(View v, MotionEvent e)
-+			{
-+				if (fullScreen)
-+					return true;
-+				if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
-+				{
-+					downX = e.getRawX();
-+					startWidth = width;
-+				}
-+				else if (e.getActionMasked() == MotionEvent.ACTION_MOVE)
-+				{
-+					width = Math.max(px(200), Math.min(parent.getWidth(), startWidth + (int)(e.getRawX() - downX)));
-+					layout();
-+				}
-+				return true;
-+			}
-+		});
-+		bottom.addView(corner, new LinearLayout.LayoutParams(px(40), px(40)));
-+		window.addView(bottom, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
-+
-+		parent.addView(window, new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
-+		layout();
-+		// Bottom right at first
-+		moveTo(parent.getWidth() - width - px(16), parent.getHeight() - windowHeight() - px(16));
-+		handler.post(progress);
 +	}
 +
-+	private int windowHeight()
++	// The shape of the video
++	@Override
++	protected int shapedHeight(int width)
 +	{
-+		return width * videoHeight / videoWidth + px(80);
-+	}
-+
-+	// The size follows the width and the shape of the video
-+	private void layout()
-+	{
-+		if (window == null)
-+			return;
-+		FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
-+		if (fullScreen)
-+		{
-+			lp.width = parent.getWidth();
-+			lp.height = parent.getHeight();
-+		}
-+		else
-+		{
-+			lp.width = width;
-+			lp.height = Math.min(parent.getHeight(), windowHeight());
-+		}
-+		window.setLayoutParams(lp);
-+		if (!fullScreen)
-+			moveTo(left(), top());
-+	}
-+
-+	// By the margins, not by setX(): the app draws on a SurfaceView, which leaves room for the
-+	// views over it only as it lays them out, and a window moved without a layout was drawn over
-+	// by the app at the places it moved to until it stopped
-+	private void moveTo(float x, float y)
-+	{
-+		FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
-+		lp.leftMargin = (int) Math.max(0, Math.min(parent.getWidth() - width, x));
-+		lp.topMargin = (int) Math.max(0, Math.min(parent.getHeight() - Math.min(parent.getHeight(), windowHeight()), y));
-+		window.setLayoutParams(lp);
-+	}
-+
-+	private float left()
-+	{
-+		return ((FrameLayout.LayoutParams) window.getLayoutParams()).leftMargin;
-+	}
-+
-+	private float top()
-+	{
-+		return ((FrameLayout.LayoutParams) window.getLayoutParams()).topMargin;
-+	}
-+
-+	private void toggleFullScreen()
-+	{
-+		fullScreen = !fullScreen;
-+		if (fullScreen)
-+		{
-+			savedX = left();
-+			savedY = top();
-+			savedWidth = width;
-+			FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) window.getLayoutParams();
-+			lp.leftMargin = 0;
-+			lp.topMargin = 0;
-+			window.setLayoutParams(lp);
-+		}
-+		else
-+		{
-+			width = savedWidth;
-+		}
-+		layout();
-+		if (!fullScreen)
-+			moveTo(savedX, savedY);
++		return width * videoHeight / videoWidth;
 +	}
 +
 +	private void open()
@@ -1690,7 +2076,7 @@ index 000000000..b8c046e91
 +	{
 +		public void run()
 +		{
-+			if (window == null)
++			if (!isOpen())
 +				return;
 +			try
 +			{
@@ -1818,10 +2204,10 @@ index 97978a7ac..127fb1d84 100755
      {
          mGlobalFont = font;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..bca5382c1 100644
+index 14d8a4dd1..e8ab47cf1 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,60 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,65 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -1859,8 +2245,13 @@ index 14d8a4dd1..bca5382c1 100644
 +/* Plays a video file with the decoder of the system in a window over the app, which can be moved,
 +   resized, made full screen and closed; the app goes on underneath. Returns 0 if it cannot. */
 +extern DECLSPEC int SDLCALL SDL_ANDROID_PlayVideo(const char *path);
-+/* Hides that window, paused, while the app shows something else - its menu, say - and shows it again */
-+extern DECLSPEC void SDLCALL SDL_ANDROID_SetVideoWindowHidden(int hide);
++/* Shows a web page in a window over the app, like the video window: an address ("aminet.net" means
++   https://aminet.net), an empty one to ask for it, or with file set the path of a file to show.
++   Returns 0 if it cannot. */
++extern DECLSPEC int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file);
++/* Hides those windows - a video paused - while the app shows something else, its menu say, and
++   shows them again */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetFloatingWindowsHidden(int hide);
 +
 +/* MIDI through the system's MIDI service, Android 6 and later: a USB MIDI device, or an app with a MIDI
 +   synthesizer. Bytes are raw MIDI; give whole messages to SDL_ANDROID_MidiSend(), some synthesizer apps want that.
@@ -1883,7 +2274,7 @@ index 14d8a4dd1..bca5382c1 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +205,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +210,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -2063,7 +2454,7 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..9a00648c9 100644
+index 30df36343..cb189c36f 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -2074,14 +2465,15 @@ index 30df36343..9a00648c9 100644
  
  #include "SDL_opengles.h"
  
-@@ -121,7 +122,15 @@ static jmethodID JavaRequestCloudLoad = NULL;
+@@ -121,7 +122,16 @@ static jmethodID JavaRequestCloudLoad = NULL;
  static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
 +static jmethodID JavaConfirmConfigOptions = NULL;
 +static jmethodID JavaMidiOpen = NULL;
 +static jmethodID JavaPlayVideo = NULL;
-+static jmethodID JavaSetVideoWindowHidden = NULL;
++static jmethodID JavaSetFloatingWindowsHidden = NULL;
++static jmethodID JavaOpenBrowser = NULL;
 +static jmethodID JavaMidiClose = NULL;
 +static jmethodID JavaMidiSend = NULL;
 +static jmethodID JavaMidiDeviceName = NULL;
@@ -2090,14 +2482,15 @@ index 30df36343..9a00648c9 100644
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -428,7 +437,15 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +438,16 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
  	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
 +	JavaConfirmConfigOptions = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "confirmConfigOptions", "()V");
 +	JavaMidiOpen = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiOpen", "()I");
 +	JavaPlayVideo = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "playVideo", "(Ljava/lang/String;)V");
-+	JavaSetVideoWindowHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setVideoWindowHidden", "(I)V");
++	JavaSetFloatingWindowsHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setFloatingWindowsHidden", "(I)V");
++	JavaOpenBrowser = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openBrowser", "(Ljava/lang/String;I)V");
 +	JavaMidiClose = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiClose", "()V");
 +	JavaMidiSend = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiSend", "([BI)V");
 +	JavaMidiDeviceName = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiDeviceName", "(I)Ljava/lang/String;");
@@ -2106,7 +2499,7 @@ index 30df36343..9a00648c9 100644
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +703,169 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +705,181 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
@@ -2165,12 +2558,24 @@ index 30df36343..9a00648c9 100644
 +	return 1;
 +}
 +
-+void SDLCALL SDL_ANDROID_SetVideoWindowHidden(int hide)
++void SDLCALL SDL_ANDROID_SetFloatingWindowsHidden(int hide)
 +{
 +	JNIEnv *JavaEnv = GetJavaEnvAttached();
-+	if( !JavaEnv || !JavaRenderer || !JavaSetVideoWindowHidden )
++	if( !JavaEnv || !JavaRenderer || !JavaSetFloatingWindowsHidden )
 +		return;
-+	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetVideoWindowHidden, (jint) hide );
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetFloatingWindowsHidden, (jint) hide );
++}
++
++int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file)
++{
++	JNIEnv *JavaEnv = GetJavaEnvAttached();
++	jstring s;
++	if( !JavaEnv || !JavaRenderer || !JavaOpenBrowser || !what )
++		return 0;
++	s = (*JavaEnv)->NewStringUTF(JavaEnv, what);
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaOpenBrowser, s, (jint) file );
++	(*JavaEnv)->DeleteLocalRef( JavaEnv, s );
++	return 1;
 +}
 +
 +int SDLCALL SDL_ANDROID_MidiOpen(void)
@@ -2276,7 +2681,7 @@ index 30df36343..9a00648c9 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +877,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +891,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  

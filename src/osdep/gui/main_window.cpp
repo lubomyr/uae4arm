@@ -1017,8 +1017,8 @@ void run_gui(void)
 #ifdef ANDROIDSDL
   SDL_ANDROID_SetScreenKeyboardShown(0);
   SDL_ANDROID_SetSystemMousePointerVisible(1);
-  // A video played from the Amiga waits behind the menu
-  SDL_ANDROID_SetVideoWindowHidden(1);
+  // A video or a web page shown for the Amiga waits behind the menu
+  SDL_ANDROID_SetFloatingWindowsHidden(1);
   // The app got this far, so a video thread on trial stays on
   SDL_ANDROID_ConfirmConfigOptions();
 #endif
@@ -1068,7 +1068,7 @@ void run_gui(void)
   }
 
 #ifdef ANDROIDSDL
-  SDL_ANDROID_SetVideoWindowHidden(0);
+  SDL_ANDROID_SetFloatingWindowsHidden(0);
 #endif
   cfgfile_compatibility_romtype(&workprefs);
   
