@@ -40,6 +40,7 @@ static int uaeconfig;
 static const TCHAR *guimode1[] = { _T("no"), _T("yes"), _T("nowait"), 0 };
 static const TCHAR *guimode2[] = { _T("false"), _T("true"), _T("nowait"), 0 };
 static const TCHAR *guimode3[] = { _T("0"), _T("1"), _T("nowait"), 0 };
+static const TCHAR *filesyscharset[] = { _T("latin1"), _T("cp1251"), 0 };
 static const TCHAR *csmode[] = { _T("ocs"), _T("ecs_agnus"), _T("ecs_denise"), _T("ecs"), _T("aga"), 0 };
 static const TCHAR *linemode[] = {
 	_T("none"),
@@ -1281,6 +1282,7 @@ static void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type
 	write_filesys_config (p, f);
 	cfgfile_dwrite (f, _T("filesys_max_size"), _T("%d"), p->filesys_limit);
 	cfgfile_dwrite (f, _T("filesys_max_name_length"), _T("%d"), p->filesys_max_name);
+	cfgfile_dwrite_str (f, _T("filesys_charset"), filesyscharset[p->filesys_charset]);
 #endif
 	cfgfile_dwrite_bool(f, _T("harddrive_write_protect"), p->harddrive_read_only);
 
@@ -1805,7 +1807,8 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
     || cfgfile_yesno (option, value, _T("bsdsocket_emu"), &p->socket_emu))
 	  return 1;
 
-  if (cfgfile_strval (option, value, _T("sound_output"), &p->produce_sound, soundmode1, 1)
+  if (cfgfile_strval (option, value, _T("filesys_charset"), &p->filesys_charset, filesyscharset, 0)
+	  || cfgfile_strval (option, value, _T("sound_output"), &p->produce_sound, soundmode1, 1)
 	  || cfgfile_strval (option, value, _T("sound_output"), &p->produce_sound, soundmode2, 0)
 	  || cfgfile_strval (option, value, _T("sound_interpol"), &p->sound_interpol, interpolmode, 0)
 	  || cfgfile_strval (option, value, _T("sound_filter"), &p->sound_filter, soundfiltermode1, 0)
@@ -4290,6 +4293,7 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
   p->ntscmode = 0;
 	p->filesys_limit = 0;
 	p->filesys_max_name = 107;
+	p->filesys_charset = 0;
 
   p->fastmem[0].size = 0x00000000;
 	p->mbresmem_low.size = 0x00000000;

@@ -345,7 +345,7 @@ typedef struct _unit {
   /* Native stuff */
   uae_s32 unit;	/* unit number */
   UnitInfo ui;	/* unit startup info */
-  TCHAR tmpbuf3[256];
+  TCHAR tmpbuf3[1024]; // a name of the Amiga in UTF-8, up to three bytes a character
 
   /* Dummy message processing */
   uaecptr dummy_message;
@@ -1251,8 +1251,9 @@ static TCHAR *bstr_cut (TrapContext *ctx, Unit *unit, uaecptr addr)
 			off = i + 1;
   }
 	buf[i] = 0;
-	au_fs_copy (unit->tmpbuf3, sizeof (unit->tmpbuf3) / sizeof (TCHAR), buf);
-	return &p[off];
+	// What follows the cut, converted alone: in UTF-8 it starts at another place
+	au_fs_copy (unit->tmpbuf3, sizeof (unit->tmpbuf3) / sizeof (TCHAR), buf + off);
+	return p;
 }
 
 /* convert time_t to/from AmigaDOS time */
@@ -2164,6 +2165,8 @@ TCHAR *build_nname (const TCHAR *d, const TCHAR *n)
   return p;
 }
 
+static TCHAR *get_aname (Unit *unit, a_inode *base, TCHAR *rel);
+
 /* This gets called to translate an Amiga name that some program used to
  * a name that we can use on the native filesystem.  */
 static TCHAR *get_nname (Unit *unit, a_inode *base, TCHAR *rel, TCHAR **modified_rel, uae_u64 *uniq_ext)
@@ -2205,8 +2208,12 @@ static TCHAR *get_nname (Unit *unit, a_inode *base, TCHAR *rel, TCHAR **modified
   if (found == rel)
   	return build_nname (base->nname, rel);
 
-  *modified_rel = found;
-  return build_nname (base->nname, found);
+  /* Another case, or the alias of a name the Amiga cannot take: the Amiga gets the name, or
+   * the alias, it gets when it lists the directory */
+  *modified_rel = get_aname (unit, base, found);
+  TCHAR *nn = build_nname (base->nname, found);
+  xfree (found);
+  return nn;
 }
 
 static TCHAR *create_nname (Unit *unit, a_inode *base, TCHAR *rel)
@@ -2278,6 +2285,9 @@ static void handle_softlink(TrapContext *ctx, Unit *unit, dpacket *packet, a_ino
  */
 static TCHAR *get_aname (Unit *unit, a_inode *base, TCHAR *rel)
 {
+	TCHAR alias[MAX_DPATH];
+	if (!(unit->volflags & (MYVOLUMEINFO_ARCHIVE | MYVOLUMEINFO_CDFS)) && fsdb_alias_aname (rel, alias, MAX_DPATH))
+		return my_strdup (alias);
   return my_strdup (rel);
 }
 
@@ -3831,11 +3841,6 @@ end:
   return ret;
 }
 
-static bool filesys_name_invalid (const TCHAR *fn)
-{
-	return _tcslen (fn) > currprefs.filesys_max_name;
-}
-
 static int filesys_readdir(struct fs_dirhandle *d, TCHAR *fn, uae_u64 *uniq)
 {
 	int ok = 0;
@@ -3866,7 +3871,7 @@ static int action_examine_all_do (TrapContext *ctx, Unit *unit, uaecptr lock, Ex
     if (!eak->fn) {
 	    do {
 				ok = filesys_readdir(d, fn, &uniq);
-			} while (ok && d->fstype == FS_DIRECTORY && (filesys_name_invalid (fn) || fsdb_name_invalid_dir (NULL, fn)));
+			} while (ok && d->fstype == FS_DIRECTORY && fsdb_name_invalid_dir (NULL, fn));
 	    if (!ok)
     		return 0;
 	  } else {
@@ -4108,7 +4113,7 @@ static void populate_directory (Unit *unit, a_inode *base)
 	   like "..", "." etc.  */
   	do {
 			ok = filesys_readdir(d, fn, &uniq);
-		} while (ok && d->fstype == FS_DIRECTORY && (filesys_name_invalid (fn) || fsdb_name_invalid_dir (NULL, fn)));
+		} while (ok && d->fstype == FS_DIRECTORY && fsdb_name_invalid_dir (NULL, fn));
   	if (!ok)
 	    break;
   	/* This calls init_child_aino, which will notice that the parent is

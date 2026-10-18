@@ -108,6 +108,7 @@ extern TCHAR *build_nname (const TCHAR *d, const TCHAR *n);
 /* Filesystem-independent functions.  */
 extern void fsdb_clean_dir (a_inode *);
 extern TCHAR *fsdb_search_dir (const TCHAR *dirname, TCHAR *rel);
+extern bool fsdb_alias_aname (const TCHAR *nrel, TCHAR *alias, int size);
 extern void fsdb_dir_writeback (a_inode *);
 extern int fsdb_used_as_nname (a_inode *base, const TCHAR *);
 extern a_inode *fsdb_lookup_aino_aname (a_inode *base, const TCHAR *);

@@ -29,6 +29,48 @@ static TCHAR *nname_begin (TCHAR *nname)
   return nname;
 }
 
+/* The Amiga name of a file of the host whose own name does not do: longer than the Amiga takes,
+ * or with characters its set lacks. The start of the name, a mark of all of it and its
+ * extension, as "Some long name~3F2A.mp4": the same for the same name, so that the file is
+ * found by it again. False if the name does. */
+bool fsdb_alias_aname (const TCHAR *nrel, TCHAR *alias, int size)
+{
+	int max = abs (currprefs.filesys_max_name);
+	if (max > 107)
+		max = 107;
+	char *a = ua_fs (nrel, '_');
+	TCHAR *back = au_fs (a);
+	int len = strlen (a);
+	bool fits = _tcscmp (back, nrel) == 0 && len <= max && !strchr (a, ':') && !strchr (a, '/');
+	xfree (back);
+	if (fits) {
+		xfree (a);
+		return false;
+	}
+	for (char *p = a; *p; p++) {
+		if (*p == ':' || *p == '/')
+			*p = '_';
+	}
+	uae_u32 h = 2166136261u;
+	for (const uae_u8 *p = (const uae_u8 *)nrel; *p; p++)
+		h = (h ^ *p) * 16777619u;
+	char *dot = strrchr (a, '.');
+	if (!dot || dot == a || strlen (dot) > 12)
+		dot = a + len;
+	char tail[32];
+	snprintf (tail, sizeof tail, "~%04X%s", (h ^ (h >> 16)) & 0xffff, dot);
+	int keep = dot - a;
+	if (keep > max - (int)strlen (tail))
+		keep = max - (int)strlen (tail);
+	if (keep < 0)
+		keep = 0;
+	char amiga[MAX_DPATH];
+	snprintf (amiga, sizeof amiga, "%.*s%s", keep, a, tail);
+	au_fs_copy (alias, size, amiga);
+	xfree (a);
+	return true;
+}
+
 #ifndef _WIN32
 /* Find the name REL in directory DIRNAME.  If we find a file that
  * has exactly the same name, return REL.  If we find a file that
@@ -52,6 +94,11 @@ TCHAR *fsdb_search_dir (const TCHAR *dirname, TCHAR *rel)
 	    p = rel;
 		else if (strcasecmp (fn, rel) == 0)
 			p = my_strdup (fn);
+		else {
+			TCHAR alias[MAX_DPATH];
+			if (fsdb_alias_aname (fn, alias, MAX_DPATH) && strcasecmp (alias, rel) == 0)
+				p = my_strdup (fn);
+		}
   }
 	my_closedir (dir);
   return p;

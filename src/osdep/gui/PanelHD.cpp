@@ -61,6 +61,11 @@ static gcn::Button* cmdAddDirectory;
 static gcn::Button* cmdAddHardfile;
 static gcn::Button* cmdCreateHardfile;
 static gcn::UaeCheckBox* chkHDReadOnly;
+// The set of the names of folder drives' files on the Amiga
+static gcn::Label* lblNames;
+static gcn::UaeDropDown* cboNames;
+static const char *namesLabels[] = { "Latin-1", "Cyrillic (1251)" };
+static gcn::GenericListModel namesList(namesLabels, 2);
 static gcn::UaeCheckBox* chkScsi;
 static gcn::UaeCheckBox* chkCD;
 static gcn::UaeCheckBox* chkCDAutomount;
@@ -181,6 +186,7 @@ static void RefreshPanelHD(void)
   if (scsi_for_cd)
     workprefs.scsi = 1;
   chkScsi->setSelected(workprefs.scsi);
+  cboNames->setSelected(workprefs.filesys_charset);
   chkScsi->setEnabled(!scsi_for_cd);
   
   chkCD->setSelected(workprefs.cdslots[0].inuse);
@@ -316,6 +322,8 @@ class AddHDActionListener : public gcn::ActionListener
           RefreshPanelHD();
         }
 
+      } else if(actionEvent.getSource() == cboNames) {
+        workprefs.filesys_charset = cboNames->getSelected();
       } else if(actionEvent.getSource() == chkHDReadOnly) {
         workprefs.harddrive_read_only = chkHDReadOnly->isSelected();
 
@@ -467,6 +475,13 @@ void InitPanelHD(const struct _ConfigCategory& category)
   cboCDFile->setId("cboCD");
   cboCDFile->addActionListener(cdFileActionListener);
 
+  lblNames = new gcn::Label("Folder file names:");
+  cboNames = new gcn::UaeDropDown(&namesList);
+  cboNames->setSize(150, DROPDOWN_HEIGHT);
+  cboNames->setBaseColor(gui_baseCol);
+  cboNames->setId("FileNames");
+  cboNames->addActionListener(addHDActionListener);
+
 	lblCDVol = new gcn::Label("CD Volume:");
 #ifdef ANDROID
   lblCDVol->setSize(85, LABEL_HEIGHT);
@@ -505,28 +520,34 @@ void InitPanelHD(const struct _ConfigCategory& category)
     posY += listEntry[row]->getHeight() + 4;
   }
   
-  posY += DISTANCE_NEXT_Y - 4;
+  // Rows closer than elsewhere: the panel holds one more of them than it had room for
+  const int rowGap = 8;
+  posY += rowGap - 2;
   category.panel->add(cmdAddDirectory, DISTANCE_BORDER, posY);
   category.panel->add(cmdAddHardfile, DISTANCE_BORDER + cmdAddDirectory->getWidth() + DISTANCE_NEXT_X, posY);
   category.panel->add(cmdCreateHardfile, cmdAddHardfile->getX() + cmdAddHardfile->getWidth() + DISTANCE_NEXT_X, posY);
 
-  posY += cmdAddDirectory->getHeight() + DISTANCE_NEXT_Y;
+  posY += cmdAddDirectory->getHeight() + rowGap;
   category.panel->add(chkHDReadOnly, DISTANCE_BORDER, posY);
   category.panel->add(chkScsi, cmdCreateHardfile->getX() + cmdCreateHardfile->getWidth(), posY);
 
-  posY += chkHDReadOnly->getHeight() + DISTANCE_NEXT_Y + 4;
+  posY += chkHDReadOnly->getHeight() + rowGap;
   category.panel->add(chkCD, DISTANCE_BORDER, posY + 2);
   category.panel->add(chkCDAutomount, DISTANCE_BORDER + chkCD->getWidth() + 3 * DISTANCE_NEXT_X, posY + 2);
   category.panel->add(cmdCDEject, category.panel->getWidth() - cmdCDEject->getWidth() - DISTANCE_NEXT_X - cmdCDSelect->getWidth() - DISTANCE_BORDER, posY);
   category.panel->add(cmdCDSelect, category.panel->getWidth() - cmdCDSelect->getWidth() - DISTANCE_BORDER, posY);
-  posY += cmdCDSelect->getHeight() + DISTANCE_NEXT_Y;
+  posY += cmdCDSelect->getHeight() + rowGap;
   category.panel->add(cboCDFile, DISTANCE_BORDER, posY);
-  posY += cboCDFile->getHeight() + DISTANCE_NEXT_Y;
+  posY += cboCDFile->getHeight() + rowGap;
   
   category.panel->add(lblCDVol, DISTANCE_BORDER, posY);
   category.panel->add(sldCDVol, DISTANCE_BORDER + lblCDVol->getWidth() + 8, posY);
   category.panel->add(lblCDVolInfo, sldCDVol->getX() + sldCDVol->getWidth() + 12, posY);
-  posY += sldCDVol->getHeight() + DISTANCE_NEXT_Y;
+  posY += sldCDVol->getHeight() + rowGap;
+
+  category.panel->add(lblNames, DISTANCE_BORDER, posY + 2);
+  category.panel->add(cboNames, DISTANCE_BORDER + lblNames->getWidth() + 8, posY);
+  posY += cboNames->getHeight() + DISTANCE_NEXT_Y;
   
   RefreshPanelHD();
 }
@@ -554,6 +575,8 @@ void ExitPanelHD(const struct _ConfigCategory& category)
   delete cmdCreateHardfile;
   delete chkHDReadOnly;
   delete chkScsi;
+  delete lblNames;
+  delete cboNames;
   
   delete chkCD;
   delete chkCDAutomount;
@@ -582,6 +605,10 @@ bool HelpPanelHD(std::vector<std::string> &helptext)
   helptext.push_back("to create the new hard disk. You have to format the new HDD in the Amiga via the Workbench.");
   helptext.push_back(" ");
   helptext.push_back("If \"Master harddrive write protection\" is activated, you can't write to any HD.");
+  helptext.push_back(" ");
+  helptext.push_back("\"Folder file names\" is the character set the Amiga gets the names of the files of folders in: Latin-1, its own,");
+  helptext.push_back("or Cyrillic (1251), for Cyrillic names with fonts of Windows-1251 on the Amiga. A name longer than the Amiga takes,");
+  helptext.push_back("or with characters the set lacks, gets a shortened one, as \"Some long name~3F2A.mp4\". It needs a reset.");
   helptext.push_back(" ");
   helptext.push_back("Activate \"CD drive\" to emulate CD for CD32. Use \"Eject\" to remove current CD and click on \"...\" to open a dialog");
   helptext.push_back("to select the iso/cue file for CD emulation.");
