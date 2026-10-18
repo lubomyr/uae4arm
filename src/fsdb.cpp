@@ -92,11 +92,11 @@ TCHAR *fsdb_search_dir (const TCHAR *dirname, TCHAR *rel)
 	while (p == 0 && (de = my_readdir (dir, fn)) != 0) {
 		if (strcmp (fn, rel) == 0)
 	    p = rel;
-		else if (strcasecmp (fn, rel) == 0)
+		else if (fs_strcasecmp (fn, rel) == 0)
 			p = my_strdup (fn);
 		else {
 			TCHAR alias[MAX_DPATH];
-			if (fsdb_alias_aname (fn, alias, MAX_DPATH) && strcasecmp (alias, rel) == 0)
+			if (fsdb_alias_aname (fn, alias, MAX_DPATH) && fs_strcasecmp (alias, rel) == 0)
 				p = my_strdup (fn);
 		}
   }

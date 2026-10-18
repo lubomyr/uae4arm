@@ -141,6 +141,37 @@ static int utf8_put (char *d, int c)
 	return 3;
 }
 
+// Letters of either case as one, as the Amiga takes names: of Latin-1 and of Cyrillic
+static int fs_fold (int c)
+{
+	if (c >= 'a' && c <= 'z')
+		return c - 0x20;
+	if (c >= 0xe0 && c <= 0xfe && c != 0xf7)
+		return c - 0x20;
+	if (c >= 0x430 && c <= 0x44f)
+		return c - 0x20;
+	if (c >= 0x450 && c <= 0x45f)
+		return c - 0x50;
+	if (c == 0x491)
+		return 0x490;
+	return c;
+}
+
+// Compares two names in UTF-8 as the Amiga does, whatever the case of their letters
+int fs_strcasecmp (const TCHAR *a, const TCHAR *b)
+{
+	const uae_u8 *s1 = (const uae_u8 *)a, *s2 = (const uae_u8 *)b;
+	while (*s1 && *s2) {
+		int l1, l2;
+		int c1 = fs_fold (utf8_char (s1, &l1)), c2 = fs_fold (utf8_char (s2, &l2));
+		if (c1 != c2)
+			return c1 < c2 ? -1 : 1;
+		s1 += l1;
+		s2 += l2;
+	}
+	return *s1 ? 1 : (*s2 ? -1 : 0);
+}
+
 TCHAR *au_fs_copy (TCHAR *dst, int maxlen, const char *src)
 {
 	int i = 0;

@@ -200,6 +200,7 @@ extern char *ua_copy (char *dst, int maxlen, const TCHAR *src);
 extern TCHAR *au_copy (TCHAR *dst, int maxlen, const char *src);
 extern char *ua_fs_copy (char *dst, int maxlen, const TCHAR *src, int defchar);
 extern TCHAR *au_fs_copy (TCHAR *dst, int maxlen, const char *src);
+extern int fs_strcasecmp (const TCHAR *a, const TCHAR *b);
 extern char *uutf8 (const TCHAR *s);
 extern TCHAR *utf8u (const char *s);
 
