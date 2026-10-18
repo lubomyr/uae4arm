@@ -297,10 +297,10 @@ index 000000000..d5f294d59
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..4632c777e
+index 000000000..3cf83b0df
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,413 @@
+@@ -0,0 +1,411 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -446,13 +446,18 @@ index 000000000..4632c777e
 +				paint.setStrokeCap(Paint.Cap.ROUND);
 +				if (kind == ICON_RESIZE)
 +				{
-+					// Three strokes in the corner, the grip of desktop windows
-+					paint.setColor(Color.LTGRAY);
++					// Three strokes in the corner, the grip of desktop windows; outlined dark, to be
++					// seen over a light page as well
 +					float m = px(6);
-+					for (int i = 0; i < 3; i++)
++					for (int pass = 0; pass < 2; pass++)
 +					{
-+						float d = m + i * px(8.5f);
-+						c.drawLine(w - m, h - d, w - d, h - m, paint);
++						paint.setColor(pass == 0 ? Color.argb(0xb0, 0, 0, 0) : Color.LTGRAY);
++						paint.setStrokeWidth(pass == 0 ? px(4.5f) : px(2.5f));
++						for (int i = 0; i < 3; i++)
++						{
++							float d = m + i * px(8.5f);
++							c.drawLine(w - m, h - d, w - d, h - m, paint);
++						}
 +					}
 +				}
 +				else
@@ -558,15 +563,8 @@ index 000000000..4632c777e
 +			stack.addView(bottom, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40), Gravity.BOTTOM));
 +		}
 +
-+		// The corner to drag for the size, seen over a light page as well
++		// The corner to drag for the size
 +		corner = icon(ICON_RESIZE, null);
-+		if (bottom.getChildCount() == 0)
-+		{
-+			android.graphics.drawable.GradientDrawable shade = new android.graphics.drawable.GradientDrawable();
-+			shade.setColor(Color.argb(0x99, 0, 0, 0));
-+			shade.setCornerRadius(px(6));
-+			corner.setBackground(shade);
-+		}
 +		corner.setOnTouchListener(new View.OnTouchListener()
 +		{
 +			float downX, downY; int startWidth, startHeight;
