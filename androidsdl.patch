@@ -12,10 +12,10 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..ce51caf62
+index 000000000..c2c23abf0
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,237 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a browser window over the app for the Android port
@@ -65,6 +65,11 @@ index 000000000..ce51caf62
 +class BrowserWindow extends FloatingWindow
 +{
 +	private WebView web;
++	// What a page shows "full screen", such as the video of YouTube: in place of the page, in the
++	// window as large as it is - the button of the title bar makes that the whole screen
++	private FrameLayout area;
++	private View fullView = null;
++	private WebChromeClient.CustomViewCallback fullDone = null;
 +	private EditText address;
 +
 +	BrowserWindow(MainActivity context, FrameLayout parent)
@@ -98,6 +103,7 @@ index 000000000..ce51caf62
 +
 +	private void load(String url)
 +	{
++		leaveFull();
 +		address.setText(url);
 +		web.loadUrl(url);
 +	}
@@ -111,9 +117,23 @@ index 000000000..ce51caf62
 +			web.onResume();
 +	}
 +
++	private void leaveFull()
++	{
++		if (fullView == null)
++			return;
++		area.removeView(fullView);
++		fullView = null;
++		web.setVisibility(View.VISIBLE);
++		WebChromeClient.CustomViewCallback done = fullDone;
++		fullDone = null;
++		if (done != null)
++			done.onCustomViewHidden();
++	}
++
 +	@Override
 +	protected void onClosed()
 +	{
++		leaveFull();
 +		web.stopLoading();
 +		web.destroy();
 +		web = null;
@@ -208,8 +228,29 @@ index 000000000..ce51caf62
 +				if (t != null && t.length() > 0)
 +					title.setText(t);
 +			}
++			@Override
++			public void onShowCustomView(View view, WebChromeClient.CustomViewCallback done)
++			{
++				if (fullView != null)
++				{
++					done.onCustomViewHidden();
++					return;
++				}
++				fullView = view;
++				fullDone = done;
++				web.setVisibility(View.INVISIBLE);
++				area.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
++			}
++			@Override
++			public void onHideCustomView()
++			{
++				leaveFull();
++			}
 +		});
-+		return web;
++		area = new FrameLayout(context);
++		area.setBackgroundColor(android.graphics.Color.BLACK);
++		area.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
++		return area;
 +	}
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
