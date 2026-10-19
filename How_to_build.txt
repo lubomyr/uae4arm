@@ -1,59 +1,102 @@
-1. You need 64bit linux
+How to build uae4arm
+====================
 
-2. Install JDK. You can do it from apt-get tool or download from official site (in this case you must set envirnoment 
-value to JDK, see guides "How install JDK and set envirnoment values to JDK).
+uae4arm is built inside pelya's libSDL environment for Android (androidsdl),
+with a patch to it kept in this repository. These steps are the ones used for
+the releases, on 64-bit Ubuntu 24.04.
 
-Command:
-sudo apt-get install openjdk-8-jdk
 
-3. Download and unpack Android Studio
-https://developer.android.com/studio/index.html
+1. Packages
 
-4. run android studio
-via menu Tools -> Android -> SDK-Manager download follow components:
-SDK Platform (tab)
-- Android 8.0 (O)
+sudo apt-get install git openjdk-17-jdk unzip python3
 
-SDK Tools (tab)
-- Android SDK Build-Tools
-- Android SDK Platform-Tools
-- Android SDK Tools
+For the Amiga tools in amiga/ also: binutils-m68k-linux-gnu
 
-Download android NDK version r21d and unzip it into ~/Android directory
-https://developer.android.com/ndk/downloads
 
-copy path from Android SDK Location field
+2. Android SDK and NDK
 
-setup environment
+Install Android Studio, or only the command line tools, and with the SDK
+Manager (or sdkmanager) get:
 
-export JAVA_HOME=/usr/lib/jvm/default-java
-export ANDROID_HOME=~/Android/Sdk
-export ANDROID_NDK_HOME=~/Android/android-ndk-r21d
-export PATH=$ANDROID_NDK_HOME:$ANDROID_HOME/tools:$PATH
+sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "ndk;25.2.9519653" "platform-tools"
 
-6. Install pelya's libSDL-environment
+Other NDK versions are not tried. The build signs its test package with the
+debug key; Android Studio makes ~/.android/debug.keystore, or make it with:
+
+keytool -genkeypair -keystore ~/.android/debug.keystore -alias androiddebugkey \
+    -storepass android -keypass android -keyalg RSA -validity 10000 \
+    -dname "CN=Android Debug,O=Android,C=US"
+
+
+3. Environment
+
+export ANDROID_SDK_ROOT=~/Android/Sdk
+export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export PATH=$ANDROID_SDK_ROOT/build-tools/36.0.0:$JAVA_HOME/bin:$PATH
+
+
+4. androidsdl, at the commit the patch is made for
+
 cd ~
-git clone git://github.com/pelya/commandergenius androidsdl
+git clone https://github.com/pelya/commandergenius androidsdl
 cd androidsdl
+git checkout e0d402e50
 
-git checkout c937f769c69c40857aa00fa3d8200d10c7c304df
+Its submodules are other applications; uae4arm does not need them.
 
-7. download uae4arm sources
+
+5. uae4arm
+
 cd ~/androidsdl/project/jni/application
 git clone https://github.com/lubomyr/uae4arm
-cd uae4arm
-. link_android_dirs.sh
 
-8. apply androidsdl.patch to the libSDL-environment
 
-The On-screen panel sets the theme, size, draw size and transparency of the
-on-screen controls, which are owned by the SDL wrapper. The patch adds the
-SDL_ANDROID_CONFIG_SCREENKB_* options they are passed through; without it the
-build fails on the missing constants.
+6. capsimage, the IPF disk image library
+
+androidsdl does not have it. It is FS-UAE's capsimg, with the Android.mk and
+the configured config.h kept in capsimage/ of this repository:
+
+cd ~/androidsdl/project/jni
+git clone https://github.com/FrodeSolheim/capsimg capsimage
+cd capsimage
+git checkout ed4cb09
+rm CAPSImg/dllmain.cpp
+cp ../application/uae4arm/capsimage/Android.mk .
+cp ../application/uae4arm/capsimage/config.h CAPSImg/
+
+
+7. The patch to androidsdl
+
+It adds what uae4arm needs of the Android wrapper: the on-screen controls'
+options, MIDI, the video and browser windows and more.
 
 cd ~/androidsdl
 git apply project/jni/application/uae4arm/androidsdl.patch
 
-// Now you can build project (apk)
+
+8. Build
+
 cd ~/androidsdl
-./build.sh uae4arm
+./build.sh release uae4arm
+
+project/app/build/outputs/apk/release/app-release.apk is signed with the debug
+key, to try out; app-release-unsigned.apk is the one to sign for a release.
+With KEEPSYMBOLS=1 before ./build.sh, project/obj/local/<abi>/libapplication.so
+keep their symbols, which crash reports need.
+
+
+Notes
+
+- The build does not follow header files: after changing one, remove
+  src-arm64-v8a and src-armeabi-v7a here, so that everything is built again.
+- Changes to the wrapper (project/java, project/jni/sdl-1.2 and so on in
+  androidsdl) belong in androidsdl.patch. Make it again from the androidsdl
+  directory with
+      git diff > project/jni/application/uae4arm/androidsdl.patch
+  after "git add -N" for new files, so that they are in it.
+- ./LinuxBuild.sh builds uae4arm for a Linux PC, with the guichan of the
+  patched androidsdl (steps 4 to 7): no Android wrapper and no JIT, but the
+  quickest way to try emulation changes. The script tells the packages it needs.
+- amiga/build.sh builds the Amiga tools (AndroidPlay, AndroidBrowser) into
+  amigaApps/.
