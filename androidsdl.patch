@@ -713,10 +713,18 @@ index 000000000..3cf83b0df
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..2585f0ecc 100644
+index 69c7f86c2..fa557e164 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
-@@ -543,6 +543,18 @@ public class MainActivity extends Activity
+@@ -116,6 +116,7 @@ public class MainActivity extends Activity
+ 		super.onCreate(savedInstanceState);
+ 
+ 		instance = this;
++		VideoWindow.deleteCopies(this);
+ 		// fullscreen mode
+ 		requestWindowFeature(Window.FEATURE_NO_TITLE);
+ 		getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+@@ -543,6 +544,18 @@ public class MainActivity extends Activity
  		mGLView.nativeScreenVisibleRect(r.left, r.top, r.right, r.bottom);
  		_videoLayout.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener()
  		{
@@ -735,7 +743,7 @@ index 69c7f86c2..2585f0ecc 100644
  			public void onGlobalLayout()
  			{
  				final Rect r = new Rect();
-@@ -575,12 +587,13 @@ public class MainActivity extends Activity
+@@ -575,12 +588,13 @@ public class MainActivity extends Activity
  				Log.v("SDL", "videoLayout: " + _videoLayout.getLeft() + ":" + _videoLayout.getTop() + ":" + _videoLayout.getWidth() + ":" + _videoLayout.getHeight() +
  						" videoLayout.getRootView() " + _videoLayout.getRootView().getLeft() + ":" + _videoLayout.getRootView().getTop() + ":" +
  						_videoLayout.getRootView().getWidth() + ":" + _videoLayout.getRootView().getHeight());
@@ -750,7 +758,7 @@ index 69c7f86c2..2585f0ecc 100644
  					}
  				}, 300 );
  				_videoLayout.postDelayed( new Runnable()
-@@ -588,7 +601,7 @@ public class MainActivity extends Activity
+@@ -588,7 +602,7 @@ public class MainActivity extends Activity
  					public void run()
  					{
  						DimSystemStatusBar.dim(_videoLayout, getWindow());
@@ -759,7 +767,7 @@ index 69c7f86c2..2585f0ecc 100644
  					}
  				}, 600 );
  			}
-@@ -597,6 +610,8 @@ public class MainActivity extends Activity
+@@ -597,6 +611,8 @@ public class MainActivity extends Activity
  
  	@Override
  	protected void onPause() {
@@ -768,7 +776,7 @@ index 69c7f86c2..2585f0ecc 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +708,72 @@ public class MainActivity extends Activity
+@@ -693,6 +709,72 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
@@ -841,7 +849,7 @@ index 69c7f86c2..2585f0ecc 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1671,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1672,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -1893,10 +1901,10 @@ index f0a437bb6..72ae18b01 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..b72ec6042
+index 000000000..846ca4934
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,405 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -1966,6 +1974,8 @@ index 000000000..b72ec6042
 +		show();
 +		if (created)
 +			handler.post(progress);
++		if (this.path != null && !this.path.equals(path))
++			deleteCopy(this.path);
 +		this.path = path;
 +		title.setText(new File(path).getName());
 +		showControls();
@@ -2030,12 +2040,40 @@ index 000000000..b72ec6042
 +		}
 +	}
 +
++	// Copies of videos the app could not reach where they are, such as inside an Amiga hardfile:
++	// the app makes them in this folder, for the window to play once
++	private static final String COPIES = "AndroidPlay";
++	private static boolean copiesChecked = false;
++
++	private void deleteCopy(String file)
++	{
++		File f = new File(file);
++		File dir = new File(context.getFilesDir(), COPIES);
++		if (dir.equals(f.getParentFile()))
++			f.delete();
++	}
++
++	// The copies left by the app ended while playing one, once a run
++	static void deleteCopies(android.content.Context context)
++	{
++		if (copiesChecked)
++			return;
++		copiesChecked = true;
++		File[] left = new File(context.getFilesDir(), COPIES).listFiles();
++		if (left != null)
++			for (File f: left)
++				f.delete();
++	}
++
 +	@Override
 +	protected void onClosed()
 +	{
 +		handler.removeCallbacks(progress);
 +		releasePlayer();
 +		surface = null;
++		if (path != null)
++			deleteCopy(path);
++		path = null;
 +	}
 +
 +	@Override

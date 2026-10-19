@@ -5,9 +5,12 @@
 | with the file requester of asl.library. Set as the default tool of a video's
 | icon, a double click on the video plays it. "AndroidPlay ?" tells the usage.
 |
-| The file has to be on a folder drive of uae4arm, not inside a hardfile: the
-| emulator hands its path to the host, and the host's decoder plays it. The
-| tool calls uaelib function 200 with a Lock of the file.
+| A file of a folder drive of uae4arm the emulator hands to the host by its
+| path, and the host's decoder plays it: the tool calls uaelib function 200
+| with a Lock of the file. One the host cannot reach - inside a hardfile, on a
+| floppy, in RAM: - the tool reads and hands over in pieces, into a copy the
+| host plays and deletes after; from the Shell it tells how far it is, and
+| Ctrl-C stops it.
 |
 | Built with GNU as for m68k into a plain binary, made an Amiga executable by
 | hunk.py - see build.sh. All code is PC relative, so the hunk needs no
@@ -219,15 +222,29 @@ locked:
 	movea.l	%a5,%a6
 	jsr	-90(%a6)		| UnLock
 
+	cmp.l	#2,%d5		| not on a folder drive: a copy
+	bne.s	result
+	bsr.w	copyvideo
+result:
 	moveq	#0,%d7
 	cmp.l	#1,%d5
-	beq.s	closeall
+	beq.w	closeall
+	moveq	#5,%d7
+	lea	msg_stopped(%pc),%a0
+	cmp.l	#5,%d5
+	beq.s	failed
 	moveq	#10,%d7
 	lea	msg_oldemu(%pc),%a0
 	tst.l	%d5
 	beq.s	failed
-	lea	msg_notfolder(%pc),%a0
-	cmp.l	#2,%d5
+	lea	msg_noread(%pc),%a0
+	cmp.l	#6,%d5
+	beq.s	failed
+	lea	msg_nomem(%pc),%a0
+	cmp.l	#7,%d5
+	beq.s	failed
+	lea	msg_nocopy(%pc),%a0
+	cmp.l	#8,%d5
 	beq.s	failed
 	lea	msg_cannot(%pc),%a0
 failed:
@@ -266,6 +283,168 @@ done:
 	move.l	%d7,%d0
 	movem.l	(%sp)+,%d2-%d7/%a2-%a6
 	rts
+
+| A video the host cannot reach goes over to it in pieces, into a copy the host
+| plays. %d5 gets the result: 1 played, 3 the host cannot play it, 5 stopped
+| by Ctrl-C, 6 not read, 7 no memory, 8 not copied - by an older emulator, or
+| without room on the host. %a2 points at vars.
+copyvideo:
+	lea	vars(%pc),%a2
+	clr.l	16(%a2)			| file
+	clr.l	20(%a2)			| buffer
+	move.l	#-1,36(%a2)		| no progress shown
+	moveq	#8,%d5
+	move.l	%a3,-(%sp)		| the name, for its extension
+	move.l	#4,-(%sp)		| start a copy
+	move.l	#200,-(%sp)
+	jsr	(%a4)
+	lea	12(%sp),%sp
+	cmp.l	#1,%d0
+	bne.w	copy_end
+	moveq	#6,%d5
+	move.l	%a3,%d1
+	move.l	#1005,%d2		| MODE_OLDFILE
+	movea.l	%a5,%a6
+	jsr	-30(%a6)		| Open
+	move.l	%d0,16(%a2)
+	beq.w	copy_drop
+| Its size, for the progress: the end, seen going back to the start
+	move.l	%d0,%d1
+	moveq	#0,%d2
+	moveq	#1,%d3			| OFFSET_END
+	jsr	-66(%a6)		| Seek
+	move.l	16(%a2),%d1
+	moveq	#0,%d2
+	moveq	#-1,%d3			| OFFSET_BEGINNING
+	jsr	-66(%a6)		| Seek
+	move.l	%d0,28(%a2)		| total
+	bpl.s	1f
+	clr.l	28(%a2)
+1:	clr.l	32(%a2)			| done
+| A large buffer, or a small one with little memory
+	moveq	#7,%d5
+	movea.l	4,%a6
+	move.l	#BIGBUF,24(%a2)
+	move.l	#BIGBUF,%d0
+	moveq	#1,%d1			| MEMF_PUBLIC
+	jsr	-198(%a6)		| AllocMem
+	tst.l	%d0
+	bne.s	2f
+	move.l	#SMALLBUF,24(%a2)
+	move.l	#SMALLBUF,%d0
+	moveq	#1,%d1
+	jsr	-198(%a6)		| AllocMem
+	tst.l	%d0
+	beq.w	copy_drop
+2:	move.l	%d0,20(%a2)
+copy_loop:
+	bsr.w	progress
+	movea.l	4,%a6
+	moveq	#0,%d0
+	move.l	#0x1000,%d1		| SIGBREAKF_CTRL_C
+	jsr	-306(%a6)		| SetSignal: takes Ctrl-C
+	moveq	#5,%d5
+	btst	#12,%d0
+	bne.s	copy_drop
+	moveq	#6,%d5
+	move.l	16(%a2),%d1
+	move.l	20(%a2),%d2
+	move.l	24(%a2),%d3
+	movea.l	%a5,%a6
+	jsr	-42(%a6)		| Read
+	tst.l	%d0
+	bmi.s	copy_drop
+	beq.s	copy_play
+	add.l	%d0,32(%a2)		| done
+	moveq	#8,%d5
+	move.l	%d0,-(%sp)		| bytes
+	move.l	20(%a2),-(%sp)		| at
+	move.l	#5,-(%sp)		| add them to the copy
+	move.l	#200,-(%sp)
+	jsr	(%a4)
+	lea	16(%sp),%sp
+	cmp.l	#1,%d0
+	beq.s	copy_loop
+	bra.s	copy_close		| the emulator dropped it
+copy_play:
+	bsr.w	progress_end
+	move.l	#6,-(%sp)		| play the copy
+	move.l	#200,-(%sp)
+	jsr	(%a4)
+	addq.l	#8,%sp
+	move.l	%d0,%d5
+	bra.s	copy_close
+copy_drop:
+	move.l	#7,-(%sp)		| drop the copy
+	move.l	#200,-(%sp)
+	jsr	(%a4)
+	addq.l	#8,%sp
+copy_close:
+	bsr.w	progress_end
+	movea.l	4,%a6
+	move.l	20(%a2),%d0
+	beq.s	3f
+	movea.l	%d0,%a1
+	move.l	24(%a2),%d0
+	jsr	-210(%a6)		| FreeMem
+3:	move.l	16(%a2),%d1
+	beq.s	copy_end
+	movea.l	%a5,%a6
+	jsr	-36(%a6)		| Close
+copy_end:
+	rts
+
+| From the Shell: how much of the file went over, when it changed
+progress:
+	tst.l	%d6
+	bne.s	progress_ret
+	move.l	32(%a2),%d0		| done
+	move.l	28(%a2),%d1		| of all
+	beq.s	progress_ret
+4:	cmp.l	#0xFFFF,%d1		| small enough for mulu and divu
+	bls.s	5f
+	lsr.l	#1,%d0
+	lsr.l	#1,%d1
+	bra.s	4b
+5:	mulu	#100,%d0
+	divu	%d1,%d0
+	and.l	#0xFFFF,%d0
+	cmp.l	36(%a2),%d0
+	beq.s	progress_ret
+	move.l	%d0,36(%a2)
+	lea	linebuf(%pc),%a0
+	lea	msg_copying(%pc),%a1
+6:	move.b	(%a1)+,(%a0)+
+	bne.s	6b
+	subq.l	#1,%a0
+	moveq	#0,%d1			| digits
+7:	divu	#10,%d0
+	swap	%d0
+	add.b	#'0',%d0
+	move.b	%d0,-(%sp)
+	addq.l	#1,%d1
+	clr.w	%d0
+	swap	%d0
+	tst.l	%d0
+	bne.s	7b
+8:	move.b	(%sp)+,(%a0)+
+	subq.l	#1,%d1
+	bne.s	8b
+	move.b	#'%',(%a0)+
+	clr.b	(%a0)
+	lea	linebuf(%pc),%a0
+	bsr.w	print
+progress_ret:
+	rts
+
+| Ends the line of the progress, if there is one
+progress_end:
+	cmp.l	#-1,36(%a2)
+	beq.s	9f
+	move.l	#-1,36(%a2)
+	lea	newline(%pc),%a0
+	bsr.w	print
+9:	rts
 
 | Frees the file requester in %d4
 freereq:
@@ -330,6 +509,7 @@ print_end:
 
 	.even
 vars:		.long	0, 0, 0, 0	| intuitionbase, aslbase, olddir, dirchanged
+		.long	0, 0, 0, 0, 0, 0	| copy: file, buffer, its size, total, done, percent shown
 easy:		.long	0, 0, 0, 0, 0	| struct EasyStruct
 asltags:	.long	0x80080001, 0	| ASLFR_TitleText
 		.long	0x80080032, 1	| ASLFR_DoPatterns
@@ -339,6 +519,9 @@ asltags:	.long	0x80080001, 0	| ASLFR_TitleText
 
 	.set	PATHSIZE, 512
 pathbuf:	.space	PATHSIZE
+	.set	BIGBUF, 262144
+	.set	SMALLBUF, 32768
+linebuf:	.space	48
 
 dosname:	.asciz	"dos.library"
 aslname:	.asciz	"asl.library"
@@ -348,12 +531,18 @@ okgadget:	.asciz	"Ok"
 pattern:	.asciz	"#?.(mp4|m4v|mkv|webm|mov|avi|3gp|mpg|mpeg|ts|wmv|flv)"
 msg_usage:	.ascii	"Usage: AndroidPlay [<file>]\n"
 		.ascii	"Plays a video file in a window of uae4arm over the Amiga screen;\n"
-		.ascii	"without a file it asks for one. The file has to be on a folder\n"
-		.asciz	"drive, not inside a hardfile.\n"
+		.ascii	"without a file it asks for one. A file the host cannot reach,\n"
+		.ascii	"such as one inside a hardfile, goes over to it first;\n"
+		.asciz	"Ctrl-C stops that.\n"
 msg_notuae:	.asciz	"AndroidPlay: this runs in uae4arm only\n"
 msg_notfound:	.asciz	"AndroidPlay: no such file\n"
 msg_oldemu:	.asciz	"AndroidPlay: this needs a newer uae4arm\n"
-msg_notfolder:	.asciz	"AndroidPlay: the file has to be on a folder drive, not inside a hardfile\n"
+msg_copying:	.asciz	"\rAndroidPlay: processing "
+newline:	.asciz	"\n"
+msg_stopped:	.asciz	"AndroidPlay: stopped\n"
+msg_noread:	.asciz	"AndroidPlay: cannot read the file\n"
+msg_nomem:	.asciz	"AndroidPlay: not enough memory\n"
+msg_nocopy:	.asciz	"AndroidPlay: uae4arm could not take the file - it needs a newer uae4arm, or more room\n"
 msg_cannot:	.asciz	"AndroidPlay: uae4arm cannot play it here\n"
 msg_noasl:	.asciz	"AndroidPlay: no file requester - asl.library 36 or later is needed\n"
 		.even

@@ -24,6 +24,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #endif
+#include <sys/stat.h>
+#include <dirent.h>
 
 /*
  * Returns UAE Version
@@ -310,22 +312,139 @@ static bool host_open(const TCHAR *what)
 }
 #endif
 
+/* A video of the Amiga's own drives - a hardfile, a floppy, RAM: - which the
+   host cannot reach: AndroidPlay hands its bytes over, into a copy in the
+   app's folder, and the host plays the copy. The video window deletes it when
+   closed or given another video, and the app the ones left at its start. */
+static FILE *copy_file = NULL;
+static char copy_path[MAX_DPATH];
+
+static void copy_drop(void)
+{
+	if (copy_file) {
+		fclose(copy_file);
+		copy_file = NULL;
+		unlink(copy_path);
+	}
+}
+
+/* The copies, at the app's end: it ends with _exit(), so its video window
+   does not delete its copy. A video still playing then goes with the app. */
+void emulib_host_cleanup(void)
+{
+#if defined(ANDROIDSDL)
+	const char *dir = getenv("APPDIR");
+	if (!dir)
+		return;
+	copy_drop();
+	char folder[MAX_DPATH];
+	snprintf(folder, sizeof folder, "%s/AndroidPlay", dir);
+	DIR *d = opendir(folder);
+	if (!d)
+		return;
+	struct dirent *e;
+	while ((e = readdir(d)) != NULL) {
+		if (e->d_name[0] == '.')
+			continue;
+		char file[MAX_DPATH];
+		snprintf(file, sizeof file, "%s/%s", folder, e->d_name);
+		unlink(file);
+	}
+	closedir(d);
+#endif
+}
+
+/* Starts a copy, named for the extension of the Amiga file's name */
+static bool copy_begin(const char *name)
+{
+	static unsigned int count;
+	const char *dir = NULL;
+
+	copy_drop();
+#if defined(ANDROIDSDL)
+	dir = getenv("APPDIR");
+#endif
+	char folder[MAX_DPATH];
+	if (dir)
+		snprintf(folder, sizeof folder, "%s/AndroidPlay", dir);
+	else
+		snprintf(folder, sizeof folder, "/tmp/uae4arm-AndroidPlay");
+	mkdir(folder, 0700);
+	const char *ext = strrchr(name, '.');
+	if (!ext || strchr(ext, '/') || strchr(ext, ':') || strlen(ext) > 8)
+		ext = "";
+	snprintf(copy_path, sizeof copy_path, "%s/%lu-%u%s", folder, (unsigned long)time(NULL), ++count, ext);
+	copy_file = fopen(copy_path, "wb");
+	write_log(_T("uaelib: copying %s into %s\n"), name, copy_file ? copy_path : "nothing");
+	return copy_file != NULL;
+}
+
+static bool copy_piece(TrapContext *ctx, uaecptr addr, uae_u32 len)
+{
+	if (!copy_file || len > 16 * 1024 * 1024 || !valid_address(addr, len))
+		return false;
+	uae_u8 *buf = xmalloc(uae_u8, len);
+	if (!buf)
+		return false;
+	trap_get_bytes(ctx, buf, addr, len);
+	bool ok = fwrite(buf, 1, len, copy_file) == len;
+	xfree(buf);
+	return ok;
+}
+
 /* uae4arm: the host shows something in a window over the Amiga screen, for
    AndroidPlay and AndroidBrowser on the Amiga side. what and arg:
    1 plays a video, arg = dos.library Lock of a file of a folder drive;
    2 shows a web page, arg = its address, a string - empty asks for one;
-   3 shows a file of a folder drive as a web page, arg = its Lock.
+   3 shows a file of a folder drive as a web page, arg = its Lock;
+   a video of another drive is copied: 4 starts a copy, arg = the file's name,
+   5 adds arg2 bytes at arg to it, 6 plays it, 7 drops it.
    Above the low byte of what: $100 leaves out the address field of the web
    page's window.
    1 done, 2 not a file of a folder drive, 3 the host cannot show it - not 0,
    which is what an emulator without this gives back. */
-static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg)
+static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_u32 arg2)
 {
 	TCHAR path[MAX_DPATH];
 	int noaddress = (what & 0x100) != 0;
 
 	(void)noaddress; // only the Android window has the field
 	what &= 0xff;
+	if (what == 4) {
+		char name[MAX_DPATH];
+		trap_get_string(ctx, name, arg, sizeof name);
+		name[sizeof name - 1] = 0;
+		return copy_begin(name) ? 1 : 3;
+	}
+	if (what == 5) {
+		if (copy_piece(ctx, arg, arg2))
+			return 1;
+		write_log(_T("uaelib: the copy failed\n"));
+		copy_drop();
+		return 3;
+	}
+	if (what == 7) {
+		copy_drop();
+		return 1;
+	}
+	if (what == 6) {
+		if (!copy_file)
+			return 3;
+		bool ok = fclose(copy_file) == 0;
+		copy_file = NULL;
+		if (!ok) {
+			unlink(copy_path);
+			return 3;
+		}
+		write_log(_T("uaelib: the host plays %s\n"), copy_path);
+#if defined(ANDROIDSDL)
+		return SDL_ANDROID_PlayVideo(copy_path) ? 1 : 3;
+#elif defined(LINUX_HOST)
+		return host_open(copy_path) ? 1 : 3;
+#else
+		return 3;
+#endif
+	}
 	if (what == 2) {
 		char url[2048];
 		trap_get_string(ctx, url, arg, sizeof url);
@@ -386,7 +505,7 @@ static uae_u32 uaelib_demux_common(TrapContext *ctx, uae_u32 ARG0, uae_u32 ARG1,
 		case 81: return cfgfile_uaelib(ctx, ARG1, ARG2, ARG3, ARG4);
 		case 82: return cfgfile_uaelib_modify(ctx, ARG1, ARG2, ARG3, ARG4, ARG5);
 		case 85: return native_dos_op(ctx, ARG1, ARG2, ARG3, ARG4);
-		case 200: return emulib_HostShow(ctx, ARG1, ARG2);
+		case 200: return emulib_HostShow(ctx, ARG1, ARG2, ARG3);
     case 86:
    	  if (valid_address(ARG1, 1)) {
 			  uae_char tmp[MAX_DPATH];

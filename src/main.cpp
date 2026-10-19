@@ -736,6 +736,7 @@ void real_main (int argc, TCHAR **argv)
 	  quit_program = 0;
   }
   zfile_exit ();
+  emulib_host_cleanup ();
 }
 
 #ifndef NO_MAIN_IN_MAIN_C
