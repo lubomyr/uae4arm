@@ -1901,10 +1901,10 @@ index f0a437bb6..72ae18b01 100644
  	}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..846ca4934
+index 000000000..c562dad6d
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,405 @@
+@@ -0,0 +1,426 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -2096,7 +2096,10 @@ index 000000000..846ca4934
 +				if (path != null)
 +					open();
 +			}
-+			public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) { }
++			public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h)
++			{
++				fitVideo();
++			}
 +			public boolean onSurfaceTextureDestroyed(SurfaceTexture st)
 +			{
 +				releasePlayer();
@@ -2153,6 +2156,23 @@ index 000000000..846ca4934
 +		bottom.addView(time, new LinearLayout.LayoutParams(px(96), px(40)));
 +	}
 +
++	// The picture in its own shape in the view, black around it: the view stretches it to its
++	// size, which in full screen is the screen's, not the video's
++	private void fitVideo()
++	{
++		int w = video.getWidth(), h = video.getHeight();
++		if (w <= 0 || h <= 0)
++			return;
++		float sx = 1, sy = 1;
++		if ((long) videoWidth * h > (long) videoHeight * w)
++			sy = (float) w * videoHeight / videoWidth / h;
++		else
++			sx = (float) h * videoWidth / videoHeight / w;
++		android.graphics.Matrix m = new android.graphics.Matrix();
++		m.setScale(sx, sy, w / 2f, h / 2f);
++		video.setTransform(m);
++	}
++
 +	// The shape of the video
 +	@Override
 +	protected int shapedHeight(int width)
@@ -2187,6 +2207,7 @@ index 000000000..846ca4934
 +						videoWidth = w;
 +						videoHeight = h;
 +						layout();
++						fitVideo();
 +					}
 +				}
 +			});
