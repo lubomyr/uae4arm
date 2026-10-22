@@ -87,7 +87,7 @@ void target_default_options (struct uae_prefs *p, int type)
   p->gfx_monitor.gfx_size.y = OFFSET_Y_ADJUST;
   p->pandora_cpu_speed = defaultCpuSpeed;
   
-  p->pandora_tapDelay = 10;
+  p->pandora_tapDelay = 5; // short: with mousehack, a tap clicks soon after the pointer is there
   p->automount_cddrives = true;
 
 	/* The same formats amiberry offers, so a mode saved in one works in the

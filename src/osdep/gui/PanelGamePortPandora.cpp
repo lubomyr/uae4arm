@@ -77,6 +77,10 @@ static gcn::UaeDropDown* cboAutofires[4] = { NULL, NULL, NULL, NULL };
 const char *tapDelayValues[] = { "Normal", "Short", "None" };
 static gcn::GenericListModel tapDelayList(tapDelayValues, 3);
   
+#ifdef ANDROIDSDL
+extern void set_mousehack_mode(int on);
+#endif
+
 static void RefreshPanelGamePort(void)
 {
   int i, idx;
@@ -139,6 +143,9 @@ static void RefreshPanelGamePort(void)
     cboTapDelay->setSelected(2);
   
   chkMouseHack->setSelected(workprefs.input_tablet == TABLET_MOUSEHACK);
+  // The delay is of the click of a tap with mousehack only: without it the
+  // button goes at once
+  cboTapDelay->setEnabled(workprefs.input_tablet == TABLET_MOUSEHACK);
 
 #ifdef ANDROIDSDL
   chkMouseDpad->setSelected(workprefs.mouseWithDpad != 0);
@@ -248,12 +255,10 @@ class GamePortActionListener : public gcn::ActionListener
 
       } else if (actionEvent.getSource() == chkMouseHack) {
 #ifdef ANDROIDSDL
-        if (chkMouseHack->isSelected())
-             SDL_ANDROID_SetMouseEmulationMode(0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-        else
-             SDL_ANDROID_SetMouseEmulationMode(1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+        set_mousehack_mode(chkMouseHack->isSelected());
 #endif
   	    workprefs.input_tablet = chkMouseHack->isSelected() ? TABLET_MOUSEHACK : TABLET_OFF;
+  	    RefreshPanelGamePort();
   	  }
 #ifdef ANDROIDSDL
       else if (actionEvent.getSource() == chkMouseDpad) {
@@ -493,7 +498,8 @@ bool HelpPanelGamePort(std::vector<std::string> &helptext)
   helptext.push_back("This works very well on Workbench, but many games using there own mouse handling and will not profit from");
   helptext.push_back("this code.");
   helptext.push_back(" ");
-  helptext.push_back("\"Tap Delay\" specifies the time between taping the screen and an emulated mouse button click.");
+  helptext.push_back("\"Tap Delay\" specifies the time between taping the screen and an emulated mouse button click, with mousehack;");
+  helptext.push_back("without it the click comes at once.");
 #ifdef ANDROIDSDL
   helptext.push_back(" ");
   helptext.push_back("\"Mouse with d-pad\" moves the mouse pointer with the d-pad of a gamepad, a trackball, the cursor keys or the");

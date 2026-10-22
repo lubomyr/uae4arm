@@ -248,6 +248,20 @@ static void push_mouse_with_dpad(int on, int speed, int accel)
     on, speed, accel, -1, -1, -1, -1, -1, -1, -1);
 }
 
+// The wrapper's mouse: absolute, the pointer where the screen is touched, for
+// mousehack; relative otherwise. Held by the wrapper across configurations, so
+// set again when one starts: a restart into one without mousehack left the
+// wrapper absolute, and the mouse did not move.
+void set_mousehack_mode(int on)
+{
+  static int last = -1;
+  int relative = on ? 0 : 1;
+  if (relative == last)
+    return;
+  last = relative;
+  SDL_ANDROID_SetMouseEmulationMode(relative, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+}
+
 static void update_onscreen_appearance()
 {
   static int last_theme = -1;
@@ -271,6 +285,7 @@ static void update_onscreen_appearance()
     last_transparency = changed_prefs.onScreen_transparency;
     SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY, last_transparency);
   }
+  set_mousehack_mode(changed_prefs.input_tablet == TABLET_MOUSEHACK);
   if (changed_prefs.keepAspectRatio != last_keepaspect) {
     last_keepaspect = changed_prefs.keepAspectRatio;
     SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO, last_keepaspect);
