@@ -398,7 +398,8 @@ static bool copy_piece(TrapContext *ctx, uaecptr addr, uae_u32 len)
    2 shows a web page, arg = its address, a string - empty asks for one;
    3 shows a file of a folder drive as a web page, arg = its Lock;
    a video of another drive is copied: 4 starts a copy, arg = the file's name,
-   5 adds arg2 bytes at arg to it, 6 plays it, 7 drops it.
+   5 adds arg2 bytes at arg to it, 6 plays it, 7 drops it;
+   8 shows a picture, arg = its Lock; 9 shows a copy as a picture.
    Above the low byte of what: $100 leaves out the address field of the web
    page's window, $200 shows the page in a window of its own.
    1 done, 2 not a file of a folder drive, 3 the host cannot show it - not 0,
@@ -436,7 +437,7 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_
 		copy_drop();
 		return 1;
 	}
-	if (what == 6) {
+	if (what == 6 || what == 9) {
 		if (!copy_file)
 			return 3;
 		bool ok = fclose(copy_file) == 0;
@@ -445,8 +446,10 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_
 			unlink(copy_path);
 			return 3;
 		}
-		write_log(_T("uaelib: the host plays %s\n"), copy_path);
+		write_log(_T("uaelib: the host shows %s\n"), copy_path);
 #if defined(ANDROIDSDL)
+		if (what == 9)
+			return SDL_ANDROID_ShowImage(copy_path) ? 1 : 3;
 		return SDL_ANDROID_PlayVideo(copy_path) ? 1 : 3;
 #elif defined(LINUX_HOST)
 		return host_open(copy_path) ? 1 : 3;
@@ -474,7 +477,7 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_
 		return 3;
 #endif
 	}
-	if (what != 1 && what != 3)
+	if (what != 1 && what != 3 && what != 8)
 		return 3;
 	if (get_native_path(ctx, arg, path))
 		return 2;
@@ -482,6 +485,8 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_
 #if defined(ANDROIDSDL)
 	if (what == 1)
 		return SDL_ANDROID_PlayVideo(path) ? 1 : 3;
+	if (what == 8)
+		return SDL_ANDROID_ShowImage(path) ? 1 : 3;
 	return SDL_ANDROID_OpenBrowser(path, 1, browser_flags(noaddress, newwindow)) ? 1 : 3;
 #elif defined(LINUX_HOST)
 	return host_open(path) ? 1 : 3;

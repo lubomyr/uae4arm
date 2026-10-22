@@ -297,10 +297,10 @@ index 000000000..6f9d61dc4
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..67d67cad7
+index 000000000..a229ca02b
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,448 @@
+@@ -0,0 +1,473 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -446,6 +446,31 @@ index 000000000..67d67cad7
 +		window = null;
 +		closed = true;
 +		context.floatingWindowsChanged();
++	}
++
++	// Copies of files the app could not reach where they are, such as inside an Amiga hardfile:
++	// the app makes them in this folder, for a window to show once
++	private static final String COPIES = "AndroidPlay";
++	private static boolean copiesChecked = false;
++
++	protected void deleteCopy(String file)
++	{
++		java.io.File f = new java.io.File(file);
++		java.io.File dir = new java.io.File(context.getFilesDir(), COPIES);
++		if (dir.equals(f.getParentFile()))
++			f.delete();
++	}
++
++	// The copies left by the app ended while showing one, once a run
++	static void deleteCopies(android.content.Context context)
++	{
++		if (copiesChecked)
++			return;
++		copiesChecked = true;
++		java.io.File[] left = new java.io.File(context.getFilesDir(), COPIES).listFiles();
++		if (left != null)
++			for (java.io.File f: left)
++				f.delete();
 +	}
 +
 +	protected int px(float v)
@@ -749,15 +774,349 @@ index 000000000..67d67cad7
 +		setControlsVisible(!controlsHidden);
 +	}
 +}
+diff --git a/project/java/ImageWindow.java b/project/java/ImageWindow.java
+new file mode 100644
+index 000000000..07c75e812
+--- /dev/null
++++ b/project/java/ImageWindow.java
+@@ -0,0 +1,328 @@
++/*
++Simple DirectMedia Layer
++Java source code, a picture window over the app for the Android port
++
++This software is provided 'as-is', without any express or implied
++warranty.  In no event will the authors be held liable for any damages
++arising from the use of this software.
++
++Permission is granted to anyone to use this software for any purpose,
++including commercial applications, and to alter it and redistribute it
++freely, subject to the following restrictions:
++
++1. The origin of this software must not be misrepresented; you must not
++   claim that you wrote the original software. If you use this software
++   in a product, an acknowledgment in the product documentation would be
++   appreciated but is not required.
++2. Altered source versions must be plainly marked as such, and must not be
++   misrepresented as being the original software.
++3. This notice may not be removed or altered from any source distribution.
++*/
++
++package net.sourceforge.clonekeenplus;
++
++import android.graphics.Bitmap;
++import android.graphics.BitmapFactory;
++import android.graphics.ImageDecoder;
++import android.graphics.Matrix;
++import android.graphics.RectF;
++import android.graphics.drawable.Animatable;
++import android.graphics.drawable.BitmapDrawable;
++import android.graphics.drawable.Drawable;
++import android.os.Handler;
++import android.os.Looper;
++import android.util.Log;
++import android.view.GestureDetector;
++import android.view.InputDevice;
++import android.view.MotionEvent;
++import android.view.ScaleGestureDetector;
++import android.view.View;
++import android.widget.FrameLayout;
++import android.widget.ImageView;
++import android.widget.Toast;
++import java.io.File;
++
++// A window that shows a picture over the app, decoded by the system at the device's resolution,
++// whatever the app's screen is: the app asks for it with a file of its own. Two fingers or a
++// mouse wheel zoom it, a double tap zooms in and back, a finger moves it while zoomed.
++class ImageWindow extends FloatingWindow
++{
++	private ImageView view;
++	private Drawable picture = null;
++	private String path = null;
++	private int imageWidth = 4, imageHeight = 3;
++	private final Matrix matrix = new Matrix();
++	private float fitScale = 1;
++	private int decoding = 0; // the decoding asked for last; one done for another is dropped
++	private final Handler handler = new Handler(Looper.getMainLooper());
++
++	private static final float MAX_ZOOM = 8;
++
++	ImageWindow(MainActivity context, FrameLayout parent)
++	{
++		super(context, parent);
++	}
++
++	void open(String path)
++	{
++		show();
++		if (this.path != null && !this.path.equals(path))
++			deleteCopy(this.path);
++		this.path = path;
++		title.setText(new File(path).getName());
++		decode(path);
++	}
++
++	@Override
++	protected void onHidden(boolean hide)
++	{
++		if (picture instanceof Animatable)
++		{
++			if (hide)
++				((Animatable) picture).stop();
++			else
++				((Animatable) picture).start();
++		}
++	}
++
++	@Override
++	protected void onClosed()
++	{
++		decoding++;
++		setPicture(null);
++		if (path != null)
++			deleteCopy(path);
++		path = null;
++	}
++
++	// The shape of the picture
++	@Override
++	protected int shapedHeight(int width)
++	{
++		return width * imageHeight / imageWidth;
++	}
++
++	@Override
++	protected View content()
++	{
++		view = new ImageView(context);
++		view.setScaleType(ImageView.ScaleType.MATRIX);
++		view.addOnLayoutChangeListener(new View.OnLayoutChangeListener()
++		{
++			public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob)
++			{
++				if (r - l != or - ol || b - t != ob - ot)
++					fit();
++			}
++		});
++		final ScaleGestureDetector scaler = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener()
++		{
++			@Override
++			public boolean onScale(ScaleGestureDetector d)
++			{
++				zoom(d.getScaleFactor(), d.getFocusX(), d.getFocusY());
++				return true;
++			}
++		});
++		final GestureDetector gestures = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener()
++		{
++			@Override
++			public boolean onDown(MotionEvent e)
++			{
++				return true;
++			}
++			@Override
++			public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy)
++			{
++				if (zoomed())
++				{
++					matrix.postTranslate(-dx, -dy);
++					keepInView();
++				}
++				return true;
++			}
++			@Override
++			public boolean onDoubleTap(MotionEvent e)
++			{
++				if (zoomed())
++					fit();
++				else
++					zoom(2.5f, e.getX(), e.getY());
++				return true;
++			}
++		});
++		view.setOnTouchListener(new View.OnTouchListener()
++		{
++			public boolean onTouch(View v, MotionEvent e)
++			{
++				scaler.onTouchEvent(e);
++				if (!scaler.isInProgress())
++					gestures.onTouchEvent(e);
++				return true;
++			}
++		});
++		// The wheel of a mouse zooms where the pointer is
++		view.setOnGenericMotionListener(new View.OnGenericMotionListener()
++		{
++			public boolean onGenericMotion(View v, MotionEvent e)
++			{
++				if ((e.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0 && e.getActionMasked() == MotionEvent.ACTION_SCROLL)
++				{
++					float s = e.getAxisValue(MotionEvent.AXIS_VSCROLL);
++					if (s != 0)
++						zoom(s > 0 ? 1.25f : 0.8f, e.getX(), e.getY());
++					return true;
++				}
++				return false;
++			}
++		});
++		return view;
++	}
++
++	// Decoded aside, so that the window does not stop for a large picture; one larger than twice
++	// the screen is decoded smaller, which still shows all there is to see of it zoomed
++	private void decode(final String file)
++	{
++		final int id = ++decoding;
++		android.util.DisplayMetrics dm = context.getResources().getDisplayMetrics();
++		final int maxSide = Math.min(4096, Math.max(dm.widthPixels, dm.heightPixels) * 2);
++		new Thread(new Runnable()
++		{
++			public void run()
++			{
++				Drawable d = null;
++				try
++				{
++					d = load(file, maxSide);
++				}
++				catch (Throwable e)
++				{
++					Log.i("SDL", "ImageWindow: cannot decode " + file + ": " + e);
++				}
++				final Drawable result = d;
++				handler.post(new Runnable()
++				{
++					public void run()
++					{
++						if (id != decoding || !isOpen())
++							return;
++						if (result == null)
++						{
++							Toast.makeText(context, "Cannot show " + new File(file).getName(), Toast.LENGTH_LONG).show();
++							close();
++							return;
++						}
++						setPicture(result);
++					}
++				});
++			}
++		}, "Picture").start();
++	}
++
++	// With ImageDecoder from Android 9: animated GIF and WebP move, HEIF shows too
++	private Drawable load(String file, final int maxSide) throws Exception
++	{
++		if (android.os.Build.VERSION.SDK_INT >= 28)
++		{
++			return ImageDecoder.decodeDrawable(ImageDecoder.createSource(new File(file)), new ImageDecoder.OnHeaderDecodedListener()
++			{
++				public void onHeaderDecoded(ImageDecoder decoder, ImageDecoder.ImageInfo info, ImageDecoder.Source source)
++				{
++					decoder.setTargetSampleSize(sample(info.getSize().getWidth(), info.getSize().getHeight(), maxSide));
++				}
++			});
++		}
++		BitmapFactory.Options o = new BitmapFactory.Options();
++		o.inJustDecodeBounds = true;
++		BitmapFactory.decodeFile(file, o);
++		if (o.outWidth <= 0 || o.outHeight <= 0)
++			return null;
++		o.inJustDecodeBounds = false;
++		o.inSampleSize = sample(o.outWidth, o.outHeight, maxSide);
++		Bitmap b = BitmapFactory.decodeFile(file, o);
++		return b == null ? null : new BitmapDrawable(context.getResources(), b);
++	}
++
++	private static int sample(int w, int h, int maxSide)
++	{
++		int sample = 1;
++		while (w / sample > maxSide || h / sample > maxSide)
++			sample *= 2;
++		return sample;
++	}
++
++	private void setPicture(Drawable d)
++	{
++		if (picture instanceof Animatable)
++			((Animatable) picture).stop();
++		picture = d;
++		if (view != null)
++			view.setImageDrawable(d);
++		if (d == null)
++			return;
++		imageWidth = Math.max(1, d.getIntrinsicWidth());
++		imageHeight = Math.max(1, d.getIntrinsicHeight());
++		if (d instanceof Animatable)
++			((Animatable) d).start();
++		layout();
++		fit();
++	}
++
++	// All of the picture in the view, in its own shape, black around it
++	private void fit()
++	{
++		if (view == null)
++			return;
++		int vw = view.getWidth(), vh = view.getHeight();
++		if (vw <= 0 || vh <= 0)
++			return;
++		fitScale = Math.min((float) vw / imageWidth, (float) vh / imageHeight);
++		matrix.setScale(fitScale, fitScale);
++		matrix.postTranslate((vw - imageWidth * fitScale) / 2, (vh - imageHeight * fitScale) / 2);
++		view.setImageMatrix(matrix);
++	}
++
++	private float scale()
++	{
++		float[] v = new float[9];
++		matrix.getValues(v);
++		return v[Matrix.MSCALE_X];
++	}
++
++	private boolean zoomed()
++	{
++		return scale() > fitScale * 1.01f;
++	}
++
++	// Between all of the picture and eight times that, about the given point
++	private void zoom(float factor, float x, float y)
++	{
++		float now = scale();
++		float to = Math.max(fitScale, Math.min(fitScale * MAX_ZOOM, now * factor));
++		matrix.postScale(to / now, to / now, x, y);
++		keepInView();
++	}
++
++	// The picture covers the view where it is larger than the view, and is in its middle where not
++	private void keepInView()
++	{
++		RectF r = new RectF(0, 0, imageWidth, imageHeight);
++		matrix.mapRect(r);
++		int vw = view.getWidth(), vh = view.getHeight();
++		float dx = 0, dy = 0;
++		if (r.width() <= vw)
++			dx = (vw - r.width()) / 2 - r.left;
++		else if (r.left > 0)
++			dx = -r.left;
++		else if (r.right < vw)
++			dx = vw - r.right;
++		if (r.height() <= vh)
++			dy = (vh - r.height()) / 2 - r.top;
++		else if (r.top > 0)
++			dy = -r.top;
++		else if (r.bottom < vh)
++			dy = vh - r.bottom;
++		matrix.postTranslate(dx, dy);
++		view.setImageMatrix(matrix);
++	}
++}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..bde0b9d89 100644
+index 69c7f86c2..8fad8376c 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -116,6 +116,7 @@ public class MainActivity extends Activity
  		super.onCreate(savedInstanceState);
  
  		instance = this;
-+		VideoWindow.deleteCopies(this);
++		FloatingWindow.deleteCopies(this);
  		// fullscreen mode
  		requestWindowFeature(Window.FEATURE_NO_TITLE);
  		getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -813,13 +1172,14 @@ index 69c7f86c2..bde0b9d89 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +709,119 @@ public class MainActivity extends Activity
+@@ -693,6 +709,139 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
 +	// A video and a web page the app shows in windows of their own over its screen, see
 +	// FloatingWindow
 +	private VideoWindow videoWindow = null;
++	private ImageWindow imageWindow = null;
 +	// The browser's windows, the one used last at the end: a page goes to it, unless it is asked
 +	// for a window of its own
 +	private final java.util.ArrayList<BrowserWindow> browserWindows = new java.util.ArrayList<BrowserWindow>();
@@ -832,6 +1192,8 @@ index 69c7f86c2..bde0b9d89 100644
 +			{
 +				if( videoWindow != null )
 +					videoWindow.setHidden(hide);
++				if( imageWindow != null )
++					imageWindow.setHidden(hide);
 +				for( BrowserWindow w: new java.util.ArrayList<BrowserWindow>(browserWindows) )
 +					w.setHidden(hide);
 +			}
@@ -867,10 +1229,12 @@ index 69c7f86c2..bde0b9d89 100644
 +			browserWindows.add((BrowserWindow) w);
 +	}
 +
-+	// A window over the app is to be seen: the video's or a browser's
++	// A window over the app is to be seen: the video's, the picture's or a browser's
 +	boolean floatingWindowShown()
 +	{
 +		if( videoWindow != null && videoWindow.isShown() )
++			return true;
++		if( imageWindow != null && imageWindow.isShown() )
 +			return true;
 +		for( BrowserWindow w: browserWindows )
 +			if( w.isShown() )
@@ -899,7 +1263,7 @@ index 69c7f86c2..bde0b9d89 100644
 +	// say: called when its screen is touched, and when such a window goes
 +	void releaseOverlayFocus()
 +	{
-+		boolean focus = videoWindow != null && videoWindow.hasFocus();
++		boolean focus = (videoWindow != null && videoWindow.hasFocus()) || (imageWindow != null && imageWindow.hasFocus());
 +		for( BrowserWindow w: browserWindows )
 +			focus |= w.hasFocus();
 +		if( !focus )
@@ -913,6 +1277,21 @@ index 69c7f86c2..bde0b9d89 100644
 +		}
 +		if( _videoLayout != null )
 +			_videoLayout.requestFocus();
++	}
++
++	public void showImage(final String path)
++	{
++		runOnUiThread(new Runnable()
++		{
++			public void run()
++			{
++				if( _videoLayout == null )
++					return;
++				if( imageWindow == null )
++					imageWindow = new ImageWindow(MainActivity.this, _videoLayout);
++				imageWindow.open(path);
++			}
++		});
 +	}
 +
 +	public void playVideo(final String path)
@@ -933,7 +1312,7 @@ index 69c7f86c2..bde0b9d89 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1719,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1739,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -1705,7 +2084,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..eb8859890 100644
+index f0a437bb6..19bd61139 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -1782,7 +2161,7 @@ index f0a437bb6..eb8859890 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +998,52 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +998,57 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -1794,6 +2173,11 @@ index f0a437bb6..eb8859890 100644
 +	public void playVideo(String path) // Called from native code
 +	{
 +		context.playVideo(path);
++	}
++
++	public void showImage(String path) // Called from native code
++	{
++		context.showImage(path);
 +	}
 +
 +	public void setFloatingWindowsHidden(int hide) // Called from native code
@@ -1835,7 +2219,7 @@ index f0a437bb6..eb8859890 100644
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1062,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1067,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -1843,7 +2227,7 @@ index f0a437bb6..eb8859890 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1073,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1078,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -1851,7 +2235,7 @@ index f0a437bb6..eb8859890 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1094,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1099,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -1862,7 +2246,7 @@ index f0a437bb6..eb8859890 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1112,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1117,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -1880,7 +2264,7 @@ index f0a437bb6..eb8859890 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1127,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1132,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -1893,7 +2277,7 @@ index f0a437bb6..eb8859890 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1153,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1158,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -1906,7 +2290,7 @@ index f0a437bb6..eb8859890 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1166,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1171,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -1918,7 +2302,7 @@ index f0a437bb6..eb8859890 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1106,6 +1209,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1106,6 +1214,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	@Override
  	public boolean onTouchEvent(final MotionEvent event)
  	{
@@ -1927,7 +2311,7 @@ index f0a437bb6..eb8859890 100644
  		if( mParent.keyboardWithoutTextInputShown && mParent._screenKeyboard != null &&
  			mParent._screenKeyboard.getY() <= event.getY() )
  		{
-@@ -1122,9 +1227,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1232,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -1967,7 +2351,7 @@ index f0a437bb6..eb8859890 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1282,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1287,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -1975,7 +2359,7 @@ index f0a437bb6..eb8859890 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1301,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1306,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -1983,7 +2367,7 @@ index f0a437bb6..eb8859890 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
-@@ -1210,12 +1347,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1210,12 +1352,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  			setFocusableInTouchMode(true);
  			setFocusable(true);
  			requestFocus();
@@ -2001,10 +2385,10 @@ index f0a437bb6..eb8859890 100644
  					}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
-index 000000000..c562dad6d
+index 000000000..9af909e42
 --- /dev/null
 +++ b/project/java/VideoWindow.java
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,401 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a video window over the app for the Android port
@@ -2138,31 +2522,6 @@ index 000000000..c562dad6d
 +		{
 +			return false;
 +		}
-+	}
-+
-+	// Copies of videos the app could not reach where they are, such as inside an Amiga hardfile:
-+	// the app makes them in this folder, for the window to play once
-+	private static final String COPIES = "AndroidPlay";
-+	private static boolean copiesChecked = false;
-+
-+	private void deleteCopy(String file)
-+	{
-+		File f = new File(file);
-+		File dir = new File(context.getFilesDir(), COPIES);
-+		if (dir.equals(f.getParentFile()))
-+			f.delete();
-+	}
-+
-+	// The copies left by the app ended while playing one, once a run
-+	static void deleteCopies(android.content.Context context)
-+	{
-+		if (copiesChecked)
-+			return;
-+		copiesChecked = true;
-+		File[] left = new File(context.getFilesDir(), COPIES).listFiles();
-+		if (left != null)
-+			for (File f: left)
-+				f.delete();
 +	}
 +
 +	@Override
@@ -2565,10 +2924,10 @@ index a32209124..bdff81492 100755
          highlightColor.a = alpha;
          shadowColor = faceColor - 0x303030;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..a96372a0f 100644
+index 14d8a4dd1..3d85ff97d 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,68 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,71 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -2606,6 +2965,9 @@ index 14d8a4dd1..a96372a0f 100644
 +/* Plays a video file with the decoder of the system in a window over the app, which can be moved,
 +   resized, made full screen and closed; the app goes on underneath. Returns 0 if it cannot. */
 +extern DECLSPEC int SDLCALL SDL_ANDROID_PlayVideo(const char *path);
++/* Shows a picture file, decoded by the system, in a window over the app like the video window:
++   at the device's resolution, zoomed with two fingers. Returns 0 if it cannot. */
++extern DECLSPEC int SDLCALL SDL_ANDROID_ShowImage(const char *path);
 +/* Shows a web page in a window over the app, like the video window: an address ("aminet.net" means
 +   https://aminet.net), an empty one to ask for it, or with file set the path of a file to show.
 +   flags: SDL_ANDROID_BROWSER_NO_ADDRESS leaves out the address field, when there is an address;
@@ -2638,7 +3000,7 @@ index 14d8a4dd1..a96372a0f 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +213,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +216,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -2818,7 +3180,7 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..df2da19d0 100644
+index 30df36343..4d550c396 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -2829,13 +3191,14 @@ index 30df36343..df2da19d0 100644
  
  #include "SDL_opengles.h"
  
-@@ -121,7 +122,16 @@ static jmethodID JavaRequestCloudLoad = NULL;
+@@ -121,7 +122,17 @@ static jmethodID JavaRequestCloudLoad = NULL;
  static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
 +static jmethodID JavaConfirmConfigOptions = NULL;
 +static jmethodID JavaMidiOpen = NULL;
 +static jmethodID JavaPlayVideo = NULL;
++static jmethodID JavaShowImage = NULL;
 +static jmethodID JavaSetFloatingWindowsHidden = NULL;
 +static jmethodID JavaOpenBrowser = NULL;
 +static jmethodID JavaMidiClose = NULL;
@@ -2846,13 +3209,14 @@ index 30df36343..df2da19d0 100644
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -428,7 +438,16 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +439,17 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
  	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
 +	JavaConfirmConfigOptions = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "confirmConfigOptions", "()V");
 +	JavaMidiOpen = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiOpen", "()I");
 +	JavaPlayVideo = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "playVideo", "(Ljava/lang/String;)V");
++	JavaShowImage = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "showImage", "(Ljava/lang/String;)V");
 +	JavaSetFloatingWindowsHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setFloatingWindowsHidden", "(I)V");
 +	JavaOpenBrowser = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openBrowser", "(Ljava/lang/String;II)V");
 +	JavaMidiClose = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiClose", "()V");
@@ -2863,7 +3227,7 @@ index 30df36343..df2da19d0 100644
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +705,181 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +707,193 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
@@ -2918,6 +3282,18 @@ index 30df36343..df2da19d0 100644
 +		return 0;
 +	s = (*JavaEnv)->NewStringUTF(JavaEnv, path);
 +	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaPlayVideo, s );
++	(*JavaEnv)->DeleteLocalRef( JavaEnv, s );
++	return 1;
++}
++
++int SDLCALL SDL_ANDROID_ShowImage(const char *path)
++{
++	JNIEnv *JavaEnv = GetJavaEnvAttached();
++	jstring s;
++	if( !JavaEnv || !JavaRenderer || !JavaShowImage || !path )
++		return 0;
++	s = (*JavaEnv)->NewStringUTF(JavaEnv, path);
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaShowImage, s );
 +	(*JavaEnv)->DeleteLocalRef( JavaEnv, s );
 +	return 1;
 +}
@@ -3045,7 +3421,7 @@ index 30df36343..df2da19d0 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +891,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +905,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  
