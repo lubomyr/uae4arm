@@ -2485,6 +2485,29 @@ index 97978a7ac..127fb1d84 100755
      void Widget::setGlobalFont(Font* font)
      {
          mGlobalFont = font;
+diff --git a/project/jni/guichan/src/widgets/slider.cpp b/project/jni/guichan/src/widgets/slider.cpp
+index a32209124..bdff81492 100755
+--- a/project/jni/guichan/src/widgets/slider.cpp
++++ b/project/jni/guichan/src/widgets/slider.cpp
+@@ -119,6 +119,9 @@ namespace gcn
+     {
+         Color shadowColor = getBaseColor() - 0x101010;
+         int alpha = getBaseColor().a;
++        // Darker when off, as a check box is
++        if (!isEnabled())
++            shadowColor = shadowColor - 0x303030;
+          shadowColor.a = alpha;
+ 
+         graphics->setColor(shadowColor);
+@@ -132,6 +135,8 @@ namespace gcn
+         gcn::Color faceColor = getBaseColor();
+         Color highlightColor, shadowColor;
+         int alpha = getBaseColor().a;
++        if (!isEnabled())
++            faceColor = faceColor - 0x303030;
+         highlightColor = faceColor + 0x303030;
+         highlightColor.a = alpha;
+         shadowColor = faceColor - 0x303030;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
 index 14d8a4dd1..5e1e1e879 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
