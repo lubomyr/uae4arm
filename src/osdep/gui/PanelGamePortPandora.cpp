@@ -144,8 +144,10 @@ static void RefreshPanelGamePort(void)
   
   chkMouseHack->setSelected(workprefs.input_tablet == TABLET_MOUSEHACK);
   // The delay is of the click of a tap with mousehack only: without it the
-  // button goes at once
+  // button goes at once. The speed is of the mouse without it: with it the
+  // pointer is where the screen is touched
   cboTapDelay->setEnabled(workprefs.input_tablet == TABLET_MOUSEHACK);
+  sldMouseSpeed->setEnabled(workprefs.input_tablet != TABLET_MOUSEHACK);
 
 #ifdef ANDROIDSDL
   chkMouseDpad->setSelected(workprefs.mouseWithDpad != 0);
@@ -492,7 +494,8 @@ bool HelpPanelGamePort(std::vector<std::string> &helptext)
   helptext.clear();
   helptext.push_back("You can select the control type for both ports and the rate for autofire.");
   helptext.push_back(" ");
-  helptext.push_back("Set the emulated mouse speed to .25x, .5x, 1x, 2x and 4x to slow down or speed up the mouse.");
+  helptext.push_back("Set the emulated mouse speed to .25x, .5x, 1x, 2x and 4x to slow down or speed up the mouse; with mousehack");
+  helptext.push_back("the pointer goes where the screen is touched, and the speed is off.");
   helptext.push_back(" ");
   helptext.push_back("When \"Enable mousehack\" is activated, you can use the stylus to set the mouse pointer to the exact position.");
   helptext.push_back("This works very well on Workbench, but many games using there own mouse handling and will not profit from");
