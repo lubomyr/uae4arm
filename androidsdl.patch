@@ -297,10 +297,10 @@ index 000000000..d5f294d59
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..3cf83b0df
+index 000000000..3d88d184e
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,411 @@
+@@ -0,0 +1,420 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -386,6 +386,12 @@ index 000000000..3cf83b0df
 +		return window != null;
 +	}
 +
++	// Open and not hidden behind the app's menu
++	boolean isShown()
++	{
++		return window != null && !hidden;
++	}
++
 +	// Has the focus for keys, which the app then does not get
 +	boolean hasFocus()
 +	{
@@ -398,6 +404,7 @@ index 000000000..3cf83b0df
 +		if (window == null)
 +			create();
 +		window.setVisibility(View.VISIBLE);
++		context.floatingWindowsChanged();
 +	}
 +
 +	// Hides the window while the app shows something else, such as its menu, and shows it again
@@ -412,6 +419,7 @@ index 000000000..3cf83b0df
 +			context.releaseOverlayFocus();
 +		window.setVisibility(hide ? View.GONE : View.VISIBLE);
 +		onHidden(hide);
++		context.floatingWindowsChanged();
 +	}
 +
 +	void close()
@@ -423,6 +431,7 @@ index 000000000..3cf83b0df
 +		onClosed();
 +		parent.removeView(window);
 +		window = null;
++		context.floatingWindowsChanged();
 +	}
 +
 +	protected int px(float v)
@@ -713,7 +722,7 @@ index 000000000..3cf83b0df
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..fa557e164 100644
+index 69c7f86c2..c4e538279 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -116,6 +116,7 @@ public class MainActivity extends Activity
@@ -776,7 +785,7 @@ index 69c7f86c2..fa557e164 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +709,72 @@ public class MainActivity extends Activity
+@@ -693,6 +709,91 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
@@ -814,6 +823,25 @@ index 69c7f86c2..fa557e164 100644
 +		});
 +	}
 +
++	// A window over the app is to be seen: the video's or the browser's
++	boolean floatingWindowShown()
++	{
++		return (videoWindow != null && videoWindow.isShown()) || (browserWindow != null && browserWindow.isShown());
++	}
++
++	// A real mouse reaches the windows over the app while one is seen: the app's view lets the
++	// mouse go, which it holds otherwise - then only the app gets its moves - and the system's
++	// pointer shows, as the app's own pointer is under the windows
++	void floatingWindowsChanged()
++	{
++		if( mGLView == null )
++			return;
++		boolean shown = floatingWindowShown();
++		mGLView.captureMouse(!shown);
++		if( Globals.HideSystemMousePointer )
++			setSystemMousePointerVisible(shown ? 1 : 0);
++	}
++
 +	// The keys go to the app again, not to a window over it that has them - its address field,
 +	// say: called when its screen is touched, and when such a window goes
 +	void releaseOverlayFocus()
@@ -849,7 +877,7 @@ index 69c7f86c2..fa557e164 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1672,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1691,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -1621,7 +1649,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..72ae18b01 100644
+index f0a437bb6..697eefb31 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -1899,6 +1927,22 @@ index f0a437bb6..72ae18b01 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
+@@ -1210,12 +1347,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+ 			setFocusableInTouchMode(true);
+ 			setFocusable(true);
+ 			requestFocus();
++			// Not while a window over the app is seen, which the mouse has to reach
+ 			if( Globals.HideSystemMousePointer && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O )
+ 			{
+ 				postDelayed( new Runnable()
+ 				{
+ 					public void run()
+ 					{
++						if( MainActivity.instance != null && MainActivity.instance.floatingWindowShown() )
++							return;
+ 						Log.v("SDL", "captureMouse::requestPointerCapture() delayed");
+ 						requestPointerCapture();
+ 					}
 diff --git a/project/java/VideoWindow.java b/project/java/VideoWindow.java
 new file mode 100644
 index 000000000..c562dad6d
