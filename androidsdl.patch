@@ -297,10 +297,10 @@ index 000000000..6f9d61dc4
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..a229ca02b
+index 000000000..d06e3e298
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,473 @@
+@@ -0,0 +1,476 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -453,12 +453,15 @@ index 000000000..a229ca02b
 +	private static final String COPIES = "AndroidPlay";
 +	private static boolean copiesChecked = false;
 +
++	protected boolean isCopy(String file)
++	{
++		return new java.io.File(context.getFilesDir(), COPIES).equals(new java.io.File(file).getParentFile());
++	}
++
 +	protected void deleteCopy(String file)
 +	{
-+		java.io.File f = new java.io.File(file);
-+		java.io.File dir = new java.io.File(context.getFilesDir(), COPIES);
-+		if (dir.equals(f.getParentFile()))
-+			f.delete();
++		if (isCopy(file))
++			new java.io.File(file).delete();
 +	}
 +
 +	// The copies left by the app ended while showing one, once a run
@@ -776,10 +779,10 @@ index 000000000..a229ca02b
 +}
 diff --git a/project/java/ImageWindow.java b/project/java/ImageWindow.java
 new file mode 100644
-index 000000000..07c75e812
+index 000000000..b4542c32d
 --- /dev/null
 +++ b/project/java/ImageWindow.java
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,412 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a picture window over the app for the Android port
@@ -821,12 +824,14 @@ index 000000000..07c75e812
 +import android.view.View;
 +import android.widget.FrameLayout;
 +import android.widget.ImageView;
++import android.widget.LinearLayout;
 +import android.widget.Toast;
 +import java.io.File;
 +
 +// A window that shows a picture over the app, decoded by the system at the device's resolution,
 +// whatever the app's screen is: the app asks for it with a file of its own. Two fingers or a
-+// mouse wheel zoom it, a double tap zooms in and back, a finger moves it while zoomed.
++// mouse wheel zoom it, a double tap zooms in and back, a finger moves it while zoomed. The other
++// pictures of its folder are a button, or a swipe, away - not for a copy, which has none.
 +class ImageWindow extends FloatingWindow
 +{
 +	private ImageView view;
@@ -836,6 +841,11 @@ index 000000000..07c75e812
 +	private final Matrix matrix = new Matrix();
 +	private float fitScale = 1;
 +	private int decoding = 0; // the decoding asked for last; one done for another is dropped
++	// The pictures of the folder of the one shown, by name, and which it is; none for a copy
++	private File[] folder = new File[0];
++	private int index = -1;
++	private View previous, next;
++	private static final String[] PICTURES = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif", ".avif" };
 +	private final Handler handler = new Handler(Looper.getMainLooper());
 +
 +	private static final float MAX_ZOOM = 8;
@@ -850,9 +860,74 @@ index 000000000..07c75e812
 +		show();
 +		if (this.path != null && !this.path.equals(path))
 +			deleteCopy(this.path);
++		findFolder(path);
++		showFile(path);
++	}
++
++	private void showFile(String path)
++	{
 +		this.path = path;
-+		title.setText(new File(path).getName());
++		String name = new File(path).getName();
++		title.setText(index >= 0 && folder.length > 1 ? name + " (" + (index + 1) + "/" + folder.length + ")" : name);
 +		decode(path);
++	}
++
++	// The pictures by the one shown, sorted as a listing of the Amiga sorts them
++	private void findFolder(String path)
++	{
++		folder = new File[0];
++		index = -1;
++		File file = new File(path);
++		File dir = file.getParentFile();
++		File[] all = isCopy(path) || dir == null ? null : dir.listFiles();
++		if (all != null)
++		{
++			java.util.ArrayList<File> found = new java.util.ArrayList<File>();
++			for (File f: all)
++				if (f.isFile() && !f.getName().startsWith(".") && isPicture(f.getName()))
++					found.add(f);
++			java.util.Collections.sort(found, new java.util.Comparator<File>()
++			{
++				public int compare(File a, File b)
++				{
++					return a.getName().compareToIgnoreCase(b.getName());
++				}
++			});
++			folder = found.toArray(new File[0]);
++			for (int i = 0; i < folder.length; i++)
++				if (folder[i].getName().equals(file.getName()))
++					index = i;
++		}
++		int shown = index >= 0 && folder.length > 1 ? View.VISIBLE : View.GONE;
++		previous.setVisibility(shown);
++		next.setVisibility(shown);
++	}
++
++	private static boolean isPicture(String name)
++	{
++		String n = name.toLowerCase(java.util.Locale.ROOT);
++		for (String ext: PICTURES)
++			if (n.endsWith(ext))
++				return true;
++		return false;
++	}
++
++	// The picture before or after it in the folder, round from the last to the first
++	private void go(int step)
++	{
++		if (index < 0 || folder.length < 2)
++			return;
++		index = (index + step + folder.length) % folder.length;
++		showFile(folder[index].getPath());
++	}
++
++	@Override
++	protected void addTitleButtons(LinearLayout bar)
++	{
++		previous = button("‹", new View.OnClickListener() { public void onClick(View v) { go(-1); } });
++		next = button("›", new View.OnClickListener() { public void onClick(View v) { go(1); } });
++		addButton(bar, previous);
++		addButton(bar, next);
 +	}
 +
 +	@Override
@@ -923,6 +998,14 @@ index 000000000..07c75e812
 +				}
 +				return true;
 +			}
++			// A swipe across, not zoomed: the next picture or the one before
++			@Override
++			public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy)
++			{
++				if (!zoomed() && Math.abs(vx) > Math.abs(vy) * 2 && Math.abs(vx) > px(600))
++					go(vx < 0 ? 1 : -1);
++				return true;
++			}
 +			@Override
 +			public boolean onDoubleTap(MotionEvent e)
 +			{
@@ -990,8 +1073,12 @@ index 000000000..07c75e812
 +							return;
 +						if (result == null)
 +						{
++							// One of a folder that cannot be shown leaves the window for the others
 +							Toast.makeText(context, "Cannot show " + new File(file).getName(), Toast.LENGTH_LONG).show();
-+							close();
++							if (folder.length < 2)
++								close();
++							else
++								setPicture(null);
 +							return;
 +						}
 +						setPicture(result);
