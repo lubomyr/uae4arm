@@ -12,7 +12,7 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..d5f294d59
+index 000000000..6f9d61dc4
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
 @@ -0,0 +1,279 @@
@@ -72,9 +72,9 @@ index 000000000..d5f294d59
 +	private WebChromeClient.CustomViewCallback fullDone = null;
 +	private EditText address;
 +
-+	BrowserWindow(MainActivity context, FrameLayout parent)
++	BrowserWindow(MainActivity context, FrameLayout parent, int cascade)
 +	{
-+		super(context, parent);
++		super(context, parent, cascade);
 +	}
 +
 +	// An address, an empty one to ask for it, or with file set the path of a file; without the
@@ -297,10 +297,10 @@ index 000000000..d5f294d59
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..3d88d184e
+index 000000000..67d67cad7
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,420 @@
+@@ -0,0 +1,448 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -349,7 +349,8 @@ index 000000000..3d88d184e
 +	protected LinearLayout window = null;
 +	protected TextView title;
 +	protected int width, contentHeight; // the height when the content does not keep its own shape
-+	private boolean fullScreen = false, hidden = false;
++	private boolean fullScreen = false, hidden = false, closed = false;
++	private final int cascade; // windows open before it, for a place a step aside of theirs
 +	private LinearLayout bottom;
 +	private View corner;
 +	private boolean controlsHidden = false;
@@ -358,8 +359,14 @@ index 000000000..3d88d184e
 +
 +	FloatingWindow(MainActivity context, FrameLayout parent)
 +	{
++		this(context, parent, 0);
++	}
++
++	FloatingWindow(MainActivity context, FrameLayout parent, int cascade)
++	{
 +		this.context = context;
 +		this.parent = parent;
++		this.cascade = cascade;
 +		this.dp = context.getResources().getDisplayMetrics().density;
 +	}
 +
@@ -384,6 +391,12 @@ index 000000000..3d88d184e
 +	boolean isOpen()
 +	{
 +		return window != null;
++	}
++
++	// Opened and closed again, not to be used any more
++	boolean wasClosed()
++	{
++		return closed;
 +	}
 +
 +	// Open and not hidden behind the app's menu
@@ -431,6 +444,7 @@ index 000000000..3d88d184e
 +		onClosed();
 +		parent.removeView(window);
 +		window = null;
++		closed = true;
 +		context.floatingWindowsChanged();
 +	}
 +
@@ -514,7 +528,21 @@ index 000000000..3d88d184e
 +		width = Math.max(px(240), parent.getWidth() * 2 / 5);
 +		contentHeight = width * 3 / 4;
 +
-+		window = new LinearLayout(context);
++		// A touch anywhere on it puts it on top of the others
++		window = new LinearLayout(context)
++		{
++			@Override
++			public boolean onInterceptTouchEvent(MotionEvent e)
++			{
++				if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
++				{
++					if (parent.indexOfChild(this) != parent.getChildCount() - 1)
++						bringToFront();
++					context.floatingWindowUsed(FloatingWindow.this);
++				}
++				return false;
++			}
++		};
 +		window.setOrientation(LinearLayout.VERTICAL);
 +		window.setBackgroundColor(Color.BLACK);
 +		window.setFocusable(false);
@@ -603,8 +631,8 @@ index 000000000..3d88d184e
 +
 +		parent.addView(window, new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
 +		layout();
-+		// Bottom right at first
-+		moveTo(parent.getWidth() - width - px(16), parent.getHeight() - windowHeight() - px(16));
++		// Bottom right at first, a step up and left of it for each window open before
++		moveTo(parent.getWidth() - width - px(16) - cascade * px(32), parent.getHeight() - windowHeight() - px(16) - cascade * px(32));
 +		showControls();
 +	}
 +
@@ -722,7 +750,7 @@ index 000000000..3d88d184e
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..c4e538279 100644
+index 69c7f86c2..bde0b9d89 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -116,6 +116,7 @@ public class MainActivity extends Activity
@@ -785,14 +813,16 @@ index 69c7f86c2..c4e538279 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +709,91 @@ public class MainActivity extends Activity
+@@ -693,6 +709,119 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
 +	// A video and a web page the app shows in windows of their own over its screen, see
 +	// FloatingWindow
 +	private VideoWindow videoWindow = null;
-+	private BrowserWindow browserWindow = null;
++	// The browser's windows, the one used last at the end: a page goes to it, unless it is asked
++	// for a window of its own
++	private final java.util.ArrayList<BrowserWindow> browserWindows = new java.util.ArrayList<BrowserWindow>();
 +
 +	public void setFloatingWindowsHidden(final boolean hide)
 +	{
@@ -802,13 +832,13 @@ index 69c7f86c2..c4e538279 100644
 +			{
 +				if( videoWindow != null )
 +					videoWindow.setHidden(hide);
-+				if( browserWindow != null )
-+					browserWindow.setHidden(hide);
++				for( BrowserWindow w: new java.util.ArrayList<BrowserWindow>(browserWindows) )
++					w.setHidden(hide);
 +			}
 +		});
 +	}
 +
-+	public void openBrowser(final String what, final boolean file, final boolean showAddress)
++	public void openBrowser(final String what, final boolean file, final boolean showAddress, final boolean newWindow)
 +	{
 +		runOnUiThread(new Runnable()
 +		{
@@ -816,17 +846,36 @@ index 69c7f86c2..c4e538279 100644
 +			{
 +				if( _videoLayout == null )
 +					return;
-+				if( browserWindow == null )
-+					browserWindow = new BrowserWindow(MainActivity.this, _videoLayout);
-+				browserWindow.open(what, file, showAddress);
++				BrowserWindow w = null;
++				if( !newWindow && !browserWindows.isEmpty() )
++					w = browserWindows.get(browserWindows.size() - 1);
++				if( w == null )
++				{
++					// A step aside of each window open, not right over the last
++					w = new BrowserWindow(MainActivity.this, _videoLayout, browserWindows.size());
++					browserWindows.add(w);
++				}
++				w.open(what, file, showAddress);
 +			}
 +		});
 +	}
 +
-+	// A window over the app is to be seen: the video's or the browser's
++	// A window over the app was touched: it goes on top, and it is the one used last
++	void floatingWindowUsed(FloatingWindow w)
++	{
++		if( w instanceof BrowserWindow && browserWindows.remove(w) )
++			browserWindows.add((BrowserWindow) w);
++	}
++
++	// A window over the app is to be seen: the video's or a browser's
 +	boolean floatingWindowShown()
 +	{
-+		return (videoWindow != null && videoWindow.isShown()) || (browserWindow != null && browserWindow.isShown());
++		if( videoWindow != null && videoWindow.isShown() )
++			return true;
++		for( BrowserWindow w: browserWindows )
++			if( w.isShown() )
++				return true;
++		return false;
 +	}
 +
 +	// A real mouse reaches the windows over the app while one is seen: the app's view lets the
@@ -834,6 +883,10 @@ index 69c7f86c2..c4e538279 100644
 +	// pointer shows, as the app's own pointer is under the windows
 +	void floatingWindowsChanged()
 +	{
++		// The browser's windows closed are gone; one made and not yet open stays
++		for( int i = browserWindows.size() - 1; i >= 0; i-- )
++			if( browserWindows.get(i).wasClosed() )
++				browserWindows.remove(i);
 +		if( mGLView == null )
 +			return;
 +		boolean shown = floatingWindowShown();
@@ -846,7 +899,10 @@ index 69c7f86c2..c4e538279 100644
 +	// say: called when its screen is touched, and when such a window goes
 +	void releaseOverlayFocus()
 +	{
-+		if( (videoWindow == null || !videoWindow.hasFocus()) && (browserWindow == null || !browserWindow.hasFocus()) )
++		boolean focus = videoWindow != null && videoWindow.hasFocus();
++		for( BrowserWindow w: browserWindows )
++			focus |= w.hasFocus();
++		if( !focus )
 +			return;
 +		View focused = getCurrentFocus();
 +		if( focused != null )
@@ -877,7 +933,7 @@ index 69c7f86c2..c4e538279 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1691,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1719,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -1649,7 +1705,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..697eefb31 100644
+index f0a437bb6..eb8859890 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -1747,7 +1803,7 @@ index f0a437bb6..697eefb31 100644
 +
 +	public void openBrowser(String what, int file, int flags) // Called from native code
 +	{
-+		context.openBrowser(what, file != 0, (flags & 1) == 0); // SDL_ANDROID_BROWSER_NO_ADDRESS
++		context.openBrowser(what, file != 0, (flags & 1) == 0, (flags & 2) != 0); // SDL_ANDROID_BROWSER_NO_ADDRESS, _NEW_WINDOW
 +	}
 +
 +	public int midiOpen() // Called from native code
@@ -2509,10 +2565,10 @@ index a32209124..bdff81492 100755
          highlightColor.a = alpha;
          shadowColor = faceColor - 0x303030;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..5e1e1e879 100644
+index 14d8a4dd1..a96372a0f 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,67 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,68 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -2552,9 +2608,10 @@ index 14d8a4dd1..5e1e1e879 100644
 +extern DECLSPEC int SDLCALL SDL_ANDROID_PlayVideo(const char *path);
 +/* Shows a web page in a window over the app, like the video window: an address ("aminet.net" means
 +   https://aminet.net), an empty one to ask for it, or with file set the path of a file to show.
-+   flags: SDL_ANDROID_BROWSER_NO_ADDRESS leaves out the address field, when there is an address.
++   flags: SDL_ANDROID_BROWSER_NO_ADDRESS leaves out the address field, when there is an address;
++   SDL_ANDROID_BROWSER_NEW_WINDOW shows it in a window of its own, not in the one used last.
 +   Returns 0 if it cannot. */
-+enum { SDL_ANDROID_BROWSER_NO_ADDRESS = 1 };
++enum { SDL_ANDROID_BROWSER_NO_ADDRESS = 1, SDL_ANDROID_BROWSER_NEW_WINDOW = 2 };
 +extern DECLSPEC int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file, int flags);
 +/* Hides those windows - a video paused - while the app shows something else, its menu say, and
 +   shows them again */
@@ -2581,7 +2638,7 @@ index 14d8a4dd1..5e1e1e879 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +212,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +213,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  

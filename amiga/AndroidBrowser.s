@@ -1,8 +1,9 @@
 | AndroidBrowser - shows a web page in a window of uae4arm over the Amiga screen
 |
-| Usage: AndroidBrowser [HIDEADDRESS] [<address> | <file>]
+| Usage: AndroidBrowser [HIDEADDRESS] [NEWWINDOW] [<address> | <file>]
 | HIDEADDRESS leaves out the address field of the window, when there is an
-| address to show. An address with "://" goes as it is; a name that is a file
+| address to show. NEWWINDOW shows it in a window of its own; without it the
+| window used last shows it. An address with "://" goes as it is; a name that is a file
 | shows that file,
 | which has to be on a folder drive of uae4arm; anything else is an address
 | without its scheme, "aminet.net" for https://aminet.net. Without either the
@@ -11,7 +12,7 @@
 | the usage.
 |
 | It calls uaelib function 200: 2 with the address, 3 with a Lock of the file,
-| plus $100 for HIDEADDRESS.
+| plus $100 for HIDEADDRESS and $200 for NEWWINDOW.
 | Built like AndroidPlay - see build.sh; all code is PC relative.
 |
 | Registers kept: a2 arguments, d3 their length, a3 the name, a4 uaelib,
@@ -116,13 +117,22 @@ nameend:
 	clr.b	(%a2)
 	cmpa.l	%a3,%a2
 	beq.w	noname
-| HIDEADDRESS, before the address
+| HIDEADDRESS and NEWWINDOW, before the address
 	movea.l	%a3,%a0
 	lea	kw_hideaddress(%pc),%a1
 	bsr.w	strieq
+	bne.s	notkw_hide
+	move.l	#0x100,%d0
+	bra.s	keyword
+notkw_hide:
+	movea.l	%a3,%a0
+	lea	kw_newwindow(%pc),%a1
+	bsr.w	strieq
 	bne.s	notkeyword
+	move.l	#0x200,%d0
+keyword:
 	lea	vars(%pc),%a0
-	move.l	#0x100,12(%a0)		| flags
+	or.l	%d0,12(%a0)		| flags
 	tst.l	%d3
 	beq.w	noname
 	addq.l	#1,%a2			| past the end of the keyword
@@ -334,11 +344,13 @@ reqtitle:	.asciz	"AndroidBrowser"
 okgadget:	.asciz	"Ok"
 empty:		.byte	0
 kw_hideaddress:	.asciz	"HIDEADDRESS"
-msg_usage:	.ascii	"Usage: AndroidBrowser [HIDEADDRESS] [<address> | <file>]\n"
+kw_newwindow:	.asciz	"NEWWINDOW"
+msg_usage:	.ascii	"Usage: AndroidBrowser [HIDEADDRESS] [NEWWINDOW] [<address> | <file>]\n"
 		.ascii	"Shows a web page in a window of uae4arm over the Amiga screen:\n"
 		.ascii	"an address such as https://aminet.net or aminet.net, or a file\n"
 		.ascii	"on a folder drive. Without either the window asks for an address.\n"
-		.ascii	"HIDEADDRESS leaves out the address field of the window.\n"
+		.ascii	"HIDEADDRESS leaves out the address field of the window;\n"
+		.ascii	"NEWWINDOW shows the page in a window of its own.\n"
 		.byte	0
 msg_notuae:	.asciz	"AndroidBrowser: this runs in uae4arm only\n"
 msg_notfound:	.asciz	"AndroidBrowser: no such file\n"

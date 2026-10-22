@@ -400,15 +400,24 @@ static bool copy_piece(TrapContext *ctx, uaecptr addr, uae_u32 len)
    a video of another drive is copied: 4 starts a copy, arg = the file's name,
    5 adds arg2 bytes at arg to it, 6 plays it, 7 drops it.
    Above the low byte of what: $100 leaves out the address field of the web
-   page's window.
+   page's window, $200 shows the page in a window of its own.
    1 done, 2 not a file of a folder drive, 3 the host cannot show it - not 0,
    which is what an emulator without this gives back. */
+#if defined(ANDROIDSDL)
+static int browser_flags(int noaddress, int newwindow)
+{
+	return (noaddress ? SDL_ANDROID_BROWSER_NO_ADDRESS : 0) | (newwindow ? SDL_ANDROID_BROWSER_NEW_WINDOW : 0);
+}
+#endif
+
 static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_u32 arg2)
 {
 	TCHAR path[MAX_DPATH];
 	int noaddress = (what & 0x100) != 0;
+	int newwindow = (what & 0x200) != 0;
 
-	(void)noaddress; // only the Android window has the field
+	(void)noaddress; // only the Android window has the field, and more windows
+	(void)newwindow;
 	what &= 0xff;
 	if (what == 4) {
 		char name[MAX_DPATH];
@@ -451,7 +460,7 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_
 		url[sizeof url - 1] = 0;
 		write_log(_T("uaelib: the host shows %s\n"), url);
 #if defined(ANDROIDSDL)
-		return SDL_ANDROID_OpenBrowser(url, 0, noaddress ? SDL_ANDROID_BROWSER_NO_ADDRESS : 0) ? 1 : 3;
+		return SDL_ANDROID_OpenBrowser(url, 0, browser_flags(noaddress, newwindow)) ? 1 : 3;
 #elif defined(LINUX_HOST)
 		if (!url[0])
 			return 3;
@@ -473,7 +482,7 @@ static uae_u32 emulib_HostShow(TrapContext *ctx, uae_u32 what, uae_u32 arg, uae_
 #if defined(ANDROIDSDL)
 	if (what == 1)
 		return SDL_ANDROID_PlayVideo(path) ? 1 : 3;
-	return SDL_ANDROID_OpenBrowser(path, 1, noaddress ? SDL_ANDROID_BROWSER_NO_ADDRESS : 0) ? 1 : 3;
+	return SDL_ANDROID_OpenBrowser(path, 1, browser_flags(noaddress, newwindow)) ? 1 : 3;
 #elif defined(LINUX_HOST)
 	return host_open(path) ? 1 : 3;
 #else
