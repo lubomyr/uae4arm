@@ -354,6 +354,16 @@ void emulib_host_cleanup(void)
 #endif
 }
 
+/* The Amiga starts again - a reset, a restart, another configuration: the
+   windows its programs opened on the host close, and a copy being made goes */
+void emulib_host_reset(void)
+{
+	copy_drop();
+#if defined(ANDROIDSDL)
+	SDL_ANDROID_CloseFloatingWindows();
+#endif
+}
+
 /* Starts a copy, named for the extension of the Amiga file's name */
 static bool copy_begin(const char *name)
 {

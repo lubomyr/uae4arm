@@ -2791,6 +2791,8 @@ void m68k_go (int may_quit)
 			if (quit_program == UAE_QUIT)
     		break;
 
+			/* What the Amiga's programs showed in windows of the host goes with them */
+			emulib_host_reset ();
 			hsync_counter = 0;
 	    quit_program = 0;
 	    hardboot = 0;
