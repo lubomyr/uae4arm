@@ -32,16 +32,37 @@ static TCHAR *nname_begin (TCHAR *nname)
 /* The Amiga name of a file of the host whose own name does not do: longer than the Amiga takes,
  * or with characters its set lacks. The start of the name, a mark of all of it and its
  * extension, as "Some long name~3F2A.mp4": the same for the same name, so that the file is
- * found by it again. False if the name does. */
+ * found by it again. An icon goes with its file: "Some long name~3F2A.mp4.info". A name is
+ * kept 5 characters short of the longest the Amiga takes, so that one with ".info" added fits
+ * as well - for Workbench, which looks for the icon so - and programs that hold one character
+ * less than the longest, Directory Opus 4 say, have it whole. False if the name does. */
 bool fsdb_alias_aname (const TCHAR *nrel, TCHAR *alias, int size)
 {
 	int max = abs (currprefs.filesys_max_name);
 	if (max > 107)
 		max = 107;
+	int limit = max - 5;
+
+	/* An icon: as its file, with ".info" added */
+	int nlen = _tcslen (nrel);
+	if (nlen > 5 && strcasecmp (nrel + nlen - 5, ".info") == 0) {
+		TCHAR base[MAX_DPATH];
+		if (nlen - 5 >= MAX_DPATH)
+			return false;
+		memcpy (base, nrel, (nlen - 5) * sizeof (TCHAR));
+		base[nlen - 5] = 0;
+		TCHAR balias[MAX_DPATH];
+		if (!fsdb_alias_aname (base, balias, MAX_DPATH))
+			return false;
+		snprintf (alias, size, "%s%s", balias, nrel + nlen - 5);
+		alias[size - 1] = 0;
+		return true;
+	}
+
 	char *a = ua_fs (nrel, '_');
 	TCHAR *back = au_fs (a);
 	int len = strlen (a);
-	bool fits = _tcscmp (back, nrel) == 0 && len <= max && !strchr (a, ':') && !strchr (a, '/');
+	bool fits = _tcscmp (back, nrel) == 0 && len <= limit && !strchr (a, ':') && !strchr (a, '/');
 	xfree (back);
 	if (fits) {
 		xfree (a);
@@ -60,8 +81,8 @@ bool fsdb_alias_aname (const TCHAR *nrel, TCHAR *alias, int size)
 	char tail[32];
 	snprintf (tail, sizeof tail, "~%04X%s", (h ^ (h >> 16)) & 0xffff, dot);
 	int keep = dot - a;
-	if (keep > max - (int)strlen (tail))
-		keep = max - (int)strlen (tail);
+	if (keep > limit - (int)strlen (tail))
+		keep = limit - (int)strlen (tail);
 	if (keep < 0)
 		keep = 0;
 	char amiga[MAX_DPATH];

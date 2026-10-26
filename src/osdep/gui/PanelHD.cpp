@@ -66,6 +66,11 @@ static gcn::Label* lblNames;
 static gcn::UaeDropDown* cboNames;
 static const char *namesLabels[] = { "Latin-1", "Cyrillic (1251)" };
 static gcn::GenericListModel namesList(namesLabels, 2);
+// and how long they may be: as long as the Amiga takes, or as FFS takes, for older software
+static gcn::Label* lblNameLength;
+static gcn::UaeDropDown* cboNameLength;
+static const char *nameLengthLabels[] = { "Long (107)", "Short (30)" };
+static gcn::GenericListModel nameLengthList(nameLengthLabels, 2);
 static gcn::UaeCheckBox* chkScsi;
 static gcn::UaeCheckBox* chkCD;
 static gcn::UaeCheckBox* chkCDAutomount;
@@ -187,6 +192,7 @@ static void RefreshPanelHD(void)
     workprefs.scsi = 1;
   chkScsi->setSelected(workprefs.scsi);
   cboNames->setSelected(workprefs.filesys_charset);
+  cboNameLength->setSelected(abs(workprefs.filesys_max_name) <= 30 ? 1 : 0);
   chkScsi->setEnabled(!scsi_for_cd);
   
   chkCD->setSelected(workprefs.cdslots[0].inuse);
@@ -324,6 +330,8 @@ class AddHDActionListener : public gcn::ActionListener
 
       } else if(actionEvent.getSource() == cboNames) {
         workprefs.filesys_charset = cboNames->getSelected();
+      } else if(actionEvent.getSource() == cboNameLength) {
+        workprefs.filesys_max_name = cboNameLength->getSelected() ? 30 : 107;
       } else if(actionEvent.getSource() == chkHDReadOnly) {
         workprefs.harddrive_read_only = chkHDReadOnly->isSelected();
 
@@ -481,6 +489,12 @@ void InitPanelHD(const struct _ConfigCategory& category)
   cboNames->setBaseColor(gui_baseCol);
   cboNames->setId("FileNames");
   cboNames->addActionListener(addHDActionListener);
+  lblNameLength = new gcn::Label("Length:");
+  cboNameLength = new gcn::UaeDropDown(&nameLengthList);
+  cboNameLength->setSize(110, DROPDOWN_HEIGHT);
+  cboNameLength->setBaseColor(gui_baseCol);
+  cboNameLength->setId("FileNameLength");
+  cboNameLength->addActionListener(addHDActionListener);
 
 	lblCDVol = new gcn::Label("CD Volume:");
 #ifdef ANDROID
@@ -547,6 +561,8 @@ void InitPanelHD(const struct _ConfigCategory& category)
 
   category.panel->add(lblNames, DISTANCE_BORDER, posY + 2);
   category.panel->add(cboNames, DISTANCE_BORDER + lblNames->getWidth() + 8, posY);
+  category.panel->add(lblNameLength, cboNames->getX() + cboNames->getWidth() + 16, posY + 2);
+  category.panel->add(cboNameLength, lblNameLength->getX() + lblNameLength->getWidth() + 8, posY);
   posY += cboNames->getHeight() + DISTANCE_NEXT_Y;
   
   RefreshPanelHD();
@@ -577,6 +593,8 @@ void ExitPanelHD(const struct _ConfigCategory& category)
   delete chkScsi;
   delete lblNames;
   delete cboNames;
+  delete lblNameLength;
+  delete cboNameLength;
   
   delete chkCD;
   delete chkCDAutomount;
@@ -608,7 +626,9 @@ bool HelpPanelHD(std::vector<std::string> &helptext)
   helptext.push_back(" ");
   helptext.push_back("\"Folder file names\" is the character set the Amiga gets the names of the files of folders in: Latin-1, its own,");
   helptext.push_back("or Cyrillic (1251), for Cyrillic names with fonts of Windows-1251 on the Amiga. A name longer than the Amiga takes,");
-  helptext.push_back("or with characters the set lacks, gets a shortened one, as \"Some long name~3F2A.mp4\". It needs a reset.");
+  helptext.push_back("or with characters the set lacks, gets a shortened one, as \"Some long name~3F2A.mp4\", and its icon one to go");
+  helptext.push_back("with it. \"Length\": \"Long (107)\" is as long as the Amiga takes; \"Short (30)\" as FFS takes, for Workbench 3.1, Directory Opus 4");
+  helptext.push_back("and other older software that holds no longer names. They need a reset.");
   helptext.push_back(" ");
   helptext.push_back("Activate \"CD drive\" to emulate CD for CD32. Use \"Eject\" to remove current CD and click on \"...\" to open a dialog");
   helptext.push_back("to select the iso/cue file for CD emulation.");
