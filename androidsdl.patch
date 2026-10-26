@@ -3557,6 +3557,72 @@ index 30df36343..9e0cd12f3 100644
  void SDLCALL SDL_ANDROID_SetCapturedMousePosition(int x, int y)
  {
  	JNIEnv *JavaEnv = GetJavaEnv();
+diff --git a/project/jni/sdl-1.2/src/video/android/SDL_touchscreenkeyboard.c b/project/jni/sdl-1.2/src/video/android/SDL_touchscreenkeyboard.c
+index 34787ac17..79dfc3a75 100644
+--- a/project/jni/sdl-1.2/src/video/android/SDL_touchscreenkeyboard.c
++++ b/project/jni/sdl-1.2/src/video/android/SDL_touchscreenkeyboard.c
+@@ -1210,7 +1210,12 @@ JAVA_EXPORT_NAME(Settings_nativeSetScreenKbKeyUsed) (JNIEnv*  env, jobject thiz,
+ }
+ 
+ 
+-int SDL_ANDROID_SetScreenKeyboardButtonPos(int buttonId, SDL_Rect * pos)
++/* A floating joystick is as big as it is drawn, not as the area of a fixed
++   one (see the end of the screen keyboard init). A position given by the app
++   or the user is the area of a fixed joystick and is shrunk the same way;
++   one that is only being moved, hidden or shown again is already the right
++   size and is kept as it is, or it would shrink each time. */
++static int setScreenKeyboardButtonPos(int buttonId, SDL_Rect * pos, int newFloatingSize)
+ {
+ 	if( buttonId < 0 || buttonId >= SDL_ANDROID_SCREENKEYBOARD_BUTTON_NUM || ! pos )
+ 		return 0;
+@@ -1224,6 +1229,13 @@ int SDL_ANDROID_SetScreenKeyboardButtonPos(int buttonId, SDL_Rect * pos)
+ 		arrowsExtended[i].x = arrows[i].x + arrows[i].w / 2 - arrowsExtended[i].w / 2;
+ 		arrowsExtended[i].y = arrows[i].y + arrows[i].h / 2 - arrowsExtended[i].h / 2;
+ 		shrinkButtonRect(arrows[i], &arrowsDraw[i]);
++		if( floatingScreenJoystick && i == 0 )
++		{
++			if( newFloatingSize )
++				arrowsExtended[0] = arrows[0] = arrowsDraw[0];
++			else
++				arrowsDraw[0] = arrowsExtended[0] = arrows[0];
++		}
+ 	}
+ 	else
+ 	{
+@@ -1234,6 +1246,11 @@ int SDL_ANDROID_SetScreenKeyboardButtonPos(int buttonId, SDL_Rect * pos)
+ 	return 1;
+ };
+ 
++int SDL_ANDROID_SetScreenKeyboardButtonPos(int buttonId, SDL_Rect * pos)
++{
++	return setScreenKeyboardButtonPos(buttonId, pos, 1);
++};
++
+ int SDLCALL SDL_ANDROID_SetScreenKeyboardButtonImagePos(int buttonId, SDL_Rect * pos)
+ {
+ 	if( buttonId < 0 || buttonId >= SDL_ANDROID_SCREENKEYBOARD_BUTTON_NUM || ! pos )
+@@ -1306,10 +1323,10 @@ int SDL_ANDROID_SetScreenKeyboardButtonShown(int buttonId, int shown)
+ 	{
+ 		SDL_Rect pos = { 0, 0, 0, 0 };
+ 		SDL_ANDROID_GetScreenKeyboardButtonPos(buttonId, &hiddenButtons[buttonId]);
+-		SDL_ANDROID_SetScreenKeyboardButtonPos(buttonId, &pos);
++		setScreenKeyboardButtonPos(buttonId, &pos, 0);
+ 	}
+ 	if( shown && !SDL_ANDROID_GetScreenKeyboardButtonShown(buttonId) )
+-		SDL_ANDROID_SetScreenKeyboardButtonPos(buttonId, &hiddenButtons[buttonId]);
++		setScreenKeyboardButtonPos(buttonId, &hiddenButtons[buttonId], 0);
+ 	return 1;
+ };
+ 
+@@ -1483,7 +1500,7 @@ extern DECLSPEC int SDL_ANDROID_ScreenKeyboardUpdateToNewVideoMode(int oldx, int
+ 		pos2.y = pos.y * newy / oldy;
+ 		pos2.w = (pos.x + pos.w) * newx / oldx - pos2.x;
+ 		pos2.h = (pos.y + pos.h) * newy / oldy - pos2.y;
+-		SDL_ANDROID_SetScreenKeyboardButtonPos(i, &pos2);
++		setScreenKeyboardButtonPos(i, &pos2, 0);
+ 	}
+ 	return 0;
+ }
 diff --git a/project/jni/sdl-1.2/src/video/android/keymap.c b/project/jni/sdl-1.2/src/video/android/keymap.c
 index 400c01b8a..f41e34d67 100644
 --- a/project/jni/sdl-1.2/src/video/android/keymap.c
