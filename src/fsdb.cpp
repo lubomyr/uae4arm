@@ -33,14 +33,15 @@ static TCHAR *nname_begin (TCHAR *nname)
  * or with characters its set lacks. The start of the name, a mark of all of it and its
  * extension, as "Some long name~3F2A.mp4": the same for the same name, so that the file is
  * found by it again. An icon goes with its file: "Some long name~3F2A.mp4.info". A name is
- * kept 5 characters short of the longest the Amiga takes, so that one with ".info" added fits
- * as well - for Workbench, which looks for the icon so - and programs that hold one character
- * less than the longest, Directory Opus 4 say, have it whole. False if the name does. */
+ * kept 5 characters short of the longest, so that one with ".info" added fits as well - for
+ * Workbench, which looks for the icon so. The longest is one less than the Amiga takes: the
+ * programs that hold a name with its end in 107 bytes, Directory Opus 4.16 say, cut one of 107.
+ * False if the name does. */
 bool fsdb_alias_aname (const TCHAR *nrel, TCHAR *alias, int size)
 {
 	int max = abs (currprefs.filesys_max_name);
-	if (max > 107)
-		max = 107;
+	if (max > 106)
+		max = 106;
 	int limit = max - 5;
 
 	/* An icon: as its file, with ".info" added */
