@@ -415,8 +415,13 @@ static bool copy_piece(TrapContext *ctx, uaecptr addr, uae_u32 len)
    1 done, 2 not a file of a folder drive, 3 the host cannot show it - not 0,
    which is what an emulator without this gives back. */
 #if defined(ANDROIDSDL)
+/* The flags of the browser window; and where it saves the files of web
+   pages, as the menu has it now (Paths -> Browser downloads) */
 static int browser_flags(int noaddress, int newwindow)
 {
+	char dir[MAX_DPATH];
+	fetch_downloadpath(dir, sizeof dir);
+	SDL_ANDROID_SetBrowserDownloadDir(dir);
 	return (noaddress ? SDL_ANDROID_BROWSER_NO_ADDRESS : 0) | (newwindow ? SDL_ANDROID_BROWSER_NEW_WINDOW : 0);
 }
 #endif

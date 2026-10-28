@@ -96,6 +96,8 @@ extern void set_rompath(char *newpath);
 extern void fetch_rp9path (char *out, int size);
 extern void fetch_savestatepath(char *out, int size);
 extern void set_savestatepath(char *newpath);
+extern void fetch_downloadpath(char *out, int size);
+extern void set_downloadpath(char *newpath);
 extern void fetch_screenshotpath(char *out, int size);
 
 extern void extractFileName(const char * str,char *buffer);

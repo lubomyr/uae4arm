@@ -28,6 +28,9 @@ static gcn::Button *cmdConfigPath;
 static gcn::Label *lblSavestatePath;
 static gcn::TextField *txtSavestatePath;
 static gcn::Button *cmdSavestatePath;
+static gcn::Label *lblDownloadPath;
+static gcn::TextField *txtDownloadPath;
+static gcn::Button *cmdDownloadPath;
 static gcn::Button *cmdRescanROMs;
 
 
@@ -43,6 +46,9 @@ static void RefreshPanelPaths(void)
 
   fetch_savestatepath(tmp, MAX_PATH);
   txtSavestatePath->setText(tmp);
+
+  fetch_downloadpath(tmp, MAX_PATH);
+  txtDownloadPath->setText(tmp);
 }
 
 
@@ -79,6 +85,15 @@ class PathsActionListener : public gcn::ActionListener
           RefreshPanelPaths();
         }
         cmdSavestatePath->requestFocus();
+
+      } else if(actionEvent.getSource() == cmdDownloadPath) {
+        fetch_downloadpath(tmp, MAX_PATH);
+        if(SelectFolder("Folder for browser downloads", tmp))
+        {
+          set_downloadpath(tmp);
+          RefreshPanelPaths();
+        }
+        cmdDownloadPath->requestFocus();
 
       } else if(actionEvent.getSource() == cmdRescanROMs) {
         RescanROMs();
@@ -128,6 +143,17 @@ void InitPanelPaths(const struct _ConfigCategory& category)
   cmdSavestatePath->setBaseColor(gui_baseCol);
   cmdSavestatePath->addActionListener(pathsActionListener);
 
+  lblDownloadPath = new gcn::Label("Browser downloads:");
+  lblDownloadPath->setSize(150, LABEL_HEIGHT);
+  txtDownloadPath = new gcn::TextField();
+  txtDownloadPath->setSize(textFieldWidth, TEXTFIELD_HEIGHT);
+  txtDownloadPath->setEnabled(false);
+  cmdDownloadPath = new gcn::Button("...");
+  cmdDownloadPath->setId("DownloadPath");
+  cmdDownloadPath->setSize(SMALL_BUTTON_WIDTH, SMALL_BUTTON_HEIGHT);
+  cmdDownloadPath->setBaseColor(gui_baseCol);
+  cmdDownloadPath->addActionListener(pathsActionListener);
+
   category.panel->add(lblSystemROMs, DISTANCE_BORDER, yPos);
   yPos += lblSystemROMs->getHeight();
   category.panel->add(txtSystemROMs, DISTANCE_BORDER, yPos);
@@ -145,6 +171,12 @@ void InitPanelPaths(const struct _ConfigCategory& category)
   category.panel->add(txtSavestatePath, DISTANCE_BORDER, yPos);
   category.panel->add(cmdSavestatePath, DISTANCE_BORDER + textFieldWidth + DISTANCE_NEXT_X, yPos);
   yPos += txtSavestatePath->getHeight() + DISTANCE_NEXT_Y;
+
+  category.panel->add(lblDownloadPath, DISTANCE_BORDER, yPos);
+  yPos += lblDownloadPath->getHeight();
+  category.panel->add(txtDownloadPath, DISTANCE_BORDER, yPos);
+  category.panel->add(cmdDownloadPath, DISTANCE_BORDER + textFieldWidth + DISTANCE_NEXT_X, yPos);
+  yPos += txtDownloadPath->getHeight() + DISTANCE_NEXT_Y;
 
   cmdRescanROMs = new gcn::Button("Rescan ROMs");
   cmdRescanROMs->setSize(120, BUTTON_HEIGHT);
@@ -173,6 +205,10 @@ void ExitPanelPaths(const struct _ConfigCategory& category)
   delete lblSavestatePath;
   delete txtSavestatePath;
   delete cmdSavestatePath;
+
+  delete lblDownloadPath;
+  delete txtDownloadPath;
+  delete cmdDownloadPath;
   
   delete cmdRescanROMs;
 
@@ -186,6 +222,9 @@ bool HelpPanelPaths(std::vector<std::string> &helptext)
   helptext.push_back("Specify the location of your kickstart roms and the folders where the configuration files and the");
   helptext.push_back("savestates should be stored.");
   helptext.push_back("Use the \"...\" button to open a dialog to choose the folder.");
+  helptext.push_back(" ");
+  helptext.push_back("\"Browser downloads\" is where the browser window (AndroidBrowser) saves the files of web pages, Android's Download");
+  helptext.push_back("folder at first. Choose a folder of a folder drive, and the Amiga has them at once.");
   helptext.push_back(" ");
   helptext.push_back("After changing the location of the kickstart roms, click on \"Rescan ROMS\" to refresh the list of the available");
   helptext.push_back("ROMs.");

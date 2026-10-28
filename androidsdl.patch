@@ -12,10 +12,10 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..6f9d61dc4
+index 000000000..32e9dcc70
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,395 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a browser window over the app for the Android port
@@ -65,6 +65,9 @@ index 000000000..6f9d61dc4
 +class BrowserWindow extends FloatingWindow
 +{
 +	private WebView web;
++	// Where the files of web pages are saved, as the app's menu has it; Android's Download folder
++	// if it has none
++	static volatile String downloadDir = null;
 +	// What a page shows "full screen", such as the video of YouTube: in place of the page, in the
 +	// window as large as it is - the button of the title bar makes that the whole screen
 +	private FrameLayout area;
@@ -230,6 +233,14 @@ index 000000000..6f9d61dc4
 +		// Pages start their videos a moment after the tap, once they fetched something - YouTube
 +		// does - which WebView no longer counts as the user's and stops
 +		s.setMediaPlaybackRequiresUserGesture(false);
++		// A link to a file: saved in the folder, not shown
++		web.setDownloadListener(new android.webkit.DownloadListener()
++		{
++			public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long length)
++			{
++				download(url, userAgent, contentDisposition, mimeType);
++			}
++		});
 +		web.setWebViewClient(new WebViewClient()
 +		{
 +			// Pages open here; other schemes, such as mailto: or market:, go to their apps
@@ -293,6 +304,111 @@ index 000000000..6f9d61dc4
 +		area.setBackgroundColor(android.graphics.Color.BLACK);
 +		area.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 +		return area;
++	}
++
++	// The name of a file of a web page: the one the server gives, else the end of its address
++	private static String fileName(String url, String contentDisposition, String mimeType)
++	{
++		if (contentDisposition != null)
++		{
++			java.util.regex.Matcher m = java.util.regex.Pattern.compile("filename\\*?=(?:UTF-8'')?\"?([^\";]+)\"?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(contentDisposition);
++			if (m.find())
++			{
++				try
++				{
++					return new File(Uri.decode(m.group(1).trim())).getName();
++				}
++				catch (Exception e)
++				{
++				}
++			}
++		}
++		String last = Uri.parse(url).getLastPathSegment();
++		if (last != null && last.length() > 0)
++			return new File(last).getName();
++		return android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType);
++	}
++
++	// Not over a file there: "name (2).lha"
++	private static File freeName(File dir, String name)
++	{
++		File f = new File(dir, name);
++		int dot = name.lastIndexOf('.');
++		String base = dot > 0 ? name.substring(0, dot) : name, ext = dot > 0 ? name.substring(dot) : "";
++		for (int i = 2; f.exists(); i++)
++			f = new File(dir, base + " (" + i + ")" + ext);
++		return f;
++	}
++
++	// Aside, with the page's cookies, into a file that gets its name when it is whole
++	private void download(final String url, final String userAgent, final String contentDisposition, final String mimeType)
++	{
++		if (!url.startsWith("http:") && !url.startsWith("https:"))
++		{
++			android.widget.Toast.makeText(context, "Cannot save this link", android.widget.Toast.LENGTH_LONG).show();
++			return;
++		}
++		String dirName = downloadDir;
++		final File dir = dirName != null && dirName.length() > 0 ? new File(dirName) :
++			android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
++		final String name = fileName(url, contentDisposition, mimeType);
++		final String cookies = android.webkit.CookieManager.getInstance().getCookie(url);
++		android.widget.Toast.makeText(context, "Downloading " + name, android.widget.Toast.LENGTH_SHORT).show();
++		new Thread(new Runnable()
++		{
++			public void run()
++			{
++				String result;
++				File part = null;
++				try
++				{
++					dir.mkdirs();
++					java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
++					c.setInstanceFollowRedirects(true);
++					if (userAgent != null)
++						c.setRequestProperty("User-Agent", userAgent);
++					if (cookies != null)
++						c.setRequestProperty("Cookie", cookies);
++					if (c.getResponseCode() >= 400)
++						throw new java.io.IOException("HTTP " + c.getResponseCode());
++					part = new File(dir, "." + name + ".part");
++					java.io.InputStream in = c.getInputStream();
++					java.io.OutputStream out = new java.io.FileOutputStream(part);
++					try
++					{
++						byte[] buf = new byte[65536];
++						int n;
++						while ((n = in.read(buf)) > 0)
++							out.write(buf, 0, n);
++					}
++					finally
++					{
++						out.close();
++						in.close();
++						c.disconnect();
++					}
++					File done = freeName(dir, name);
++					if (!part.renameTo(done))
++						throw new java.io.IOException("cannot name it " + done.getName());
++					result = "Saved " + done.getName() + " in " + dir.getPath();
++				}
++				catch (Exception e)
++				{
++					android.util.Log.i("SDL", "BrowserWindow: cannot download " + url + ": " + e);
++					if (part != null)
++						part.delete();
++					result = "Cannot download " + name + ": " + e.getMessage();
++				}
++				final String message = result;
++				context.runOnUiThread(new Runnable()
++				{
++					public void run()
++					{
++						android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show();
++					}
++				});
++			}
++		}, "Download").start();
 +	}
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
@@ -1196,7 +1312,7 @@ index 000000000..b4542c32d
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..35ff75046 100644
+index 69c7f86c2..e70603a12 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -116,6 +116,7 @@ public class MainActivity extends Activity
@@ -1415,7 +1531,25 @@ index 69c7f86c2..35ff75046 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -1590,6 +1755,21 @@ public class MainActivity extends Activity
+@@ -786,12 +951,14 @@ public class MainActivity extends Activity
+ 							}
+ 							public boolean dispatchTouchEvent(final MotionEvent ev)
+ 							{
+-								if( ev.getY() < getTop() )
+-									return false;
++								// A touch dispatched to this view has its coordinates in this view
++								// already. Taking getTop() off once more sent the rows below
++								// getTop() to the rows getTop() above them, and the rows above it
++								// only worked because they fell through to DemoGLSurfaceView.
+ 								if( ev.getAction() == MotionEvent.ACTION_DOWN || ev.getAction() == MotionEvent.ACTION_UP || ev.getAction() == MotionEvent.ACTION_MOVE )
+ 								{
+ 									// Convert pointer coords, this will lose multitiouch data, however KeyboardView does not support multitouch anyway
+-									MotionEvent converted = MotionEvent.obtain(ev.getDownTime(), ev.getEventTime(), ev.getAction(), ev.getX(), ev.getY() - (float)getTop(), ev.getMetaState());
++									MotionEvent converted = MotionEvent.obtain(ev.getDownTime(), ev.getEventTime(), ev.getAction(), ev.getX(), ev.getY(), ev.getMetaState());
+ 									return super.dispatchTouchEvent(converted);
+ 								}
+ 								return false;
+@@ -1590,6 +1757,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -2187,7 +2321,7 @@ index c99131b2a..f8c87722b 100644
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..c7a4a1075 100644
+index f0a437bb6..ba5c7ac84 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -2264,7 +2398,7 @@ index f0a437bb6..c7a4a1075 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +998,62 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +998,67 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -2291,6 +2425,11 @@ index f0a437bb6..c7a4a1075 100644
 +	public void setFloatingWindowsHidden(int hide) // Called from native code
 +	{
 +		context.setFloatingWindowsHidden(hide != 0);
++	}
++
++	public void setBrowserDownloadDir(String path) // Called from native code
++	{
++		BrowserWindow.downloadDir = path;
 +	}
 +
 +	public void openBrowser(String what, int file, int flags) // Called from native code
@@ -2327,7 +2466,7 @@ index f0a437bb6..c7a4a1075 100644
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1072,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1077,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -2335,7 +2474,7 @@ index f0a437bb6..c7a4a1075 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1083,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1088,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -2343,7 +2482,7 @@ index f0a437bb6..c7a4a1075 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1104,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1109,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -2354,7 +2493,7 @@ index f0a437bb6..c7a4a1075 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1122,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1127,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -2372,7 +2511,7 @@ index f0a437bb6..c7a4a1075 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1137,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1142,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -2385,7 +2524,7 @@ index f0a437bb6..c7a4a1075 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1163,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1168,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -2398,7 +2537,7 @@ index f0a437bb6..c7a4a1075 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1176,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1181,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -2410,7 +2549,7 @@ index f0a437bb6..c7a4a1075 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1106,6 +1219,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1106,6 +1224,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	@Override
  	public boolean onTouchEvent(final MotionEvent event)
  	{
@@ -2419,7 +2558,7 @@ index f0a437bb6..c7a4a1075 100644
  		if( mParent.keyboardWithoutTextInputShown && mParent._screenKeyboard != null &&
  			mParent._screenKeyboard.getY() <= event.getY() )
  		{
-@@ -1122,9 +1237,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1242,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -2459,7 +2598,7 @@ index f0a437bb6..c7a4a1075 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1292,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1297,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -2467,7 +2606,7 @@ index f0a437bb6..c7a4a1075 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1311,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1316,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -2475,7 +2614,7 @@ index f0a437bb6..c7a4a1075 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
-@@ -1210,12 +1357,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1210,12 +1362,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  			setFocusableInTouchMode(true);
  			setFocusable(true);
  			requestFocus();
@@ -3032,10 +3171,10 @@ index a32209124..bdff81492 100755
          highlightColor.a = alpha;
          shadowColor = faceColor - 0x303030;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..8504ece36 100644
+index 14d8a4dd1..8b0b4e095 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,74 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,76 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -3083,6 +3222,8 @@ index 14d8a4dd1..8504ece36 100644
 +   Returns 0 if it cannot. */
 +enum { SDL_ANDROID_BROWSER_NO_ADDRESS = 1, SDL_ANDROID_BROWSER_NEW_WINDOW = 2 };
 +extern DECLSPEC int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file, int flags);
++/* The folder the browser window saves the files of web pages in */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetBrowserDownloadDir(const char *path);
 +/* Hides those windows - a video paused - while the app shows something else, its menu say, and
 +   shows them again */
 +extern DECLSPEC void SDLCALL SDL_ANDROID_SetFloatingWindowsHidden(int hide);
@@ -3111,7 +3252,7 @@ index 14d8a4dd1..8504ece36 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +219,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +221,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -3291,7 +3432,7 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..9e0cd12f3 100644
+index 30df36343..e4ee13d44 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -3302,7 +3443,7 @@ index 30df36343..9e0cd12f3 100644
  
  #include "SDL_opengles.h"
  
-@@ -121,7 +122,18 @@ static jmethodID JavaRequestCloudLoad = NULL;
+@@ -121,7 +122,19 @@ static jmethodID JavaRequestCloudLoad = NULL;
  static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
@@ -3313,6 +3454,7 @@ index 30df36343..9e0cd12f3 100644
 +static jmethodID JavaSetFloatingWindowsHidden = NULL;
 +static jmethodID JavaCloseFloatingWindows = NULL;
 +static jmethodID JavaOpenBrowser = NULL;
++static jmethodID JavaSetBrowserDownloadDir = NULL;
 +static jmethodID JavaMidiClose = NULL;
 +static jmethodID JavaMidiSend = NULL;
 +static jmethodID JavaMidiDeviceName = NULL;
@@ -3321,7 +3463,7 @@ index 30df36343..9e0cd12f3 100644
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -428,7 +440,18 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +441,19 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
  	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
@@ -3332,6 +3474,7 @@ index 30df36343..9e0cd12f3 100644
 +	JavaSetFloatingWindowsHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setFloatingWindowsHidden", "(I)V");
 +	JavaCloseFloatingWindows = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "closeFloatingWindows", "()V");
 +	JavaOpenBrowser = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openBrowser", "(Ljava/lang/String;II)V");
++	JavaSetBrowserDownloadDir = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setBrowserDownloadDir", "(Ljava/lang/String;)V");
 +	JavaMidiClose = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiClose", "()V");
 +	JavaMidiSend = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiSend", "([BI)V");
 +	JavaMidiDeviceName = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "midiDeviceName", "(I)Ljava/lang/String;");
@@ -3340,7 +3483,7 @@ index 30df36343..9e0cd12f3 100644
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +709,201 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +711,212 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
@@ -3425,6 +3568,17 @@ index 30df36343..9e0cd12f3 100644
 +	if( !JavaEnv || !JavaRenderer || !JavaSetFloatingWindowsHidden )
 +		return;
 +	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetFloatingWindowsHidden, (jint) hide );
++}
++
++void SDLCALL SDL_ANDROID_SetBrowserDownloadDir(const char *path)
++{
++	JNIEnv *JavaEnv = GetJavaEnvAttached();
++	jstring s;
++	if( !JavaEnv || !JavaRenderer || !JavaSetBrowserDownloadDir || !path )
++		return;
++	s = (*JavaEnv)->NewStringUTF(JavaEnv, path);
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetBrowserDownloadDir, s );
++	(*JavaEnv)->DeleteLocalRef( JavaEnv, s );
 +}
 +
 +int SDLCALL SDL_ANDROID_OpenBrowser(const char *what, int file, int flags)
@@ -3542,7 +3696,7 @@ index 30df36343..9e0cd12f3 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +915,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +928,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  

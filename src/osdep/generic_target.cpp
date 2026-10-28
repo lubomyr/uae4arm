@@ -91,6 +91,8 @@ static char config_path[MAX_DPATH];
 static char rom_path[MAX_DPATH];
 static char rp9_path[MAX_DPATH];
 static char savestate_path[MAX_DPATH];
+// Where the browser window saves the files of web pages: Android's Download folder at first
+static char download_path[MAX_DPATH];
 char last_loaded_config[MAX_DPATH] = { '\0' };
 
 int max_uae_width;
@@ -357,6 +359,20 @@ void set_savestatepath(char *newpath)
 }
 
 
+void fetch_downloadpath(char *out, int size)
+{
+  strncpy(out, download_path, size - 1);
+  out[size - 1] = '\0';
+}
+
+
+void set_downloadpath(char *newpath)
+{
+  strncpy(download_path, newpath, MAX_DPATH - 1);
+  download_path[MAX_DPATH - 1] = '\0';
+}
+
+
 void fetch_screenshotpath(char *out, int size)
 {
   strncpy(out, start_path_data, size - 1);
@@ -553,6 +569,8 @@ void saveAdfDir(void)
 
 	snprintf(buffer, MAX_DPATH - 1, "savestate_path=%s\n", savestate_path);
 	fputs(buffer, f);
+	snprintf(buffer, MAX_DPATH - 1, "download_path=%s\n", download_path);
+	fputs(buffer, f);
 
   snprintf(buffer, MAX_DPATH - 1, "ROMs=%d\n", lstAvailableROMs.size());
   fputs(buffer, f);
@@ -682,6 +700,12 @@ void loadAdfDir(void)
 #endif
 	snprintf(rp9_path, MAX_DPATH - 1, "%s/rp9/", start_path_data);
 	snprintf(savestate_path, MAX_DPATH - 1, "%s/savestates/", start_path_data);
+	if (getenv("SDCARD_DOWNLOADS"))
+		snprintf(download_path, MAX_DPATH - 1, "%s/", getenv("SDCARD_DOWNLOADS"));
+	else if (getenv("HOME"))
+		snprintf(download_path, MAX_DPATH - 1, "%s/Downloads/", getenv("HOME"));
+	else
+		snprintf(download_path, MAX_DPATH - 1, "%s/downloads/", start_path_data);
 
 #ifdef ANDROID
 	char def_config[MAX_DPATH], def_rom[MAX_DPATH], def_savestate[MAX_DPATH];
@@ -738,6 +762,7 @@ void loadAdfDir(void)
           cfgfile_string(option, value, "config_path", config_path, sizeof(config_path));
           cfgfile_string(option, value, "rom_path", rom_path, sizeof(rom_path));
           cfgfile_string(option, value, "savestate_path", savestate_path, sizeof(savestate_path));
+          cfgfile_string(option, value, "download_path", download_path, sizeof(download_path));
           cfgfile_intval(option, value, "ROMs", &numROMs, 1);
           cfgfile_intval(option, value, "MRUDiskList", &numDisks, 1);
           cfgfile_intval(option, value, "MRUCDList", &numCDs, 1);
