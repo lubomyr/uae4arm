@@ -41,7 +41,7 @@
 #include "picasso96.h"
 #include "driveclick.h"
 #include "fsdb.h"
-#if defined(WITH_UAENATIVE) && !defined(ANDROIDSDL)
+#ifdef WITH_UAENATIVE
 #include <dlfcn.h>
 #include <EGL/egl.h>
 #endif
@@ -388,34 +388,59 @@ void *uaenative_get_uaevar(void)
 }
 
 /* A host library such as QuarkTex NG leaves its OpenGL context current in
-   this thread from one call to the next. While one is current, the NVIDIA
-   driver keeps the window from showing anything SDL_Flip() puts there: it
-   stays on the last picture from before, and so does the menu. QuarkTex
-   checks for its context on every call and makes it current again itself.
-   libEGL is looked up only once such a library has loaded it. On Android
-   the context current here is the one SDL draws with, so it stays. */
-void uaenative_release_host_context(void)
+   this thread from one call to the next, and QuarkTex makes it current again
+   itself whenever it finds another one there. Before the emulator draws its
+   screen or menu, the thread gets back the context it had before that: on
+   the PC none - while one is current, the NVIDIA driver keeps the window
+   from showing anything SDL_Flip() puts there - and on Android the one SDL
+   draws with. That one is noted while no host library is being called, as
+   SDL may make a new one. libEGL is looked up once a library has loaded it
+   (on Android, SDL has). */
+bool uaenative_host_called;
+
+void uaenative_restore_own_context(void)
 {
-#ifndef ANDROIDSDL
-  static EGLContext (*get_context)(void);
-  static EGLBoolean (*make_current)(EGLDisplay, EGLSurface, EGLSurface, EGLContext);
+#ifdef ANDROIDSDL
+  static const char egl_name[] = "libEGL.so";
+#else
+  static const char egl_name[] = "libEGL.so.1";
+#endif
   static EGLDisplay (*get_display)(void);
+  static EGLContext (*get_context)(void);
+  static EGLSurface (*get_surface)(EGLint);
+  static EGLBoolean (*make_current)(EGLDisplay, EGLSurface, EGLSurface, EGLContext);
+  static EGLDisplay own_display = EGL_NO_DISPLAY;
+  static EGLSurface own_draw = EGL_NO_SURFACE, own_read = EGL_NO_SURFACE;
+  static EGLContext own_context = EGL_NO_CONTEXT;
 
   if (make_current == NULL) {
-    void *egl = dlopen("libEGL.so.1", RTLD_NOW | RTLD_NOLOAD);
+    void *egl = dlopen(egl_name, RTLD_NOW | RTLD_NOLOAD);
     if (egl == NULL)
       return;
-    get_context = (EGLContext (*)(void))dlsym(egl, "eglGetCurrentContext");
     get_display = (EGLDisplay (*)(void))dlsym(egl, "eglGetCurrentDisplay");
-    if (get_context == NULL || get_display == NULL)
+    get_context = (EGLContext (*)(void))dlsym(egl, "eglGetCurrentContext");
+    get_surface = (EGLSurface (*)(EGLint))dlsym(egl, "eglGetCurrentSurface");
+    if (get_display == NULL || get_context == NULL || get_surface == NULL)
       return;
     make_current = (EGLBoolean (*)(EGLDisplay, EGLSurface, EGLSurface, EGLContext))dlsym(egl, "eglMakeCurrent");
     if (make_current == NULL)
       return;
   }
-  if (get_context() != EGL_NO_CONTEXT)
+
+  if (!uaenative_host_called) {
+    own_display = get_display();
+    own_draw = get_surface(EGL_DRAW);
+    own_read = get_surface(EGL_READ);
+    own_context = get_context();
+    return;
+  }
+  uaenative_host_called = false;
+  if (get_context() == own_context)
+    return;
+  if (own_context == EGL_NO_CONTEXT)
     make_current(get_display(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-#endif
+  else
+    make_current(own_display, own_draw, own_read, own_context);
 }
 #endif
 

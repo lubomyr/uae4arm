@@ -200,7 +200,15 @@ static TCHAR *get_native_library_path (const TCHAR *library_name)
         }
 #endif
     }
+#ifdef ANDROIDSDL
+    // The ones that come with the app are in the APK as lib<name>.so, where
+    // they may not be files of their own: dlopen() finds them by name
+    _sntprintf (path, PATH_MAX, _T("lib%s.so"), library_name);
+    write_log (_T("uni: using %s of the app\n"), path);
+    return my_strdup (path);
+#else
     return NULL;
+#endif
 }
 
 static void *dl_symbol(void *dl, const char *name)
@@ -265,7 +273,11 @@ static uae_u32 open_library (const char *name, uae_u32 min_version)
 #endif
     free(path);
     if (dl == NULL) {
+#ifdef _WIN32
         write_log (_T("uni: error opening library errno %d\n"), errno);
+#else
+        write_log (_T("uni: error opening library: %s\n"), dlerror ());
+#endif
         return UNI_ERROR_COULD_NOT_OPEN_LIBRARY;
     }
 
@@ -440,6 +452,7 @@ static void do_call_function (struct uni *uni)
 {
     frame_time_t start_time;
     const int flags = uni->flags;
+    uaenative_host_called = true;
     if ((flags & UNI_FLAG_ASYNCHRONOUS) == 0) {
         start_time = read_processor_time ();
     }

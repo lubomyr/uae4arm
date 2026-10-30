@@ -33,9 +33,11 @@ uaecptr uaenative_startup(TrapContext*, uaecptr resaddr);
  * be de-allocated. */
 const TCHAR **uaenative_get_library_dirs(void);
 
-/* Lets go of an OpenGL context a library of the host left current in this
- * thread, before the emulator draws its own window or menu. */
-void uaenative_release_host_context(void);
+/* Gives this thread back the OpenGL context it had before a library of the
+ * host made its own current, before the emulator draws its screen or menu.
+ * uaenative_host_called is set by every call of a host function. */
+extern bool uaenative_host_called;
+void uaenative_restore_own_context(void);
 
 #endif /* WITH_UAENATIVE */
 

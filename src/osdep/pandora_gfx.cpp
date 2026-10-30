@@ -701,7 +701,7 @@ void show_screen (int mode)
 
   last_synctime = read_processor_time();
 #ifdef WITH_UAENATIVE
-  uaenative_release_host_context();
+  uaenative_restore_own_context();
 #endif
   SDL_Flip(prSDLScreen);
 #ifdef ANDROIDSDL

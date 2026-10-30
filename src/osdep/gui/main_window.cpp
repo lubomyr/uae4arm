@@ -1024,7 +1024,7 @@ void run_gui(void)
   SDL_ANDROID_ConfirmConfigOptions();
 #endif
 #ifdef WITH_UAENATIVE
-  uaenative_release_host_context();
+  uaenative_restore_own_context();
 #endif
   gui_running = true;
   gui_rtarea_flags_onenter = gui_create_rtarea_flag(&currprefs);
