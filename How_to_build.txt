@@ -66,7 +66,12 @@ cp ../application/uae4arm/capsimage/Android.mk .
 cp ../application/uae4arm/capsimage/config.h CAPSImg/
 
 
-7. QuarkTex NG's host library, and gl4es for it
+7. QuarkTex NG's host library, and gl4es for it (may be left out)
+
+To build uae4arm without them, skip this step and take quarktexng and
+quarktexng_gl4es out of CompiledLibraries in AndroidAppSettings.cfg:
+uaenative.library then finds no host library for QuarkTex, and the rest works
+as ever.
 
 uaenative.library (Misc in the menu) lets QuarkTex NG's Amiga libraries draw
 3D with the GPU. Its host library is QuarkTex NG 1.0 beta 3 (Aminet
