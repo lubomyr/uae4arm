@@ -8,7 +8,7 @@ the releases, on 64-bit Ubuntu 24.04.
 
 1. Packages
 
-sudo apt-get install git openjdk-17-jdk unzip python3
+sudo apt-get install git openjdk-17-jdk unzip python3 lhasa
 
 For the Amiga tools in amiga/ also: binutils-m68k-linux-gnu
 
@@ -66,7 +66,32 @@ cp ../application/uae4arm/capsimage/Android.mk .
 cp ../application/uae4arm/capsimage/config.h CAPSImg/
 
 
-7. The patch to androidsdl
+7. QuarkTex NG's host library, and gl4es for it
+
+uaenative.library (Misc in the menu) lets QuarkTex NG's Amiga libraries draw
+3D with the GPU. Its host library is QuarkTex NG 1.0 beta 3 (Aminet
+driver/video/QuarkTexNG.lha) with the changes for Linux and Android in
+quarktexng/ of this repository. On Android it is two libraries: one for
+ogles2.library on OpenGL ES 3, and one for minigl.library and agl.library on
+gl4es. Get QuarkTexNG.lha from https://aminet.net/package/driver/video/QuarkTexNG
+into ~/androidsdl/project/jni, then:
+
+cd ~/androidsdl/project/jni
+lha x QuarkTexNG.lha
+mkdir quarktexng
+mv QuarkTexNG/Source quarktexng/src
+cd quarktexng
+cp ../application/uae4arm/quarktexng/Android.mk .
+patch -p1 -d src < ../application/uae4arm/quarktexng/quarktexng.patch
+git clone https://github.com/ptitseb/gl4es
+cd gl4es
+git checkout bc4314d8
+
+The patch is for 1.0 beta 3: if Aminet has a newer QuarkTex NG by then, its
+Source folder may not take it.
+
+
+8. The patch to androidsdl
 
 It adds what uae4arm needs of the Android wrapper: the on-screen controls'
 options, MIDI, the video and browser windows and more.
@@ -75,7 +100,7 @@ cd ~/androidsdl
 git apply project/jni/application/uae4arm/androidsdl.patch
 
 
-8. Build
+9. Build
 
 cd ~/androidsdl
 ./build.sh release uae4arm
@@ -96,7 +121,16 @@ Notes
       git diff > project/jni/application/uae4arm/androidsdl.patch
   after "git add -N" for new files, so that they are in it.
 - ./LinuxBuild.sh builds uae4arm for a Linux PC, with the guichan of the
-  patched androidsdl (steps 4 to 7): no Android wrapper and no JIT, but the
+  patched androidsdl (steps 4 to 8): no Android wrapper and no JIT, but the
   quickest way to try emulation changes. The script tells the packages it needs.
+  QuarkTex NG's host library for it (libegl-dev, libgl-dev and libglu1-mesa-dev
+  needed), into build-linux/run/plugins:
+      cd ~/androidsdl/project/jni/quarktexng/src
+      g++ -shared -fPIC -O2 -std=c++11 -Igl -o quarktexng-linux-x86-64.so \
+          host/quarktex.cpp host/gldecode.cpp host/w3d.cpp host/mgl.cpp \
+          host/ogles2.cpp host/ffp.cpp host/gl3.cpp host/present.cpp \
+          -lEGL -lGL -lGLU
+- Changes to QuarkTex NG's host belong in quarktexng/quarktexng.patch: a git
+  diff of its Source folder against the Aminet release.
 - amiga/build.sh builds the Amiga tools (AndroidPlay, AndroidBrowser) into
   amigaApps/.

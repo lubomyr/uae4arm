@@ -1,0 +1,1447 @@
+diff --git a/gl/glgen.cpp b/gl/glgen.cpp
+index 310dbef..80e2988 100644
+--- a/gl/glgen.cpp
++++ b/gl/glgen.cpp
+@@ -12,6 +12,8 @@
+ //   gl/gldeclarations.auto.h      prototypes of the 68k _glXxx functions
+ //   gl/glencode.auto.c            68k encoders, included by gl/gl.c
+ //   host/gldecode.auto.inc        host dispatch, included by host/gldecode.cpp
++//   host/gldecode.gles.inc        the same for the OpenGL ES host (Android):
++//                                 only the functions OpenGL ES has
+ //   tests/host/glstubs.auto.inc   recording OpenGL stubs for the unit test
+ //   tests/host/glcalls.auto.inc   one test call per function for the unit test
+ 
+@@ -80,6 +82,20 @@ namespace {
+ 		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer"
+ 	};
+ 
++	// What OpenGL ES 3 has of OpenGL 1.1, for the OpenGL ES host: all that
++	// ogles2.library sends of it among them. ClearDepth and DepthRange are
++	// glClearDepthf and glDepthRangef there, and PolygonMode does nothing
++	// (host/gldecode.cpp).
++	const std::set<string> gles = {
++		"BindTexture", "BlendFunc", "Clear", "ClearColor", "ClearDepth", "ClearStencil", "ColorMask",
++		"CopyTexImage2D", "CopyTexSubImage2D", "CullFace", "DeleteTextures", "DepthFunc", "DepthMask",
++		"DepthRange", "Disable", "DrawArrays", "DrawElements", "Enable", "Finish", "Flush", "FrontFace",
++		"GenTextures", "GetBooleanv", "GetError", "GetFloatv", "GetIntegerv", "GetTexParameterfv",
++		"GetTexParameteriv", "Hint", "IsEnabled", "IsTexture", "LineWidth", "PixelStorei", "PolygonMode",
++		"PolygonOffset", "ReadPixels", "Scissor", "StencilFunc", "StencilMask", "StencilOp", "TexImage2D",
++		"TexParameterf", "TexParameterfv", "TexParameteri", "TexParameteriv", "TexSubImage2D", "Viewport"
++	};
++
+ 	string trim(const string& s) {
+ 		size_t begin = s.find_first_not_of(" \t\r");
+ 		size_t end = s.find_last_not_of(" \t\r");
+@@ -187,10 +203,12 @@ namespace {
+ 	// Host side: one case per opcode. host/gldecode.cpp provides the Command
+ 	// accessors c.u/f/d/p and QT_GL(name), which is gl##name in the library and
+ 	// a recording stub in the unit test.
+-	void decoder(const vector<Function>& functions, const string& path) {
++	// With only, just the functions in it.
++	void decoder(const vector<Function>& functions, const string& path, const std::set<string>* only = 0) {
+ 		std::ofstream out = create(path);
+ 		for (size_t i = 0; i < functions.size(); ++i) {
+ 			const Function& f = functions[i];
++			if (only && !only->count(f.name)) continue;
+ 			out << "case " << f.opcode << ": /* " << f.name << " */\n";
+ 			out << "\tif (c.words != " << f.words() << ") return qt_bad_command(c);\n";
+ 			if (manual.count(f.name)) {
+@@ -278,6 +296,7 @@ int main(int argc, char** argv) {
+ 		declarations(functions, root + "gl/gldeclarations.auto.h");
+ 		encoders(functions, root + "gl/glencode.auto.c");
+ 		decoder(functions, root + "host/gldecode.auto.inc");
++		decoder(functions, root + "host/gldecode.gles.inc", &gles);
+ 		stubs(functions, root + "tests/host/glstubs.auto.inc");
+ 		calls(functions, root + "tests/host/glcalls.auto.inc");
+ 		int synchronous = 0;
+diff --git a/host/ffp.h b/host/ffp.h
+index 8760330..b518269 100644
+--- a/host/ffp.h
++++ b/host/ffp.h
+@@ -95,12 +95,16 @@ namespace ffp {
+ 	inline void BlendFunc(GLenum source, GLenum destination) { flush(); glBlendFunc(source, destination); }
+ 	inline void DepthMask(GLboolean flag) { flush(); glDepthMask(flag); }
+ 	inline void DepthFunc(GLenum function) { flush(); glDepthFunc(function); }
++#ifndef QT_GLES
+ 	inline void LogicOp(GLenum operation) { flush(); glLogicOp(operation); }
++#endif
+ 	inline void ColorMask(GLboolean r, GLboolean g, GLboolean b, GLboolean a) { flush(); glColorMask(r, g, b, a); }
+ 	inline void Scissor(GLint x, GLint y, GLsizei width, GLsizei height) { flush(); glScissor(x, y, width, height); }
+ 	inline void ClearColor(GLclampf r, GLclampf g, GLclampf b, GLclampf a) { flush(); glClearColor(r, g, b, a); }
+ 	inline void Clear(GLbitfield mask) { flush(); glClear(mask); }
++#ifndef QT_GLES
+ 	inline void PointSize(GLfloat size) { flush(); glPointSize(size); }
++#endif
+ 	inline void LineWidth(GLfloat width) { flush(); glLineWidth(width); }
+ 	inline void StencilFunc(GLenum function, GLint reference, GLuint mask) { flush(); glStencilFunc(function, reference, mask); }
+ 	inline void StencilOp(GLenum sfail, GLenum dpfail, GLenum dppass) { flush(); glStencilOp(sfail, dpfail, dppass); }
+diff --git a/host/gl3.cpp b/host/gl3.cpp
+index c44ec26..7f45b2d 100644
+--- a/host/gl3.cpp
++++ b/host/gl3.cpp
+@@ -1,20 +1,32 @@
+ #include "gl3.h"
++#include <cstring>
+ 
+ namespace gl3 {
+ #define QT_GL3_DEFINE(result, name, parameters) result (APIENTRY* name) parameters = 0;
+ 	QT_GL3_FUNCTIONS(QT_GL3_DEFINE)
+ #undef QT_GL3_DEFINE
+ 
++	// What an OpenGL ES context may lack: only Warp3D (ffp.cpp) uses it.
++	static bool optional(const char* name) {
++#ifdef QT_GLES
++		return !strcmp(name, "ProvokingVertex");
++#else
++		(void)name;
++		return false;
++#endif
++	}
++
+ 	bool load() {
+ 		bool all = true;
+ #define QT_GL3_LOAD(result, name, parameters) \
+-		name = reinterpret_cast<result (APIENTRY*) parameters>(reinterpret_cast<void*>(wglGetProcAddress("gl" #name))); \
+-		if (!name) all = false;
++		name = reinterpret_cast<result (APIENTRY*) parameters>(reinterpret_cast<void*>(QT_GET_PROC("gl" #name))); \
++		if (!name && !optional(#name)) all = false;
+ 		QT_GL3_FUNCTIONS(QT_GL3_LOAD)
+ #undef QT_GL3_LOAD
+ 		return all;
+ 	}
+ 
++#ifdef _WIN32
+ 	HGLRC createCoreContext(HDC deviceContext) {
+ 		typedef HGLRC (WINAPI* CreateContextAttribs)(HDC, HGLRC, const int*);
+ 		// wglCreateContextAttribsARB needs a current context to be looked up.
+@@ -36,4 +48,5 @@ namespace gl3 {
+ 		wglDeleteContext(legacy);
+ 		return core;
+ 	}
++#endif
+ }
+diff --git a/host/gl3.h b/host/gl3.h
+index efa9bc5..5224471 100644
+--- a/host/gl3.h
++++ b/host/gl3.h
+@@ -4,33 +4,72 @@
+ #ifndef QUARKTEX_GL3_H
+ #define QUARKTEX_GL3_H
+ 
+-#define WIN32_LEAN_AND_MEAN
+-#include <windows.h>
++#include "platform.h"
+ #include <GL/gl.h>
+ #include <cstddef>
+ 
++#ifndef QT_GLES
+ typedef char GLchar;
+ typedef ptrdiff_t GLsizeiptr;
++#endif
+ 
++#ifndef GL_CLAMP_TO_EDGE
+ #define GL_CLAMP_TO_EDGE 0x812F
++#endif
++#ifndef GL_CLAMP_TO_BORDER
+ #define GL_CLAMP_TO_BORDER 0x812D
++#endif
++#ifndef GL_TEXTURE_MAX_LEVEL
+ #define GL_TEXTURE_MAX_LEVEL 0x813D
++#endif
++#ifndef GL_BGR
+ #define GL_BGR 0x80E0
++#endif
++#ifndef GL_BGRA
+ #define GL_BGRA 0x80E1
++#endif
++#ifndef GL_RG
+ #define GL_RG 0x8227
++#endif
++#ifndef GL_R8
+ #define GL_R8 0x8229
++#endif
++#ifndef GL_RG8
+ #define GL_RG8 0x822B
++#endif
++#ifndef GL_TEXTURE_SWIZZLE_R
+ #define GL_TEXTURE_SWIZZLE_R 0x8E42
++#endif
++#ifndef GL_TEXTURE_SWIZZLE_G
+ #define GL_TEXTURE_SWIZZLE_G 0x8E43
++#endif
++#ifndef GL_TEXTURE_SWIZZLE_B
+ #define GL_TEXTURE_SWIZZLE_B 0x8E44
++#endif
++#ifndef GL_TEXTURE_SWIZZLE_A
+ #define GL_TEXTURE_SWIZZLE_A 0x8E45
++#endif
++#ifndef GL_ARRAY_BUFFER
+ #define GL_ARRAY_BUFFER 0x8892
++#endif
++#ifndef GL_STREAM_DRAW
+ #define GL_STREAM_DRAW 0x88E0
++#endif
++#ifndef GL_FRAGMENT_SHADER
+ #define GL_FRAGMENT_SHADER 0x8B30
++#endif
++#ifndef GL_VERTEX_SHADER
+ #define GL_VERTEX_SHADER 0x8B31
++#endif
++#ifndef GL_COMPILE_STATUS
+ #define GL_COMPILE_STATUS 0x8B81
++#endif
++#ifndef GL_LINK_STATUS
+ #define GL_LINK_STATUS 0x8B82
++#endif
++#ifndef GL_INFO_LOG_LENGTH
+ #define GL_INFO_LOG_LENGTH 0x8B84
++#endif
+ 
+ // wglCreateContextAttribsARB (WGL_ARB_create_context, _profile)
+ #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+@@ -130,9 +169,11 @@ namespace gl3 {
+ 	// With a context current. False if a function is missing.
+ 	bool load();
+ 
++#ifdef _WIN32
+ 	// An OpenGL 3.3 core profile context for the device context, whose pixel
+ 	// format is set already. 0 if the driver has none.
+ 	HGLRC createCoreContext(HDC deviceContext);
++#endif
+ }
+ 
+ #endif
+diff --git a/host/gldecode.cpp b/host/gldecode.cpp
+index 4668217..f4c911b 100644
+--- a/host/gldecode.cpp
++++ b/host/gldecode.cpp
+@@ -5,10 +5,15 @@
+ // The unit test (tests/host) includes this file with QT_TEST defined and
+ // QT_GL pointing to recording stubs.
+ #ifndef QT_TEST
+-#define WIN32_LEAN_AND_MEAN
+-#include <windows.h>
++#include "platform.h"
+ #include <GL/gl.h>
+ #define QT_GL(name) gl##name
++#ifdef QT_GLES
++// What OpenGL ES has instead (gl/glgen.cpp: the functions it has at all)
++#define glClearDepth(depth) glClearDepthf(static_cast<GLfloat>(depth))
++#define glDepthRange(near, far) glDepthRangef(static_cast<GLfloat>(near), static_cast<GLfloat>(far))
++#define glPolygonMode(face, mode) ((void)(face), (void)(mode)) // filled polygons only
++#endif
+ #endif
+ #include <cstdio>
+ #include "gldecode.h"
+@@ -25,6 +30,7 @@ namespace {
+ 		return 0;
+ 	}
+ 
++#ifndef QT_GLES
+ 	// Amiga addresses of the buffers OpenGL keeps pointers to.
+ 	enum {
+ 		VertexArray, NormalArray, ColorArray, IndexArray, TexCoordArray, EdgeFlagArray,
+@@ -135,6 +141,7 @@ namespace {
+ 		QT_GL(ReadBuffer)(colourBuffer(c.u(1), 0x8CAA /* GL_READ_FRAMEBUFFER_BINDING */));
+ 		return 0;
+ 	}
++#endif
+ }
+ 
+ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
+@@ -149,7 +156,11 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
+ 		uint32_t opcode = header >> 16;
+ 		if (opcode < QT_W3D_FIRST || opcode >= QT_MGL_FIRST) qt_w3d_sync();
+ 		switch (opcode) {
++#ifdef QT_GLES
++#include "gldecode.gles.inc"
++#else
+ #include "gldecode.auto.inc"
++#endif
+ 		default:
+ 			if (opcode >= QT_OGLES2_FIRST) {
+ 				if (!qt_ogles2_decode(c, result)) return qt_bad_command(c);
+diff --git a/host/gldecode.gles.inc b/host/gldecode.gles.inc
+new file mode 100644
+index 0000000..6f307d1
+--- /dev/null
++++ b/host/gldecode.gles.inc
+@@ -0,0 +1,189 @@
++/* Generated by gl/glgen.cpp from gl/glFuncs.txt - do not edit */
++case 6: /* BindTexture */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(BindTexture)((GLenum) c.u(1), (GLuint) c.u(2));
++	break;
++case 8: /* BlendFunc */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(BlendFunc)((GLenum) c.u(1), (GLenum) c.u(2));
++	break;
++case 11: /* Clear */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(Clear)((GLbitfield) c.u(1));
++	break;
++case 13: /* ClearColor */
++	if (c.words != 5) return qt_bad_command(c);
++	QT_GL(ClearColor)(c.f(1), c.f(2), c.f(3), c.f(4));
++	break;
++case 14: /* ClearDepth */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(ClearDepth)(c.d(1));
++	break;
++case 16: /* ClearStencil */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(ClearStencil)((GLint) (int32_t) c.u(1));
++	break;
++case 50: /* ColorMask */
++	if (c.words != 5) return qt_bad_command(c);
++	QT_GL(ColorMask)((GLboolean) c.u(1), (GLboolean) c.u(2), (GLboolean) c.u(3), (GLboolean) c.u(4));
++	break;
++case 55: /* CopyTexImage2D */
++	if (c.words != 9) return qt_bad_command(c);
++	QT_GL(CopyTexImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLenum) c.u(3), (GLint) (int32_t) c.u(4), (GLint) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), (GLsizei) (int32_t) c.u(7), (GLint) (int32_t) c.u(8));
++	break;
++case 57: /* CopyTexSubImage2D */
++	if (c.words != 9) return qt_bad_command(c);
++	QT_GL(CopyTexSubImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), (GLint) (int32_t) c.u(5), (GLint) (int32_t) c.u(6), (GLsizei) (int32_t) c.u(7), (GLsizei) (int32_t) c.u(8));
++	break;
++case 58: /* CullFace */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(CullFace)((GLenum) c.u(1));
++	break;
++case 60: /* DeleteTextures */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(DeleteTextures)((GLsizei) (int32_t) c.u(1), c.p(2));
++	break;
++case 61: /* DepthFunc */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(DepthFunc)((GLenum) c.u(1));
++	break;
++case 62: /* DepthMask */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(DepthMask)((GLboolean) c.u(1));
++	break;
++case 63: /* DepthRange */
++	if (c.words != 5) return qt_bad_command(c);
++	QT_GL(DepthRange)(c.d(1), c.d(3));
++	break;
++case 64: /* Disable */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(Disable)((GLenum) c.u(1));
++	break;
++case 66: /* DrawArrays */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(DrawArrays)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3));
++	break;
++case 68: /* DrawElements */
++	if (c.words != 5) return qt_bad_command(c);
++	QT_GL(DrawElements)((GLenum) c.u(1), (GLsizei) (int32_t) c.u(2), (GLenum) c.u(3), c.p(4));
++	break;
++case 73: /* Enable */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(Enable)((GLenum) c.u(1));
++	break;
++case 90: /* Finish */
++	if (c.words != 1) return qt_bad_command(c);
++	QT_GL(Finish)();
++	break;
++case 91: /* Flush */
++	if (c.words != 1) return qt_bad_command(c);
++	QT_GL(Flush)();
++	break;
++case 96: /* FrontFace */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(FrontFace)((GLenum) c.u(1));
++	break;
++case 99: /* GenTextures */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(GenTextures)((GLsizei) (int32_t) c.u(1), c.p(2));
++	break;
++case 100: /* GetBooleanv */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(GetBooleanv)((GLenum) c.u(1), c.p(2));
++	break;
++case 103: /* GetError */
++	if (c.words != 1) return qt_bad_command(c);
++	result = (int32_t) QT_GL(GetError)();
++	break;
++case 104: /* GetFloatv */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(GetFloatv)((GLenum) c.u(1), c.p(2));
++	break;
++case 105: /* GetIntegerv */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(GetIntegerv)((GLenum) c.u(1), c.p(2));
++	break;
++case 127: /* GetTexParameterfv */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(GetTexParameterfv)((GLenum) c.u(1), (GLenum) c.u(2), c.p(3));
++	break;
++case 128: /* GetTexParameteriv */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(GetTexParameteriv)((GLenum) c.u(1), (GLenum) c.u(2), c.p(3));
++	break;
++case 129: /* Hint */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(Hint)((GLenum) c.u(1), (GLenum) c.u(2));
++	break;
++case 144: /* IsEnabled */
++	if (c.words != 2) return qt_bad_command(c);
++	result = (int32_t) QT_GL(IsEnabled)((GLenum) c.u(1));
++	break;
++case 146: /* IsTexture */
++	if (c.words != 2) return qt_bad_command(c);
++	result = (int32_t) QT_GL(IsTexture)((GLuint) c.u(1));
++	break;
++case 156: /* LineWidth */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(LineWidth)(c.f(1));
++	break;
++case 196: /* PixelStorei */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(PixelStorei)((GLenum) c.u(1), (GLint) (int32_t) c.u(2));
++	break;
++case 201: /* PolygonMode */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(PolygonMode)((GLenum) c.u(1), (GLenum) c.u(2));
++	break;
++case 202: /* PolygonOffset */
++	if (c.words != 3) return qt_bad_command(c);
++	QT_GL(PolygonOffset)(c.f(1), c.f(2));
++	break;
++case 238: /* ReadPixels */
++	if (c.words != 8) return qt_bad_command(c);
++	QT_GL(ReadPixels)((GLint) (int32_t) c.u(1), (GLint) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4), (GLenum) c.u(5), (GLenum) c.u(6), c.p(7));
++	break;
++case 252: /* Scissor */
++	if (c.words != 5) return qt_bad_command(c);
++	QT_GL(Scissor)((GLint) (int32_t) c.u(1), (GLint) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4));
++	break;
++case 255: /* StencilFunc */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(StencilFunc)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLuint) c.u(3));
++	break;
++case 256: /* StencilMask */
++	if (c.words != 2) return qt_bad_command(c);
++	QT_GL(StencilMask)((GLuint) c.u(1));
++	break;
++case 257: /* StencilOp */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(StencilOp)((GLenum) c.u(1), (GLenum) c.u(2), (GLenum) c.u(3));
++	break;
++case 302: /* TexImage2D */
++	if (c.words != 10) return qt_bad_command(c);
++	QT_GL(TexImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLint) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
++	break;
++case 303: /* TexParameterf */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(TexParameterf)((GLenum) c.u(1), (GLenum) c.u(2), c.f(3));
++	break;
++case 304: /* TexParameterfv */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(TexParameterfv)((GLenum) c.u(1), (GLenum) c.u(2), c.p(3));
++	break;
++case 305: /* TexParameteri */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(TexParameteri)((GLenum) c.u(1), (GLenum) c.u(2), (GLint) (int32_t) c.u(3));
++	break;
++case 306: /* TexParameteriv */
++	if (c.words != 4) return qt_bad_command(c);
++	QT_GL(TexParameteriv)((GLenum) c.u(1), (GLenum) c.u(2), c.p(3));
++	break;
++case 308: /* TexSubImage2D */
++	if (c.words != 10) return qt_bad_command(c);
++	QT_GL(TexSubImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
++	break;
++case 336: /* Viewport */
++	if (c.words != 5) return qt_bad_command(c);
++	QT_GL(Viewport)((GLint) (int32_t) c.u(1), (GLint) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4));
++	break;
+diff --git a/host/gles.cpp b/host/gles.cpp
+new file mode 100644
+index 0000000..120292b
+--- /dev/null
++++ b/host/gles.cpp
+@@ -0,0 +1,29 @@
++// What the Android builds have in place of what they leave out. The OpenGL
++// ES one (QT_GLES) executes only ogles2.library's commands: Warp3D, minigl
++// and agl need OpenGL 1.1 (w3d.cpp, ffp.cpp, mgl.cpp and the decoder's
++// OpenGL commands are not built), their commands are refused as unknown
++// ones, and a context has no ffp state. The gl4es one (QT_GL4ES) has minigl
++// and agl, but not Warp3D, which needs OpenGL 3.3.
++#include "platform.h"
++#include <GL/gl.h>
++#include "gldecode.h"
++#include "ffp.h"
++
++bool qt_w3d_trace_textures = false;
++bool qt_w3d_trace_all = false;
++
++bool qt_w3d_decode(const Command&, int32_t&) { return false; }
++#ifdef QT_GL4ES
++// ogles2.library's contexts stay in the OpenGL ES library
++bool qt_ogles2_decode(const Command&, int32_t&) { return false; }
++#else
++bool qt_mgl_decode(const Command&, int32_t&) { return false; }
++#endif
++void qt_w3d_sync() {}
++
++namespace ffp {
++	Context* create(int, int) { return 0; }
++	void destroy(Context*) {}
++	void makeCurrent(Context*) {}
++	void flush() {}
++}
+diff --git a/host/gles/GL/gl.h b/host/gles/GL/gl.h
+new file mode 100644
+index 0000000..7d1ccf6
+--- /dev/null
++++ b/host/gles/GL/gl.h
+@@ -0,0 +1,3 @@
++// On Android the host draws with OpenGL ES 3. The sources include the
++// OpenGL header; with host/gles first on the include path, they get this.
++#include <GLES3/gl3.h>
+diff --git a/host/mgl.cpp b/host/mgl.cpp
+index 11edcab..64d0376 100644
+--- a/host/mgl.cpp
++++ b/host/mgl.cpp
+@@ -13,8 +13,7 @@
+ // The unit test (tests/host) includes this file with QT_TEST defined and
+ // QT_GL and QT_GL13 pointing to recording stubs.
+ #ifndef QT_TEST
+-#define WIN32_LEAN_AND_MEAN
+-#include <windows.h>
++#include "platform.h"
+ #include <GL/gl.h>
+ #define QT_GL(name) gl##name
+ #define QT_GL13(name) mgl::gl13::name
+@@ -39,7 +38,7 @@ namespace mgl {
+ 		FactorsFunction blendFuncSeparate;
+ 
+ 		template <typename T> T lookUp(const char* name) {
+-			return reinterpret_cast<T>(reinterpret_cast<void*>(wglGetProcAddress(name)));
++			return reinterpret_cast<T>(reinterpret_cast<void*>(QT_GET_PROC(name)));
+ 		}
+ 
+ 		void load() {
+diff --git a/host/ogles2.cpp b/host/ogles2.cpp
+index ffc2b0d..47fc43e 100644
+--- a/host/ogles2.cpp
++++ b/host/ogles2.cpp
+@@ -23,8 +23,7 @@
+ // the file links, the same way the real _gl* encoders are recording stubs
+ // there.
+ #ifndef QT_TEST
+-#define WIN32_LEAN_AND_MEAN
+-#include <windows.h>
++#include "platform.h"
+ #include <GL/gl.h>
+ #include "gl3.h"
+ #define QT_GL(name) gl##name
+@@ -281,13 +280,14 @@ namespace ogles2 {
+ 	// Keyed by the current host OpenGL context as well: shader names are its
+ 	// own, and several programs' contexts may each have a shader 1.
+ #ifndef QT_TEST
+-	uintptr_t currentGL() { return reinterpret_cast<uintptr_t>(wglGetCurrentContext()); }
++	uintptr_t currentGL() { return reinterpret_cast<uintptr_t>(QT_CURRENT_CONTEXT()); }
+ #else
+ 	uintptr_t currentGL() { return 0; }
+ #endif
+ 	typedef std::pair<uintptr_t, GLuint> ShaderKey;
+ 	std::map<ShaderKey, std::string> sources;
+ 
++#ifndef QT_GLES
+ 	std::string coreSource(const std::string& source, bool fragment) {
+ 		std::string out =
+ 			"#version 330 core\n"
+@@ -319,6 +319,7 @@ namespace ogles2 {
+ 		}
+ 		return out;
+ 	}
++#endif
+ 
+ 	bool shaderSource(const Command& c) {
+ 		GLuint shader = static_cast<GLuint>(c.u(1));
+@@ -327,8 +328,13 @@ namespace ogles2 {
+ 		GLint type = 0;
+ 		QT_GL3(GetShaderiv)(shader, 0x8B4F, &type); // GL_SHADER_TYPE
+ 		sources[ShaderKey(currentGL(), shader)] = source;
++#ifdef QT_GLES
++		(void)type; // OpenGL ES runs the application's GLSL ES as it is
++		const char* text = source;
++#else
+ 		std::string core = coreSource(source, type == 0x8B30); // GL_FRAGMENT_SHADER
+ 		const char* text = core.c_str();
++#endif
+ 		QT_GL3(ShaderSource)(shader, 1, &text, 0);
+ 		return true;
+ 	}
+diff --git a/host/platform.h b/host/platform.h
+new file mode 100644
+index 0000000..d3bef93
+--- /dev/null
++++ b/host/platform.h
+@@ -0,0 +1,52 @@
++// What the host library needs of the system it runs on: on Windows WGL, as
++// QuarkTex was written for; elsewhere (Linux, Android) EGL.
++#ifndef QUARKTEX_PLATFORM_H
++#define QUARKTEX_PLATFORM_H
++
++#ifdef _WIN32
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++#define QT_GET_PROC(name) wglGetProcAddress(name)
++#define QT_CURRENT_CONTEXT() wglGetCurrentContext()
++#else
++#include <EGL/egl.h>
++#if defined(__ANDROID__) && !defined(QT_GL4ES)
++// OpenGL ES 3 instead of desktop OpenGL: only ogles2.library's commands;
++// Warp3D, minigl and agl need OpenGL 1.1 and are left out (gles.cpp).
++#ifndef QT_GLES
++#define QT_GLES
++#endif
++#endif
++// QT_GL4ES: the second library on Android, libquarktexng_gl4es.so, for
++// minigl.library and agl.library: their OpenGL 1.1 through gl4es, which
++// draws with OpenGL ES 2. The OpenGL ES one hands their contexts to it.
++#ifndef APIENTRY
++#define APIENTRY
++#endif
++#ifndef WINAPI
++#define WINAPI
++#endif
++#ifndef __cdecl
++#define __cdecl
++#endif
++#if defined(QT_GL4ES)
++extern "C" void* gl4es_GetProcAddress(const char* name);
++#define QT_GET_PROC(name) gl4es_GetProcAddress(name)
++#elif defined(QT_GLES)
++// eglGetProcAddress need not know the core functions of OpenGL ES
++#include <dlfcn.h>
++inline void* qt_get_proc(const char* name) {
++	void* p = dlsym(RTLD_DEFAULT, name);
++	return p ? p : reinterpret_cast<void*>(eglGetProcAddress(name));
++}
++#define QT_GET_PROC(name) qt_get_proc(name)
++#else
++#define QT_GET_PROC(name) eglGetProcAddress(name)
++#endif
++#define QT_CURRENT_CONTEXT() eglGetCurrentContext()
++#if defined(QT_GLES) || defined(QT_GL4ES)
++#define QT_READ_RGBA // OpenGL ES has no GL_BGRA to read pictures back in
++#endif
++#endif
++
++#endif
+diff --git a/host/present.cpp b/host/present.cpp
+index 92a0819..0ca10a9 100644
+--- a/host/present.cpp
++++ b/host/present.cpp
+@@ -9,11 +9,12 @@
+ // millisecond or two), or at the next swap at the latest; the 68k side asks
+ // for it to be written before it waits (minigl's main loop). Waiting for the
+ // GPU at the swap cost RTCW about 2.3 ms a frame.
+-#define WIN32_LEAN_AND_MEAN
+-#include <windows.h>
++#include "platform.h"
++#include <ctime>
+ #include <GL/gl.h>
+ #include <cstddef>
+ #include "present.h"
++#include <vector>
+ 
+ #ifndef GL_FRAMEBUFFER
+ #define GL_FRAMEBUFFER 0x8D40
+@@ -49,7 +50,11 @@ namespace present {
+ 		typedef void (APIENTRY* StorageFunction)(GLenum target, GLenum format, GLsizei width, GLsizei height);
+ 		typedef GLenum (APIENTRY* StatusFunction)(GLenum target);
+ 		typedef void (APIENTRY* BufferDataFunction)(GLenum target, ptrdiff_t size, const void* data, GLenum usage);
++#ifdef QT_GLES
++		typedef void* (APIENTRY* MapFunction)(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
++#else
+ 		typedef void* (APIENTRY* MapFunction)(GLenum target, GLenum access);
++#endif
+ 		typedef GLboolean (APIENTRY* UnmapFunction)(GLenum target);
+ 		typedef void* (APIENTRY* FenceFunction)(GLenum condition, GLbitfield flags);
+ 		typedef GLenum (APIENTRY* WaitFunction)(void* sync, GLbitfield flags, unsigned long long timeout);
+@@ -67,7 +72,7 @@ namespace present {
+ 		DeleteSyncFunction deleteSync;
+ 
+ 		template <typename T> T lookUp(const char* name) {
+-			return reinterpret_cast<T>(reinterpret_cast<void*>(wglGetProcAddress(name)));
++			return reinterpret_cast<T>(reinterpret_cast<void*>(QT_GET_PROC(name)));
+ 		}
+ 
+ 		bool load() {
+@@ -86,22 +91,38 @@ namespace present {
+ 				renderbufferStorage = lookUp<StorageFunction>("glRenderbufferStorage");
+ 				checkFramebufferStatus = lookUp<StatusFunction>("glCheckFramebufferStatus");
+ 				bufferData = lookUp<BufferDataFunction>("glBufferData");
++#ifdef QT_GLES
++				mapBuffer = lookUp<MapFunction>("glMapBufferRange");
++#else
+ 				mapBuffer = lookUp<MapFunction>("glMapBuffer");
++#endif
+ 				unmapBuffer = lookUp<UnmapFunction>("glUnmapBuffer");
+ 				fenceSync = lookUp<FenceFunction>("glFenceSync");
+ 				clientWaitSync = lookUp<WaitFunction>("glClientWaitSync");
+ 				deleteSync = lookUp<DeleteSyncFunction>("glDeleteSync");
+ 			}
+-			return genFramebuffers && genRenderbuffers && deleteFramebuffers && deleteRenderbuffers && genBuffers
+-				&& deleteBuffers && bindFramebuffer && bindRenderbuffer && bindBuffer && framebufferRenderbuffer
+-				&& renderbufferStorage && checkFramebufferStatus && bufferData && mapBuffer && unmapBuffer && fenceSync
+-				&& clientWaitSync && deleteSync;
++			bool framebuffers = genFramebuffers && genRenderbuffers && deleteFramebuffers && deleteRenderbuffers
++				&& bindFramebuffer && bindRenderbuffer && framebufferRenderbuffer && renderbufferStorage
++				&& checkFramebufferStatus;
++#ifdef QT_GL4ES
++			return framebuffers; // pictures are read back as they are finished (synchronous)
++#else
++			return framebuffers && genBuffers && deleteBuffers && bindBuffer && bufferData && mapBuffer
++				&& unmapBuffer && fenceSync && clientWaitSync && deleteSync;
++#endif
+ 		}
+ 
++		// Ticks of the profile's clock, as quarktex.cpp counts them
+ 		long long now() {
++#ifdef _WIN32
+ 			LARGE_INTEGER t;
+ 			QueryPerformanceCounter(&t);
+ 			return t.QuadPart;
++#else
++			struct timespec t;
++			clock_gettime(CLOCK_MONOTONIC, &t);
++			return static_cast<long long>(t.tv_sec) * 1000000000 + t.tv_nsec;
++#endif
+ 		}
+ 
+ 		// The pixel buffer bound for packing before we bind ours.
+@@ -116,7 +137,12 @@ namespace present {
+ 			long long begin = now();
+ 			GLint saved = boundPackBuffer();
+ 			bindBuffer(GL_PIXEL_PACK_BUFFER, f.pixelBuffers[f.pending]);
++#ifdef QT_GLES
++			const uint8_t* bgra = static_cast<const uint8_t*>(mapBuffer(GL_PIXEL_PACK_BUFFER, 0,
++				static_cast<GLsizeiptr>(f.width) * f.height * 4, GL_MAP_READ_BIT));
++#else
+ 			const uint8_t* bgra = static_cast<const uint8_t*>(mapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
++#endif
+ 			if (bgra) {
+ 				write(bgra, f.width, f.height, f.target, resolve);
+ 				unmapBuffer(GL_PIXEL_PACK_BUFFER);
+@@ -137,19 +163,23 @@ namespace present {
+ 			genFramebuffers(1, &f.fbo);
+ 			genRenderbuffers(1, &f.color);
+ 			genRenderbuffers(1, &f.depthStencil);
++#ifndef QT_GL4ES
+ 			genBuffers(2, f.pixelBuffers);
++#endif
+ 		}
+ 		bindRenderbuffer(GL_RENDERBUFFER, f.color);
+ 		renderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+ 		bindRenderbuffer(GL_RENDERBUFFER, f.depthStencil);
+ 		renderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+ 		bindRenderbuffer(GL_RENDERBUFFER, 0);
++#ifndef QT_GL4ES
+ 		GLint saved = boundPackBuffer();
+ 		for (int i = 0; i < 2; ++i) {
+ 			bindBuffer(GL_PIXEL_PACK_BUFFER, f.pixelBuffers[i]);
+ 			bufferData(GL_PIXEL_PACK_BUFFER, static_cast<ptrdiff_t>(width) * height * 4, 0, GL_STREAM_READ);
+ 		}
+ 		bindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(saved));
++#endif
+ 		bindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+ 		framebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, f.color);
+ 		framebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, f.depthStencil);
+@@ -165,13 +195,32 @@ namespace present {
+ 		deleteFramebuffers(1, &f.fbo);
+ 		deleteRenderbuffers(1, &f.color);
+ 		deleteRenderbuffers(1, &f.depthStencil);
++#ifndef QT_GL4ES
+ 		deleteBuffers(2, f.pixelBuffers);
++#endif
+ 		f.fbo = f.color = f.depthStencil = f.pixelBuffers[0] = f.pixelBuffers[1] = 0;
+ 		f.fence = 0;
+ 	}
+ 
+ 	void start(Framebuffer& f, const Target& t, void* (*resolve)(uint32_t)) {
+ 		if (!f.fbo || !bytesPerPixel(t.format)) return;
++#ifdef QT_GL4ES
++		// gl4es has no pixel buffers or fences: read back and written at once,
++		// with only the pack alignment the application's own
++		long long begin = now();
++		static std::vector<uint8_t> rgba;
++		rgba.resize(static_cast<size_t>(f.width) * f.height * 4);
++		GLint alignment = 4;
++		glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
++		glPixelStorei(GL_PACK_ALIGNMENT, 4);
++		glReadPixels(0, 0, f.width, f.height, GL_RGBA, GL_UNSIGNED_BYTE, &rgba[0]);
++		glPixelStorei(GL_PACK_ALIGNMENT, alignment);
++		readTicks += now() - begin;
++		begin = now();
++		write(&rgba[0], f.width, f.height, t, resolve);
++		writeTicks += now() - begin;
++		f.target = t;
++#else
+ 		poll(f, resolve, true);
+ 		long long begin = now();
+ 		// The application's pack state stays as it was (as in the frame
+@@ -185,7 +234,11 @@ namespace present {
+ 		GLint savedBuffer = boundPackBuffer();
+ 		for (int i = 0; i < count; ++i) glPixelStorei(packs[i], values[i]);
+ 		bindBuffer(GL_PIXEL_PACK_BUFFER, f.pixelBuffers[f.next]);
++#ifdef QT_GLES
++		glReadPixels(0, 0, f.width, f.height, GL_RGBA, GL_UNSIGNED_BYTE, 0); // no GL_BGRA in OpenGL ES
++#else
+ 		glReadPixels(0, 0, f.width, f.height, GL_BGRA, GL_UNSIGNED_BYTE, 0);
++#endif
+ 		bindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(savedBuffer));
+ 		for (int i = 0; i < count; ++i) glPixelStorei(packs[i], saved[i]);
+ 		f.fence = fenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+@@ -194,6 +247,7 @@ namespace present {
+ 		f.next ^= 1;
+ 		f.target = t;
+ 		readTicks += now() - begin;
++#endif
+ 	}
+ 
+ 	void poll(Framebuffer& f, void* (*resolve)(uint32_t), bool wait) {
+diff --git a/host/present.h b/host/present.h
+index 6562c88..c895682 100644
+--- a/host/present.h
++++ b/host/present.h
+@@ -35,9 +35,20 @@ namespace present {
+ 	inline uint32_t loadPixel(const uint8_t* p) {
+ 		uint32_t v;
+ 		memcpy(&v, p, 4); // little-endian host: b | g << 8 | r << 16 | a << 24
++#ifdef QT_READ_RGBA
++		// OpenGL ES reads back R, G, B, A: red and blue change places
++		v = (v & 0xFF00FF00) | ((v >> 16) & 0xFF) | ((v & 0xFF) << 16);
++#endif
+ 		return v;
+ 	}
+ 
++	// Where red and blue are in a pixel read back
++#ifdef QT_READ_RGBA
++	const int redByte = 0, blueByte = 2;
++#else
++	const int redByte = 2, blueByte = 0;
++#endif
++
+ 	inline uint32_t swapBytes(uint32_t v) {
+ 		return (v >> 24) | ((v >> 8) & 0xFF00) | ((v << 8) & 0xFF0000) | (v << 24);
+ 	}
+@@ -72,10 +83,10 @@ namespace present {
+ 			}
+ 			return;
+ 		case R8G8B8:
+-			for (int i = 0; i < count; ++i, bgra += 4, dest += 3) { dest[0] = bgra[2]; dest[1] = bgra[1]; dest[2] = bgra[0]; }
++			for (int i = 0; i < count; ++i, bgra += 4, dest += 3) { dest[0] = bgra[redByte]; dest[1] = bgra[1]; dest[2] = bgra[blueByte]; }
+ 			return;
+ 		case B8G8R8:
+-			for (int i = 0; i < count; ++i, bgra += 4, dest += 3) { dest[0] = bgra[0]; dest[1] = bgra[1]; dest[2] = bgra[2]; }
++			for (int i = 0; i < count; ++i, bgra += 4, dest += 3) { dest[0] = bgra[blueByte]; dest[1] = bgra[1]; dest[2] = bgra[redByte]; }
+ 			return;
+ 		// The PC formats are little-endian, the others big-endian.
+ 		case R5G6B5: convert16<6, true, true>(bgra, dest, count); return;
+diff --git a/host/quarktex.cpp b/host/quarktex.cpp
+index 66bdba7..2421924 100644
+--- a/host/quarktex.cpp
++++ b/host/quarktex.cpp
+@@ -6,9 +6,12 @@
+ // window of the emulator window, OpenGL context and (for Warp3D) ffp.h state,
+ // named by the id qt_create_context returns; the other calls pass that id.
+ #include "gl3.h"
++#if !defined(QT_GLES) && !defined(QT_GL4ES)
+ #include <GL/glu.h>
++#endif
+ #include <cstdio>
+ #include <cstdlib>
++#include <ctime>
+ #include <cstring>
+ #include <fstream>
+ #include <map>
+@@ -23,12 +26,50 @@
+ #define QT_PROTOCOL_VERSION 11
+ 
+ extern "C" {
+-	__declspec(dllexport) uni_resolve_function uni_resolve = 0;
++	uni_resolve_function uni_resolve = 0; // exported as uni.h declares it
+ }
+ 
++#if defined(QT_GLES) || defined(QT_GL4ES)
++// What the OpenGL ES library passes on to libquarktexng_gl4es.so, for the
++// contexts of minigl.library and agl.library; qt_gl4es_functions gives it.
++struct Gl4esFunctions {
++	int32_t (__cdecl* createContext)(struct uni*);
++	int32_t (__cdecl* freeContext)(struct uni*);
++	int32_t (__cdecl* execute)(struct uni*);
++	int32_t (__cdecl* moveWindow)(struct uni*);
++	int32_t (__cdecl* swapBuffers)(struct uni*);
++	int32_t (__cdecl* finishFrame)(struct uni*);
++};
++#endif
++
++#ifdef QT_GL4ES
++#include "gl4esinit.h"
++// gl4es's state of a context (gl/glstate.c), kept per context: several
++// contexts would otherwise share one, and a new one the old one's objects.
++extern "C" {
++	void* NewGLState(void* shared, int es2only);
++	void ActivateGLState(void* state);
++	void DeleteGLState(void* state);
++}
++
++namespace {
++	// Built with NO_INIT_CONSTRUCTOR: started for the first context, not
++	// when Android loads the library with the app. It looks at the GPU with
++	// a context of its own, made current in this thread.
++	void startGl4es() {
++		static bool started = false;
++		if (started) return;
++		started = true;
++		initialize_gl4es();
++	}
++}
++#endif
++
+ namespace {
++#ifdef _WIN32
+ 	HINSTANCE instance = 0;
+ 	int classUsers = 0; // windows of the "QuarkTexNG" class
++#endif
+ 
+ 	// qt_create_context flags, as QT_CONTEXT_CORE in gl/gl.h.
+ 	const int32_t contextCore = 1;
+@@ -40,6 +81,7 @@ namespace {
+ 	// hidden.
+ 	const int32_t contextOffscreen = 4;
+ 
++#ifdef _WIN32
+ 	LRESULT CALLBACK windowFunc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+ 		switch (message) {
+ 		case WM_NCCREATE:
+@@ -80,11 +122,52 @@ namespace {
+ 		EnumWindows(checkWindow, reinterpret_cast<LPARAM>(&search));
+ 		return search.found;
+ 	}
++#else
++	// EGL draws without a window: into a pbuffer, or for an offscreen context
++	// into its framebuffer object, whose picture goes to the Amiga bitmap.
++	EGLDisplay display = EGL_NO_DISPLAY;
++
++	bool startEgl() {
++		if (display != EGL_NO_DISPLAY) return true;
++		EGLDisplay d = eglGetDisplay(EGL_DEFAULT_DISPLAY);
++		if (d == EGL_NO_DISPLAY || !eglInitialize(d, 0, 0)) return false;
++		display = d;
++		return true;
++	}
++#endif
++
++	// A clock for the profile: its ticks and how many a second
++	int64_t ticksNow() {
++#ifdef _WIN32
++		LARGE_INTEGER t;
++		QueryPerformanceCounter(&t);
++		return t.QuadPart;
++#else
++		struct timespec t;
++		clock_gettime(CLOCK_MONOTONIC, &t);
++		return static_cast<int64_t>(t.tv_sec) * 1000000000 + t.tv_nsec;
++#endif
++	}
++
++	int64_t ticksPerSecond() {
++#ifdef _WIN32
++		LARGE_INTEGER f;
++		QueryPerformanceFrequency(&f);
++		return f.QuadPart;
++#else
++		return 1000000000;
++#endif
++	}
+ 
+ 	std::ofstream* out;
+ 
+ 	void logString(const char* c) {
++#ifdef QT_GL4ES
++		// The OpenGL ES library's log, which it started
++		if (!out) out = new std::ofstream("QuarkTexNGLog.txt", std::ios::app);
++#else
+ 		if (!out) out = new std::ofstream("QuarkTexNGLog.txt");
++#endif
+ 		*out << c << std::endl;
+ 	}
+ 
+@@ -92,13 +175,13 @@ namespace {
+ 	// environment variable QUARKTEX_PROFILE is set.
+ 	struct Profile {
+ 		bool on;
+-		LONGLONG ticks;
++		int64_t ticks;
+ 		unsigned long calls;
+ 		unsigned long long bytes;
+ 		// Every reportFrames buffer swaps: the wall clock time, the time
+ 		// executing command buffers and in SwapBuffers; the rest is the
+ 		// emulated 68k's.
+-		LONGLONG periodStart, periodTicks, swapTicks;
++		int64_t periodStart, periodTicks, swapTicks;
+ 		unsigned long periodCalls;
+ 		unsigned long long periodBytes;
+ 	};
+@@ -106,9 +189,18 @@ namespace {
+ 
+ 	struct Context {
+ 		uint32_t id;
++#ifdef _WIN32
+ 		HWND window;
+ 		HDC deviceContext;
+ 		HGLRC gl;
++#else
++		EGLSurface surface;
++		EGLContext gl;
++#ifdef QT_GL4ES
++		void* gl4esState; // gl4es's state of the OpenGL 1.1 the context has
++#endif
++		int width, height;
++#endif
+ 		ffp::Context* ffp; // Warp3D (OpenGL 3.3 core) only
+ 		bool offscreen;
+ 		present::Framebuffer framebuffer; // offscreen only
+@@ -119,7 +211,16 @@ namespace {
+ 	};
+ 
+ 	std::map<uint32_t, Context*> contexts;
++#if defined(QT_GLES) || defined(QT_GL4ES)
++	// The contexts of libquarktexng_gl4es.so have ids of their own, with
++	// this bit set: the OpenGL ES library passes their calls on to it.
++	const uint32_t gl4esIds = 0x40000000;
++#endif
++#ifdef QT_GL4ES
++	uint32_t nextId = gl4esIds | 1;
++#else
+ 	uint32_t nextId = 1;
++#endif
+ 	Context* active = 0; // whose OpenGL context is current
+ 
+ 	Context* find(int32_t id) {
+@@ -127,26 +228,49 @@ namespace {
+ 		return i == contexts.end() ? 0 : i->second;
+ 	}
+ 
+-	// Makes the context's OpenGL context (and ffp state) current.
++	// Makes the context's OpenGL context (and ffp state) current. The emulator
++	// may have let it go between calls (uae4arm does, for its window to show
++	// what it draws), so being the last one activated is not enough.
+ 	bool activate(Context* c) {
+-		if (c == active) return true;
++		if (c == active && QT_CURRENT_CONTEXT() == c->gl) return true;
++#ifdef _WIN32
+ 		if (!wglMakeCurrent(c->deviceContext, c->gl)) {
++#else
++		if (!eglMakeCurrent(display, c->surface, c->surface, c->gl)) {
++#endif
+ 			logString("Warning: Could not activate a rendering context");
+ 			return false;
+ 		}
+ 		active = c;
+ 		ffp::makeCurrent(c->ffp);
++#ifdef QT_GL4ES
++		ActivateGLState(c->gl4esState);
++#endif
+ 		return true;
+ 	}
+ 
++	// What gluErrorString says; OpenGL ES has no GLU.
++	const char* errorString(GLenum code) {
++#if defined(QT_GLES) || defined(QT_GL4ES)
++		switch (code) {
++		case GL_INVALID_ENUM: return "invalid enumerant";
++		case GL_INVALID_VALUE: return "invalid value";
++		case GL_INVALID_OPERATION: return "invalid operation";
++		case GL_OUT_OF_MEMORY: return "out of memory";
++		case 0x0506: return "invalid framebuffer operation"; // GL_INVALID_FRAMEBUFFER_OPERATION
++		}
++		return "unknown error";
++#else
++		return reinterpret_cast<const char*>(gluErrorString(code));
++#endif
++	}
++
+ 	void logProfile(const Context* c) {
+ 		if (!c->profile.on || !c->profile.calls) return;
+-		LARGE_INTEGER frequency;
+-		QueryPerformanceFrequency(&frequency);
+ 		char line[160];
+ 		snprintf(line, sizeof(line), "Profile %s: %lu buffers, %llu bytes, %.3f s executing",
+ 			c->label.empty() ? "context" : c->label.c_str(), c->profile.calls, c->profile.bytes,
+-			static_cast<double>(c->profile.ticks) / frequency.QuadPart);
++			static_cast<double>(c->profile.ticks) / ticksPerSecond());
+ 		logString(line);
+ 	}
+ }
+@@ -186,6 +310,10 @@ namespace {
+ 	}
+ 
+ 	void captureFrame(Context* c) {
++#ifndef _WIN32
++		(void)c; // the BMP files of the reference tests are written on Windows only
++	}
++#else
+ 		RECT rect;
+ 		if (!GetClientRect(c->window, &rect)) return;
+ 		int width = rect.right - rect.left;
+@@ -245,9 +373,31 @@ namespace {
+ 		bmp.write(reinterpret_cast<const char*>(&info), sizeof(info));
+ 		bmp.write(reinterpret_cast<const char*>(&pixels[0]), pixels.size());
+ 	}
++#endif
+ 
+ 	// Releases what create got so far; c is not in contexts yet or any more.
+ 	void destroy(Context* c) {
++#ifndef _WIN32
++		if (c->gl) {
++			if (eglMakeCurrent(display, c->surface, c->surface, c->gl)) {
++				if (c->ffp) ffp::destroy(c->ffp);
++				present::destroy(c->framebuffer);
++				ffp::makeCurrent(0);
++#ifdef QT_GL4ES
++				if (c->gl4esState) {
++					ActivateGLState(c->gl4esState);
++					DeleteGLState(c->gl4esState);
++				}
++#endif
++			}
++			eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
++			eglDestroyContext(display, c->gl);
++			active = 0;
++		}
++		if (c->surface) eglDestroySurface(display, c->surface);
++		delete c;
++	}
++#else
+ 		if (c->gl) {
+ 			if (wglMakeCurrent(c->deviceContext, c->gl)) {
+ 				if (c->ffp) ffp::destroy(c->ffp);
+@@ -265,8 +415,43 @@ namespace {
+ 		}
+ 		delete c;
+ 	}
++#endif
+ }
+ 
++#ifdef QT_GLES
++#include <dlfcn.h>
++
++namespace {
++	// libquarktexng_gl4es.so, opened for the first context that is not an
++	// OpenGL 3.3 one; 0 if it cannot be.
++	const Gl4esFunctions* gl4es() {
++		static const Gl4esFunctions* functions = 0;
++		static bool tried = false;
++		if (tried) return functions;
++		tried = true;
++		void* library = dlopen("libquarktexng_gl4es.so", RTLD_NOW | RTLD_LOCAL);
++		if (!library) {
++			logString((std::string("Warning: No minigl.library and agl.library: ") + dlerror()).c_str());
++			return 0;
++		}
++		typedef const Gl4esFunctions* (*Get)(uni_resolve_function);
++		Get get = reinterpret_cast<Get>(dlsym(library, "qt_gl4es_functions"));
++		if (get) functions = get(uni_resolve);
++		return functions;
++	}
++
++	// A context of libquarktexng_gl4es.so: its calls go there
++	const Gl4esFunctions* passedOn(int32_t id) {
++		return (static_cast<uint32_t>(id) & gl4esIds) ? gl4es() : 0;
++	}
++}
++
++#define QT_PASS_ON(id, function) \
++	if (const Gl4esFunctions* passOn = passedOn(id)) return passOn->function(uni);
++#else
++#define QT_PASS_ON(id, function)
++#endif
++
+ QT_EXPORT int __cdecl uni_init(void) {
+ 	return 0;
+ }
+@@ -294,18 +479,18 @@ namespace {
+ }
+ 
+ QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
++	QT_PASS_ON(uni->d2, execute)
+ 	Context* c = find(uni->d2);
+ 	if (!c || !activate(c)) return 0;
+ 	// An offscreen context's last picture is written as soon as the GPU has it.
+ 	if (c->offscreen) present::poll(c->framebuffer, uni_resolve, false);
+ 	qt_w3d_trace_all = traceFrame >= 0 && c->swaps == static_cast<unsigned long>(traceFrame);
+ 	if (!c->profile.on) return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
+-	LARGE_INTEGER start, end;
+-	QueryPerformanceCounter(&start);
++	int64_t start = ticksNow();
+ 	int32_t result = qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
+-	QueryPerformanceCounter(&end);
+-	c->profile.ticks += end.QuadPart - start.QuadPart;
+-	c->profile.periodTicks += end.QuadPart - start.QuadPart;
++	int64_t end = ticksNow();
++	c->profile.ticks += end - start;
++	c->profile.periodTicks += end - start;
+ 	++c->profile.periodCalls;
+ 	c->profile.periodBytes += static_cast<uint32_t>(uni->d1);
+ 	++c->profile.calls;
+@@ -315,6 +500,7 @@ QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
+ 
+ // d1 = context
+ QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
++	QT_PASS_ON(uni->d1, freeContext)
+ 	Context* c = find(uni->d1);
+ 	if (!c) return 0;
+ 	logProfile(c);
+@@ -329,7 +515,84 @@ QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
+ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+ 	int left = uni->d1, top = uni->d2, width = uni->d3, height = uni->d4;
+ 	bool core = (uni->d5 & contextCore) != 0;
++#ifdef QT_GLES
++	// minigl.library's and agl.library's OpenGL 1.1 goes through gl4es
++	if (!core) {
++		const Gl4esFunctions* passOn = gl4es();
++		return passOn ? passOn->createContext(uni) : 0;
++	}
++#endif
++
++#ifndef _WIN32
++	// No emulator window to take the size of: a context of the whole display
++	// gets one of its own, and one in a window is not seen at all - only an
++	// offscreen context's picture, written into the Amiga bitmap, is.
++	if (width <= 0 || height <= 0) {
++		width = 640;
++		height = 480;
++	}
++	(void)left; // a window's place: there is no window
++	(void)top;
++	if (!(uni->d5 & contextOffscreen)) logString("Warning: Only offscreen contexts are shown on this host");
++	if (!startEgl()) { logString("Warning: Could not initialize EGL"); return 0; }
++#ifdef QT_GLES
++	if (!eglBindAPI(EGL_OPENGL_ES_API)) { logString("Warning: EGL has no OpenGL ES"); return 0; }
++	const EGLint renderable = 0x0040; // EGL_OPENGL_ES3_BIT
++#elif defined(QT_GL4ES)
++	if (core) { logString("Warning: OpenGL 3.3 contexts are not made with gl4es"); return 0; }
++	startGl4es();
++	if (!eglBindAPI(EGL_OPENGL_ES_API)) { logString("Warning: EGL has no OpenGL ES"); return 0; }
++	const EGLint renderable = EGL_OPENGL_ES2_BIT; // gl4es draws with OpenGL ES 2
++#else
++	if (!eglBindAPI(EGL_OPENGL_API)) { logString("Warning: EGL has no OpenGL"); return 0; }
++	const EGLint renderable = EGL_OPENGL_BIT;
++#endif
++	const EGLint configAttributes[] = {
++		EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
++		EGL_RENDERABLE_TYPE, renderable,
++		EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
++		EGL_DEPTH_SIZE, (uni->d5 & contextPlain) ? 24 : 16,
++		EGL_STENCIL_SIZE, 8,
++		EGL_NONE
++	};
++	EGLConfig config;
++	EGLint configs = 0;
++	if (!eglChooseConfig(display, configAttributes, &config, 1, &configs) || configs < 1) { logString("Warning: Could not choose an EGL config"); return 0; }
+ 
++	Context* c = new Context();
++	c->offscreen = (uni->d5 & contextOffscreen) != 0;
++	c->width = width;
++	c->height = height;
++	const EGLint surfaceAttributes[] = {EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE};
++	if (!(c->surface = eglCreatePbufferSurface(display, config, surfaceAttributes))) { logString("Warning: Could not create a pbuffer"); destroy(c); return 0; }
++#if defined(QT_GLES) || defined(QT_GL4ES) // gl4es: never asked for
++	const EGLint coreAttributes[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
++#else
++	const EGLint coreAttributes[] = {
++		EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3,
++		EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
++		EGL_NONE
++	};
++#endif
++#ifdef QT_GL4ES
++	const EGLint compatibilityAttributes[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
++#else
++	const EGLint compatibilityAttributes[] = {
++		EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
++		EGL_NONE
++	};
++#endif
++	if (!(c->gl = eglCreateContext(display, config, EGL_NO_CONTEXT, core ? coreAttributes : compatibilityAttributes))) {
++		logString(core ? "Warning: Could not create an OpenGL 3.3 core rendering context" : "Warning: Could not create rendering context");
++		destroy(c);
++		return 0;
++	}
++	if (!eglMakeCurrent(display, c->surface, c->surface, c->gl)) { logString("Warning: Could not activate the rendering context"); destroy(c); return 0; }
++#ifdef QT_GL4ES
++	c->gl4esState = NewGLState(0, 0);
++	ActivateGLState(c->gl4esState);
++#endif
++#else
+ 	if (!instance) instance = GetModuleHandleA(0);
+ 	HWND amigaWindow = findAmigaWindow();
+ 	if (!amigaWindow) { logString("Warning: Could not find the emulator window"); return 0; }
+@@ -391,6 +654,7 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+ 		return 0;
+ 	}
+ 	if (!wglMakeCurrent(c->deviceContext, c->gl)) { logString("Warning: Could not activate the rendering context"); destroy(c); return 0; }
++#endif
+ 	active = c;
+ 	ffp::makeCurrent(0);
+ 	c->framebuffer.core = core;
+@@ -402,7 +666,9 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+ 
+ 	if (core) {
+ 		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); destroy(c); return 0; }
++#ifndef QT_GLES // ogles2.library's contexts draw without ffp's state
+ 		if (!(c->ffp = ffp::create(width, height))) { destroy(c); return 0; }
++#endif
+ 		static bool logged = false;
+ 		if (!logged) {
+ 			logged = true;
+@@ -410,12 +676,14 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+ 				reinterpret_cast<const char*>(glGetString(GL_RENDERER))).c_str());
+ 		}
+ 	}
++#ifndef QT_GLES // only core contexts get this far
+ 	else if (!(uni->d5 & contextPlain)) {
+ 		glMatrixMode(GL_MODELVIEW);
+ 		glLoadIdentity();
+ 		glScalef(2.0f / static_cast<float>(width), -2.0f / static_cast<float>(height), 1.0f);
+ 		glTranslatef(-(static_cast<float>(width) / 2.0f), -(static_cast<float>(height) / 2.0f), 0.0f);
+ 	}
++#endif
+ 
+ 	const char* dir = getenv("QUARKTEX_CAPTURE_DIR");
+ 	captureDir = dir ? dir : "";
+@@ -438,9 +706,12 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+ 
+ // d1 = left, d2 = top, d3 = width, d4 = height, d5 = context
+ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
++	QT_PASS_ON(uni->d5, moveWindow)
+ 	Context* c = find(uni->d5);
+ 	if (!c) return 0;
++#ifdef _WIN32
+ 	MoveWindow(c->window, uni->d1, uni->d2, uni->d3, uni->d4, FALSE);
++#endif
+ 	// An offscreen context's picture takes the new size.
+ 	if (c->offscreen && (c->framebuffer.width != uni->d3 || c->framebuffer.height != uni->d4) && activate(c)) {
+ 		ffp::flush();
+@@ -452,14 +723,19 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
+ // d1 = context; a1 = the QtTarget an offscreen context's picture goes to
+ // (gl/gl.h), 0 for none.
+ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
++	QT_PASS_ON(uni->d1, swapBuffers)
+ 	Context* c = find(uni->d1);
+ 	if (!c || !activate(c)) return 0;
+ 	ffp::flush();
+ 	if (!captureDir.empty() && c->swaps % captureEvery == 0) captureFrame(c);
+ 	++c->swaps;
+-	LARGE_INTEGER before, after;
+-	if (c->profile.on) QueryPerformanceCounter(&before);
++	int64_t before = 0, after = 0;
++	if (c->profile.on) before = ticksNow();
++#ifdef _WIN32
+ 	if (!c->offscreen) SwapBuffers(c->deviceContext);
++#else
++	if (!c->offscreen) eglSwapBuffers(display, c->surface);
++#endif
+ 	else if (uni->a1) {
+ 		const uint8_t* words = amiga<const uint8_t>(uni->a1);
+ 		uint32_t w[9];
+@@ -472,14 +748,12 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+ 		present::start(c->framebuffer, t, uni_resolve);
+ 	}
+ 	if (c->profile.on) {
+-		QueryPerformanceCounter(&after);
++		after = ticksNow();
+ 		Profile& p = c->profile;
+-		p.swapTicks += after.QuadPart - before.QuadPart;
+-		if (!p.periodStart) p.periodStart = after.QuadPart;
++		p.swapTicks += after - before;
++		if (!p.periodStart) p.periodStart = after;
+ 		else if (c->swaps % reportFrames == 0) {
+-			LARGE_INTEGER frequency;
+-			QueryPerformanceFrequency(&frequency);
+-			double f = static_cast<double>(frequency.QuadPart), wall = (after.QuadPart - p.periodStart) / f;
++			double f = static_cast<double>(ticksPerSecond()), wall = (after - p.periodStart) / f;
+ 			char line[240];
+ 			snprintf(line, sizeof(line), "Profile %s: frames %lu-%lu: %.1f fps; per frame %.2f ms wall, %.2f ms executing "
+ 				"(%lu buffers, %llu bytes), %.2f ms presenting (%.2f starting read backs, %.2f writing pictures), %.2f ms elsewhere (68k)",
+@@ -489,7 +763,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+ 				present::readTicks / f * 1000 / reportFrames, present::writeTicks / f * 1000 / reportFrames,
+ 				(wall - (p.periodTicks + p.swapTicks) / f) * 1000 / reportFrames);
+ 			logString(line);
+-			p.periodStart = after.QuadPart;
++			p.periodStart = after;
+ 			p.periodTicks = p.swapTicks = 0;
+ 			present::readTicks = present::writeTicks = 0;
+ 			p.periodCalls = 0;
+@@ -499,7 +773,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+ 
+ 	GLenum code = glGetError();
+ 	while (code != GL_NO_ERROR) {
+-		logString(reinterpret_cast<const char*>(gluErrorString(code)));
++		logString(errorString(code));
+ 		code = glGetError();
+ 	}
+ 	return 0;
+@@ -509,7 +783,20 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+ // for the GPU if need be: the 68k side calls it before it waits for input,
+ // when no command buffer would come to write it.
+ QT_EXPORT int32_t __cdecl qt_finish_frame(struct uni* uni) {
++	QT_PASS_ON(uni->d1, finishFrame)
+ 	Context* c = find(uni->d1);
+ 	if (c && c->offscreen && activate(c)) present::poll(c->framebuffer, uni_resolve, true);
+ 	return 0;
+ }
++
++#ifdef QT_GL4ES
++// The one function this library exports: what the OpenGL ES library passes
++// on to it, with the emulator's resolver that library was given.
++extern "C" __attribute__((visibility("default"))) const Gl4esFunctions* qt_gl4es_functions(uni_resolve_function resolve) {
++	static const Gl4esFunctions functions = {
++		qt_create_context, qt_free_context, qt_execute, qt_move_window, qt_swap_buffers, qt_finish_frame
++	};
++	uni_resolve = resolve;
++	return &functions;
++}
++#endif
+diff --git a/host/uni.h b/host/uni.h
+index 124a797..88580e4 100644
+--- a/host/uni.h
++++ b/host/uni.h
+@@ -4,8 +4,20 @@
+ #define QUARKTEX_UNI_H
+ 
+ #include <cstdint>
++#include "platform.h"
+ 
++#ifdef _WIN32
+ #define QT_EXPORT extern "C" __declspec(dllexport)
++#define QT_EXPORT_DATA extern "C" __declspec(dllexport)
++#elif defined(QT_GL4ES)
++// Not exported: the library beside the OpenGL ES one that only it opens,
++// and takes the functions from qt_gl4es_functions (quarktex.cpp)
++#define QT_EXPORT extern "C" __attribute__((visibility("hidden")))
++#define QT_EXPORT_DATA extern "C" __attribute__((visibility("hidden")))
++#else
++#define QT_EXPORT extern "C" __attribute__((visibility("default")))
++#define QT_EXPORT_DATA extern "C" __attribute__((visibility("default")))
++#endif
+ 
+ // Registers passed by uaenative.library call_function.
+ struct uni {
+@@ -16,7 +28,7 @@ struct uni {
+ 
+ // Set by the emulator after it has loaded the library.
+ typedef void* (__cdecl *uni_resolve_function)(uint32_t ptr);
+-extern "C" __declspec(dllexport) uni_resolve_function uni_resolve;
++QT_EXPORT_DATA uni_resolve_function uni_resolve;
+ 
+ // Host pointer for an Amiga address.
+ template <typename T> inline T* amiga(int32_t address) {
