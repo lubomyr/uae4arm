@@ -1283,6 +1283,7 @@ static void cfgfile_save_options (struct zfile *f, struct uae_prefs *p, int type
 	cfgfile_dwrite (f, _T("filesys_max_size"), _T("%d"), p->filesys_limit);
 	cfgfile_dwrite (f, _T("filesys_max_name_length"), _T("%d"), p->filesys_max_name);
 	cfgfile_dwrite_str (f, _T("filesys_charset"), filesyscharset[p->filesys_charset]);
+	cfgfile_dwrite_bool (f, _T("native_code"), p->native_code);
 #endif
 	cfgfile_dwrite_bool(f, _T("harddrive_write_protect"), p->harddrive_read_only);
 
@@ -1808,6 +1809,7 @@ static int cfgfile_parse_host (struct uae_prefs *p, TCHAR *option, TCHAR *value)
 	  return 1;
 
   if (cfgfile_strval (option, value, _T("filesys_charset"), &p->filesys_charset, filesyscharset, 0)
+	  || cfgfile_yesno (option, value, _T("native_code"), &p->native_code)
 	  || cfgfile_strval (option, value, _T("sound_output"), &p->produce_sound, soundmode1, 1)
 	  || cfgfile_strval (option, value, _T("sound_output"), &p->produce_sound, soundmode2, 0)
 	  || cfgfile_strval (option, value, _T("sound_interpol"), &p->sound_interpol, interpolmode, 0)
@@ -4294,6 +4296,7 @@ void default_prefs (struct uae_prefs *p, bool reset, int type)
 	p->filesys_limit = 0;
 	p->filesys_max_name = 107;
 	p->filesys_charset = 0;
+	p->native_code = false;
 
   p->fastmem[0].size = 0x00000000;
 	p->mbresmem_low.size = 0x00000000;

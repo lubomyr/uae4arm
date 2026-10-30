@@ -57,6 +57,7 @@ static gcn::UaeDropDown* cboMenuTheme;
 static const TCHAR* menuThemeLabels[] = { _T("Light"), _T("Dark") };
 static gcn::GenericListModel menuThemeList(menuThemeLabels, 2);
 static gcn::UaeCheckBox* chkBSDSocket;
+static gcn::UaeCheckBox* chkNativeCode;
 static gcn::UaeCheckBox* chkMasterWP;
 static gcn::UaeCheckBox* chkMidi;
 static gcn::UaeCheckBox* chkKeyboardAmiga;
@@ -142,6 +143,7 @@ static void RefreshPanelMisc(void)
 
   chkShowGUI->setSelected(workprefs.start_gui);
   chkBSDSocket->setSelected(workprefs.socket_emu);
+  chkNativeCode->setSelected(workprefs.native_code);
   chkMasterWP->setSelected(workprefs.floppy_read_only);
   chkMidi->setSelected(workprefs.midi_serial);
   sync_midi();
@@ -211,6 +213,8 @@ class MiscActionListener : public gcn::ActionListener
 
       else if (actionEvent.getSource() == chkBSDSocket)
         workprefs.socket_emu = chkBSDSocket->isSelected();
+      else if (actionEvent.getSource() == chkNativeCode)
+        workprefs.native_code = chkNativeCode->isSelected();
         
       else if (actionEvent.getSource() == chkMasterWP) {
         workprefs.floppy_read_only = chkMasterWP->isSelected();
@@ -335,6 +339,10 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   chkBSDSocket->setId("BSDSocket");
   chkBSDSocket->addActionListener(miscActionListener);
 
+	chkNativeCode = new gcn::UaeCheckBox("uaenative.library");
+  chkNativeCode->setId("NativeCode");
+  chkNativeCode->addActionListener(miscActionListener);
+
 	chkMasterWP = new gcn::UaeCheckBox("Master floppy write protection");
   chkMasterWP->setId("MasterWP");
   chkMasterWP->addActionListener(miscActionListener);
@@ -420,6 +428,8 @@ void InitPanelMisc(const struct _ConfigCategory& category)
   posY += chkShowCDLed->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkShowDFxLed, DISTANCE_BORDER + 260, posY);
   posY += chkShowDFxLed->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkNativeCode, DISTANCE_BORDER + 260, posY);
+  posY += chkNativeCode->getHeight() + DISTANCE_NEXT_Y;
 
 #ifdef PANDORA
   category.panel->add(lblPandoraSpeed, DISTANCE_BORDER, posY);
@@ -451,6 +461,7 @@ void ExitPanelMisc(const struct _ConfigCategory& category)
   delete lblPandoraSpeedInfo;
 #endif
   delete chkBSDSocket;
+  delete chkNativeCode;
   delete chkMasterWP;
   delete chkMidi;
   delete chkKeyboardAmiga;
@@ -488,6 +499,8 @@ bool HelpPanelMisc(std::vector<std::string> &helptext)
   helptext.push_back(" ");
 #endif	
   helptext.push_back("\"bsdsocket.library\" enables network functions (i.e. for web browsers in OS3.9).");
+  helptext.push_back("\"uaenative.library\" lets Amiga programs call libraries of the host, as WinUAE's \"Allow native code\" - for");
+  helptext.push_back("QuarkTex NG's 3D. It needs a reset.");
   helptext.push_back(" ");
   helptext.push_back("\"Master floppy drive protection\" will disable all write access to floppy disks.");
   helptext.push_back(" ");

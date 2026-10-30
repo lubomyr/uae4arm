@@ -43,6 +43,7 @@
 #define SAVESTATE /* State file support */
 /* #define GFXBOARD */ /* Hardware graphics board */
 /* #define WITH_CHD */
+#define WITH_UAENATIVE /* uaenative.library: Amiga programs call libraries of the host */
 
 
 #define A_ZIP

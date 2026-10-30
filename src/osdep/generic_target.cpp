@@ -23,6 +23,7 @@
 #include "config.h"
 #include "uae.h"
 #include "options.h"
+#include "uaenative.h"
 #include "custom.h"
 #include "inputdevice.h"
 #include "disk.h"
@@ -40,6 +41,10 @@
 #include "picasso96.h"
 #include "driveclick.h"
 #include "fsdb.h"
+#if defined(WITH_UAENATIVE) && !defined(ANDROIDSDL)
+#include <dlfcn.h>
+#include <EGL/egl.h>
+#endif
 
 
 #ifdef WITH_LOGGING
@@ -357,6 +362,62 @@ void set_savestatepath(char *newpath)
   strncpy(savestate_path, newpath, MAX_DPATH - 1);
   savestate_path[MAX_DPATH - 1] = '\0';
 }
+
+
+#ifdef WITH_UAENATIVE
+/* Where uaenative.library looks for libraries of the host: the app's own
+   ones - inside the APK on Android - and a plugins folder beside its data */
+const TCHAR **uaenative_get_library_dirs(void)
+{
+  static const TCHAR *dirs[4];
+  static TCHAR plugins[MAX_DPATH];
+  int n = 0;
+  if (getenv("LIBDIR"))
+    dirs[n++] = getenv("LIBDIR");
+  snprintf(plugins, sizeof plugins, "%s/plugins", start_path_data);
+  dirs[n++] = plugins;
+  dirs[n++] = start_path_data;
+  dirs[n] = NULL;
+  return dirs;
+}
+
+/* Only the old way of calling, of WinUAE on Windows, hands this over */
+void *uaenative_get_uaevar(void)
+{
+  return NULL;
+}
+
+/* A host library such as QuarkTex NG leaves its OpenGL context current in
+   this thread from one call to the next. While one is current, the NVIDIA
+   driver keeps the window from showing anything SDL_Flip() puts there: it
+   stays on the last picture from before, and so does the menu. QuarkTex
+   checks for its context on every call and makes it current again itself.
+   libEGL is looked up only once such a library has loaded it. On Android
+   the context current here is the one SDL draws with, so it stays. */
+void uaenative_release_host_context(void)
+{
+#ifndef ANDROIDSDL
+  static EGLContext (*get_context)(void);
+  static EGLBoolean (*make_current)(EGLDisplay, EGLSurface, EGLSurface, EGLContext);
+  static EGLDisplay (*get_display)(void);
+
+  if (make_current == NULL) {
+    void *egl = dlopen("libEGL.so.1", RTLD_NOW | RTLD_NOLOAD);
+    if (egl == NULL)
+      return;
+    get_context = (EGLContext (*)(void))dlsym(egl, "eglGetCurrentContext");
+    get_display = (EGLDisplay (*)(void))dlsym(egl, "eglGetCurrentDisplay");
+    if (get_context == NULL || get_display == NULL)
+      return;
+    make_current = (EGLBoolean (*)(EGLDisplay, EGLSurface, EGLSurface, EGLContext))dlsym(egl, "eglMakeCurrent");
+    if (make_current == NULL)
+      return;
+  }
+  if (get_context() != EGL_NO_CONTEXT)
+    make_current(get_display(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+#endif
+}
+#endif
 
 
 void fetch_downloadpath(char *out, int size)

@@ -155,6 +155,7 @@ OBJS =	\
 	src-$(arch)/traps.o \
 	src-$(arch)/tinyxml2.o \
 	src-$(arch)/uaelib.o \
+	src-$(arch)/uaenative.o \
 	src-$(arch)/uaeresource.o \
 	src-$(arch)/zfile.o \
 	src-$(arch)/zfile_archive.o \

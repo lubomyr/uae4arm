@@ -34,6 +34,7 @@
 #ifdef JIT
 #include "jit/compemu.h"
 #endif
+#include "uaenative.h"
 
 #define MAX_DEVICE_ITEMS 64
 
@@ -247,6 +248,9 @@ void virtualdevice_init (void)
 #ifdef AUTOCONFIG
 	expansion_init ();
 	emulib_install ();
+#ifdef WITH_UAENATIVE
+	uaenative_install ();
+#endif
 #endif
 #ifdef FILESYS
 	filesys_install ();

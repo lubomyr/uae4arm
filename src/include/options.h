@@ -319,6 +319,7 @@ struct uae_prefs {
 	int turbo_emulation;
 	int filesys_limit;
 	int filesys_max_name;
+	bool native_code; // uaenative.library
 	int filesys_charset; // of the file names of folder drives on the Amiga: 0 Latin-1, 1 Windows-1251
 
 	int cs_compatible;

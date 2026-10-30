@@ -47,6 +47,7 @@
 #include "isofs_api.h"
 #include "picasso96.h"
 #include "rommgr.h"
+#include "uaenative.h"
 
 #define KS12_BOOT_HACK 1
 
@@ -6474,6 +6475,9 @@ static uae_u32 REGPARAM2 filesys_diagentry (TrapContext *ctx)
 	}
 
   resaddr = uaeres_startup (ctx, resaddr);
+#ifdef WITH_UAENATIVE
+	resaddr = uaenative_startup(ctx, resaddr);
+#endif
 #ifdef BSDSOCKET
 	resaddr = bsdlib_startup(ctx, resaddr);
 #endif

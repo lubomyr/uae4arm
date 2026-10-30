@@ -19,6 +19,7 @@
 #include "gui_handling.h"
 #include "include/memory-uae.h"
 #include "autoconf.h"
+#include "uaenative.h"
 
 #if defined(ANDROIDSDL)
 #include "androidsdl_event.h"
@@ -1021,6 +1022,9 @@ void run_gui(void)
   SDL_ANDROID_SetFloatingWindowsHidden(1);
   // The app got this far, so a video thread on trial stays on
   SDL_ANDROID_ConfirmConfigOptions();
+#endif
+#ifdef WITH_UAENATIVE
+  uaenative_release_host_context();
 #endif
   gui_running = true;
   gui_rtarea_flags_onenter = gui_create_rtarea_flag(&currprefs);

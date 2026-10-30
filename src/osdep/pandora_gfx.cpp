@@ -14,6 +14,7 @@
 #include "savestate.h"
 #include "picasso96.h"
 #include "statusline.h"
+#include "uaenative.h"
 
 #include <png.h>
 #include <SDL.h>
@@ -699,6 +700,9 @@ void show_screen (int mode)
   }
 
   last_synctime = read_processor_time();
+#ifdef WITH_UAENATIVE
+  uaenative_release_host_context();
+#endif
   SDL_Flip(prSDLScreen);
 #ifdef ANDROIDSDL
   // A configuration that starts without the menu never shows it, so a
