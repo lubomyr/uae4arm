@@ -220,6 +220,13 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
     p->z3fastmem[0].size = 0;
     err = 1;
   }
+  // A configuration may ask for more than this device had room for
+  if (p->z3fastmem[0].size > max_z3fastmem) {
+	  error_log (_T("Zorro III fastmem size %d (0x%x) larger than maximum reserved %d (0x%x)."),
+      p->z3fastmem[0].size, p->z3fastmem[0].size, max_z3fastmem, max_z3fastmem);
+    p->z3fastmem[0].size = max_z3fastmem;
+    err = 1;
+  }
 
   p->z3autoconfig_start &= ~0xffff;
 	if (p->z3autoconfig_start != 0 && p->z3autoconfig_start < 0x1000000)

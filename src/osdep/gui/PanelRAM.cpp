@@ -29,6 +29,11 @@ static const char *SlowMem_list[] = { "None", "512 K", "1 MB", "1.5 MB", "1.8 MB
 static const int SlowMem_values[] = { 0x000000, 0x080000, 0x100000, 0x180000, 0x1c0000 };
 static const char *FastMem_list[] = { "None", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB", "32 MB", "64 MB", "128 MB" };
 static const int FastMem_values[] = { 0x000000, 0x100000, 0x200000, 0x400000, 0x800000, 0x1000000, 0x2000000, 0x4000000, 0x8000000 };
+// Z3 Fast up to 512 MB (Quake III wants 256), as far as alloc_AmigaMem() got
+// room for it (max_z3fastmem)
+static const char *Z3Mem_list[] = { "None", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB", "32 MB", "64 MB", "128 MB", "256 MB", "512 MB" };
+static const int Z3Mem_values[] = { 0x000000, 0x100000, 0x200000, 0x400000, 0x800000, 0x1000000, 0x2000000, 0x4000000, 0x8000000,
+  0x10000000, 0x20000000 };
 static const char *A3000LowMem_list[] = { "None", "8 MB", "16 MB", "32 MB", "64 MB" };
 static const int A3000LowMem_values[] = { 0x080000, 0x800000, 0x1000000, 0x2000000, 0x4000000 };
 static const char *A3000HighMem_list[] = { "None", "8 MB", "16 MB", "32 MB", "64 MB", "128 MB" };
@@ -86,10 +91,10 @@ static void RefreshPanelRAM(void)
     }
   }
 
-  for(i = 0; i < 9; ++i) {
-    if(workprefs.z3fastmem[0].size == FastMem_values[i]) {
+  for(i = 0; i < 11; ++i) {
+    if(workprefs.z3fastmem[0].size == Z3Mem_values[i]) {
       sldZ3mem->setValue(i);
-      lblZ3size->setCaption(FastMem_list[i]);
+      lblZ3size->setCaption(Z3Mem_list[i]);
       break;
     }
   }
@@ -146,7 +151,7 @@ class MemorySliderActionListener : public gcn::ActionListener
   		}	
 
 	    if (actionEvent.getSource() == sldZ3mem) {
-     		workprefs.z3fastmem[0].size = FastMem_values[(int)(sldZ3mem->getValue())];
+     		workprefs.z3fastmem[0].size = Z3Mem_values[(int)(sldZ3mem->getValue())];
 	      if (workprefs.z3fastmem[0].size > max_z3fastmem)
 	        workprefs.z3fastmem[0].size = max_z3fastmem;
   		}	
@@ -218,7 +223,7 @@ void InitPanelRAM(const struct _ConfigCategory& category)
   lblFastsize = new gcn::Label("None   ");
 
 	lblZ3mem = new gcn::Label("Z3 Fast:");
-  sldZ3mem = new gcn::Slider(0, 8);
+  sldZ3mem = new gcn::Slider(0, 10);
   sldZ3mem->setSize(sldWidth, SLIDER_HEIGHT);
   sldZ3mem->setBaseColor(gui_baseCol);
 	sldZ3mem->setMarkerLength(markerLength);

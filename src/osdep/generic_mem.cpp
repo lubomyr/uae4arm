@@ -31,8 +31,27 @@ uae_u32 max_z3fastmem;
 /* JIT can access few bytes outside of memory block of it executes code at the very end of memory block */
 #define BARRIER 32
 
+static uae_u8 *map_at_address(void *addr, size_t size);
 static uae_u8* additional_mem = (uae_u8*) MAP_FAILED;
-#define ADDITIONAL_MEMSIZE (128 + 16) * 1024 * 1024
+/* The area for Z3 Fast RAM and the 16 MB of the RTG board. As much as can be
+   had of 512, 256 and 128 MB for Z3 (Quake III wants 256): a 32-bit device may
+   have no room for the larger ones, and the JIT needs all of it below 4 GB.
+   max_z3fastmem is what was had. */
+static const uae_u32 additional_memsizes[] = { (512 + 16) * 1024 * 1024, (256 + 16) * 1024 * 1024, (128 + 16) * 1024 * 1024 };
+static uae_u32 additional_memsize = (128 + 16) * 1024 * 1024;
+#define ADDITIONAL_MEMSIZE additional_memsize
+
+static uae_u8 *map_additional(uae_u8 *at)
+{
+  uae_u8 *p = map_at_address(at, ADDITIONAL_MEMSIZE + BARRIER);
+#if defined(CPU_AARCH64)
+  if (p != MAP_FAILED && ((uae_u64)(p + ADDITIONAL_MEMSIZE + BARRIER) & 0xffffffff00000000) != 0) {
+    munmap(p, ADDITIONAL_MEMSIZE + BARRIER);
+    return (uae_u8 *)MAP_FAILED;
+  }
+#endif
+  return p;
+}
 
 static uae_u8* a3000_mem = (uae_u8*) MAP_FAILED;
 static int a3000_totalsize = 0;
@@ -123,6 +142,31 @@ void alloc_AmigaMem(void)
   // and additional mem for Z3 and RTG at correct offset
   natmem_size = 16 * 1024 * 1024;
 #ifdef ANDROID
+  /* Z3 goes 1 GB above the 24-bit area. Just above 0x60000000, where the first
+     free low address would put it, 64-bit Android keeps its boot image (about
+     0x70000000), which leaves room for 128 MB only: so look for a base where
+     both fit, the largest Z3 first, below 4 GB as the JIT wants. */
+  for (i = 0; i < (int)(sizeof(additional_memsizes) / sizeof(additional_memsizes[0])); ++i) {
+    additional_memsize = additional_memsizes[i];
+    for (uae_u64 base = 0x20000000; base + Z3BASE_REAL + ADDITIONAL_MEMSIZE + BARRIER <= 0x100000000ULL;
+         base += 0x08000000) {
+      regs.natmem_offset = map_at_address((void *)base, natmem_size + BARRIER);
+      if (regs.natmem_offset == MAP_FAILED)
+        continue;
+      additional_mem = map_additional(regs.natmem_offset + Z3BASE_REAL);
+      if (additional_mem != MAP_FAILED) {
+        max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
+        changed_prefs.z3autoconfig_start = currprefs.z3autoconfig_start = Z3BASE_REAL;
+        z3base_adr = Z3BASE_REAL;
+        write_log("Allocated 16 MB for 24-bit area (%p) and %d MB for Z3 and RTG at real address (%p - %p)\n",
+          regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
+        set_expamem_z3_hack_mode(Z3MAPPING_REAL);
+        return;
+      }
+      munmap(regs.natmem_offset, natmem_size + BARRIER);
+    }
+  }
+
   // address returned by valloc() too high for later mmap() calls. Use mmap() also for first area.
   /* The JIT reaches Amiga memory through natmem_offset and needs it below 4 GB,
      which is why a fixed low address is asked for at all. If it is taken, walk
@@ -145,44 +189,50 @@ void alloc_AmigaMem(void)
 #else
   regs.natmem_offset = (uae_u8*)valloc (natmem_size + BARRIER);
 #endif
-  max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
 	if (!regs.natmem_offset) {
 		write_log("Can't allocate 16M of virtual address space!?\n");
     abort();
 	}
-  additional_mem = map_at_address(regs.natmem_offset + Z3BASE_REAL, ADDITIONAL_MEMSIZE + BARRIER);
-  if(additional_mem != MAP_FAILED)
-  {
-    // Allocation successful -> we can use natmem_offset for entire memory access at real address
-    changed_prefs.z3autoconfig_start = currprefs.z3autoconfig_start = Z3BASE_REAL;
-    z3base_adr = Z3BASE_REAL;
+  for (i = 0; i < (int)(sizeof(additional_memsizes) / sizeof(additional_memsizes[0])); ++i) {
+    additional_memsize = additional_memsizes[i];
+    max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
+    additional_mem = map_additional(regs.natmem_offset + Z3BASE_REAL);
+    if(additional_mem != MAP_FAILED)
+    {
+      // Allocation successful -> we can use natmem_offset for entire memory access at real address
+      changed_prefs.z3autoconfig_start = currprefs.z3autoconfig_start = Z3BASE_REAL;
+      z3base_adr = Z3BASE_REAL;
 #if defined(CPU_AARCH64)
-    write_log("Allocated 16 MB for 24-bit area (0x%016lx) and %d MB for Z3 and RTG at real address (0x%016lx - 0x%016lx)\n", 
-      regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
+      write_log("Allocated 16 MB for 24-bit area (0x%016lx) and %d MB for Z3 and RTG at real address (0x%016lx - 0x%016lx)\n", 
+        regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
 #else
-    write_log("Allocated 16 MB for 24-bit area (0x%08x) and %d MB for Z3 and RTG at real address (0x%08x - 0x%08x)\n", 
-      regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
+      write_log("Allocated 16 MB for 24-bit area (0x%08x) and %d MB for Z3 and RTG at real address (0x%08x - 0x%08x)\n", 
+        regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
 #endif
-    set_expamem_z3_hack_mode(Z3MAPPING_REAL);
-    return;
-  }
+      set_expamem_z3_hack_mode(Z3MAPPING_REAL);
+      return;
+    }
 
-  additional_mem = map_at_address(regs.natmem_offset + Z3BASE_UAE, ADDITIONAL_MEMSIZE + BARRIER);
-  if(additional_mem != MAP_FAILED)
-  {
-    // Allocation successful -> we can use natmem_offset for entire memory access at fake address
-    changed_prefs.z3autoconfig_start = currprefs.z3autoconfig_start = Z3BASE_UAE;
-    z3base_adr = Z3BASE_UAE;
+    additional_mem = map_additional(regs.natmem_offset + Z3BASE_UAE);
+    if(additional_mem != MAP_FAILED)
+    {
+      // Allocation successful -> we can use natmem_offset for entire memory access at fake address
+      changed_prefs.z3autoconfig_start = currprefs.z3autoconfig_start = Z3BASE_UAE;
+      z3base_adr = Z3BASE_UAE;
 #if defined(CPU_AARCH64)
-    write_log("Allocated 16 MB for 24-bit area (0x%016lx) and %d MB for Z3 and RTG at fake address (0x%016lx - 0x%016lx)\n", 
-      regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
+      write_log("Allocated 16 MB for 24-bit area (0x%016lx) and %d MB for Z3 and RTG at fake address (0x%016lx - 0x%016lx)\n", 
+        regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
 #else
-    write_log("Allocated 16 MB for 24-bit area (0x%08x) and %d MB for Z3 and RTG at fake address (0x%08x - 0x%08x)\n", 
-      regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
+      write_log("Allocated 16 MB for 24-bit area (0x%08x) and %d MB for Z3 and RTG at fake address (0x%08x - 0x%08x)\n", 
+        regs.natmem_offset, ADDITIONAL_MEMSIZE / (1024 * 1024), additional_mem, additional_mem + ADDITIONAL_MEMSIZE + BARRIER);
 #endif
-    set_expamem_z3_hack_mode(Z3MAPPING_UAE);
-    return;
+      set_expamem_z3_hack_mode(Z3MAPPING_UAE);
+      return;
+    }
   }
+  // The smallest did not fit either
+  additional_memsize = additional_memsizes[sizeof(additional_memsizes) / sizeof(additional_memsizes[0]) - 1];
+  max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
 #ifdef ANDROID
   munmap(regs.natmem_offset, natmem_size + BARRIER);
 #else
