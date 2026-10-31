@@ -1,7 +1,7 @@
 # QuarkTex NG's host library, libquarktexng.so, which uaenative.library
 # opens for QuarkTex's Amiga libraries: in project/jni/quarktexng/ with
 # QuarkTex's Source folder as src/ and gl4es as gl4es/. It draws with OpenGL
-# ES 3 and executes ogles2.library's commands itself (host/gles.cpp);
+# ES 3 and executes ogles2.library's and Warp3D's commands itself;
 # minigl.library's and agl.library's go to libquarktexng_gl4es.so below.
 LOCAL_PATH := $(call my-dir)
 
@@ -13,7 +13,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/src/host/gles $(LOCAL_PATH)/src/gl
 
 LOCAL_CPPFLAGS := -O2 -std=c++11 -Wall
 
-LOCAL_SRC_FILES := src/host/quarktex.cpp src/host/gldecode.cpp src/host/ogles2.cpp \
+LOCAL_SRC_FILES := src/host/quarktex.cpp src/host/gldecode.cpp src/host/ogles2.cpp src/host/w3d.cpp src/host/ffp.cpp \
 	src/host/gl3.cpp src/host/present.cpp src/host/gles.cpp
 
 LOCAL_LDLIBS := -lEGL -lGLESv3

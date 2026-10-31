@@ -54,22 +54,406 @@ index 310dbef..80e2988 100644
  		stubs(functions, root + "tests/host/glstubs.auto.inc");
  		calls(functions, root + "tests/host/glcalls.auto.inc");
  		int synchronous = 0;
+diff --git a/host/ffp.cpp b/host/ffp.cpp
+index aed5246..cbe112f 100644
+--- a/host/ffp.cpp
++++ b/host/ffp.cpp
+@@ -119,6 +119,9 @@ namespace {
+ 	struct Uniforms {
+ 		GLint modelView, smoothShading, texturing, envMode, envColor, fogging, fogMode, fogParams, fogColor,
+ 			alphaTesting, alphaFunction, alphaReference, clampRange, chromaMode, chromaLower, chromaUpper;
++#ifdef QT_GLES
++		GLint pointSize;
++#endif
+ 	};
+ 
+ 	// GL_CLAMP, which OpenGL 3.3 does not have: the coordinate is clamped to
+@@ -171,13 +174,43 @@ struct ffp::Context {
+ 	std::map<GLuint, TextureInfo> textures;
+ 	std::vector<Vertex> batch; // see flushBatch
+ 	GLenum batchMode;
++#ifdef QT_GLES
++	GLfloat pointSize;
++	// The unpack state the texel conversion needs (PixelStorei)
++	bool unpackSwap;
++	GLint unpackRowLength, unpackAlignment;
++#endif
+ };
+ 
+ namespace {
+ 	ffp::Context* ctx = 0; // the current one
+ 
++#ifdef QT_GLES
++	// The shaders above as GLSL ES 3.00: its version line and precisions,
++	// and the point size, which OpenGL ES takes only from the vertex shader
++	// (the main program's PointSize, 1 for DepthPoints and StencilPoints).
++	std::string esSource(GLenum type, const char* source) {
++		std::string s(source);
++		const std::string desktop = "#version 330 core\n";
++		if (s.compare(0, desktop.size(), desktop) == 0)
++			s.replace(0, desktop.size(), "#version 300 es\nprecision highp float;\nprecision highp int;\n");
++		if (type == GL_VERTEX_SHADER) {
++			bool main = s.find("uniform mat4 modelView;\nout vec4") != std::string::npos;
++			size_t at = s.find("void main() {\n");
++			if (at != std::string::npos)
++				s.replace(at, 14, main ? "uniform float pointSize;\nvoid main() {\n\tgl_PointSize = pointSize;\n"
++					: "void main() {\n\tgl_PointSize = 1.0;\n");
++		}
++		return s;
++	}
++#endif
++
+ 	GLuint compile(GLenum type, const char* source) {
+ 		GLuint shader = gl3::CreateShader(type);
++#ifdef QT_GLES
++		std::string es = esSource(type, source);
++		source = es.c_str();
++#endif
+ 		gl3::ShaderSource(shader, 1, &source, 0);
+ 		gl3::CompileShader(shader);
+ 		GLint ok = 0, length = 0;
+@@ -285,9 +318,22 @@ namespace {
+ 		ctx->texturingSent = texture;
+ 	}
+ 
++#ifdef QT_GLES
++	// The vertex array is bound only to draw: under OpenGL ES the client
++	// memory indices of ogles2.library's draws need none bound, and its
++	// contexts have this emulation too.
++	void bindArrays() {
++		gl3::BindVertexArray(ctx->vertexArray);
++		gl3::BindBuffer(GL_ARRAY_BUFFER, ctx->vertexBuffer);
++	}
++#else
++	void bindArrays() {}
++#endif
++
+ 	void draw(GLenum mode, const Vertex* data, size_t count) {
+ 		if (!count || !ctx->program) return;
+ 		sendState();
++		bindArrays();
+ 		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(count * sizeof(Vertex)), data, GL_STREAM_DRAW);
+ 		glDrawArrays(mode, 0, static_cast<GLsizei>(count));
+ 	}
+@@ -347,6 +393,75 @@ namespace {
+ 		}
+ 		return false;
+ 	}
++
++#ifdef QT_GLES
++	// OpenGL ES takes a GL_RGBA8 texture only as RGBA bytes, and has no
++	// GL_BGRA, no reversed packed types and no byte swapping: Warp3D's
++	// texels (host/w3d.cpp) become RGBA bytes here, rows as the unpack state
++	// lays them out. Empty for pixels of none of its formats, which go to
++	// OpenGL ES as they are.
++	std::vector<uint8_t> toRgba(GLenum format, GLenum type, GLsizei width, GLsizei height, const GLvoid* pixels) {
++		std::vector<uint8_t> rgba;
++		int size;
++		if (type == GL_UNSIGNED_BYTE) size = format == GL_RGB ? 3 : format == GL_RGBA || format == 0x80E1 ? 4 : 0;
++		else if (type == 0x8363 || type == 0x8365 || type == 0x8366) size = 2; // 5_6_5, 4_4_4_4_REV, 1_5_5_5_REV
++		else if (type == 0x8367) size = 4; // 8_8_8_8_REV
++		else size = 0;
++		if (!pixels || !size || width <= 0 || height <= 0) return rgba;
++		size_t row = static_cast<size_t>(ctx->unpackRowLength > 0 ? ctx->unpackRowLength : width) * size;
++		size_t alignment = ctx->unpackAlignment > 0 ? static_cast<size_t>(ctx->unpackAlignment) : 1;
++		row = (row + alignment - 1) / alignment * alignment;
++		rgba.resize(static_cast<size_t>(width) * height * 4);
++		uint8_t* out = &rgba[0];
++		for (GLsizei y = 0; y < height; ++y) {
++			const uint8_t* p = static_cast<const uint8_t*>(pixels) + row * y;
++			for (GLsizei x = 0; x < width; ++x, p += size, out += 4) {
++				uint32_t v;
++				if (size == 2) v = ctx->unpackSwap ? (p[0] << 8 | p[1]) : (p[1] << 8 | p[0]);
++				else if (size == 4 && type != GL_UNSIGNED_BYTE)
++					v = ctx->unpackSwap ? (uint32_t(p[0]) << 24 | p[1] << 16 | p[2] << 8 | p[3])
++						: (uint32_t(p[3]) << 24 | p[2] << 16 | p[1] << 8 | p[0]);
++				else v = 0;
++				switch (type) {
++				case 0x8363: // GL_RGB, 5_6_5
++					out[0] = static_cast<uint8_t>((v >> 11) * 255 / 31); out[1] = static_cast<uint8_t>(((v >> 5) & 63) * 255 / 63);
++					out[2] = static_cast<uint8_t>((v & 31) * 255 / 31); out[3] = 255;
++					break;
++				case 0x8365: // GL_BGRA, 4_4_4_4_REV: a r g b from the top
++					out[0] = static_cast<uint8_t>(((v >> 8) & 15) * 17); out[1] = static_cast<uint8_t>(((v >> 4) & 15) * 17);
++					out[2] = static_cast<uint8_t>((v & 15) * 17); out[3] = static_cast<uint8_t>((v >> 12) * 17);
++					break;
++				case 0x8366: // GL_BGRA, 1_5_5_5_REV
++					out[0] = static_cast<uint8_t>(((v >> 10) & 31) * 255 / 31); out[1] = static_cast<uint8_t>(((v >> 5) & 31) * 255 / 31);
++					out[2] = static_cast<uint8_t>((v & 31) * 255 / 31); out[3] = (v & 0x8000) ? 255 : 0;
++					break;
++				case 0x8367: // GL_BGRA, 8_8_8_8_REV
++					out[0] = static_cast<uint8_t>(v >> 16); out[1] = static_cast<uint8_t>(v >> 8);
++					out[2] = static_cast<uint8_t>(v); out[3] = static_cast<uint8_t>(v >> 24);
++					break;
++				default: // bytes
++					if (format == GL_RGB) { out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; out[3] = 255; }
++					else if (format == GL_RGBA) { out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; out[3] = p[3]; }
++					else { out[0] = p[2]; out[1] = p[1]; out[2] = p[0]; out[3] = p[3]; } // GL_BGRA
++				}
++			}
++		}
++		return rgba;
++	}
++
++	// Uploads converted pixels as tight RGBA rows, the application's unpack
++	// state put back after.
++	void uploadRgba(bool sub, GLenum target, GLint level, GLint x, GLint y, GLsizei width, GLsizei height,
++			const std::vector<uint8_t>& rgba) {
++		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
++		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
++		const void* data = rgba.empty() ? 0 : &rgba[0];
++		if (sub) glTexSubImage2D(target, level, x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
++		else glTexImage2D(target, level, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
++		glPixelStorei(GL_UNPACK_ROW_LENGTH, ctx->unpackRowLength);
++		glPixelStorei(GL_UNPACK_ALIGNMENT, ctx->unpackAlignment);
++	}
++#endif
+ }
+ 
+ namespace ffp {
+@@ -363,6 +478,9 @@ namespace ffp {
+ 		QT_UNIFORM(fogging) QT_UNIFORM(fogMode) QT_UNIFORM(fogParams) QT_UNIFORM(fogColor) QT_UNIFORM(alphaTesting)
+ 		QT_UNIFORM(alphaFunction) QT_UNIFORM(alphaReference) QT_UNIFORM(clampRange)
+ 		QT_UNIFORM(chromaMode) QT_UNIFORM(chromaLower) QT_UNIFORM(chromaUpper)
++#ifdef QT_GLES
++		QT_UNIFORM(pointSize)
++#endif
+ #undef QT_UNIFORM
+ 
+ 		// The model view matrix of QuarkTex 0.53, built as glScalef and
+@@ -386,6 +504,15 @@ namespace ffp {
+ 		gl3::EnableVertexAttribArray(0);
+ 		gl3::EnableVertexAttribArray(1);
+ 		gl3::EnableVertexAttribArray(2);
++#ifdef QT_GLES
++		gl3::BindVertexArray(0); // see bindArrays
++		gl3::BindBuffer(GL_ARRAY_BUFFER, 0);
++		ctx->pointSize = 1.0f;
++		gl3::Uniform1f(ctx->uniforms.pointSize, 1.0f);
++		ctx->unpackSwap = false;
++		ctx->unpackRowLength = 0;
++		ctx->unpackAlignment = 4;
++#endif
+ 
+ 		State initial = {false, false, false, true, GL_ALWAYS, 0.0f, GL_EXP, 0.0f, 1.0f, 1.0f, {0, 0, 0, 0},
+ 			GL_MODULATE, {0, 0, 0, 0}, false};
+@@ -480,6 +607,9 @@ namespace ffp {
+ 		case GL_TEXTURE_2D: ctx->state.texture2D = true; ctx->dirty = true; break;
+ 		case GL_FOG: ctx->state.fog = true; ctx->dirty = true; break;
+ 		case GL_ALPHA_TEST: ctx->state.alphaTest = true; ctx->dirty = true; break;
++#ifdef QT_GLES
++		case GL_COLOR_LOGIC_OP: break; // OpenGL ES has no logic operations
++#endif
+ 		default: glEnable(cap); break;
+ 		}
+ 	}
+@@ -490,6 +620,9 @@ namespace ffp {
+ 		case GL_TEXTURE_2D: ctx->state.texture2D = false; ctx->dirty = true; break;
+ 		case GL_FOG: ctx->state.fog = false; ctx->dirty = true; break;
+ 		case GL_ALPHA_TEST: ctx->state.alphaTest = false; ctx->dirty = true; break;
++#ifdef QT_GLES
++		case GL_COLOR_LOGIC_OP: break;
++#endif
+ 		default: glDisable(cap); break;
+ 		}
+ 	}
+@@ -629,7 +762,13 @@ namespace ffp {
+ 		GLenum upload = format;
+ 		GLint swizzle[4] = {GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA};
+ 		if (!legacyFormat(format, upload, internalFormat, swizzle)) internalFormat = GL_RGBA8;
++#ifdef QT_GLES
++		if (internalFormat == GL_RGBA8) uploadRgba(false, target, level, 0, 0, width, height,
++			toRgba(format, type, width, height, pixels));
++		else glTexImage2D(target, level, internalFormat, width, height, border, upload, type, pixels);
++#else
+ 		glTexImage2D(target, level, internalFormat, width, height, border, upload, type, pixels);
++#endif
+ 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_R, swizzle[0]);
+ 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_G, swizzle[1]);
+ 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_B, swizzle[2]);
+@@ -649,11 +788,35 @@ namespace ffp {
+ 		flushBatch();
+ 		GLenum upload = format;
+ 		GLint internalFormat, swizzle[4];
++#ifdef QT_GLES
++		if (!legacyFormat(format, upload, internalFormat, swizzle)) {
++			std::vector<uint8_t> rgba = toRgba(format, type, width, height, pixels);
++			if (!rgba.empty()) uploadRgba(true, target, level, x, y, width, height, rgba);
++		}
++		else glTexSubImage2D(target, level, x, y, width, height, upload, type, pixels);
++#else
+ 		legacyFormat(format, upload, internalFormat, swizzle);
+ 		glTexSubImage2D(target, level, x, y, width, height, upload, type, pixels);
++#endif
+ 		if (target == GL_TEXTURE_2D && level == 0 && ctx->textures.count(ctx->bound)) ctx->textures[ctx->bound].mipmapsMade = false;
+ 	}
+ 
++#ifdef QT_GLES
++	void PixelStorei(GLenum pname, GLint param) {
++		flushBatch();
++		if (pname == GL_UNPACK_SWAP_BYTES) { ctx->unpackSwap = param != 0; return; }
++		if (pname == GL_UNPACK_ROW_LENGTH) ctx->unpackRowLength = param;
++		else if (pname == GL_UNPACK_ALIGNMENT) ctx->unpackAlignment = param;
++		glPixelStorei(pname, param);
++	}
++
++	void PointSize(GLfloat size) {
++		flushBatch();
++		ctx->pointSize = size;
++		gl3::Uniform1f(ctx->uniforms.pointSize, size);
++	}
++#endif
++
+ 	void DepthPoints(GLsizei count, const GLfloat* xyz) {
+ 		flushBatch();
+ 		if (count <= 0 || !ctx->program) return;
+@@ -664,7 +827,9 @@ namespace ffp {
+ 		glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+ 		glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+ 		glGetIntegerv(GL_DEPTH_FUNC, &depthFunction);
++#ifndef QT_GLES
+ 		glGetFloatv(GL_POINT_SIZE, &pointSize);
++#endif
+ 
+ 		std::vector<Vertex> points(static_cast<size_t>(count));
+ 		for (GLsizei i = 0; i < count; ++i) {
+@@ -675,13 +840,20 @@ namespace ffp {
+ 		glEnable(GL_DEPTH_TEST);
+ 		glDepthFunc(GL_ALWAYS);
+ 		glDepthMask(GL_TRUE);
++#ifdef QT_GLES
++		(void)pointSize; // the depth program draws 1 pixel points
++		bindArrays();
++#else
+ 		glPointSize(1.0f);
++#endif
+ 		gl3::UseProgram(ctx->depthProgram);
+ 		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)), &points[0], GL_STREAM_DRAW);
+ 		glDrawArrays(GL_POINTS, 0, count);
+ 		gl3::UseProgram(ctx->program);
+ 
++#ifndef QT_GLES
+ 		glPointSize(pointSize);
++#endif
+ 		glDepthMask(depthMask);
+ 		glDepthFunc(static_cast<GLenum>(depthFunction));
+ 		if (!depthTest) glDisable(GL_DEPTH_TEST);
+@@ -706,7 +878,9 @@ namespace ffp {
+ 		glGetIntegerv(GL_STENCIL_FAIL, &sfail);
+ 		glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &dpfail);
+ 		glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &dppass);
++#ifndef QT_GLES
+ 		glGetFloatv(GL_POINT_SIZE, &pointSize);
++#endif
+ 
+ 		std::vector<Vertex> points(static_cast<size_t>(count));
+ 		for (GLsizei i = 0; i < count; ++i) {
+@@ -717,7 +891,12 @@ namespace ffp {
+ 		glDisable(GL_DEPTH_TEST);
+ 		glEnable(GL_STENCIL_TEST);
+ 		glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
++#ifdef QT_GLES
++		(void)pointSize; // the depth program draws 1 pixel points
++		bindArrays();
++#else
+ 		glPointSize(1.0f);
++#endif
+ 		gl3::UseProgram(ctx->depthProgram);
+ 		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)), &points[0], GL_STREAM_DRAW);
+ 		for (GLsizei first = 0, end; first < count; first = end) {
+@@ -727,7 +906,9 @@ namespace ffp {
+ 		}
+ 		gl3::UseProgram(ctx->program);
+ 
++#ifndef QT_GLES
+ 		glPointSize(pointSize);
++#endif
+ 		glStencilOp(static_cast<GLenum>(sfail), static_cast<GLenum>(dpfail), static_cast<GLenum>(dppass));
+ 		glStencilFunc(static_cast<GLenum>(function), reference, static_cast<GLuint>(valueMask));
+ 		if (!stencilTest) glDisable(GL_STENCIL_TEST);
 diff --git a/host/ffp.h b/host/ffp.h
-index 8760330..b518269 100644
+index 8760330..7506b31 100644
 --- a/host/ffp.h
 +++ b/host/ffp.h
-@@ -95,12 +95,16 @@ namespace ffp {
+@@ -11,6 +11,52 @@
+ #include <cstdint>
+ #include <vector>
+ 
++#ifdef QT_GLES
++// OpenGL 1.1's names for what is emulated here, or taken apart (logic
++// operations, byte swapping); OpenGL ES has none of them.
++#define GL_EXP 0x0800
++#define GL_EXP2 0x0801
++#define GL_POINT_SIZE 0x0B11
++#define GL_FOG 0x0B60
++#define GL_FOG_DENSITY 0x0B62
++#define GL_FOG_START 0x0B63
++#define GL_FOG_END 0x0B64
++#define GL_FOG_MODE 0x0B65
++#define GL_FOG_COLOR 0x0B66
++#define GL_ALPHA_TEST 0x0BC0
++#define GL_COLOR_LOGIC_OP 0x0BF2
++#define GL_UNPACK_SWAP_BYTES 0x0CF0
++#define GL_COLOR_INDEX 0x1900
++#define GL_STENCIL_INDEX 0x1901
++#define GL_CLEAR 0x1500
++#define GL_AND 0x1501
++#define GL_AND_REVERSE 0x1502
++#define GL_COPY 0x1503
++#define GL_AND_INVERTED 0x1504
++#define GL_NOOP 0x1505
++#define GL_XOR 0x1506
++#define GL_OR 0x1507
++#define GL_NOR 0x1508
++#define GL_EQUIV 0x1509
++#define GL_OR_REVERSE 0x150B
++#define GL_COPY_INVERTED 0x150C
++#define GL_OR_INVERTED 0x150D
++#define GL_NAND 0x150E
++#define GL_SET 0x150F
++#define GL_FLAT 0x1D00
++#define GL_SMOOTH 0x1D01
++#define GL_MODULATE 0x2100
++#define GL_DECAL 0x2101
++#define GL_TEXTURE_ENV_MODE 0x2200
++#define GL_TEXTURE_ENV_COLOR 0x2201
++#define GL_TEXTURE_ENV 0x2300
++#define GL_CLAMP 0x2900
++#define GL_INTENSITY 0x8049
++#ifndef GL_TEXTURE_BORDER_COLOR
++#define GL_TEXTURE_BORDER_COLOR 0x1004 // OpenGL ES 3.2
++#endif
++#endif
++
+ namespace ffp {
+ 	// The emulation's objects and state for one OpenGL context. create needs
+ 	// that context current and makes the new state current; width and height
+@@ -91,16 +137,30 @@ namespace ffp {
+ 	void StencilPoints(GLsizei count, const GLfloat* xy, const GLuint* values);
+ 
+ 	// Passed on as they are.
++#ifdef QT_GLES
++	// GL_UNPACK_SWAP_BYTES and the unpack state are kept here: OpenGL ES
++	// takes few of Warp3D's texel formats, which are converted (ffp.cpp).
++	void PixelStorei(GLenum pname, GLint param);
++#else
+ 	inline void PixelStorei(GLenum pname, GLint param) { flush(); glPixelStorei(pname, param); }
++#endif
  	inline void BlendFunc(GLenum source, GLenum destination) { flush(); glBlendFunc(source, destination); }
  	inline void DepthMask(GLboolean flag) { flush(); glDepthMask(flag); }
  	inline void DepthFunc(GLenum function) { flush(); glDepthFunc(function); }
-+#ifndef QT_GLES
++#ifdef QT_GLES
++	inline void LogicOp(GLenum) {} // OpenGL ES has no logic operations
++#else
  	inline void LogicOp(GLenum operation) { flush(); glLogicOp(operation); }
 +#endif
  	inline void ColorMask(GLboolean r, GLboolean g, GLboolean b, GLboolean a) { flush(); glColorMask(r, g, b, a); }
  	inline void Scissor(GLint x, GLint y, GLsizei width, GLsizei height) { flush(); glScissor(x, y, width, height); }
  	inline void ClearColor(GLclampf r, GLclampf g, GLclampf b, GLclampf a) { flush(); glClearColor(r, g, b, a); }
  	inline void Clear(GLbitfield mask) { flush(); glClear(mask); }
-+#ifndef QT_GLES
++#ifdef QT_GLES
++	void PointSize(GLfloat size); // gl_PointSize in the shader
++#else
  	inline void PointSize(GLfloat size) { flush(); glPointSize(size); }
 +#endif
  	inline void LineWidth(GLfloat width) { flush(); glLineWidth(width); }
@@ -458,31 +842,28 @@ index 0000000..6f307d1
 +	break;
 diff --git a/host/gles.cpp b/host/gles.cpp
 new file mode 100644
-index 0000000..120292b
+index 0000000..ee3a935
 --- /dev/null
 +++ b/host/gles.cpp
 @@ -0,0 +1,29 @@
 +// What the Android builds have in place of what they leave out. The OpenGL
-+// ES one (QT_GLES) executes only ogles2.library's commands: Warp3D, minigl
-+// and agl need OpenGL 1.1 (w3d.cpp, ffp.cpp, mgl.cpp and the decoder's
-+// OpenGL commands are not built), their commands are refused as unknown
-+// ones, and a context has no ffp state. The gl4es one (QT_GL4ES) has minigl
-+// and agl, but not Warp3D, which needs OpenGL 3.3.
++// ES one (QT_GLES) executes ogles2.library's and Warp3D's commands; minigl
++// and agl need OpenGL 1.1 (mgl.cpp and the decoder's OpenGL commands are not
++// built), so their commands are refused there as unknown ones. The gl4es
++// one (QT_GL4ES) has minigl and agl, but not Warp3D or ogles2.
 +#include "platform.h"
 +#include <GL/gl.h>
 +#include "gldecode.h"
 +#include "ffp.h"
 +
++#ifdef QT_GL4ES
++// Warp3D needs OpenGL 3.3 and ogles2.library OpenGL ES 3: their contexts
++// are the OpenGL ES library's, and the contexts here have no ffp state.
 +bool qt_w3d_trace_textures = false;
 +bool qt_w3d_trace_all = false;
 +
 +bool qt_w3d_decode(const Command&, int32_t&) { return false; }
-+#ifdef QT_GL4ES
-+// ogles2.library's contexts stay in the OpenGL ES library
 +bool qt_ogles2_decode(const Command&, int32_t&) { return false; }
-+#else
-+bool qt_mgl_decode(const Command&, int32_t&) { return false; }
-+#endif
 +void qt_w3d_sync() {}
 +
 +namespace ffp {
@@ -491,6 +872,9 @@ index 0000000..120292b
 +	void makeCurrent(Context*) {}
 +	void flush() {}
 +}
++#else
++bool qt_mgl_decode(const Command&, int32_t&) { return false; }
++#endif
 diff --git a/host/gles/GL/gl.h b/host/gles/GL/gl.h
 new file mode 100644
 index 0000000..7d1ccf6
@@ -845,7 +1229,7 @@ index 6562c88..c895682 100644
  		// The PC formats are little-endian, the others big-endian.
  		case R5G6B5: convert16<6, true, true>(bgra, dest, count); return;
 diff --git a/host/quarktex.cpp b/host/quarktex.cpp
-index 66bdba7..2421924 100644
+index 66bdba7..cdba909 100644
 --- a/host/quarktex.cpp
 +++ b/host/quarktex.cpp
 @@ -6,9 +6,12 @@
@@ -1293,17 +1677,7 @@ index 66bdba7..2421924 100644
  	active = c;
  	ffp::makeCurrent(0);
  	c->framebuffer.core = core;
-@@ -402,7 +666,9 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
- 
- 	if (core) {
- 		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); destroy(c); return 0; }
-+#ifndef QT_GLES // ogles2.library's contexts draw without ffp's state
- 		if (!(c->ffp = ffp::create(width, height))) { destroy(c); return 0; }
-+#endif
- 		static bool logged = false;
- 		if (!logged) {
- 			logged = true;
-@@ -410,12 +676,14 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+@@ -410,12 +674,14 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
  				reinterpret_cast<const char*>(glGetString(GL_RENDERER))).c_str());
  		}
  	}
@@ -1318,7 +1692,7 @@ index 66bdba7..2421924 100644
  
  	const char* dir = getenv("QUARKTEX_CAPTURE_DIR");
  	captureDir = dir ? dir : "";
-@@ -438,9 +706,12 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+@@ -438,9 +704,12 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
  
  // d1 = left, d2 = top, d3 = width, d4 = height, d5 = context
  QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
@@ -1331,7 +1705,7 @@ index 66bdba7..2421924 100644
  	// An offscreen context's picture takes the new size.
  	if (c->offscreen && (c->framebuffer.width != uni->d3 || c->framebuffer.height != uni->d4) && activate(c)) {
  		ffp::flush();
-@@ -452,14 +723,19 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
+@@ -452,14 +721,19 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
  // d1 = context; a1 = the QtTarget an offscreen context's picture goes to
  // (gl/gl.h), 0 for none.
  QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
@@ -1353,7 +1727,7 @@ index 66bdba7..2421924 100644
  	else if (uni->a1) {
  		const uint8_t* words = amiga<const uint8_t>(uni->a1);
  		uint32_t w[9];
-@@ -472,14 +748,12 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -472,14 +746,12 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  		present::start(c->framebuffer, t, uni_resolve);
  	}
  	if (c->profile.on) {
@@ -1372,7 +1746,7 @@ index 66bdba7..2421924 100644
  			char line[240];
  			snprintf(line, sizeof(line), "Profile %s: frames %lu-%lu: %.1f fps; per frame %.2f ms wall, %.2f ms executing "
  				"(%lu buffers, %llu bytes), %.2f ms presenting (%.2f starting read backs, %.2f writing pictures), %.2f ms elsewhere (68k)",
-@@ -489,7 +763,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -489,7 +761,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  				present::readTicks / f * 1000 / reportFrames, present::writeTicks / f * 1000 / reportFrames,
  				(wall - (p.periodTicks + p.swapTicks) / f) * 1000 / reportFrames);
  			logString(line);
@@ -1381,7 +1755,7 @@ index 66bdba7..2421924 100644
  			p.periodTicks = p.swapTicks = 0;
  			present::readTicks = present::writeTicks = 0;
  			p.periodCalls = 0;
-@@ -499,7 +773,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -499,7 +771,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  
  	GLenum code = glGetError();
  	while (code != GL_NO_ERROR) {
@@ -1390,7 +1764,7 @@ index 66bdba7..2421924 100644
  		code = glGetError();
  	}
  	return 0;
-@@ -509,7 +783,20 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -509,7 +781,20 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  // for the GPU if need be: the 68k side calls it before it waits for input,
  // when no command buffer would come to write it.
  QT_EXPORT int32_t __cdecl qt_finish_frame(struct uni* uni) {
@@ -1445,3 +1819,16 @@ index 124a797..88580e4 100644
  
  // Host pointer for an Amiga address.
  template <typename T> inline T* amiga(int32_t address) {
+diff --git a/host/w3d.cpp b/host/w3d.cpp
+index 1a80126..1740479 100644
+--- a/host/w3d.cpp
++++ b/host/w3d.cpp
+@@ -27,6 +27,8 @@
+ #endif
+ #ifndef GL_UNSIGNED_SHORT_5_6_5
+ #define GL_UNSIGNED_SHORT_5_6_5 0x8363
++#endif
++#ifndef GL_UNSIGNED_SHORT_4_4_4_4_REV // OpenGL ES has 5_6_5 but not these
+ #define GL_UNSIGNED_SHORT_4_4_4_4_REV 0x8365
+ #define GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
+ #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367

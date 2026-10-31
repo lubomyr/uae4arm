@@ -77,8 +77,8 @@ uaenative.library (Misc in the menu) lets QuarkTex NG's Amiga libraries draw
 3D with the GPU. Its host library is QuarkTex NG 1.0 beta 3 (Aminet
 driver/video/QuarkTexNG.lha) with the changes for Linux and Android in
 quarktexng/ of this repository. On Android it is two libraries: one for
-ogles2.library on OpenGL ES 3, and one for minigl.library and agl.library on
-gl4es. Get QuarkTexNG.lha from https://aminet.net/package/driver/video/QuarkTexNG
+ogles2.library and Warp3D.library on OpenGL ES 3, and one for QuarkTex's
+minigl.library and agl.library on gl4es. Get QuarkTexNG.lha from https://aminet.net/package/driver/video/QuarkTexNG
 into ~/androidsdl/project/jni, then:
 
 cd ~/androidsdl/project/jni
