@@ -1,5 +1,5 @@
 diff --git a/gl/glgen.cpp b/gl/glgen.cpp
-index 310dbef..80e2988 100644
+index 310dbef..592acb0 100644
 --- a/gl/glgen.cpp
 +++ b/gl/glgen.cpp
 @@ -12,6 +12,8 @@
@@ -11,10 +11,18 @@ index 310dbef..80e2988 100644
  //   tests/host/glstubs.auto.inc   recording OpenGL stubs for the unit test
  //   tests/host/glcalls.auto.inc   one test call per function for the unit test
  
-@@ -80,6 +82,20 @@ namespace {
- 		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer"
- 	};
- 
+@@ -74,10 +76,25 @@ namespace {
+ 	// that GetPointerv can return them; GetString would return a host pointer.
+ 	// DrawBuffer and ReadBuffer name the framebuffer object's colour buffer
+ 	// for the front and back buffers when the context draws offscreen.
++	// TexImage2D and TexSubImage2D take minigl.library's packed formats.
+ 	const std::set<string> manual = {
+ 		"GetPointerv", "VertexPointer", "NormalPointer", "ColorPointer", "IndexPointer",
+ 		"TexCoordPointer", "EdgeFlagPointer", "InterleavedArrays", "FeedbackBuffer",
+-		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer"
++		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer", "TexImage2D", "TexSubImage2D"
++	};
++
 +	// What OpenGL ES 3 has of OpenGL 1.1, for the OpenGL ES host: all that
 +	// ogles2.library sends of it among them. ClearDepth and DepthRange are
 +	// glClearDepthf and glDepthRangef there, and PolygonMode does nothing
@@ -27,12 +35,10 @@ index 310dbef..80e2988 100644
 +		"GetTexParameteriv", "Hint", "IsEnabled", "IsTexture", "LineWidth", "PixelStorei", "PolygonMode",
 +		"PolygonOffset", "ReadPixels", "Scissor", "StencilFunc", "StencilMask", "StencilOp", "TexImage2D",
 +		"TexParameterf", "TexParameterfv", "TexParameteri", "TexParameteriv", "TexSubImage2D", "Viewport"
-+	};
-+
+ 	};
+ 
  	string trim(const string& s) {
- 		size_t begin = s.find_first_not_of(" \t\r");
- 		size_t end = s.find_last_not_of(" \t\r");
-@@ -187,10 +203,12 @@ namespace {
+@@ -187,10 +204,12 @@ namespace {
  	// Host side: one case per opcode. host/gldecode.cpp provides the Command
  	// accessors c.u/f/d/p and QT_GL(name), which is gl##name in the library and
  	// a recording stub in the unit test.
@@ -46,7 +52,7 @@ index 310dbef..80e2988 100644
  			out << "case " << f.opcode << ": /* " << f.name << " */\n";
  			out << "\tif (c.words != " << f.words() << ") return qt_bad_command(c);\n";
  			if (manual.count(f.name)) {
-@@ -278,6 +296,7 @@ int main(int argc, char** argv) {
+@@ -278,6 +297,7 @@ int main(int argc, char** argv) {
  		declarations(functions, root + "gl/gldeclarations.auto.h");
  		encoders(functions, root + "gl/glencode.auto.c");
  		decoder(functions, root + "host/gldecode.auto.inc");
@@ -595,11 +601,33 @@ index efa9bc5..5224471 100644
  }
  
  #endif
+diff --git a/host/gldecode.auto.inc b/host/gldecode.auto.inc
+index 80707d9..f1a3e3f 100644
+--- a/host/gldecode.auto.inc
++++ b/host/gldecode.auto.inc
+@@ -1205,7 +1205,7 @@ case 301: /* TexImage1D */
+ 	break;
+ case 302: /* TexImage2D */
+ 	if (c.words != 10) return qt_bad_command(c);
+-	QT_GL(TexImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLint) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
++	result = qt_manual_TexImage2D(c);
+ 	break;
+ case 303: /* TexParameterf */
+ 	if (c.words != 4) return qt_bad_command(c);
+@@ -1229,7 +1229,7 @@ case 307: /* TexSubImage1D */
+ 	break;
+ case 308: /* TexSubImage2D */
+ 	if (c.words != 10) return qt_bad_command(c);
+-	QT_GL(TexSubImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
++	result = qt_manual_TexSubImage2D(c);
+ 	break;
+ case 309: /* Translated */
+ 	if (c.words != 7) return qt_bad_command(c);
 diff --git a/host/gldecode.cpp b/host/gldecode.cpp
-index 4668217..f4c911b 100644
+index 4668217..20e2f8c 100644
 --- a/host/gldecode.cpp
 +++ b/host/gldecode.cpp
-@@ -5,10 +5,15 @@
+@@ -5,18 +5,123 @@
  // The unit test (tests/host) includes this file with QT_TEST defined and
  // QT_GL pointing to recording stubs.
  #ifndef QT_TEST
@@ -616,8 +644,116 @@ index 4668217..f4c911b 100644
 +#endif
  #endif
  #include <cstdio>
++#include <vector>
  #include "gldecode.h"
-@@ -25,6 +30,7 @@ namespace {
+ #include "w3dcmd.h"
+ #include "mglcmd.h"
+ #include "oglescmd.h"
+ 
+ namespace {
++	// minigl.library passes MiniGL's packed texel formats, MGL_UNSIGNED_SHORT_
++	// 4_4_4_4 and MGL_UNSIGNED_SHORT_5_6_5 (OpenGL's packed type values), as
++	// the format and the internal format, with GL_UNSIGNED_BYTE: GLQuake's
++	// lightmaps. Each texel is a big-endian word, a r g b 4 bits each or
++	// r g b 5 6 5. OpenGL has no such format and refused them (the lightmaps
++	// were missing); they are uploaded as RGBA bytes.
++	const GLenum mglPacked4444 = 0x8033, mglPacked565 = 0x8363;
++
++	bool packedFormat(GLenum format) {
++		return format == mglPacked4444 || format == mglPacked565;
++	}
++
++	// Rows as the unpack state lays them out; the upload's state is set to
++	// tight RGBA rows and put back by uploadPacked.
++	std::vector<uint8_t> packedToRgba(GLenum format, GLsizei width, GLsizei height, const uint8_t* pixels) {
++		std::vector<uint8_t> rgba;
++		if (!pixels || width <= 0 || height <= 0) return rgba;
++		GLint rowLength = 0, alignment = 4;
++		QT_GL(GetIntegerv)(0x0CF2, &rowLength); // GL_UNPACK_ROW_LENGTH
++		QT_GL(GetIntegerv)(GL_UNPACK_ALIGNMENT, &alignment);
++		size_t row = static_cast<size_t>(rowLength > 0 ? rowLength : width) * 2;
++		if (alignment > 1) row = (row + alignment - 1) / alignment * alignment;
++		rgba.resize(static_cast<size_t>(width) * height * 4);
++		uint8_t* out = &rgba[0];
++		for (GLsizei y = 0; y < height; ++y) {
++			const uint8_t* p = pixels + row * y;
++			for (GLsizei x = 0; x < width; ++x, p += 2, out += 4) {
++				uint32_t v = static_cast<uint32_t>(p[0]) << 8 | p[1];
++				if (format == mglPacked4444) {
++					out[0] = static_cast<uint8_t>(((v >> 8) & 15) * 17);
++					out[1] = static_cast<uint8_t>(((v >> 4) & 15) * 17);
++					out[2] = static_cast<uint8_t>((v & 15) * 17);
++					out[3] = static_cast<uint8_t>((v >> 12) * 17);
++				}
++				else {
++					out[0] = static_cast<uint8_t>((v >> 11) * 255 / 31);
++					out[1] = static_cast<uint8_t>(((v >> 5) & 63) * 255 / 63);
++					out[2] = static_cast<uint8_t>((v & 31) * 255 / 31);
++					out[3] = 255;
++				}
++			}
++		}
++		return rgba;
++	}
++
++	void uploadPacked(bool sub, const Command& c, GLenum format) {
++		GLenum target = static_cast<GLenum>(c.u(1));
++		GLint level = static_cast<GLint>(c.u(2));
++		GLsizei width = static_cast<GLsizei>(c.u(sub ? 5 : 4)), height = static_cast<GLsizei>(c.u(sub ? 6 : 5));
++		std::vector<uint8_t> rgba = packedToRgba(format, width, height, c.p(9));
++		GLint rowLength = 0, alignment = 4;
++		QT_GL(GetIntegerv)(0x0CF2, &rowLength);
++		QT_GL(GetIntegerv)(GL_UNPACK_ALIGNMENT, &alignment);
++		QT_GL(PixelStorei)(0x0CF2, 0);
++		QT_GL(PixelStorei)(GL_UNPACK_ALIGNMENT, 4);
++		void* data = rgba.empty() ? 0 : &rgba[0];
++		if (sub) QT_GL(TexSubImage2D)(target, level, static_cast<GLint>(c.u(3)), static_cast<GLint>(c.u(4)), width, height,
++			GL_RGBA, GL_UNSIGNED_BYTE, data);
++		else QT_GL(TexImage2D)(target, level, GL_RGBA, width, height, static_cast<GLint>(c.u(6)), GL_RGBA, GL_UNSIGNED_BYTE, data);
++		QT_GL(PixelStorei)(0x0CF2, rowLength);
++		QT_GL(PixelStorei)(GL_UNPACK_ALIGNMENT, alignment);
++	}
++
++	// MiniGL (and Warp3D) make the mipmaps a program does not supply; OpenGL
++	// takes a texture with a mipmap filter but only its level 0 as incomplete
++	// and draws without it. GLQuake's font is such a texture, and came out as
++	// white squares. OpenGL 1.4 makes them on every level 0 upload, where
++	// a program's own levels still replace them. (OpenGL ES 3, ogles2.library's,
++	// has no GL_GENERATE_MIPMAP and needs none.)
++	void generateMipmaps(const Command& c) {
++#ifndef QT_GLES
++		if (static_cast<GLenum>(c.u(1)) == GL_TEXTURE_2D && c.u(2) == 0)
++			QT_GL(TexParameteri)(GL_TEXTURE_2D, 0x8191, GL_TRUE); // GL_GENERATE_MIPMAP
++#else
++		(void)c;
++#endif
++	}
++
++	int32_t qt_manual_TexImage2D(const Command& c) {
++		GLenum format = static_cast<GLenum>(c.u(7));
++		GLint internalformat = static_cast<GLint>(c.u(3));
++		generateMipmaps(c);
++		if (packedFormat(format)) uploadPacked(false, c, format);
++		else QT_GL(TexImage2D)(static_cast<GLenum>(c.u(1)), static_cast<GLint>(c.u(2)),
++			packedFormat(static_cast<GLenum>(internalformat)) ? GL_RGBA : internalformat,
++			static_cast<GLsizei>(c.u(4)), static_cast<GLsizei>(c.u(5)), static_cast<GLint>(c.u(6)), format,
++			static_cast<GLenum>(c.u(8)), c.p(9));
++		return 0;
++	}
++
++	int32_t qt_manual_TexSubImage2D(const Command& c) {
++		GLenum format = static_cast<GLenum>(c.u(7));
++		if (packedFormat(format)) uploadPacked(true, c, format);
++		else QT_GL(TexSubImage2D)(static_cast<GLenum>(c.u(1)), static_cast<GLint>(c.u(2)), static_cast<GLint>(c.u(3)),
++			static_cast<GLint>(c.u(4)), static_cast<GLsizei>(c.u(5)), static_cast<GLsizei>(c.u(6)), format,
++			static_cast<GLenum>(c.u(8)), c.p(9));
++		return 0;
++	}
++
+ 	int32_t qt_bad_command(const Command& c) {
+ 		char message[96];
+ 		snprintf(message, sizeof(message), "Bad command: opcode %u, %u words",
+@@ -25,6 +130,7 @@ namespace {
  		return 0;
  	}
  
@@ -625,7 +761,7 @@ index 4668217..f4c911b 100644
  	// Amiga addresses of the buffers OpenGL keeps pointers to.
  	enum {
  		VertexArray, NormalArray, ColorArray, IndexArray, TexCoordArray, EdgeFlagArray,
-@@ -135,6 +141,7 @@ namespace {
+@@ -135,6 +241,7 @@ namespace {
  		QT_GL(ReadBuffer)(colourBuffer(c.u(1), 0x8CAA /* GL_READ_FRAMEBUFFER_BINDING */));
  		return 0;
  	}
@@ -633,7 +769,7 @@ index 4668217..f4c911b 100644
  }
  
  int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
-@@ -149,7 +156,11 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
+@@ -149,7 +256,11 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
  		uint32_t opcode = header >> 16;
  		if (opcode < QT_W3D_FIRST || opcode >= QT_MGL_FIRST) qt_w3d_sync();
  		switch (opcode) {
@@ -647,7 +783,7 @@ index 4668217..f4c911b 100644
  				if (!qt_ogles2_decode(c, result)) return qt_bad_command(c);
 diff --git a/host/gldecode.gles.inc b/host/gldecode.gles.inc
 new file mode 100644
-index 0000000..6f307d1
+index 0000000..ccda0c6
 --- /dev/null
 +++ b/host/gldecode.gles.inc
 @@ -0,0 +1,189 @@
@@ -814,7 +950,7 @@ index 0000000..6f307d1
 +	break;
 +case 302: /* TexImage2D */
 +	if (c.words != 10) return qt_bad_command(c);
-+	QT_GL(TexImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLint) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
++	result = qt_manual_TexImage2D(c);
 +	break;
 +case 303: /* TexParameterf */
 +	if (c.words != 4) return qt_bad_command(c);
@@ -834,7 +970,7 @@ index 0000000..6f307d1
 +	break;
 +case 308: /* TexSubImage2D */
 +	if (c.words != 10) return qt_bad_command(c);
-+	QT_GL(TexSubImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
++	result = qt_manual_TexSubImage2D(c);
 +	break;
 +case 336: /* Viewport */
 +	if (c.words != 5) return qt_bad_command(c);
@@ -885,7 +1021,7 @@ index 0000000..7d1ccf6
 +// OpenGL header; with host/gles first on the include path, they get this.
 +#include <GLES3/gl3.h>
 diff --git a/host/mgl.cpp b/host/mgl.cpp
-index 11edcab..64d0376 100644
+index 11edcab..d609c42 100644
 --- a/host/mgl.cpp
 +++ b/host/mgl.cpp
 @@ -13,8 +13,7 @@
@@ -907,6 +1043,43 @@ index 11edcab..64d0376 100644
  		}
  
  		void load() {
+@@ -112,9 +111,26 @@ namespace mgl {
+ 		std::vector<uint8_t> bytes;
+ 	};
+ 
++	// MiniGL's colour types (mgl/gl.h): MGL_UBYTE_ARGB (no OpenGL value, so
++	// marked by mglgen.py as 0x7F007019) and MGL_UBYTE_BGRA (GL_BGRA), four
++	// bytes a colour. GLQuake's models are lit with MGL_UBYTE_ARGB; read as
++	// numbers they were 0 to 255, which OpenGL clamps (the models drawn
++	// unlit) and gl4es does not (the models drawn white).
++	const uint32_t mglUbyteArgb = 0x7F007019, mglUbyteBgra = 0x80E1;
++
+ 	bool convert(const Command& c, const Array& a, uint32_t count, Converted& out, bool normalise = false) {
+ 		const uint8_t* base = static_cast<const uint8_t*>(c.resolve(a.address));
+ 		if (!base || a.size < 1 || a.size > 4) return false;
++		if (a.type == mglUbyteArgb || a.type == mglUbyteBgra) { // as RGBA bytes
++			out.bytes.resize(static_cast<size_t>(count) * 4);
++			for (uint32_t i = 0; i < count; ++i) {
++				const uint8_t* p = base + i * a.stride;
++				uint8_t* q = &out.bytes[i * 4];
++				if (a.type == mglUbyteArgb) { q[0] = p[1]; q[1] = p[2]; q[2] = p[3]; q[3] = p[0]; }
++				else { q[0] = p[2]; q[1] = p[1]; q[2] = p[0]; q[3] = p[3]; }
++			}
++			return true;
++		}
+ 		if (a.type == GL_UNSIGNED_BYTE && !normalise) {
+ 			out.bytes.resize(static_cast<size_t>(count) * a.size);
+ 			for (uint32_t i = 0; i < count; ++i) memcpy(&out.bytes[i * a.size], base + i * a.stride, a.size);
+@@ -240,7 +256,8 @@ namespace mgl {
+ 		for (int k = 0; k < Arrays; ++k) {
+ 			bool bytes = !converted[k].bytes.empty();
+ 			const void* data = !on[k] ? 0 : bytes ? static_cast<const void*>(&converted[k].bytes[0]) : static_cast<const void*>(&converted[k].floats[0]);
+-			setArray(k, on[k], static_cast<GLint>(arrays[k].size), bytes ? GL_UNSIGNED_BYTE : GL_FLOAT, data);
++			GLint size = static_cast<GLint>(arrays[k].type == mglUbyteArgb || arrays[k].type == mglUbyteBgra ? 4 : arrays[k].size);
++			setArray(k, on[k], size, bytes ? GL_UNSIGNED_BYTE : GL_FLOAT, data);
+ 		}
+ 		QT_GL(DisableClientState)(GL_INDEX_ARRAY);
+ 		QT_GL(DisableClientState)(GL_EDGE_FLAG_ARRAY);
 diff --git a/host/ogles2.cpp b/host/ogles2.cpp
 index ffc2b0d..47fc43e 100644
 --- a/host/ogles2.cpp
@@ -1018,7 +1191,7 @@ index 0000000..d3bef93
 +
 +#endif
 diff --git a/host/present.cpp b/host/present.cpp
-index 92a0819..0ca10a9 100644
+index 92a0819..66f0925 100644
 --- a/host/present.cpp
 +++ b/host/present.cpp
 @@ -9,11 +9,12 @@
@@ -1137,7 +1310,7 @@ index 92a0819..0ca10a9 100644
  		bindFramebuffer(GL_FRAMEBUFFER, f.fbo);
  		framebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, f.color);
  		framebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, f.depthStencil);
-@@ -165,13 +195,32 @@ namespace present {
+@@ -165,13 +195,34 @@ namespace present {
  		deleteFramebuffers(1, &f.fbo);
  		deleteRenderbuffers(1, &f.color);
  		deleteRenderbuffers(1, &f.depthStencil);
@@ -1151,16 +1324,18 @@ index 92a0819..0ca10a9 100644
  	void start(Framebuffer& f, const Target& t, void* (*resolve)(uint32_t)) {
  		if (!f.fbo || !bytesPerPixel(t.format)) return;
 +#ifdef QT_GL4ES
-+		// gl4es has no pixel buffers or fences: read back and written at once,
-+		// with only the pack alignment the application's own
++		// gl4es has no pixel buffers or fences: read back and written at once
 +		long long begin = now();
 +		static std::vector<uint8_t> rgba;
 +		rgba.resize(static_cast<size_t>(f.width) * f.height * 4);
-+		GLint alignment = 4;
-+		glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
-+		glPixelStorei(GL_PACK_ALIGNMENT, 4);
++		// The application's pack state, put back after
++		const GLenum packs[] = {GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_ROWS, GL_PACK_SKIP_PIXELS};
++		const GLint values[] = {4, 0, 0, 0};
++		GLint saved[4];
++		for (int i = 0; i < 4; ++i) glGetIntegerv(packs[i], &saved[i]);
++		for (int i = 0; i < 4; ++i) glPixelStorei(packs[i], values[i]);
 +		glReadPixels(0, 0, f.width, f.height, GL_RGBA, GL_UNSIGNED_BYTE, &rgba[0]);
-+		glPixelStorei(GL_PACK_ALIGNMENT, alignment);
++		for (int i = 0; i < 4; ++i) glPixelStorei(packs[i], saved[i]);
 +		readTicks += now() - begin;
 +		begin = now();
 +		write(&rgba[0], f.width, f.height, t, resolve);
@@ -1170,7 +1345,7 @@ index 92a0819..0ca10a9 100644
  		poll(f, resolve, true);
  		long long begin = now();
  		// The application's pack state stays as it was (as in the frame
-@@ -185,7 +234,11 @@ namespace present {
+@@ -185,7 +236,11 @@ namespace present {
  		GLint savedBuffer = boundPackBuffer();
  		for (int i = 0; i < count; ++i) glPixelStorei(packs[i], values[i]);
  		bindBuffer(GL_PIXEL_PACK_BUFFER, f.pixelBuffers[f.next]);
@@ -1182,7 +1357,7 @@ index 92a0819..0ca10a9 100644
  		bindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(savedBuffer));
  		for (int i = 0; i < count; ++i) glPixelStorei(packs[i], saved[i]);
  		f.fence = fenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-@@ -194,6 +247,7 @@ namespace present {
+@@ -194,6 +249,7 @@ namespace present {
  		f.next ^= 1;
  		f.target = t;
  		readTicks += now() - begin;
@@ -1229,7 +1404,7 @@ index 6562c88..c895682 100644
  		// The PC formats are little-endian, the others big-endian.
  		case R5G6B5: convert16<6, true, true>(bgra, dest, count); return;
 diff --git a/host/quarktex.cpp b/host/quarktex.cpp
-index 66bdba7..cdba909 100644
+index 66bdba7..d980916 100644
 --- a/host/quarktex.cpp
 +++ b/host/quarktex.cpp
 @@ -6,9 +6,12 @@
@@ -1245,7 +1420,7 @@ index 66bdba7..cdba909 100644
  #include <cstring>
  #include <fstream>
  #include <map>
-@@ -23,12 +26,50 @@
+@@ -23,12 +26,54 @@
  #define QT_PROTOCOL_VERSION 11
  
  extern "C" {
@@ -1284,6 +1459,10 @@ index 66bdba7..cdba909 100644
 +		static bool started = false;
 +		if (started) return;
 +		started = true;
++		// A colour renderbuffer stays one: by default gl4es makes it a texture,
++		// named by glGenTextures - 1 in a new context - and programs that name
++		// their textures themselves (GLQuake's font is 1) then draw into ours.
++		setenv("LIBGL_FBOFORCETEX", "0", 0);
 +		initialize_gl4es();
 +	}
 +}
@@ -1297,7 +1476,7 @@ index 66bdba7..cdba909 100644
  
  	// qt_create_context flags, as QT_CONTEXT_CORE in gl/gl.h.
  	const int32_t contextCore = 1;
-@@ -40,6 +81,7 @@ namespace {
+@@ -40,6 +85,7 @@ namespace {
  	// hidden.
  	const int32_t contextOffscreen = 4;
  
@@ -1305,7 +1484,7 @@ index 66bdba7..cdba909 100644
  	LRESULT CALLBACK windowFunc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
  		switch (message) {
  		case WM_NCCREATE:
-@@ -80,11 +122,52 @@ namespace {
+@@ -80,11 +126,54 @@ namespace {
  		EnumWindows(checkWindow, reinterpret_cast<LPARAM>(&search));
  		return search.found;
  	}
@@ -1349,16 +1528,19 @@ index 66bdba7..cdba909 100644
  	std::ofstream* out;
  
  	void logString(const char* c) {
-+#ifdef QT_GL4ES
-+		// The OpenGL ES library's log, which it started
-+		if (!out) out = new std::ofstream("QuarkTexNGLog.txt", std::ios::app);
-+#else
- 		if (!out) out = new std::ofstream("QuarkTexNGLog.txt");
+-		if (!out) out = new std::ofstream("QuarkTexNGLog.txt");
++		if (!out) {
++#ifndef QT_GL4ES
++			std::ofstream("QuarkTexNGLog.txt"); // emptied, then appended to
 +#endif
++			// The libquarktexng_gl4es.so on Android writes to the same log: in
++			// append mode neither writes over the other's lines.
++			out = new std::ofstream("QuarkTexNGLog.txt", std::ios::app);
++		}
  		*out << c << std::endl;
  	}
  
-@@ -92,13 +175,13 @@ namespace {
+@@ -92,13 +181,13 @@ namespace {
  	// environment variable QUARKTEX_PROFILE is set.
  	struct Profile {
  		bool on;
@@ -1374,7 +1556,7 @@ index 66bdba7..cdba909 100644
  		unsigned long periodCalls;
  		unsigned long long periodBytes;
  	};
-@@ -106,9 +189,18 @@ namespace {
+@@ -106,12 +195,22 @@ namespace {
  
  	struct Context {
  		uint32_t id;
@@ -1393,7 +1575,11 @@ index 66bdba7..cdba909 100644
  		ffp::Context* ffp; // Warp3D (OpenGL 3.3 core) only
  		bool offscreen;
  		present::Framebuffer framebuffer; // offscreen only
-@@ -119,7 +211,16 @@ namespace {
++		present::Target lastTarget; // the last one traced
+ 		std::string label; // frame capture
+ 		int frames;
+ 		unsigned long swaps;
+@@ -119,7 +218,16 @@ namespace {
  	};
  
  	std::map<uint32_t, Context*> contexts;
@@ -1410,7 +1596,7 @@ index 66bdba7..cdba909 100644
  	Context* active = 0; // whose OpenGL context is current
  
  	Context* find(int32_t id) {
-@@ -127,26 +228,49 @@ namespace {
+@@ -127,26 +235,68 @@ namespace {
  		return i == contexts.end() ? 0 : i->second;
  	}
  
@@ -1453,6 +1639,25 @@ index 66bdba7..cdba909 100644
 +#endif
 +	}
 +
++#ifndef _WIN32
++	// QuarkTexNG.env beside the log, NAME=value a line, sets the variables
++	// below where an app cannot be given an environment (Android). Those of
++	// the environment stay as they are.
++	void readEnvironmentFile() {
++		static bool read = false;
++		if (read) return;
++		read = true;
++		std::ifstream in("QuarkTexNG.env");
++		std::string line;
++		while (std::getline(in, line)) {
++			if (!line.empty() && line[line.size() - 1] == '\r') line.erase(line.size() - 1);
++			size_t equals = line.find('=');
++			if (line.empty() || line[0] == '#' || equals == std::string::npos || equals == 0) continue;
++			setenv(line.substr(0, equals).c_str(), line.substr(equals + 1).c_str(), 0);
++		}
++	}
++#endif
++
  	void logProfile(const Context* c) {
  		if (!c->profile.on || !c->profile.calls) return;
 -		LARGE_INTEGER frequency;
@@ -1465,7 +1670,7 @@ index 66bdba7..cdba909 100644
  		logString(line);
  	}
  }
-@@ -186,6 +310,10 @@ namespace {
+@@ -186,6 +336,10 @@ namespace {
  	}
  
  	void captureFrame(Context* c) {
@@ -1476,7 +1681,7 @@ index 66bdba7..cdba909 100644
  		RECT rect;
  		if (!GetClientRect(c->window, &rect)) return;
  		int width = rect.right - rect.left;
-@@ -245,9 +373,31 @@ namespace {
+@@ -245,9 +399,31 @@ namespace {
  		bmp.write(reinterpret_cast<const char*>(&info), sizeof(info));
  		bmp.write(reinterpret_cast<const char*>(&pixels[0]), pixels.size());
  	}
@@ -1508,7 +1713,7 @@ index 66bdba7..cdba909 100644
  		if (c->gl) {
  			if (wglMakeCurrent(c->deviceContext, c->gl)) {
  				if (c->ffp) ffp::destroy(c->ffp);
-@@ -265,8 +415,43 @@ namespace {
+@@ -265,8 +441,43 @@ namespace {
  		}
  		delete c;
  	}
@@ -1552,7 +1757,7 @@ index 66bdba7..cdba909 100644
  QT_EXPORT int __cdecl uni_init(void) {
  	return 0;
  }
-@@ -294,18 +479,18 @@ namespace {
+@@ -294,18 +505,18 @@ namespace {
  }
  
  QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
@@ -1576,7 +1781,7 @@ index 66bdba7..cdba909 100644
  	++c->profile.periodCalls;
  	c->profile.periodBytes += static_cast<uint32_t>(uni->d1);
  	++c->profile.calls;
-@@ -315,6 +500,7 @@ QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
+@@ -315,6 +526,7 @@ QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
  
  // d1 = context
  QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
@@ -1584,10 +1789,13 @@ index 66bdba7..cdba909 100644
  	Context* c = find(uni->d1);
  	if (!c) return 0;
  	logProfile(c);
-@@ -329,7 +515,84 @@ QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
+@@ -329,7 +541,87 @@ QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
  QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
  	int left = uni->d1, top = uni->d2, width = uni->d3, height = uni->d4;
  	bool core = (uni->d5 & contextCore) != 0;
++#ifndef _WIN32
++	readEnvironmentFile(); // before gl4es starts, which reads its LIBGL_ variables then
++#endif
 +#ifdef QT_GLES
 +	// minigl.library's and agl.library's OpenGL 1.1 goes through gl4es
 +	if (!core) {
@@ -1669,7 +1877,7 @@ index 66bdba7..cdba909 100644
  	if (!instance) instance = GetModuleHandleA(0);
  	HWND amigaWindow = findAmigaWindow();
  	if (!amigaWindow) { logString("Warning: Could not find the emulator window"); return 0; }
-@@ -391,6 +654,7 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+@@ -391,6 +683,7 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
  		return 0;
  	}
  	if (!wglMakeCurrent(c->deviceContext, c->gl)) { logString("Warning: Could not activate the rendering context"); destroy(c); return 0; }
@@ -1677,7 +1885,7 @@ index 66bdba7..cdba909 100644
  	active = c;
  	ffp::makeCurrent(0);
  	c->framebuffer.core = core;
-@@ -410,12 +674,14 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+@@ -410,12 +703,14 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
  				reinterpret_cast<const char*>(glGetString(GL_RENDERER))).c_str());
  		}
  	}
@@ -1692,7 +1900,20 @@ index 66bdba7..cdba909 100644
  
  	const char* dir = getenv("QUARKTEX_CAPTURE_DIR");
  	captureDir = dir ? dir : "";
-@@ -438,9 +704,12 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+@@ -430,6 +725,12 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
+ 	qt_w3d_trace_textures = trace && *trace && *trace != '0';
+ 	const char* frame = getenv("QUARKTEX_TRACE_FRAME");
+ 	traceFrame = frame && *frame ? atol(frame) : -1;
++	if (traceFrame >= 0 || qt_w3d_trace_textures) {
++		char line[160];
++		snprintf(line, sizeof(line), "Context %dx%d (asked %dx%d), %s%s", width, height, uni->d3, uni->d4,
++			core ? "OpenGL 3.3" : (uni->d5 & contextPlain) ? "plain" : "OpenGL 1.1", c->offscreen ? ", offscreen" : "");
++		logString(line);
++	}
+ 	c->id = nextId++;
+ 	if (!nextId) nextId = 1; // 0 means no context
+ 	contexts[c->id] = c;
+@@ -438,9 +739,12 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
  
  // d1 = left, d2 = top, d3 = width, d4 = height, d5 = context
  QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
@@ -1705,7 +1926,7 @@ index 66bdba7..cdba909 100644
  	// An offscreen context's picture takes the new size.
  	if (c->offscreen && (c->framebuffer.width != uni->d3 || c->framebuffer.height != uni->d4) && activate(c)) {
  		ffp::flush();
-@@ -452,14 +721,19 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
+@@ -452,14 +756,19 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
  // d1 = context; a1 = the QtTarget an offscreen context's picture goes to
  // (gl/gl.h), 0 for none.
  QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
@@ -1727,7 +1948,19 @@ index 66bdba7..cdba909 100644
  	else if (uni->a1) {
  		const uint8_t* words = amiga<const uint8_t>(uni->a1);
  		uint32_t w[9];
-@@ -472,14 +746,12 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -469,17 +778,24 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+ 		}
+ 		present::Target t = {w[0], w[1], w[2], w[3], w[4], static_cast<int32_t>(w[5]), static_cast<int32_t>(w[6]),
+ 			static_cast<int32_t>(w[7]), static_cast<int32_t>(w[8])};
++		// Traced: where the pictures go, when that changes
++		if (traceFrame >= 0 && memcmp(&c->lastTarget, &t, sizeof(t)) != 0) {
++			c->lastTarget = t;
++			char line[200];
++			snprintf(line, sizeof(line), "Pictures to %08x: %dx%d at %d,%d of a %ux%u bitmap, format %u, %u bytes a row; framebuffer %dx%d",
++				t.address, t.width, t.height, t.left, t.top, t.bitmapWidth, t.bitmapHeight, t.format, t.bytesPerRow,
++				c->framebuffer.width, c->framebuffer.height);
++			logString(line);
++		}
  		present::start(c->framebuffer, t, uni_resolve);
  	}
  	if (c->profile.on) {
@@ -1746,7 +1979,7 @@ index 66bdba7..cdba909 100644
  			char line[240];
  			snprintf(line, sizeof(line), "Profile %s: frames %lu-%lu: %.1f fps; per frame %.2f ms wall, %.2f ms executing "
  				"(%lu buffers, %llu bytes), %.2f ms presenting (%.2f starting read backs, %.2f writing pictures), %.2f ms elsewhere (68k)",
-@@ -489,7 +761,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -489,7 +805,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  				present::readTicks / f * 1000 / reportFrames, present::writeTicks / f * 1000 / reportFrames,
  				(wall - (p.periodTicks + p.swapTicks) / f) * 1000 / reportFrames);
  			logString(line);
@@ -1755,7 +1988,7 @@ index 66bdba7..cdba909 100644
  			p.periodTicks = p.swapTicks = 0;
  			present::readTicks = present::writeTicks = 0;
  			p.periodCalls = 0;
-@@ -499,7 +771,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -499,7 +815,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  
  	GLenum code = glGetError();
  	while (code != GL_NO_ERROR) {
@@ -1764,7 +1997,7 @@ index 66bdba7..cdba909 100644
  		code = glGetError();
  	}
  	return 0;
-@@ -509,7 +781,20 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+@@ -509,7 +825,20 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
  // for the GPU if need be: the 68k side calls it before it waits for input,
  // when no command buffer would come to write it.
  QT_EXPORT int32_t __cdecl qt_finish_frame(struct uni* uni) {
@@ -1832,3 +2065,93 @@ index 1a80126..1740479 100644
  #define GL_UNSIGNED_SHORT_4_4_4_4_REV 0x8365
  #define GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
  #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
+diff --git a/minigl.library/glfuncs.c b/minigl.library/glfuncs.c
+index b9a41a9..e48e4b0 100644
+--- a/minigl.library/glfuncs.c
++++ b/minigl.library/glfuncs.c
+@@ -180,15 +180,38 @@ void mgl_GLULookAt(GLfloat ex, GLfloat ey, GLfloat ez, GLfloat cx, GLfloat cy, G
+ 	_glTranslatef(-ex, -ey, -ez);
+ }
+ 
+-/* MiniGL's rotation about one axis: xyz 0 = x, 1 = y, 2 = z. */
++/* MiniGL's rotation about axes given as bits (mgl/gl.h): GLROT_100 x,
++ * GLROT_010 y, GLROT_001 z, and the combinations GLROT_011 to GLROT_111.
++ * GLQuake turns its view with GLROT_100, GLROT_010 and GLROT_001; taken as
++ * 0, 1 and 2 they gave no axis at all, and the camera no rotation (NVIDIA)
++ * or a broken matrix (gl4es). 0, 1 and 2 still mean x, y and z. */
++#define MGL_ROT_001 0x800
++#define MGL_ROT_010 0x1000
++#define MGL_ROT_100 0x2000
++#define MGL_ROT_011 0x4000
++#define MGL_ROT_101 0x8000
++#define MGL_ROT_110 0x10000
++#define MGL_ROT_111 0x20000
++
++static void rotationAxis(GLint xyz, GLfloat *x, GLfloat *y, GLfloat *z) {
++	*x = (xyz == 0 || xyz == MGL_ROT_100 || xyz == MGL_ROT_101 || xyz == MGL_ROT_110 || xyz == MGL_ROT_111) ? 1.0f : 0.0f;
++	*y = (xyz == 1 || xyz == MGL_ROT_010 || xyz == MGL_ROT_011 || xyz == MGL_ROT_110 || xyz == MGL_ROT_111) ? 1.0f : 0.0f;
++	*z = (xyz == 2 || xyz == MGL_ROT_001 || xyz == MGL_ROT_011 || xyz == MGL_ROT_101 || xyz == MGL_ROT_111) ? 1.0f : 0.0f;
++}
++
+ void mgl_GLRotatefEXT(GLcontext context, GLfloat angle, const GLint xyz) {
+-	_glRotatef(angle, xyz == 0, xyz == 1, xyz == 2);
++	GLfloat x, y, z;
++	rotationAxis(xyz, &x, &y, &z);
++	_glRotatef(angle, x, y, z);
+ }
+ 
+-/* The same with the angle given as its sine and cosine. */
++/* The same with the angle given as its sine and cosine, about one axis. */
+ void mgl_GLRotatefEXTs(GLcontext context, GLfloat sin_an, GLfloat cos_an, const GLint xyz) {
+-	GLfloat m[16];
+-	int i, a = xyz == 0 ? 1 : 0, b = xyz == 2 ? 1 : 2;
++	GLfloat m[16], x, y, z;
++	int i, a, b;
++	rotationAxis(xyz, &x, &y, &z);
++	a = x != 0.0f ? 1 : 0;
++	b = z != 0.0f ? 1 : 2;
+ 	for (i = 0; i < 16; ++i) m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+ 	m[a * 4 + a] = cos_an;
+ 	m[b * 4 + b] = cos_an;
+diff --git a/tests/host/glcalls.auto.inc b/tests/host/glcalls.auto.inc
+index 7fdc5ab..116ea83 100644
+--- a/tests/host/glcalls.auto.inc
++++ b/tests/host/glcalls.auto.inc
+@@ -866,9 +866,6 @@
+ {"TexImage1D", true, 0,
+ 	[]() -> int32_t { _glTexImage1D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), -(1000 + 5), (GLenum) (0x1000 + 7 * 6), (GLenum) (0x1000 + 7 * 7), (GLvoid*) (uintptr_t) 0x10800); return 0; },
+ 	[]() -> int32_t { stub_glTexImage1D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), -(1000 + 5), (GLenum) (0x1000 + 7 * 6), (GLenum) (0x1000 + 7 * 7), (GLvoid*) (arena + 0x10800)); return 0; }},
+-{"TexImage2D", true, 0,
+-	[]() -> int32_t { _glTexImage2D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), -(1000 + 5), -(1000 + 6), (GLenum) (0x1000 + 7 * 7), (GLenum) (0x1000 + 7 * 8), (GLvoid*) (uintptr_t) 0x10900); return 0; },
+-	[]() -> int32_t { stub_glTexImage2D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), -(1000 + 5), -(1000 + 6), (GLenum) (0x1000 + 7 * 7), (GLenum) (0x1000 + 7 * 8), (GLvoid*) (arena + 0x10900)); return 0; }},
+ {"TexParameterf", false, 0,
+ 	[]() -> int32_t { _glTexParameterf((GLenum) (0x1000 + 7 * 1), (GLenum) (0x1000 + 7 * 2), (GLfloat) (4.25)); return 0; },
+ 	[]() -> int32_t { stub_glTexParameterf((GLenum) (0x1000 + 7 * 1), (GLenum) (0x1000 + 7 * 2), (GLfloat) (4.25)); return 0; }},
+@@ -884,9 +881,6 @@
+ {"TexSubImage1D", true, 0,
+ 	[]() -> int32_t { _glTexSubImage1D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), (GLenum) (0x1000 + 7 * 5), (GLenum) (0x1000 + 7 * 6), (GLvoid*) (uintptr_t) 0x10700); return 0; },
+ 	[]() -> int32_t { stub_glTexSubImage1D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), (GLenum) (0x1000 + 7 * 5), (GLenum) (0x1000 + 7 * 6), (GLvoid*) (arena + 0x10700)); return 0; }},
+-{"TexSubImage2D", true, 0,
+-	[]() -> int32_t { _glTexSubImage2D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), -(1000 + 5), -(1000 + 6), (GLenum) (0x1000 + 7 * 7), (GLenum) (0x1000 + 7 * 8), (GLvoid*) (uintptr_t) 0x10900); return 0; },
+-	[]() -> int32_t { stub_glTexSubImage2D((GLenum) (0x1000 + 7 * 1), -(1000 + 2), -(1000 + 3), -(1000 + 4), -(1000 + 5), -(1000 + 6), (GLenum) (0x1000 + 7 * 7), (GLenum) (0x1000 + 7 * 8), (GLvoid*) (arena + 0x10900)); return 0; }},
+ {"Translated", false, 0,
+ 	[]() -> int32_t { _glTranslated(-(1e10 + 1 + 0.125), -(1e10 + 2 + 0.125), -(1e10 + 3 + 0.125)); return 0; },
+ 	[]() -> int32_t { stub_glTranslated(-(1e10 + 1 + 0.125), -(1e10 + 2 + 0.125), -(1e10 + 3 + 0.125)); return 0; }},
+diff --git a/tests/host/test.cpp b/tests/host/test.cpp
+index de80e46..215f333 100644
+--- a/tests/host/test.cpp
++++ b/tests/host/test.cpp
+@@ -295,10 +295,11 @@ int main() {
+ 	check(pointer == 0x12340, "GetPointerv returned " + std::to_string(pointer));
+ 	check(joined() == "VertexPointer(3,5126,12,@12340)", "VertexPointer: " + joined());
+ 
+-	// A NULL pointer arrives as NULL.
++	// A NULL pointer arrives as NULL. A level 0 image gets its mipmaps made
++	// (GL_GENERATE_MIPMAP, host/gldecode.cpp) as MiniGL makes them.
+ 	records.clear();
+ 	_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+-	check(joined() == "TexImage2D(3553,0,6408,4,4,0,6408,5121,NULL)", "NULL pointer: " + joined());
++	check(joined() == "TexParameteri(3553,33169,1) TexImage2D(3553,0,6408,4,4,0,6408,5121,NULL)", "NULL pointer: " + joined());
+ 
+ 	// --- Warp3D commands: the OpenGL calls the 0.53 68k code made ---
+ 
