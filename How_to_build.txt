@@ -139,3 +139,15 @@ Notes
   diff of its Source folder against the Aminet release.
 - amiga/build.sh builds the Amiga tools (AndroidPlay, AndroidBrowser) into
   amigaApps/.
+- amigaApps/Libs/minigl.library is QuarkTex NG's with the patch (GLQuake's
+  camera turns). It is built in Docker (docker.io, the user in the docker
+  group) from step 7's src/, with the include folder of PiStorm3D's MiniGL
+  SDK (SDK/minigl-shared-library/include of the PiStorm3D archive):
+      cd ~/androidsdl/project/jni/quarktexng/src
+      MINIGL_SDK=<SDK include folder> sh ./build.sh amiga
+      docker run --rm -u $(id -u):$(id -g) -v $PWD:/w \
+          -v <SDK include folder>:/sdk:ro -w /w amigadev/crosstools:m68k-amigaos \
+          make -f amiga/Makefile build/amiga/minigl.library
+  The first stops at Warp3D.library, which the Aminet archive has no source
+  of, after making minigl.library's generated files; the second builds
+  build/amiga/minigl.library.
