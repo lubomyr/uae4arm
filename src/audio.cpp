@@ -1275,9 +1275,8 @@ void check_prefs_changed_audio (void)
 #endif
 }
 
-#ifdef TOCCATA
+/* for the sources that ride on Paula's samples (resampler.h) */
 uae_u32 audio_sample_cycles;
-#endif
 
 void update_audio (void)
 {
@@ -1332,9 +1331,7 @@ void update_audio (void)
     	if (rounded == best_evtime) {
 			  /* Before the following addition, next_sample_evtime is in range [-0.5, 0.5) */
     		next_sample_evtime += scaled_sample_evtime;
-#ifdef TOCCATA
         audio_sample_cycles = get_cycles () - n_cycles;
-#endif
         (*sample_handler) ();
     	}
 		}

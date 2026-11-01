@@ -9,10 +9,9 @@
 * codec. Recording, the Prelude boards and the FM801 PCI cards are left out.
 *
 * WinUAE hands the codec's samples to its audio mixer as a stream. That mixer
-* does not exist here, so the board keeps its own clock instead: the FIFO is
-* drained at the codec's rate in emulated time, and every sample Paula puts out
-* gets the codec's output at that instant added to it (sound.h). Both then
-* share the same buffer, the same pacing and the same rate control.
+* does not exist here, so the board keeps its own clock instead (resampler.h):
+* the FIFO is drained at the codec's rate in emulated time, and every sample
+* Paula puts out gets the codec's output at that instant added to it.
 */
 
 #include "sysconfig.h"
@@ -31,6 +30,7 @@
 #include "devices.h"
 #include "audio.h"
 #include "sndboard.h"
+#include "resampler.h"
 
 #define DEBUG_SNDDEV 0
 
@@ -38,35 +38,6 @@
 #define BOARD_MASK (BOARD_SIZE - 1)
 
 #define FIFO_SIZE_MAX 1024
-
-/* The codec's samples are resampled to the instants Paula puts hers out with
-   a windowed sinc. Paula's rate is never exactly the codec's - the sound rate
-   control moves it by up to 0.4% - so those instants slide past the codec's
-   samples. Linear interpolation dulls the high frequencies the more, the
-   nearer an instant falls to the middle between two samples, and the sliding
-   turned that into a hiss on cymbals and the like. The sinc's response stays
-   flat to about 20 kHz wherever the instant falls. */
-#define RS_TAPS 96
-#define RS_PHASES 256              /* table steps between two codec samples */
-#define RS_KAISER_BETA 7.86        /* about 80 dB of stopband */
-/* The pass band ends short of Nyquist, so that the stop band starts at it:
-   centred on Nyquist, the images of what lies just below - plenty in some
-   mp3s - came through. Flat to about 20 kHz at 44.1 kHz. */
-#define RS_CUTOFF 0.477
-/* Paula's samples come in a batch at the end of each stretch update_audio()
-   works through - about one per scanline - by which time the codec has run
-   on. Taking the codec's output as of then gave every sample of the batch
-   the same value, a staircase at the scanline rate that folded everything
-   above about 8 kHz back down as noise. The history keeps this many codec
-   samples more, so the output can be worked out for the instant of each
-   sample even when it lies that far before the codec's latest one. */
-#define RS_LOOKBACK 16
-#define RS_HIST 256                /* power of two, at least RS_TAPS + RS_LOOKBACK */
-
-/* Colour clocks per second of a PAL Amiga, for when sound emulation is off and
-   update_sound() never tells us the real figure: the driver still waits on the
-   FIFO, so it has to drain. */
-#define DEFAULT_EVENT_CLOCK 3546895.0
 
 struct snddev_data {
 	bool enabled;
@@ -88,9 +59,6 @@ struct snddev_data {
 	bool fifo_play_byteswap;
 
 	int ch_sample[2];
-	/* the codec's recent samples, volume applied, for the resampler */
-	float hist[2][RS_HIST];
-	unsigned int hist_pos;
 
 	uae_u16 codec_reg1_mask;
 	uae_u16 codec_reg1_addr;
@@ -107,20 +75,13 @@ struct snddev_data {
 	int play_channels, play_samplebits;
 	int play_bytespersample;
 
-	/* our replacement for WinUAE's audio stream: the codec's clock */
-	int event_time;
-	uae_u32 last_cycles;
-	uae_s64 cycle_acc;
+	/* our replacement for WinUAE's audio stream */
+	struct resampler rs;
 
 	addrbank *bank;
 };
 
 static struct snddev_data toccata;
-static double base_event_clock;
-
-static float rs_coef[RS_PHASES + 1][RS_TAPS];
-static double rs_cutoff;
-
 bool sndboard_playing;
 
 /* ZorroII, 64 KB, MacroSystem (18260) product 12 */
@@ -137,11 +98,6 @@ static const uae_u8 toccata_autoconfig[16] = { 0xc1, 12, 0, 0, 18260 >> 8, 18260
 #define STATUS_READ_INTREQ 128
 #define STATUS_READ_PLAY_HALF 8
 #define STATUS_READ_RECORD_HALF 4
-
-void update_sndboard_sound(double clk)
-{
-	base_event_clock = clk;
-}
 
 static void sndboard_rethink(void)
 {
@@ -204,10 +160,9 @@ static void codec_tick(struct snddev_data *data)
 	}
 	/* WinUAE scales ch_sample itself, which an empty FIFO then scales again on
 	   every tick; keep the sample as read and scale the copy instead. */
-	unsigned int i = data->hist_pos & (RS_HIST - 1);
-	data->hist[0][i] = data->ch_sample[0] * (float)data->left_volume / 32768.0f;
-	data->hist[1][i] = data->ch_sample[1] * (float)data->right_volume / 32768.0f;
-	data->hist_pos++;
+	resampler_put(&data->rs,
+		data->ch_sample[0] * (float)data->left_volume / 32768.0f,
+		data->ch_sample[1] * (float)data->right_volume / 32768.0f);
 	int old = data->snddev_irq;
 	if (data->snddev_active && (data->snddev_status & STATUS_FIFO_CODEC)) {
 		if ((data->fifo_half & STATUS_FIFO_PLAY) && (data->snddev_status & STATUS_PLAY_INTENA) && (data->snddev_status & STATUS_FIFO_PLAY)) {
@@ -221,20 +176,9 @@ static void codec_tick(struct snddev_data *data)
 /* Runs the codec up to the current emulated time. */
 static void codec_catchup(struct snddev_data *data)
 {
-	uae_u32 now = get_cycles();
-	uae_u32 delta = now - data->last_cycles;
-	data->last_cycles = now;
-	if (!data->snddev_active || data->event_time <= 0)
-		return;
-	/* after a pause or a long stall, do not replay seconds of ticks at once */
-	uae_u32 limit = (uae_u32)data->event_time * 4096;
-	if (delta > limit)
-		delta = limit;
-	data->cycle_acc += delta;
-	while (data->cycle_acc >= data->event_time) {
-		data->cycle_acc -= data->event_time;
+	int n = resampler_catchup(&data->rs, data->snddev_active != 0);
+	while (n-- > 0)
 		codec_tick(data);
-	}
 }
 
 static int get_volume(uae_u8 v)
@@ -273,51 +217,6 @@ static const int freq_dividers[] = {
 	2560
 };
 
-static double bessel_i0(double x)
-{
-	double sum = 1.0, term = 1.0, q = x * x / 4.0;
-	for (int k = 1; k < 100; k++) {
-		term *= q / ((double)k * k);
-		sum += term;
-		if (term < sum * 1e-12)
-			break;
-	}
-	return sum;
-}
-
-/* Fills the resampler's table: for each phase between two codec samples, the
-   weights of the RS_TAPS samples around the output instant. The cutoff is a
-   fraction of the codec's rate; each row is scaled to sum to 1, so that
-   silence with an offset stays silent whatever the phase. */
-static void resampler_setup(double cutoff)
-{
-	if (cutoff == rs_cutoff)
-		return;
-	rs_cutoff = cutoff;
-	const double half = RS_TAPS / 2.0;
-	const double i0_beta = bessel_i0(RS_KAISER_BETA);
-	for (int p = 0; p <= RS_PHASES; p++) {
-		double c[RS_TAPS], sum = 0.0;
-		for (int j = 0; j < RS_TAPS; j++) {
-			/* the output instant's distance from sample j, in samples */
-			double x = (double)p / RS_PHASES + half - 1 - j;
-			double s = x == 0.0 ? 2.0 * cutoff : sin(2.0 * M_PI * cutoff * x) / (M_PI * x);
-			double w = x / half;
-			w = fabs(w) >= 1.0 ? 0.0 : bessel_i0(RS_KAISER_BETA * sqrt(1.0 - w * w)) / i0_beta;
-			c[j] = s * w;
-			sum += c[j];
-		}
-		for (int j = 0; j < RS_TAPS; j++)
-			rs_coef[p][j] = (float)(c[j] / sum);
-	}
-}
-
-static void resampler_clear(struct snddev_data *data)
-{
-	memset(data->hist, 0, sizeof data->hist);
-	data->hist_pos = 0;
-}
-
 static void codec_setup(struct snddev_data *data)
 {
 	uae_u8 c = data->ad1848_regs[8];
@@ -340,18 +239,7 @@ static void codec_start(struct snddev_data *data)
 
 	codec_setup(data);
 
-	double clk = base_event_clock > 0 ? base_event_clock : DEFAULT_EVENT_CLOCK;
-	data->event_time = (int)(clk * CYCLE_UNIT / data->freq);
-	data->last_cycles = get_cycles();
-	data->cycle_acc = 0;
-
-	/* Up to Nyquist of the codec, or of the output if that is lower, so
-	   that nothing above it folds back into the audible range. */
-	double cutoff = RS_CUTOFF;
-	if (currprefs.sound_freq > 0 && currprefs.sound_freq < data->freq)
-		cutoff = RS_CUTOFF * currprefs.sound_freq / data->freq;
-	resampler_setup(cutoff);
-	resampler_clear(data);
+	resampler_start(&data->rs, data->freq);
 
 	sndboard_playing = (data->snddev_active & STATUS_FIFO_PLAY) != 0;
 	if (sndboard_playing)
@@ -362,7 +250,7 @@ static void codec_stop(struct snddev_data *data)
 {
 	sndboard_playing = false;
 	data->ch_sample[0] = data->ch_sample[1] = 0;
-	resampler_clear(data);
+	resampler_clear(&data->rs);
 	if (!data->snddev_active)
 		return;
 	write_log(_T("CODEC stop\n"));
@@ -685,51 +573,11 @@ bool toccata_init(struct autoconfig_info *aci)
 	return true;
 }
 
-static inline int clamp16(int v)
-{
-	return v > 32767 ? 32767 : (v < -32768 ? -32768 : v);
-}
-
-/* The codec's output at the instant of Paula's sample, delayed by a fixed
-   RS_TAPS / 2 codec samples. The phase falls between two rows of the table,
-   so both are applied and the results interpolated. */
+/* The codec's output at the instant of Paula's sample. */
 static void codec_output(struct snddev_data *data, int *l, int *r)
 {
 	codec_catchup(data);
-	if (data->event_time <= 0) {
-		*l = *r = 0;
-		return;
-	}
-	/* where the instant lies from the codec's latest sample, in samples:
-	   below 1, and below 0 when that sample came after it */
-	uae_u32 latest = data->last_cycles - (uae_u32)data->cycle_acc;
-	float since = (float)(uae_s32)(audio_sample_cycles - latest) / data->event_time;
-	if (since < -RS_LOOKBACK)
-		since = -RS_LOOKBACK;
-	/* counted from RS_LOOKBACK samples back, to keep it positive: the
-	   integer part moves the taps, the rest is the phase */
-	float pos = since + RS_LOOKBACK;
-	int whole = (int)pos;
-	if (whole > RS_LOOKBACK)
-		whole = RS_LOOKBACK;
-	float phase = (pos - whole) * RS_PHASES;
-	int p = (int)phase;
-	if (p >= RS_PHASES)
-		p = RS_PHASES - 1;
-	float f = phase - p;
-	const float *c0 = rs_coef[p], *c1 = rs_coef[p + 1];
-	unsigned int base = data->hist_pos - RS_TAPS - RS_LOOKBACK + whole;
-	float l0 = 0, l1 = 0, r0 = 0, r1 = 0;
-	for (int j = 0; j < RS_TAPS; j++) {
-		unsigned int i = (base + j) & (RS_HIST - 1);
-		float sl = data->hist[0][i], sr = data->hist[1][i];
-		l0 += c0[j] * sl;
-		l1 += c1[j] * sl;
-		r0 += c0[j] * sr;
-		r1 += c1[j] * sr;
-	}
-	*l = (int)lrintf(l0 + (l1 - l0) * f);
-	*r = (int)lrintf(r0 + (r1 - r0) * f);
+	resampler_output(&data->rs, l, r);
 }
 
 void sndboard_mix_stereo(uae_u32 *left, uae_u32 *right)

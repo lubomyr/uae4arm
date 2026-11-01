@@ -40,14 +40,18 @@ STATIC_INLINE void clear_sound_buffers (void)
 
 #ifdef TOCCATA
 #include "sndboard.h"
-/* Every sample Paula puts out picks up the sound card's current one, so the
-   card shares Paula's buffer, timing and rate control. */
-#define PUT_SOUND_WORD(b) do { uae_u32 _w = (b); if (sndboard_playing) sndboard_mix_mono(&_w); *sndbufpt = _w; sndbufpt = sndbufpt + 1; } while (0)
-#define PUT_SOUND_WORD_STEREO(l,r) do { uae_u32 _l = (l), _r = (r); if (sndboard_playing) sndboard_mix_stereo(&_l, &_r); *((uae_u32 *)sndbufpt) = (_r << 16) | (_l & 0xffff); sndbufpt = sndbufpt + 2; } while (0)
+#define SNDBOARD_MIX_MONO(w) do { if (sndboard_playing) sndboard_mix_mono(w); } while (0)
+#define SNDBOARD_MIX_STEREO(l,r) do { if (sndboard_playing) sndboard_mix_stereo(l, r); } while (0)
 #else
-#define PUT_SOUND_WORD(b) do { *sndbufpt = b; sndbufpt = sndbufpt + 1; } while (0)
-#define PUT_SOUND_WORD_STEREO(l,r) do { *((uae_u32 *)sndbufpt) = (r << 16) | (l & 0xffff); sndbufpt = sndbufpt + 2; } while (0)
+#define SNDBOARD_MIX_MONO(w) do { } while (0)
+#define SNDBOARD_MIX_STEREO(l,r) do { } while (0)
 #endif
+#include "mhi.h"
+/* Every sample Paula puts out picks up the sound card's and the MPEG
+   decoder's current ones, so they share Paula's buffer, timing and rate
+   control. */
+#define PUT_SOUND_WORD(b) do { uae_u32 _w = (b); SNDBOARD_MIX_MONO(&_w); if (mhi_playing) mhi_mix_mono(&_w); *sndbufpt = _w; sndbufpt = sndbufpt + 1; } while (0)
+#define PUT_SOUND_WORD_STEREO(l,r) do { uae_u32 _l = (l), _r = (r); SNDBOARD_MIX_STEREO(&_l, &_r); if (mhi_playing) mhi_mix_stereo(&_l, &_r); *((uae_u32 *)sndbufpt) = (_r << 16) | (_l & 0xffff); sndbufpt = sndbufpt + 2; } while (0)
 
 #define DEFAULT_SOUND_BITS 16
 #define DEFAULT_SOUND_FREQ 44100

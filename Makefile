@@ -145,6 +145,7 @@ OBJS =	\
 	src-$(arch)/main.o \
 	src-$(arch)/memory.o \
 	src-$(arch)/native2amiga.o \
+	src-$(arch)/resampler.o \
 	src-$(arch)/rommgr.o \
 	src-$(arch)/rtc.o \
 	src-$(arch)/savestate.o \
@@ -210,6 +211,7 @@ OBJS =	\
 	src-$(arch)/osdep/charset.o \
 	src-$(arch)/osdep/fsdb_host.o \
 	src-$(arch)/osdep/keyboard.o \
+	src-$(arch)/osdep/mhi.o \
 	src-$(arch)/osdep/mp3decoder.o \
 	src-$(arch)/osdep/picasso96.o \
 	src-$(arch)/osdep/writelog.o \
