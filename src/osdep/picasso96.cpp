@@ -1268,6 +1268,11 @@ static struct modeids mi[] =
   1152, 648, 173,
   1776,1000, 174,
 	2560,1440, 175,
+
+  /* uae4arm's own, past WinUAE's last (193): NTSC and PAL HighRes */
+
+   640, 200, 194,
+   640, 256, 195,
   -1,-1,0
 };
 
