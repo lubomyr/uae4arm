@@ -70,8 +70,12 @@ extern "C" {
 #define HV_CMD_TARGET 4     /* handle, buffer, width << 16 | height, RGBFormat */
 #define HV_CMD_FRAME 5      /* handle: HV_FRAME_... */
 #define HV_CMD_PAUSE 6      /* handle: 1 when paused now */
+#define HV_CMD_TIME 7       /* handle: the time played, in ms */
+#define HV_CMD_DURATION 8   /* handle: the length of the video in ms, 0 when unknown */
+#define HV_CMD_SEEK 9       /* handle, time in ms */
+#define HV_CMD_DESCRIBE 10  /* handle, buffer, its size: "(width x height) (codec)" */
 
-#define HV_API_VERSION 1
+#define HV_API_VERSION 2
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -125,6 +129,11 @@ public:
 	virtual ~video_source() {}
 	/* The size to show the video at. */
 	int width, height;
+	/* Its length in seconds, 0 when unknown, and what it is, for the title */
+	double duration;
+	char codec[32];
+	/* Goes to t seconds from the start. */
+	virtual void seek(double t) = 0;
 	/* Takes the latest frame due by t seconds from the start, and drops
 	   those before it; false when none is new. */
 	virtual bool take(double t) = 0;
@@ -146,16 +155,20 @@ public:
    frames and a ring of sound, which the emulator's thread takes from. */
 class decoding_source : public video_source {
 public:
+	void seek(double t);
 	bool take(double t);
 	bool ended();
 	int audio_read(uae_s16 (*out)[2], int n);
 
 protected:
-	decoding_source() { dropped = 0; audio_rate = 0; }
+	decoding_source() { dropped = 0; audio_rate = 0; duration = 0; codec[0] = 0; }
 	~decoding_source() { delete[] audio; }
 	/* Decodes a little; false at the end of the stream. */
 	virtual bool decode_some() = 0;
 	virtual void free_frame(void *f) = 0;
+	/* Moves the reading to the key frame at or before pts and empties the
+	   decoders; with the thread stopped. */
+	virtual void seek_to(double pts) = 0;
 	void start_thread();
 	/* First thing in the destructor of a decoder, as the thread uses its
 	   parts; frees the frames too. */
@@ -178,6 +191,7 @@ protected:
 private:
 	void decode_thread();
 	bool want_more();
+	void halt_thread();
 
 	std::thread thread;
 	std::mutex lock;
@@ -188,6 +202,10 @@ private:
 	std::deque<frame> queue;
 
 	bool audio_started = false;
+	/* the time the sound in the ring starts at, and samples to leave out
+	   of it yet */
+	double audio_origin = 0;
+	int audio_skip = 0;
 	/* written by the decoder's thread, read by the emulator's */
 	uae_s16 (*audio)[2] = NULL;
 	std::atomic<unsigned int> audio_write_pos{0}, audio_read_pos{0};
@@ -198,7 +216,7 @@ void decoding_source::start_thread()
 	thread = std::thread(&decoding_source::decode_thread, this);
 }
 
-void decoding_source::stop_thread()
+void decoding_source::halt_thread()
 {
 	if (thread.joinable()) {
 		{
@@ -208,6 +226,12 @@ void decoding_source::stop_thread()
 		wake.notify_all();
 		thread.join();
 	}
+	stop = false;
+}
+
+void decoding_source::stop_thread()
+{
+	halt_thread();
 	for (auto &q : queue)
 		free_frame(q.f);
 	queue.clear();
@@ -227,6 +251,22 @@ void decoding_source::queue_frame(double pts, void *f)
 	queue.push_back({ pts, f });
 }
 
+/* The frame shown stays until one of the new place falls due. */
+void decoding_source::seek(double t)
+{
+	halt_thread();
+	seek_to((start >= 0 ? start : 0) + t);
+	for (auto &q : queue)
+		free_frame(q.f);
+	queue.clear();
+	eof = false;
+	audio_read_pos.store(audio_write_pos.load());
+	audio_started = false;
+	audio_origin = t;
+	audio_skip = 0;
+	start_thread();
+}
+
 size_t decoding_source::queued()
 {
 	std::lock_guard<std::mutex> g(lock);
@@ -244,16 +284,26 @@ void decoding_source::audio_start(double pts)
 	if (audio_started)
 		return;
 	audio_started = true;
-	/* sound from before the picture's start is left out by the player */
+	/* sound from before the start, or from before where a seek went to,
+	   is left out */
 	if (pts >= 0 && start >= 0) {
-		int pad = (int)((pts - start) * audio_rate);
+		int pad = (int)((pts - start - audio_origin) * audio_rate);
 		if (pad > 0 && pad < AUDIO_FRAMES / 2)
 			audio_write(NULL, pad);
+		else if (pad < 0)
+			audio_skip = -pad;
 	}
 }
 
 void decoding_source::audio_write(const uae_s16 *in, int n)
 {
+	if (audio_skip > 0) {
+		int k = n < audio_skip ? n : audio_skip;
+		audio_skip -= k;
+		n -= k;
+		if (in)
+			in += k * 2;
+	}
 	unsigned int w = audio_write_pos.load(std::memory_order_relaxed);
 	for (int i = 0; i < n; i++, w++) {
 		audio[w & (AUDIO_FRAMES - 1)][0] = in ? in[i * 2] : 0;
@@ -379,6 +429,7 @@ public:
 protected:
 	bool decode_some();
 	void free_frame(void *f) { AVFrame *a = (AVFrame *)f; av_frame_free(&a); }
+	void seek_to(double pts);
 
 private:
 	bool open_audio();
@@ -426,9 +477,20 @@ bool ffmpeg_source::open(const char *path)
 		width = (int)((double)width * sar.num / sar.den + 0.5);
 	if (width <= 0 || height <= 0 || width > 0xffff || height > 0xffff)
 		return false;
-	write_log(_T("HostPlay: %s, %s %dx%d\n"), path, codec->name, width, height);
+	if (fmt->duration != AV_NOPTS_VALUE && fmt->duration > 0)
+		duration = (double)fmt->duration / AV_TIME_BASE;
+	snprintf(this->codec, sizeof this->codec, "%s", codec->name);
+	write_log(_T("HostPlay: %s, %s %dx%d, %.1f s\n"), path, codec->name, width, height, duration);
 	start_thread();
 	return true;
+}
+
+void ffmpeg_source::seek_to(double pts)
+{
+	av_seek_frame(fmt, -1, (int64_t)(pts * AV_TIME_BASE), AVSEEK_FLAG_BACKWARD);
+	avcodec_flush_buffers(dec);
+	if (adec)
+		avcodec_flush_buffers(adec);
 }
 
 /* The sound that goes with the picture, as 16-bit stereo at its own rate */
@@ -688,6 +750,7 @@ public:
 protected:
 	bool decode_some();
 	void free_frame(void *f) { delete (yuv_frame *)f; }
+	void seek_to(double pts);
 
 private:
 	bool feed();
@@ -757,6 +820,10 @@ bool mediacodec_source::open(const char *path)
 		if (AMediaFormat_getInt32(vfmt, "sar-width", &sw) && AMediaFormat_getInt32(vfmt, "sar-height", &sh) &&
 				sw > 0 && sh > 0 && sw != sh)
 			width = (int)((double)w * sw / sh + 0.5);
+		int64_t us = 0;
+		if (AMediaFormat_getInt64(vfmt, AMEDIAFORMAT_KEY_DURATION, &us) && us > 0)
+			duration = us / 1000000.0;
+		snprintf(codec, sizeof codec, "%s", vmime + 6);
 		vcodec = AMediaCodec_createDecoderByType(vmime);
 		/* pictures in memory, in one of the YUV 4:2:0 layouts */
 		AMediaFormat_setInt32(vfmt, AMEDIAFORMAT_KEY_COLOR_FORMAT, COLOR_YUV420_FLEXIBLE);
@@ -858,6 +925,16 @@ bool mediacodec_source::feed()
 	AMediaCodec_queueInputBuffer(codec, i, 0, n < 0 ? 0 : n, pts < 0 ? 0 : pts, 0);
 	AMediaExtractor_advance(ex);
 	return true;
+}
+
+void mediacodec_source::seek_to(double pts)
+{
+	AMediaExtractor_seekTo(ex, (int64_t)(pts * 1000000), AMEDIAEXTRACTOR_SEEK_PREVIOUS_SYNC);
+	AMediaCodec_flush(vcodec);
+	if (acodec)
+		AMediaCodec_flush(acodec);
+	input_done = veos_sent = aeos_sent = false;
+	video_done = audio_done = false;
 }
 
 void mediacodec_source::video_format()
@@ -1081,8 +1158,9 @@ struct hostvideo {
 	/* the video's clock: emulated time played */
 	uae_u32 last_cycles;
 	uae_s64 played;
-	/* a new frame or the end the tool has not seen yet, and it was told */
-	bool ready, ended, signalled;
+	/* a new frame or the end the tool has not seen yet, and it was told;
+	   the end once told is not told again */
+	bool ready, ended, signalled, end_told;
 
 	int stat_shown;
 	int stat_time;
@@ -1222,13 +1300,15 @@ static void catchup(struct hostvideo *v)
 	uae_u32 now = get_cycles();
 	uae_u32 delta = now - v->last_cycles;
 	v->last_cycles = now;
-	if (v->paused || v->ended)
+	if (v->ended)
 		return;
 	double second = resampler_clock() * CYCLE_UNIT;
 	/* after a pause of the emulator, not a run of frames at once */
 	if (delta > second / 4)
 		delta = (uae_u32)(second / 4);
-	v->played += delta;
+	/* paused, the clock stands, but a seek still shows its frame */
+	if (!v->paused)
+		v->played += delta;
 	double t = v->played / second;
 	if (v->source->take(t))
 		v->ready = true;
@@ -1257,7 +1337,7 @@ static void hostvideo_hsync(void)
 				loud = true;
 		}
 		/* once, until the tool takes the frame */
-		if ((v->ready || v->ended) && !v->signalled && v->buffer) {
+		if ((v->ready || (v->ended && !v->end_told)) && !v->signalled && v->buffer) {
 			v->signalled = true;
 			uae_Signal(v->task, v->sigmask);
 		}
@@ -1310,7 +1390,7 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 	v->paused = false;
 	v->last_cycles = get_cycles();
 	v->played = 0;
-	v->ready = v->ended = v->signalled = false;
+	v->ready = v->ended = v->signalled = v->end_told = false;
 	v->stat_shown = v->stat_time = 0;
 	v->apos = v->alen = v->missed = 0;
 	v->quiet = RS_HIST;
@@ -1364,10 +1444,49 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 			v->stat_shown++;
 			return HV_FRAME_NEW;
 		}
-		return v->ended ? HV_FRAME_END : HV_FRAME_NONE;
+		if (v->ended) {
+			v->end_told = true;
+			return HV_FRAME_END;
+		}
+		return HV_FRAME_NONE;
 	case HV_CMD_PAUSE:
 		v->paused = !v->paused;
 		return v->paused ? 1 : 0;
+	case HV_CMD_TIME: {
+		double t = v->played / (resampler_clock() * CYCLE_UNIT);
+		if (v->source->duration > 0 && t > v->source->duration)
+			t = v->source->duration;
+		return (uae_u32)(t * 1000);
+	}
+	case HV_CMD_DURATION:
+		return (uae_u32)(v->source->duration * 1000);
+	case HV_CMD_SEEK: {
+		double t = arg2 / 1000.0;
+		if (v->source->duration > 0 && t > v->source->duration)
+			t = v->source->duration;
+		v->source->seek(t);
+		v->played = (uae_s64)(t * resampler_clock() * CYCLE_UNIT);
+		v->ready = v->ended = v->signalled = v->end_told = false;
+		v->stat_time = (int)t;
+		v->apos = v->alen = v->missed = 0;
+		if (v->source->audio_rate > 0)
+			resampler_clear(&v->rs);
+		v->quiet = RS_HIST;
+		update_playing();
+		return 1;
+	}
+	case HV_CMD_DESCRIBE: {
+		char text[64];
+		snprintf(text, sizeof text, "(%dx%d) (%s)", v->source->width, v->source->height, v->source->codec);
+		if (!arg2 || !arg3)
+			return 0;
+		uae_u32 n = (uae_u32)strlen(text) + 1;
+		if (n > arg3)
+			n = arg3;
+		for (uae_u32 i = 0; i < n; i++)
+			put_byte(arg2 + i, i == n - 1 ? 0 : text[i]);
+		return 1;
+	}
 	}
 	return 0;
 }

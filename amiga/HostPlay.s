@@ -3,9 +3,13 @@
 | Usage: HostPlay [<file>]
 | Without a file - from the Shell, or started from its icon - it asks for one
 | with the file requester of asl.library. Set as the default tool of a
-| video's icon, a double click on the video plays it. Space pauses, Esc or
-| the close gadget ends it; at the end of the video the window closes.
-| The file has to be on a folder drive of uae4arm, where the host reaches it.
+| video's icon, a double click on the video plays it. The file has to be on a
+| folder drive of uae4arm, where the host reaches it.
+|
+| In the bottom border of the window: a slider for where the video is, to
+| drag to another place; a button that pauses and plays on, or plays again
+| from the start once the video ended; and a button that asks for another
+| file. Space pauses too, Esc or the close gadget ends it.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 15, 16, 24 or 32 bits. The tool hands the emulator a buffer
@@ -17,13 +21,14 @@
 |
 | Built with GNU as for m68k into a plain binary, made an Amiga executable by
 | hunk.py - see build.sh. All code is PC relative, so the hunk needs no
-| relocation: the pointers in the tag list are filled in at run time.
+| relocation: the pointers in the tag lists are filled in at run time.
 |
-| Registers kept: a3 the window (the file name before it opens), a4 uaelib, a5 DOSBase, d5 the emulator's
+| Registers kept: a3 the window, a4 uaelib, a5 DOSBase, d5 the emulator's
 | handle of the player, d6 the WBStartup message (0 from the Shell), d7 the
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
+	.set	HOSTVIDEO_VERSION, 2	| the seek and the time
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -31,8 +36,37 @@
 
 	.set	IDCMP_NEWSIZE, 0x2
 	.set	IDCMP_REFRESHWINDOW, 0x4
+	.set	IDCMP_GADGETDOWN, 0x20
+	.set	IDCMP_GADGETUP, 0x40
 	.set	IDCMP_CLOSEWINDOW, 0x200
 	.set	IDCMP_VANILLAKEY, 0x200000
+
+	.set	GA_Left, 0x80030001
+	.set	GA_RelRight, 0x80030002
+	.set	GA_RelBottom, 0x80030004
+	.set	GA_RelWidth, 0x80030006
+	.set	GA_Height, 0x80030007
+	.set	GA_Image, 0x8003000A
+	.set	GA_ID, 0x80030010
+	.set	GA_Immediate, 0x80030015
+	.set	GA_RelVerify, 0x80030016
+	.set	GA_BottomBorder, 0x8003001B
+	.set	GA_Previous, 0x8003001F
+	.set	PGA_Freedom, 0x80031001
+	.set	PGA_Borderless, 0x80031002
+	.set	PGA_Total, 0x80031007
+	.set	PGA_Visible, 0x80031008
+	.set	PGA_Top, 0x80031009
+	.set	PGA_NewLook, 0x8003100A
+	.set	IA_Width, 0x80020003
+	.set	IA_Height, 0x80020004
+	.set	SYSIA_Size, 0x8002000B
+	.set	SYSIA_Which, 0x8002000D
+	.set	SYSIA_DrawInfo, 0x80020018
+
+	.set	GAD_SLIDER, 1
+	.set	GAD_PLAY, 2
+	.set	GAD_OPEN, 3
 
 | vars
 	.set	INTUITIONBASE, 0
@@ -48,7 +82,24 @@
 	.set	OLDDIR, 40
 	.set	DIRCHANGED, 44
 	.set	NAME, 48
-	.set	VARSIZE, 52
+	.set	SCREEN, 52
+	.set	DRAWINFO, 56
+	.set	IMGSIZE, 60		| the images - of the size gadget, for its size -
+	.set	IMGPLAY, 64
+	.set	IMGOPEN, 68
+	.set	GADSLIDER, 72		| and the gadgets, linked in this order
+	.set	GADPLAY, 76
+	.set	GADOPEN, 80
+	.set	DURATION, 84		| in seconds
+	.set	SHOWN, 88		| the second the slider shows
+	.set	ATEND, 92
+	.set	DRAGGING, 96
+	.set	STORE, 100		| for GetAttr()
+	.set	SIZEW, 104
+	.set	SIZEH, 108
+	.set	PLAYW, 112
+	.set	OPENW, 116
+	.set	VARSIZE, 120
 
 	.text
 	.globl	_start
@@ -94,11 +145,15 @@ opendos:
 	beq.w	exit
 	movea.l	%d0,%a5			| DOSBase
 	lea	intuiname(%pc),%a1
-	moveq	#36,%d0
+	moveq	#39,%d0
 	jsr	-552(%a6)		| OpenLibrary
 	lea	vars(%pc),%a0
 	move.l	%d0,INTUITIONBASE(%a0)
-	beq.w	closeall
+	bne.s	openp96
+	lea	msg_nointuition(%pc),%a0
+	bsr.w	print
+	bra.w	closeall
+openp96:
 	lea	p96name(%pc),%a1
 	moveq	#2,%d0
 	jsr	-552(%a6)		| OpenLibrary
@@ -123,8 +178,8 @@ findlib:
 haveuaelib:
 	moveq	#0,%d0			| the version of the host's side, 0 for none
 	bsr.w	callhost
-	tst.l	%d0
-	bne.s	newenough
+	cmp.l	#HOSTVIDEO_VERSION,%d0
+	bcc.s	newenough
 	lea	msg_oldemu(%pc),%a0
 	bra.w	failed
 newenough:
@@ -134,21 +189,22 @@ newenough:
 | From Workbench: the second argument is the file, if there is one
 	movea.l	%d6,%a0
 	cmp.l	#2,28(%a0)		| sm_NumArgs
-	blt.w	askfile
+	blt.w	askfirst
 	movea.l	36(%a0),%a0		| sm_ArgList
 	move.l	8(%a0),%d1		| wa_Lock of the file's drawer
-	movea.l	12(%a0),%a3		| wa_Name
+	move.l	12(%a0),-(%sp)		| wa_Name
 	movea.l	%a5,%a6
 	jsr	-126(%a6)		| CurrentDir
 	lea	vars(%pc),%a0
 	move.l	%d0,OLDDIR(%a0)
 	move.l	#1,DIRCHANGED(%a0)
+	move.l	(%sp)+,NAME(%a0)
 	bra.w	havename
 
 | From the Shell: the first argument, in quotes if it has spaces
 shellargs:
 	tst.l	%d3
-	beq.w	askfile
+	beq.w	askfirst
 	move.b	(%a2),%d0
 	cmp.b	#' ',%d0
 	beq.s	nextspace
@@ -160,7 +216,7 @@ nextspace:
 	bra.s	shellargs
 namestart:
 	cmp.b	#10,%d0
-	beq.w	askfile
+	beq.w	askfirst
 	moveq	#' ',%d1		| what ends the name
 	cmp.b	#'"',%d0
 	bne.s	nameset
@@ -168,7 +224,7 @@ namestart:
 	subq.l	#1,%d3
 	moveq	#'"',%d1
 nameset:
-	movea.l	%a2,%a3			| the name starts here
+	movea.l	%a2,%a1			| the name starts here
 nameloop:
 	tst.l	%d3
 	beq.s	nameend
@@ -182,79 +238,31 @@ nameloop:
 	bra.s	nameloop
 nameend:
 	clr.b	(%a2)
-	cmpa.l	%a3,%a2
-	beq.w	askfile
-	cmp.b	#'?',(%a3)		| "HostPlay ?"
-	bne.w	havename
-	tst.b	1(%a3)
-	bne.w	havename
+	cmpa.l	%a1,%a2
+	beq.s	askfirst
+	lea	vars(%pc),%a0
+	move.l	%a1,NAME(%a0)
+	cmp.b	#'?',(%a1)		| "HostPlay ?"
+	bne.s	havename
+	tst.b	1(%a1)
+	bne.s	havename
 	lea	msg_usage(%pc),%a0
 	bsr.w	report
 	moveq	#0,%d7
-	suba.l	%a3,%a3
 	bra.w	closeall
 
-| No file given: the file requester of asl.library
-askfile:
-	movea.l	4,%a6
-	lea	aslname(%pc),%a1
-	moveq	#36,%d0
-	jsr	-552(%a6)		| OpenLibrary
+askfirst:
+	bsr.w	askfile
 	tst.l	%d0
-	beq.w	noasl
-	lea	vars(%pc),%a0
-	move.l	%d0,ASLBASE(%a0)
-	movea.l	%d0,%a6
-	lea	asltags(%pc),%a0
-	lea	title(%pc),%a1
-	move.l	%a1,4(%a0)		| ASLFR_TitleText
-	lea	pattern(%pc),%a1
-	move.l	%a1,20(%a0)		| ASLFR_InitialPattern
-	moveq	#0,%d0			| ASL_FileRequest
-	jsr	-48(%a6)		| AllocAslRequest
-	tst.l	%d0
-	beq.w	noasl
-	move.l	%d0,%d4
-	movea.l	%d0,%a0
-	suba.l	%a1,%a1
-	jsr	-60(%a6)		| AslRequest
-	tst.l	%d0
-	beq.s	cancelled
-	movea.l	%d4,%a0
-	movea.l	4(%a0),%a1		| rf_File
-	tst.b	(%a1)
-	beq.s	cancelled
-| The path: the drawer, then the file added to it
-	movea.l	8(%a0),%a1		| rf_Dir
-	lea	pathbuf(%pc),%a0
-	move.w	#PATHSIZE-2,%d0
-copydir:
-	move.b	(%a1)+,(%a0)+
-	dbeq	%d0,copydir
-	clr.b	-1(%a0)
-	lea	pathbuf(%pc),%a0
-	move.l	%a0,%d1
-	movea.l	%d4,%a0
-	move.l	4(%a0),%d2		| rf_File
-	move.l	#PATHSIZE,%d3
-	movea.l	%a5,%a6
-	jsr	-882(%a6)		| AddPart
-	bsr.w	freereq
-	lea	pathbuf(%pc),%a3
-	bra.s	havename
-cancelled:
-	bsr.w	freereq
-	moveq	#0,%d7
+	bmi.s	noasl
+	bne.s	havename
+	moveq	#0,%d7			| cancelled
 	bra.w	closeall
 noasl:
 	lea	msg_noasl(%pc),%a0
 	bra.w	failed
 
-| The file name goes to the vars, a3 is the window's from here
 havename:
-	lea	vars(%pc),%a0
-	move.l	%a3,NAME(%a0)
-	suba.l	%a3,%a3
 	movea.l	4,%a6
 	moveq	#-1,%d0
 	jsr	-330(%a6)		| AllocSignal
@@ -266,95 +274,43 @@ havename:
 	lea	msg_nosignal(%pc),%a0
 	bra.w	failed
 havesignal:
-	move.l	NAME(%a0),%d1
-	moveq	#-2,%d2			| ACCESS_READ
-	movea.l	%a5,%a6
-	jsr	-84(%a6)		| Lock
+	bsr.w	openvideo
+	tst.l	%d0
+	bmi.w	failed			| %a0 tells why
 	move.l	%d0,%d5
-	bne.s	locked
-	lea	msg_notfound(%pc),%a0
+
+| The screen, its DrawInfo for the images, and the gadgets of the border
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	suba.l	%a0,%a0
+	jsr	-510(%a6)		| LockPubScreen(NULL)
+	move.l	%d0,SCREEN(%a2)
+	bne.s	havescreen
+	lea	msg_nowindow(%pc),%a0
 	bra.w	failed
-locked:
-	lea	vars(%pc),%a0
-	moveq	#1,%d0			| a player, for our task and signal
-	move.l	TASK(%a0),%d1
-	moveq	#0,%d2
-	move.l	SIGBIT(%a0),%d3
-	bset	%d3,%d2
-	move.l	%d5,%d3			| the Lock of the file
-	moveq	#0,%d4
-	bsr.w	callhost
-	move.l	%d0,-(%sp)
-	move.l	%d5,%d1
-	movea.l	%a5,%a6
-	jsr	-90(%a6)		| UnLock
-	move.l	(%sp)+,%d5
-	bgt.s	haveplayer
-	lea	msg_busy(%pc),%a0
-	tst.l	%d5
-	beq.s	openfailed
-	lea	msg_nopath(%pc),%a0
-	cmp.l	#-2,%d5
-	beq.s	openfailed
-	lea	msg_cannot(%pc),%a0
-openfailed:
-	moveq	#0,%d5
+havescreen:
+	movea.l	%d0,%a0
+	jsr	-690(%a6)		| GetScreenDrawInfo
+	move.l	%d0,DRAWINFO(%a2)
+	bsr.w	makegadgets
+	tst.l	%d0
+	bne.s	havegadgets
+	lea	msg_nowindow(%pc),%a0
 	bra.w	failed
 
 | The window, at the size of the video
-haveplayer:
-	moveq	#3,%d0			| the size of the video
-	move.l	%d5,%d1
-	bsr.w	callhost
-	moveq	#0,%d2
-	move.w	%d0,%d2			| height
-	swap	%d0
-	moveq	#0,%d1
-	move.w	%d0,%d1			| width
-| A video larger than the screen gets a smaller window of the same shape
-	movem.l	%d1-%d2,-(%sp)
-	lea	vars(%pc),%a0
-	movea.l	INTUITIONBASE(%a0),%a6
-	suba.l	%a0,%a0
-	jsr	-510(%a6)		| LockPubScreen(NULL)
-	movem.l	(%sp)+,%d1-%d2
-	tst.l	%d0
-	beq.s	sized
-	movea.l	%d0,%a1
-	moveq	#0,%d3
-	move.w	12(%a1),%d3		| sc_Width
-	moveq	#0,%d4
-	move.w	14(%a1),%d4		| sc_Height
-	movem.l	%d1-%d2,-(%sp)
-	suba.l	%a0,%a0
-	jsr	-516(%a6)		| UnlockPubScreen
-	movem.l	(%sp)+,%d1-%d2
-	sub.l	#32,%d3			| room for the borders
-	sub.l	#64,%d4			| and the screen's title bar
-	cmp.l	%d3,%d1
-	bls.s	1f
-	mulu	%d3,%d2
-	divu	%d1,%d2
-	and.l	#0xFFFF,%d2
-	move.l	%d3,%d1
-1:	cmp.l	%d4,%d2
-	bls.s	sized
-	mulu	%d4,%d1
-	divu	%d2,%d1
-	and.l	#0xFFFF,%d1
-	move.l	%d4,%d2
-sized:
+havegadgets:
+	bsr.w	fitsize
 	lea	wintags(%pc),%a1
 	move.l	%d1,4(%a1)		| WA_InnerWidth
 	move.l	%d2,12(%a1)		| WA_InnerHeight
-	lea	vars(%pc),%a0
-	move.l	NAME(%a0),%d1
-	movea.l	%a5,%a6
-	jsr	-870(%a6)		| FilePart: the title
+	bsr.w	maketitle
 	lea	wintags(%pc),%a1
-	move.l	%d0,20(%a1)		| WA_Title
-	lea	vars(%pc),%a0
-	movea.l	INTUITIONBASE(%a0),%a6
+	lea	titlebuf(%pc),%a0
+	move.l	%a0,20(%a1)		| WA_Title
+	move.l	SCREEN(%a2),36(%a1)	| WA_PubScreen
+	move.l	GADSLIDER(%a2),44(%a1)	| WA_Gadgets
+	movea.l	INTUITIONBASE(%a2),%a6
 	suba.l	%a0,%a0
 	jsr	-606(%a6)		| OpenWindowTagList
 	movea.l	%d0,%a3
@@ -391,6 +347,7 @@ isrtg:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
+	bsr.w	newslider
 
 | Waits for a frame, the window, or Ctrl-C
 mainloop:
@@ -414,20 +371,27 @@ mainloop:
 	move.l	%d5,%d1
 	bsr.w	callhost
 	cmp.l	#2,%d0			| the end of the video
-	beq.w	quit
+	bne.s	notend
+	lea	vars(%pc),%a2
+	move.l	#1,ATEND(%a2)
+	bsr.w	moveslider
+	bra.s	msgloop
+notend:
 	tst.l	%d0
 	beq.s	msgloop
 	bsr.w	draw
+	bsr.w	moveslider
 
 msgloop:
 	movea.l	4,%a6
 	movea.l	86(%a3),%a0		| wd_UserPort
 	jsr	-372(%a6)		| GetMsg
 	tst.l	%d0
-	beq.s	mainloop
+	beq.w	mainloop
 	movea.l	%d0,%a1
 	move.l	20(%a1),%d2		| im_Class
 	move.w	24(%a1),%d3		| im_Code
+	movea.l	28(%a1),%a2		| im_IAddress
 	jsr	-378(%a6)		| ReplyMsg
 	cmp.l	#IDCMP_CLOSEWINDOW,%d2
 	beq.w	quit
@@ -438,7 +402,7 @@ msgloop:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
-	bra.w	msgloop
+	bra.s	msgloop
 notsize:
 	cmp.l	#IDCMP_REFRESHWINDOW,%d2
 	bne.s	notrefresh
@@ -452,17 +416,43 @@ notsize:
 	movea.l	%a3,%a0
 	moveq	#1,%d0
 	jsr	-366(%a6)		| EndRefresh
-	bra.w	msgloop
+	bra.s	msgloop
 notrefresh:
+	cmp.l	#IDCMP_GADGETDOWN,%d2
+	bne.s	notdown
+	cmp.w	#GAD_SLIDER,38(%a2)	| gg_GadgetID
+	bne.w	msgloop
+	lea	vars(%pc),%a0
+	move.l	#1,DRAGGING(%a0)
+	bra.w	msgloop
+notdown:
+	cmp.l	#IDCMP_GADGETUP,%d2
+	bne.s	notup
+	move.w	38(%a2),%d0		| gg_GadgetID
+	cmp.w	#GAD_SLIDER,%d0
+	bne.s	notslider
+	bsr.w	seekslider
+	bra.w	msgloop
+notslider:
+	cmp.w	#GAD_PLAY,%d0
+	bne.s	notplay
+	bsr.w	playpause
+	bra.w	msgloop
+notplay:
+	cmp.w	#GAD_OPEN,%d0
+	bne.w	msgloop
+	bsr.w	newfile
+	tst.l	%d0
+	bmi.w	badformat
+	bra.w	msgloop
+notup:
 	cmp.l	#IDCMP_VANILLAKEY,%d2
 	bne.w	msgloop
 	cmp.b	#27,%d3			| Esc
 	beq.s	quit
 	cmp.b	#' ',%d3
 	bne.w	msgloop
-	moveq	#6,%d0			| pause, or play on
-	move.l	%d5,%d1
-	bsr.w	callhost
+	bsr.w	playpause
 	bra.w	msgloop
 
 badformat:
@@ -473,7 +463,7 @@ nomem:
 failed:
 	bsr.w	report
 	moveq	#10,%d7
-	bra.w	closeall
+	bra.s	closeall
 quit:
 	moveq	#0,%d7
 
@@ -484,35 +474,53 @@ closeall:
 	move.l	%d5,%d1
 	bsr.w	callhost
 1:	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
 	move.l	%a3,%d0
 	beq.s	2f
-	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
-2:	bsr.w	freebuffer
+| The gadgets, then the images, now that no window has them
+2:	lea	GADOPEN+4(%a2),%a3
+	moveq	#5,%d2
+3:	move.l	-(%a3),%d0
+	beq.s	4f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+4:	dbra	%d2,3b
+	move.l	DRAWINFO(%a2),%d0
+	beq.s	5f
+	movea.l	%d0,%a1
+	movea.l	SCREEN(%a2),%a0
+	jsr	-696(%a6)		| FreeScreenDrawInfo
+5:	move.l	SCREEN(%a2),%d0
+	beq.s	6f
+	movea.l	%d0,%a1
+	suba.l	%a0,%a0
+	jsr	-516(%a6)		| UnlockPubScreen
+6:	bsr.w	freebuffer
 	movea.l	4,%a6
 	move.l	SIGBIT(%a2),%d0
-	bmi.s	3f
+	bmi.s	7f
 	jsr	-336(%a6)		| FreeSignal
-3:	tst.l	DIRCHANGED(%a2)
-	beq.s	6f
+7:	tst.l	DIRCHANGED(%a2)
+	beq.s	8f
 	move.l	OLDDIR(%a2),%d1
 	movea.l	%a5,%a6
 	jsr	-126(%a6)		| CurrentDir
 	movea.l	4,%a6
-6:	move.l	ASLBASE(%a2),%d0
-	beq.s	7f
+8:	move.l	ASLBASE(%a2),%d0
+	beq.s	9f
 	movea.l	%d0,%a1
 	jsr	-414(%a6)		| CloseLibrary
-7:	move.l	P96BASE(%a2),%d0
-	beq.s	4f
+9:	move.l	P96BASE(%a2),%d0
+	beq.s	10f
 	movea.l	%d0,%a1
 	jsr	-414(%a6)		| CloseLibrary
-4:	move.l	INTUITIONBASE(%a2),%d0
-	beq.s	5f
+10:	move.l	INTUITIONBASE(%a2),%d0
+	beq.s	11f
 	movea.l	%d0,%a1
 	jsr	-414(%a6)		| CloseLibrary
-5:	movea.l	%a5,%a1
+11:	movea.l	%a5,%a1
 	jsr	-414(%a6)		| CloseLibrary
 exit:
 	tst.l	%d6
@@ -524,6 +532,488 @@ exit:
 done:
 	move.l	%d7,%d0
 	movem.l	(%sp)+,%d2-%d7/%a2-%a6
+	rts
+
+| Hands the file in NAME to the emulator. %d0: a handle, or -1 with the
+| reason in %a0.
+openvideo:
+	movem.l	%d2-%d4/%a6,-(%sp)
+	lea	vars(%pc),%a0
+	move.l	NAME(%a0),%d1
+	moveq	#-2,%d2			| ACCESS_READ
+	movea.l	%a5,%a6
+	jsr	-84(%a6)		| Lock
+	move.l	%d0,%d4
+	bne.s	1f
+	lea	msg_notfound(%pc),%a0
+	moveq	#-1,%d0
+	bra.s	openvideo_end
+1:	lea	vars(%pc),%a0
+	moveq	#1,%d0			| a player, for our task and signal
+	move.l	TASK(%a0),%d1
+	moveq	#0,%d2
+	move.l	SIGBIT(%a0),%d3
+	bset	%d3,%d2
+	move.l	%d4,%d3			| the Lock of the file
+	move.l	%d4,-(%sp)
+	moveq	#0,%d4
+	bsr.w	callhost
+	move.l	(%sp)+,%d1
+	move.l	%d0,-(%sp)
+	movea.l	%a5,%a6
+	jsr	-90(%a6)		| UnLock
+	move.l	(%sp)+,%d0
+	bgt.s	openvideo_end
+	lea	msg_busy(%pc),%a0
+	tst.l	%d0
+	beq.s	2f
+	lea	msg_nopath(%pc),%a0
+	cmp.l	#-2,%d0
+	beq.s	2f
+	lea	msg_cannot(%pc),%a0
+2:	moveq	#-1,%d0
+openvideo_end:
+	movem.l	(%sp)+,%d2-%d4/%a6
+	rts
+
+| The file requester: %d0 the name (in pathbuf, and in NAME), 0 when
+| cancelled, -1 without asl.library
+askfile:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	ASLBASE(%a2),%d0
+	bne.s	1f
+	movea.l	4,%a6
+	lea	aslname(%pc),%a1
+	moveq	#36,%d0
+	jsr	-552(%a6)		| OpenLibrary
+	move.l	%d0,ASLBASE(%a2)
+	beq.w	askfile_noasl
+1:	movea.l	%d0,%a6
+	lea	asltags(%pc),%a0
+	lea	title(%pc),%a1
+	move.l	%a1,4(%a0)		| ASLFR_TitleText
+	lea	pattern(%pc),%a1
+	move.l	%a1,20(%a0)		| ASLFR_InitialPattern
+	move.l	%a3,36(%a0)		| ASLFR_Window: ours, once it is open
+	moveq	#0,%d0			| ASL_FileRequest
+	jsr	-48(%a6)		| AllocAslRequest
+	tst.l	%d0
+	beq.s	askfile_noasl
+	move.l	%d0,%d4
+	movea.l	%d0,%a0
+	suba.l	%a1,%a1
+	jsr	-60(%a6)		| AslRequest
+	tst.l	%d0
+	beq.s	askfile_cancel
+	movea.l	%d4,%a0
+	movea.l	4(%a0),%a1		| rf_File
+	tst.b	(%a1)
+	beq.s	askfile_cancel
+| The path: the drawer, then the file added to it
+	movea.l	8(%a0),%a1		| rf_Dir
+	lea	pathbuf(%pc),%a0
+	move.w	#PATHSIZE-2,%d0
+2:	move.b	(%a1)+,(%a0)+
+	dbeq	%d0,2b
+	clr.b	-1(%a0)
+	lea	pathbuf(%pc),%a0
+	move.l	%a0,%d1
+	movea.l	%d4,%a0
+	move.l	4(%a0),%d2		| rf_File
+	move.l	#PATHSIZE,%d3
+	move.l	%a6,-(%sp)
+	movea.l	%a5,%a6
+	jsr	-882(%a6)		| AddPart
+	movea.l	(%sp)+,%a6
+	movea.l	%d4,%a0
+	jsr	-54(%a6)		| FreeAslRequest
+	lea	pathbuf(%pc),%a0
+	move.l	%a0,NAME(%a2)
+	move.l	%a0,%d0
+	bra.s	askfile_end
+askfile_cancel:
+	movea.l	%d4,%a0
+	jsr	-54(%a6)		| FreeAslRequest
+	moveq	#0,%d0
+	bra.s	askfile_end
+askfile_noasl:
+	moveq	#-1,%d0
+askfile_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Another file in the same window: the old video goes once the new one
+| plays. %d0: 0, or -1 when the screen's format is not one the emulator
+| makes.
+newfile:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	bsr.w	askfile
+	tst.l	%d0
+	bmi.w	newfile_noasl
+	beq.w	newfile_end
+	bsr.w	openvideo
+	tst.l	%d0
+	bpl.s	1f
+	bsr.w	report
+	moveq	#0,%d0
+	bra.w	newfile_end
+1:	move.l	%d0,-(%sp)
+	moveq	#2,%d0			| the old one stops
+	move.l	%d5,%d1
+	bsr.w	callhost
+	move.l	(%sp)+,%d5
+	lea	vars(%pc),%a2
+	clr.l	ATEND(%a2)
+	bsr.w	maketitle
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	lea	titlebuf(%pc),%a1
+	movea.l	#-1,%a2			| the screen's title stays
+	jsr	-276(%a6)		| SetWindowTitles
+	bsr.w	newslider
+| The window at the new video's size, where it fits on the screen; the
+| emulator gets the buffer anew now, and again once the size changed
+	bsr.w	fitsize
+	moveq	#0,%d0
+	move.b	54(%a3),%d0		| wd_BorderLeft
+	add.l	%d0,%d1
+	move.b	56(%a3),%d0		| wd_BorderRight
+	add.l	%d0,%d1
+	move.b	55(%a3),%d0		| wd_BorderTop
+	add.l	%d0,%d2
+	move.b	57(%a3),%d0		| wd_BorderBottom
+	add.l	%d0,%d2
+	move.l	%d2,%d3			| height
+	move.l	%d1,%d2			| width
+	lea	vars(%pc),%a2
+	movea.l	SCREEN(%a2),%a0
+	moveq	#0,%d0
+	move.w	4(%a3),%d0		| wd_LeftEdge
+	moveq	#0,%d4
+	move.w	12(%a0),%d4		| sc_Width
+	sub.l	%d2,%d4
+	bpl.s	2f
+	moveq	#0,%d4
+2:	cmp.l	%d4,%d0
+	ble.s	3f
+	move.l	%d4,%d0
+3:	moveq	#0,%d1
+	move.w	6(%a3),%d1		| wd_TopEdge
+	moveq	#0,%d4
+	move.w	14(%a0),%d4		| sc_Height
+	sub.l	%d3,%d4
+	bpl.s	4f
+	moveq	#0,%d4
+4:	cmp.l	%d4,%d1
+	ble.s	5f
+	move.l	%d4,%d1
+5:	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	jsr	-486(%a6)		| ChangeWindowBox
+	bsr.w	target
+	tst.l	%d0
+	bmi.s	newfile_end
+	bsr.w	draw
+	moveq	#0,%d0
+	bra.s	newfile_end
+newfile_noasl:
+	lea	msg_noasl(%pc),%a0
+	bsr.w	report
+	moveq	#0,%d0
+newfile_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The video's size, made to fit the screen in the same shape: %d1 width,
+| %d2 height
+fitsize:
+	movem.l	%d3-%d4/%a2,-(%sp)
+	moveq	#3,%d0			| the size of the video
+	move.l	%d5,%d1
+	bsr.w	callhost
+	moveq	#0,%d2
+	move.w	%d0,%d2			| height
+	swap	%d0
+	moveq	#0,%d1
+	move.w	%d0,%d1			| width
+	lea	vars(%pc),%a2
+	movea.l	SCREEN(%a2),%a0
+	moveq	#0,%d3
+	move.w	12(%a0),%d3		| sc_Width
+	moveq	#0,%d4
+	move.w	14(%a0),%d4		| sc_Height
+	sub.l	#32,%d3			| room for the borders
+	sub.l	#64,%d4			| and the screen's title bar
+	cmp.l	%d3,%d1
+	bls.s	1f
+	mulu	%d3,%d2
+	divu	%d1,%d2
+	and.l	#0xFFFF,%d2
+	move.l	%d3,%d1
+1:	cmp.l	%d4,%d2
+	bls.s	2f
+	mulu	%d4,%d1
+	divu	%d2,%d1
+	and.l	#0xFFFF,%d1
+	move.l	%d4,%d2
+2:	movem.l	(%sp)+,%d3-%d4/%a2
+	rts
+
+| The title: the file's name and what the video is, in titlebuf
+maketitle:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	NAME(%a2),%d1
+	movea.l	%a5,%a6
+	jsr	-870(%a6)		| FilePart
+	movea.l	%d0,%a1
+	lea	titlebuf(%pc),%a0
+	move.w	#TITLESIZE-64-1,%d0
+1:	move.b	(%a1)+,(%a0)+
+	dbeq	%d0,1b
+	move.b	#' ',-1(%a0)
+	move.l	%a0,%d2			| the emulator adds the rest
+	lea	titlebuf+TITLESIZE(%pc),%a1
+	move.l	%a1,%d3
+	sub.l	%a0,%d3
+	moveq	#10,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The images and gadgets of the bottom border, linked in the order of the
+| vars, on the screen in SCREEN with its DrawInfo. %d0: 0 when one did not
+| come.
+makegadgets:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	moveq	#1,%d2			| SYSISIZE_LOWRES
+	movea.l	SCREEN(%a2),%a0
+	btst	#1,20(%a0)		| sc_Flags & SCREENHIRES (0x200)
+	beq.s	1f
+	moveq	#0,%d2			| SYSISIZE_MEDRES
+1:	lea	imagetags(%pc),%a0
+	move.l	DRAWINFO(%a2),4(%a0)	| SYSIA_DrawInfo
+	move.l	%d2,12(%a0)		| SYSIA_Size
+	moveq	#2,%d0			| SIZEIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGSIZE(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,SIZEW(%a2)
+	move.l	#IA_Height,%d0
+	movea.l	IMGSIZE(%a2),%a0
+	bsr.w	getattr
+	move.l	%d0,SIZEH(%a2)
+	moveq	#0x0C,%d0		| RIGHTIMAGE: play
+	bsr.w	newimage
+	move.l	%d0,IMGPLAY(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,PLAYW(%a2)
+	moveq	#0x0B,%d0		| UPIMAGE: another file
+	bsr.w	newimage
+	move.l	%d0,IMGOPEN(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,OPENW(%a2)
+
+| The slider: from the left border up to the buttons
+	lea	slidertags(%pc),%a0
+	moveq	#0,%d0
+	movea.l	SCREEN(%a2),%a1
+	move.b	36(%a1),%d0		| sc_WBorLeft
+	move.l	%d0,4(%a0)		| GA_Left
+	moveq	#3,%d1
+	sub.l	SIZEH(%a2),%d1
+	move.l	%d1,12(%a0)		| GA_RelBottom
+	add.l	PLAYW(%a2),%d0
+	add.l	OPENW(%a2),%d0
+	add.l	SIZEW(%a2),%d0
+	addq.l	#1,%d0
+	neg.l	%d0
+	move.l	%d0,20(%a0)		| GA_RelWidth
+	move.l	SIZEH(%a2),%d0
+	subq.l	#4,%d0
+	move.l	%d0,28(%a0)		| GA_Height
+	lea	slidertags(%pc),%a1
+	lea	propclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADSLIDER(%a2)
+	beq.s	makegadgets_end
+
+| The buttons, left of the size gadget
+	lea	buttontags(%pc),%a0
+	move.l	SIZEW(%a2),%d0
+	add.l	OPENW(%a2),%d0
+	add.l	PLAYW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	%d0,%d1
+	move.l	%d1,4(%a0)		| GA_RelRight
+	moveq	#1,%d1
+	sub.l	SIZEH(%a2),%d1
+	move.l	%d1,12(%a0)		| GA_RelBottom
+	move.l	IMGPLAY(%a2),20(%a0)	| GA_Image
+	move.l	#GAD_PLAY,28(%a0)	| GA_ID
+	move.l	GADSLIDER(%a2),36(%a0)	| GA_Previous
+	movea.l	%a0,%a1
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADPLAY(%a2)
+	beq.s	makegadgets_end
+	lea	buttontags(%pc),%a0
+	move.l	SIZEW(%a2),%d0
+	add.l	OPENW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	%d0,%d1
+	move.l	%d1,4(%a0)		| GA_RelRight
+	move.l	IMGOPEN(%a2),20(%a0)	| GA_Image
+	move.l	#GAD_OPEN,28(%a0)	| GA_ID
+	move.l	GADPLAY(%a2),36(%a0)	| GA_Previous
+	movea.l	%a0,%a1
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADOPEN(%a2)
+makegadgets_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| A sysiclass image of the kind in %d0, with imagetags; in %d0 and %a0.
+| Needs INTUITIONBASE in %a6.
+newimage:
+	lea	imagetags(%pc),%a1
+	move.l	%d0,20(%a1)		| SYSIA_Which
+	lea	sysiclass(%pc),%a0
+| An object of the class named at %a0, with the tags at %a1
+newobject:
+	move.l	%a2,-(%sp)
+	movea.l	%a1,%a2
+	movea.l	%a0,%a1
+	suba.l	%a0,%a0
+	jsr	-636(%a6)		| NewObjectA
+	movea.l	%d0,%a0
+	movea.l	(%sp)+,%a2
+	tst.l	%d0
+	rts
+
+| The attribute %d0 of the object %a0, with INTUITIONBASE in %a6
+getattr:
+	move.l	%a2,-(%sp)
+	lea	vars(%pc),%a2
+	lea	STORE(%a2),%a1
+	clr.l	(%a1)
+	jsr	-654(%a6)		| GetAttr
+	move.l	STORE(%a2),%d0
+	movea.l	(%sp)+,%a2
+	rts
+
+| The slider for a new video: its length, at the start
+newslider:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	moveq	#8,%d0			| the length
+	move.l	%d5,%d1
+	bsr.w	callhost
+	divu	#1000,%d0		| in seconds, up to 18 hours
+	bvc.s	1f
+	move.l	#0xFFFF,%d0
+1:	and.l	#0xFFFF,%d0
+	move.l	%d0,DURATION(%a2)
+	clr.l	SHOWN(%a2)
+	lea	proptags(%pc),%a0
+	move.l	#PGA_Total,(%a0)
+	addq.l	#1,%d0			| room for the knob at the end
+	move.l	%d0,4(%a0)
+	move.l	#PGA_Visible,8(%a0)
+	move.l	#1,12(%a0)
+	move.l	#PGA_Top,16(%a0)
+	clr.l	20(%a0)
+	bsr.s	setslider
+	movem.l	(%sp)+,%d2-%d4/%a2
+	rts
+
+| The slider to where the video is now, when that is another second and
+| it is not being dragged
+moveslider:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	tst.l	DRAGGING(%a2)
+	bne.s	1f
+	moveq	#7,%d0			| the time
+	move.l	%d5,%d1
+	bsr.w	callhost
+	divu	#1000,%d0
+	bvs.s	1f
+	and.l	#0xFFFF,%d0
+	cmp.l	SHOWN(%a2),%d0
+	beq.s	1f
+	move.l	%d0,SHOWN(%a2)
+	lea	proptags(%pc),%a0
+	move.l	#PGA_Top,(%a0)
+	move.l	%d0,4(%a0)
+	clr.l	8(%a0)			| TAG_DONE after the one
+	bsr.s	setslider
+1:	movem.l	(%sp)+,%d2-%d4/%a2
+	rts
+
+| SetGadgetAttrsA() of the slider with proptags
+setslider:
+	movem.l	%a2-%a3/%a6,-(%sp)
+	lea	vars(%pc),%a0
+	movea.l	INTUITIONBASE(%a0),%a6
+	movea.l	%a3,%a1			| the window
+	movea.l	GADSLIDER(%a0),%a0
+	suba.l	%a2,%a2
+	lea	proptags(%pc),%a3
+	jsr	-660(%a6)		| SetGadgetAttrsA
+	movem.l	(%sp)+,%a2-%a3/%a6
+	rts
+
+| The slider let go: the video goes to where it is
+seekslider:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	clr.l	DRAGGING(%a2)
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	GADSLIDER(%a2),%a0
+	move.l	#PGA_Top,%d0
+	bsr.w	getattr
+	move.l	%d0,SHOWN(%a2)
+	mulu	#1000,%d0
+	move.l	%d0,%d2
+	moveq	#9,%d0			| seek
+	move.l	%d5,%d1
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	clr.l	ATEND(%a2)
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Pauses, plays on, or plays again from the start once the video ended
+playpause:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	moveq	#0,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	move.l	%d5,%d1
+	tst.l	ATEND(%a2)
+	beq.s	1f
+	clr.l	ATEND(%a2)
+	moveq	#9,%d0			| seek to the start
+	bsr.w	callhost
+	bra.s	2f
+1:	moveq	#6,%d0			| pause, or play on
+	bsr.w	callhost
+2:	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
 
 | Makes the buffer for the inside of the window anew and hands it to the
@@ -624,13 +1114,6 @@ callhost:
 	lea	24(%sp),%sp
 	rts
 
-| Frees the file requester in %d4
-freereq:
-	lea	vars(%pc),%a0
-	movea.l	ASLBASE(%a0),%a6
-	movea.l	%d4,%a0
-	jmp	-54(%a6)		| FreeAslRequest
-
 | Z set if %a4 points at a trap followed by RTS
 isuaelib:
 	move.w	(%a4),%d0
@@ -659,7 +1142,7 @@ report:
 	move.l	%d2,12(%a1)		| es_TextFormat
 	lea	okgadget(%pc),%a0
 	move.l	%a0,16(%a1)		| es_GadgetFormat
-	suba.l	%a0,%a0			| no window
+	movea.l	%a3,%a0			| our window, if it is open
 	suba.l	%a2,%a2
 	suba.l	%a3,%a3
 	jsr	-588(%a6)		| EasyRequestArgs
@@ -695,12 +1178,15 @@ asltags:	.long	0x80080001, 0	| ASLFR_TitleText
 		.long	0x80080032, 1	| ASLFR_DoPatterns
 		.long	0x8008000A, 0	| ASLFR_InitialPattern
 		.long	0x8008003C, 1	| ASLFR_RejectIcons
+		.long	0x80080002, 0	| ASLFR_Window
 		.long	0		| TAG_DONE
 wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x80000077, 0	| WA_InnerHeight
 		.long	0x8000006E, 0	| WA_Title
-		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY
-		.long	0x80000072, 64	| WA_MinWidth
+		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_GADGETDOWN+IDCMP_GADGETUP+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY
+		.long	0x80000079, 0	| WA_PubScreen
+		.long	0x8000006C, 0	| WA_Gadgets
+		.long	0x80000072, 160	| WA_MinWidth: room for the slider
 		.long	0x80000073, 48	| WA_MinHeight
 		.long	0x80000074, -1	| WA_MaxWidth: the screen's
 		.long	0x80000075, -1	| WA_MaxHeight
@@ -712,21 +1198,59 @@ wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x8000008C, 1	| WA_SimpleRefresh
 		.long	0x8000008F, 1	| WA_SizeBBottom
 		.long	0		| TAG_DONE
+imagetags:	.long	SYSIA_DrawInfo, 0
+		.long	SYSIA_Size, 0
+		.long	SYSIA_Which, 0
+		.long	0
+slidertags:	.long	GA_Left, 0
+		.long	GA_RelBottom, 0
+		.long	GA_RelWidth, 0
+		.long	GA_Height, 0
+		.long	GA_ID, GAD_SLIDER
+		.long	GA_BottomBorder, 1
+		.long	GA_RelVerify, 1
+		.long	GA_Immediate, 1
+		.long	PGA_Freedom, 2	| FREEHORIZ
+		.long	PGA_NewLook, 1
+		.long	PGA_Borderless, 1
+		.long	PGA_Total, 1
+		.long	PGA_Visible, 1
+		.long	PGA_Top, 0
+		.long	0
+buttontags:	.long	GA_RelRight, 0
+		.long	GA_RelBottom, 0
+		.long	GA_Image, 0
+		.long	GA_ID, 0
+		.long	GA_Previous, 0
+		.long	GA_BottomBorder, 1
+		.long	GA_RelVerify, 1
+		.long	0
+proptags:	.long	PGA_Total, 0
+		.long	PGA_Visible, 0
+		.long	PGA_Top, 0
+		.long	0
 
 	.set	PATHSIZE, 512
 pathbuf:	.space	PATHSIZE
+	.set	TITLESIZE, 256
+titlebuf:	.space	TITLESIZE
 
 dosname:	.asciz	"dos.library"
-aslname:	.asciz	"asl.library"
 intuiname:	.asciz	"intuition.library"
+aslname:	.asciz	"asl.library"
 p96name:	.asciz	"Picasso96API.library"
+sysiclass:	.asciz	"sysiclass"
+propclass:	.asciz	"propgclass"
+buttonclass:	.asciz	"buttongclass"
 title:		.asciz	"HostPlay"
 okgadget:	.asciz	"Ok"
 pattern:	.asciz	"#?.(mp4|m4v|mkv|webm|avi|mov|mpg|mpeg|ts|wmv|flv|3gp|ogv)"
 msg_usage:	.ascii	"Usage: HostPlay [<file>]\n"
 		.ascii	"Plays a video in a window, decoded by uae4arm; without a file\n"
-		.ascii	"it asks for one. Space pauses, Esc ends it. The file has to be\n"
-		.asciz	"on a folder drive of uae4arm.\n"
+		.ascii	"it asks for one. In the bottom border: where the video is,\n"
+		.ascii	"play and pause, another file. Space pauses, Esc ends it.\n"
+		.asciz	"The file has to be on a folder drive of uae4arm.\n"
+msg_nointuition: .asciz	"HostPlay: this needs intuition.library 39\n"
 msg_notfound:	.asciz	"HostPlay: no such file\n"
 msg_nopath:	.asciz	"HostPlay: the file has to be on a folder drive of uae4arm\n"
 msg_cannot:	.asciz	"HostPlay: uae4arm cannot play this file\n"
