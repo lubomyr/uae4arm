@@ -23,8 +23,8 @@ else ifeq ($(arch),linux)
 	LDFLAGS += -Lbuild-linux `sdl-config --libs` -lSDL_image -lmpeg2convert -lasound
 	# HostPlay's video, decoded by FFmpeg
 	DEFS += -DHOSTVIDEO_FFMPEG
-	MORE_CFLAGS += `pkg-config --cflags libavformat libavcodec libswscale libavutil`
-	LDFLAGS += `pkg-config --libs libavformat libavcodec libswscale libavutil`
+	MORE_CFLAGS += `pkg-config --cflags libavformat libavcodec libswscale libswresample libavutil`
+	LDFLAGS += `pkg-config --libs libavformat libavcodec libswscale libswresample libavutil`
 	FLAC_LIB = -lFLAC
 	ifdef ASAN
 		MORE_CFLAGS += -fsanitize=address -fno-omit-frame-pointer

@@ -13,6 +13,11 @@
  * (resampler.h). One that falls due before the tool took the last one
  * replaces it: a slow Amiga drops frames, it does not fall behind.
  *
+ * The sound plays along with Paula's, as the MHI decoder's does (mhi.cpp):
+ * its samples are taken at its own rate in emulated time, so picture and
+ * sound keep together. When the decoder falls behind, the samples missed
+ * are left out once they come, so that the sound does not lag.
+ *
  * The decoding: FFmpeg's libraries on the Linux PC (HOSTVIDEO_FFMPEG).
  */
 
@@ -24,6 +29,8 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
+#include <chrono>
 
 #include "options.h"
 #include "memory-uae.h"
@@ -31,6 +38,7 @@
 #include "traps.h"
 #include "filesys.h"
 #include "devices.h"
+#include "audio.h"
 #include "native2amiga_api.h"
 #include "resampler.h"
 #include "hostvideo.h"
@@ -40,6 +48,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 }
 #endif
 
@@ -80,8 +89,13 @@ extern "C" {
 #define RGBFB_B5G6R5PC 12
 #define RGBFB_B5G5R5PC 13
 
-/* Decoded frames waiting to fall due */
+/* Decoded frames waiting to fall due; more when the sound is short */
 #define QUEUE_FRAMES 8
+#define QUEUE_FRAMES_MAX 64
+
+/* Decoded stereo samples waiting to be played: a power of two, so indexes
+   wrap by mask. The decoder keeps half a second ready. */
+#define AUDIO_FRAMES (1 << 17)
 
 static int format_bpp(int format)
 {
@@ -113,6 +127,11 @@ public:
 	virtual bool ended() = 0;
 	/* Frames dropped by take(), for the log. */
 	int dropped;
+	/* The rate of the sound, 0 for none. */
+	int audio_rate;
+	/* Takes up to n stereo samples, from the start of the video on;
+	   fewer when the decoder is behind. */
+	virtual int audio_read(uae_s16 (*out)[2], int n) = 0;
 };
 
 #ifdef HOSTVIDEO_FFMPEG
@@ -143,11 +162,16 @@ public:
 	bool take(double t);
 	void render(uae_u8 *dst, int w, int h, int format);
 	bool ended();
+	int audio_read(uae_s16 (*out)[2], int n);
 
 private:
+	bool open_audio();
 	void decode_thread();
+	bool want_more();
 	bool decode_some();
 	void queue_frame(AVFrame *f);
+	void queue_audio(AVFrame *f);
+	void audio_write(const uae_s16 *in, int n);
 
 	AVFormatContext *fmt = NULL;
 	AVCodecContext *dec = NULL;
@@ -165,6 +189,15 @@ private:
 	std::deque<frame> queue;
 	/* the frame shown, the emulator thread's own */
 	AVFrame *current = NULL;
+
+	int audio_stream = -1;
+	AVCodecContext *adec = NULL;
+	double audio_time_base = 0;
+	SwrContext *swr = NULL;
+	bool audio_started = false;
+	/* written by the decoder's thread, read by the emulator's */
+	uae_s16 (*audio)[2] = NULL;
+	std::atomic<unsigned int> audio_write_pos{0}, audio_read_pos{0};
 };
 
 bool ffmpeg_source::open(const char *path)
@@ -186,6 +219,11 @@ bool ffmpeg_source::open(const char *path)
 	if (avcodec_open2(dec, codec, NULL) < 0)
 		return false;
 	time_base = av_q2d(st->time_base);
+	if (st->start_time != AV_NOPTS_VALUE)
+		start = st->start_time * time_base;
+	audio_rate = 0;
+	if (!open_audio())
+		write_log(_T("HostPlay: %s plays without sound\n"), path);
 	width = dec->width;
 	height = dec->height;
 	/* pixels that are not square: wider or narrower to show */
@@ -196,6 +234,38 @@ bool ffmpeg_source::open(const char *path)
 		return false;
 	write_log(_T("HostPlay: %s, %s %dx%d\n"), path, codec->name, width, height);
 	thread = std::thread(&ffmpeg_source::decode_thread, this);
+	return true;
+}
+
+/* The sound that goes with the picture, as 16-bit stereo at its own rate */
+bool ffmpeg_source::open_audio()
+{
+	const AVCodec *codec = NULL;
+	audio_stream = av_find_best_stream(fmt, AVMEDIA_TYPE_AUDIO, -1, stream, &codec, 0);
+	if (audio_stream < 0 || !codec)
+		return false;
+	AVStream *st = fmt->streams[audio_stream];
+	adec = avcodec_alloc_context3(codec);
+	if (!adec || avcodec_parameters_to_context(adec, st->codecpar) < 0 || avcodec_open2(adec, codec, NULL) < 0) {
+		audio_stream = -1;
+		return false;
+	}
+	AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
+	if (swr_alloc_set_opts2(&swr, &stereo, AV_SAMPLE_FMT_S16, adec->sample_rate,
+			&adec->ch_layout, adec->sample_fmt, adec->sample_rate, 0, NULL) < 0 || swr_init(swr) < 0) {
+		audio_stream = -1;
+		return false;
+	}
+	audio_time_base = av_q2d(st->time_base);
+	/* the earlier of the two starts is the start of the video */
+	if (st->start_time != AV_NOPTS_VALUE) {
+		double t = st->start_time * audio_time_base;
+		if (start < 0 || t < start)
+			start = t;
+	}
+	audio = new uae_s16[AUDIO_FRAMES][2];
+	audio_rate = adec->sample_rate;
+	write_log(_T("HostPlay: sound %s, %d Hz\n"), codec->name, audio_rate);
 	return true;
 }
 
@@ -212,6 +282,9 @@ ffmpeg_source::~ffmpeg_source()
 	for (auto &q : queue)
 		av_frame_free(&q.f);
 	av_frame_free(&current);
+	swr_free(&swr);
+	avcodec_free_context(&adec);
+	delete[] audio;
 	sws_freeContext(sws);
 	avcodec_free_context(&dec);
 	avformat_close_input(&fmt);
@@ -225,7 +298,41 @@ void ffmpeg_source::queue_frame(AVFrame *f)
 	/* without a time stamp, right after the one before */
 	if (pts < 0)
 		pts = queue.empty() ? 0 : queue.back().pts;
+	if (start < 0)
+		start = pts;
 	queue.push_back({ pts, av_frame_clone(f) });
+}
+
+void ffmpeg_source::audio_write(const uae_s16 *in, int n)
+{
+	unsigned int w = audio_write_pos.load(std::memory_order_relaxed);
+	for (int i = 0; i < n; i++, w++) {
+		audio[w & (AUDIO_FRAMES - 1)][0] = in ? in[i * 2] : 0;
+		audio[w & (AUDIO_FRAMES - 1)][1] = in ? in[i * 2 + 1] : 0;
+	}
+	audio_write_pos.store(w, std::memory_order_release);
+}
+
+void ffmpeg_source::queue_audio(AVFrame *f)
+{
+	if (!audio_started) {
+		/* Sound that starts after the picture waits, with silence; sound
+		   from before the picture's start is left out. */
+		audio_started = true;
+		int64_t ts = f->best_effort_timestamp;
+		if (ts != AV_NOPTS_VALUE && start >= 0) {
+			int pad = (int)((ts * audio_time_base - start) * audio_rate);
+			if (pad > 0 && pad < AUDIO_FRAMES / 2)
+				audio_write(NULL, pad);
+		}
+	}
+	/* the same rate in and out: as many samples, and a few it held back */
+	int room = f->nb_samples + 64;
+	std::vector<uae_s16> buf((size_t)room * 2);
+	uint8_t *out = (uint8_t *)buf.data();
+	int got = swr_convert(swr, &out, room, (const uint8_t **)f->extended_data, f->nb_samples);
+	if (got > 0)
+		audio_write(buf.data(), got);
 }
 
 /* Reads and decodes until a frame or two came out, or the end. False at the
@@ -239,15 +346,24 @@ bool ffmpeg_source::decode_some()
 	while (!got && more) {
 		int ret = av_read_frame(fmt, pkt);
 		if (ret < 0) {
-			/* the end: what the decoder still holds */
+			/* the end: what the decoders still hold */
 			avcodec_send_packet(dec, NULL);
+			if (adec)
+				avcodec_send_packet(adec, NULL);
 			more = false;
 		} else if (pkt->stream_index == stream) {
 			avcodec_send_packet(dec, pkt);
+		} else if (pkt->stream_index == audio_stream) {
+			avcodec_send_packet(adec, pkt);
 		}
 		av_packet_unref(pkt);
 		while (avcodec_receive_frame(dec, f) == 0) {
 			queue_frame(f);
+			av_frame_unref(f);
+			got = true;
+		}
+		while (adec && avcodec_receive_frame(adec, f) == 0) {
+			queue_audio(f);
 			av_frame_unref(f);
 			got = true;
 		}
@@ -257,14 +373,33 @@ bool ffmpeg_source::decode_some()
 	return more;
 }
 
+/* Whether to decode on: a few frames of the picture and half a second of
+   sound ready, within what the queues hold. Called with the lock held. */
+bool ffmpeg_source::want_more()
+{
+	if (queue.size() >= QUEUE_FRAMES_MAX)
+		return false;
+	if (!audio)
+		return queue.size() < QUEUE_FRAMES;
+	unsigned int fill = audio_write_pos.load(std::memory_order_relaxed) -
+		audio_read_pos.load(std::memory_order_acquire);
+	if (fill > AUDIO_FRAMES - 16384)
+		return false;
+	return queue.size() < QUEUE_FRAMES || fill < (unsigned int)audio_rate / 2;
+}
+
 void ffmpeg_source::decode_thread()
 {
 	for (;;) {
 		{
 			std::unique_lock<std::mutex> g(lock);
-			wake.wait(g, [this] { return stop || queue.size() < QUEUE_FRAMES; });
+			/* the sound is used up without a word to here, so look again
+			   now and then */
+			wake.wait_for(g, std::chrono::milliseconds(10), [this] { return stop || want_more(); });
 			if (stop)
 				return;
+			if (!want_more())
+				continue;
 		}
 		if (!decode_some()) {
 			std::lock_guard<std::mutex> g(lock);
@@ -281,8 +416,6 @@ bool ffmpeg_source::take(double t)
 		std::lock_guard<std::mutex> g(lock);
 		if (queue.empty())
 			return false;
-		if (start < 0)
-			start = queue.front().pts;
 		while (!queue.empty() && queue.front().pts - start <= t) {
 			if (latest) {
 				av_frame_free(&latest);
@@ -319,7 +452,26 @@ void ffmpeg_source::render(uae_u8 *dst, int w, int h, int format)
 bool ffmpeg_source::ended()
 {
 	std::lock_guard<std::mutex> g(lock);
-	return eof && queue.empty();
+	if (!eof || !queue.empty())
+		return false;
+	return !audio || audio_write_pos.load(std::memory_order_acquire) ==
+		audio_read_pos.load(std::memory_order_relaxed);
+}
+
+int ffmpeg_source::audio_read(uae_s16 (*out)[2], int n)
+{
+	if (!audio)
+		return 0;
+	unsigned int r = audio_read_pos.load(std::memory_order_relaxed);
+	unsigned int fill = audio_write_pos.load(std::memory_order_acquire) - r;
+	if ((unsigned int)n > fill)
+		n = fill;
+	for (int i = 0; i < n; i++, r++) {
+		out[i][0] = audio[r & (AUDIO_FRAMES - 1)][0];
+		out[i][1] = audio[r & (AUDIO_FRAMES - 1)][1];
+	}
+	audio_read_pos.store(r, std::memory_order_release);
+	return n;
 }
 
 #endif /* HOSTVIDEO_FFMPEG */
@@ -359,9 +511,114 @@ struct hostvideo {
 	int stat_time;
 
 	std::vector<uae_u8> pixels;
+
+	/* the sound: its clock, samples read ahead, and those that were not
+	   there when due, to be left out */
+	struct resampler rs;
+	uae_s16 abuf[512][2];
+	int apos, alen;
+	int missed;
+	/* samples of silence in a row, up to RS_HIST: past that the mixing is
+	   left out */
+	int quiet;
 };
 
 static struct hostvideo players[HOSTVIDEO_PLAYERS];
+
+bool hostvideo_playing;
+
+static bool sounding(struct hostvideo *v)
+{
+	return v->used && v->source->audio_rate > 0 && !v->ended;
+}
+
+static void update_playing(void)
+{
+	bool playing = false;
+	for (int i = 0; i < HOSTVIDEO_PLAYERS; i++) {
+		if (sounding(&players[i]))
+			playing = true;
+	}
+	if (playing && !hostvideo_playing)
+		audio_activate();
+	hostvideo_playing = playing;
+}
+
+static void audio_fill(struct hostvideo *v)
+{
+	v->apos = v->alen = 0;
+	while (v->missed > 0) {
+		int n = v->source->audio_read(v->abuf, v->missed < 512 ? v->missed : 512);
+		if (!n)
+			return;
+		v->missed -= n;
+	}
+	v->alen = v->source->audio_read(v->abuf, 512);
+}
+
+/* One sample of the sound's clock; silence while paused. */
+static void audio_tick(struct hostvideo *v)
+{
+	float l = 0, r = 0;
+	if (!v->paused) {
+		if (v->apos == v->alen)
+			audio_fill(v);
+		if (v->apos < v->alen) {
+			l = v->abuf[v->apos][0];
+			r = v->abuf[v->apos][1];
+			v->apos++;
+		} else if (v->missed < v->source->audio_rate * 10) {
+			v->missed++;
+		}
+	}
+	if (l == 0 && r == 0) {
+		if (v->quiet < RS_HIST)
+			v->quiet++;
+	} else {
+		v->quiet = 0;
+	}
+	resampler_put(&v->rs, l, r);
+}
+
+/* Runs the sound up to the current emulated time. */
+static void audio_catchup(struct hostvideo *v)
+{
+	int n = resampler_catchup(&v->rs, true);
+	while (n-- > 0)
+		audio_tick(v);
+}
+
+static void mix(int *l, int *r)
+{
+	*l = *r = 0;
+	for (int i = 0; i < HOSTVIDEO_PLAYERS; i++) {
+		struct hostvideo *v = &players[i];
+		if (!sounding(v))
+			continue;
+		audio_catchup(v);
+		if (v->quiet >= RS_HIST)
+			continue;
+		int vl, vr;
+		resampler_output(&v->rs, &vl, &vr);
+		*l += vl;
+		*r += vr;
+	}
+}
+
+void hostvideo_mix_stereo(uae_u32 *left, uae_u32 *right)
+{
+	int l, r;
+	mix(&l, &r);
+	*left = (uae_u16)clamp16((uae_s16)*left + l);
+	*right = (uae_u16)clamp16((uae_s16)*right + r);
+}
+
+void hostvideo_mix_mono(uae_u32 *mono)
+{
+	int l, r;
+	mix(&l, &r);
+	*mono = (uae_u16)clamp16((uae_s16)*mono + (l + r) / 2);
+}
 
 static void copy_to_amiga(uaecptr dst, const uae_u8 *src, uae_u32 size)
 {
@@ -410,17 +667,28 @@ static void catchup(struct hostvideo *v)
 
 static void hostvideo_hsync(void)
 {
+	bool loud = false;
 	for (int i = 0; i < HOSTVIDEO_PLAYERS; i++) {
 		struct hostvideo *v = &players[i];
 		if (!v->used)
 			continue;
 		catchup(v);
+		if (sounding(v)) {
+			/* also without sound output, so that the sound is used up */
+			audio_catchup(v);
+			if (v->quiet < RS_HIST)
+				loud = true;
+		}
 		/* once, until the tool takes the frame */
 		if ((v->ready || v->ended) && !v->signalled && v->buffer) {
 			v->signalled = true;
 			uae_Signal(v->task, v->sigmask);
 		}
 	}
+	update_playing();
+	/* keeps Paula's output running, which the sound rides on */
+	if (loud)
+		audio_activate();
 }
 
 static void player_close(struct hostvideo *v)
@@ -467,6 +735,11 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 	v->played = 0;
 	v->ready = v->ended = v->signalled = false;
 	v->stat_shown = v->stat_time = 0;
+	v->apos = v->alen = v->missed = 0;
+	v->quiet = RS_HIST;
+	if (source->audio_rate > 0)
+		resampler_start(&v->rs, source->audio_rate);
+	update_playing();
 	return i + 1;
 }
 
@@ -484,6 +757,7 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	switch (cmd) {
 	case HV_CMD_CLOSE:
 		player_close(v);
+		update_playing();
 		return 1;
 	case HV_CMD_INFO:
 		return (v->source->width << 16) | v->source->height;
@@ -528,6 +802,7 @@ static void hostvideo_reset(int hardreset)
 		if (players[i].used)
 			player_close(&players[i]);
 	}
+	update_playing();
 }
 
 static void hostvideo_free(void)

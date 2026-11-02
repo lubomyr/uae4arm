@@ -47,11 +47,12 @@ STATIC_INLINE void clear_sound_buffers (void)
 #define SNDBOARD_MIX_STEREO(l,r) do { } while (0)
 #endif
 #include "mhi.h"
-/* Every sample Paula puts out picks up the sound card's and the MPEG
-   decoder's current ones, so they share Paula's buffer, timing and rate
+#include "hostvideo.h"
+/* Every sample Paula puts out picks up the sound card's, the MPEG decoder's
+   and HostPlay's current ones, so they share Paula's buffer, timing and rate
    control. */
-#define PUT_SOUND_WORD(b) do { uae_u32 _w = (b); SNDBOARD_MIX_MONO(&_w); if (mhi_playing) mhi_mix_mono(&_w); *sndbufpt = _w; sndbufpt = sndbufpt + 1; } while (0)
-#define PUT_SOUND_WORD_STEREO(l,r) do { uae_u32 _l = (l), _r = (r); SNDBOARD_MIX_STEREO(&_l, &_r); if (mhi_playing) mhi_mix_stereo(&_l, &_r); *((uae_u32 *)sndbufpt) = (_r << 16) | (_l & 0xffff); sndbufpt = sndbufpt + 2; } while (0)
+#define PUT_SOUND_WORD(b) do { uae_u32 _w = (b); SNDBOARD_MIX_MONO(&_w); if (mhi_playing) mhi_mix_mono(&_w); if (hostvideo_playing) hostvideo_mix_mono(&_w); *sndbufpt = _w; sndbufpt = sndbufpt + 1; } while (0)
+#define PUT_SOUND_WORD_STEREO(l,r) do { uae_u32 _l = (l), _r = (r); SNDBOARD_MIX_STEREO(&_l, &_r); if (mhi_playing) mhi_mix_stereo(&_l, &_r); if (hostvideo_playing) hostvideo_mix_stereo(&_l, &_r); *((uae_u32 *)sndbufpt) = (_r << 16) | (_l & 0xffff); sndbufpt = sndbufpt + 2; } while (0)
 
 #define DEFAULT_SOUND_BITS 16
 #define DEFAULT_SOUND_FREQ 44100

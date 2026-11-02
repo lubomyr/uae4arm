@@ -4,7 +4,7 @@
 # old Pandora path on plain SDL 1.2, without the Android wrapper or the JIT.
 # Needs libsdl1.2-dev libsdl-ttf2.0-dev libsdl-image1.2-dev libpng-dev
 # libxml2-dev libflac-dev libmpg123-dev libmpeg2-4-dev zlib1g-dev
-# libavformat-dev libavcodec-dev libswscale-dev.
+# libavformat-dev libavcodec-dev libswscale-dev libswresample-dev.
 #
 # ./LinuxBuild.sh            build ./uae4arm-linux, logging to the console
 # WITH_LOGGING= ./LinuxBuild.sh   the same without the log
