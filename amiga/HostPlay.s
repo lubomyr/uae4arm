@@ -263,6 +263,7 @@ noasl:
 	bra.w	failed
 
 havename:
+	bsr.w	setdrawer
 	movea.l	4,%a6
 	moveq	#-1,%d0
 	jsr	-330(%a6)		| AllocSignal
@@ -596,6 +597,8 @@ askfile:
 	lea	pattern(%pc),%a1
 	move.l	%a1,20(%a0)		| ASLFR_InitialPattern
 	move.l	%a3,36(%a0)		| ASLFR_Window: ours, once it is open
+	lea	drawerbuf(%pc),%a1
+	move.l	%a1,44(%a0)		| ASLFR_InitialDrawer: the last file's
 	moveq	#0,%d0			| ASL_FileRequest
 	jsr	-48(%a6)		| AllocAslRequest
 	tst.l	%d0
@@ -630,6 +633,8 @@ askfile:
 	jsr	-54(%a6)		| FreeAslRequest
 	lea	pathbuf(%pc),%a0
 	move.l	%a0,NAME(%a2)
+	bsr.s	setdrawer
+	lea	pathbuf(%pc),%a0
 	move.l	%a0,%d0
 	bra.s	askfile_end
 askfile_cancel:
@@ -641,6 +646,25 @@ askfile_noasl:
 	moveq	#-1,%d0
 askfile_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The drawer of the file in NAME, for the file requester to start in
+setdrawer:
+	movem.l	%d2/%a6,-(%sp)
+	lea	vars(%pc),%a0
+	movea.l	NAME(%a0),%a1
+	lea	drawerbuf(%pc),%a0
+	move.w	#PATHSIZE-2,%d0
+1:	move.b	(%a1)+,(%a0)+
+	dbeq	%d0,1b
+	clr.b	-1(%a0)
+	lea	drawerbuf(%pc),%a0
+	move.l	%a0,%d1
+	movea.l	%a5,%a6
+	jsr	-876(%a6)		| PathPart
+	movea.l	%d0,%a0
+	clr.b	(%a0)
+	movem.l	(%sp)+,%d2/%a6
 	rts
 
 | Another file in the same window: the old video goes once the new one
@@ -1179,6 +1203,7 @@ asltags:	.long	0x80080001, 0	| ASLFR_TitleText
 		.long	0x8008000A, 0	| ASLFR_InitialPattern
 		.long	0x8008003C, 1	| ASLFR_RejectIcons
 		.long	0x80080002, 0	| ASLFR_Window
+		.long	0x80080009, 0	| ASLFR_InitialDrawer
 		.long	0		| TAG_DONE
 wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x80000077, 0	| WA_InnerHeight
@@ -1232,6 +1257,7 @@ proptags:	.long	PGA_Total, 0
 
 	.set	PATHSIZE, 512
 pathbuf:	.space	PATHSIZE
+drawerbuf:	.space	PATHSIZE
 	.set	TITLESIZE, 256
 titlebuf:	.space	TITLESIZE
 
