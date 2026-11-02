@@ -109,6 +109,15 @@ extern "C" {
    wrap by mask. The decoder keeps half a second ready. */
 #define AUDIO_FRAMES (1 << 17)
 
+static int format_bpp(int format);
+
+/* Black: all the formats have it as zeros. */
+static void clear(uae_u8 *dst, int w, int h, int stride, int format)
+{
+	for (int y = 0; y < h; y++)
+		memset(dst + (size_t)y * stride, 0, (size_t)w * format_bpp(format));
+}
+
 static int format_bpp(int format)
 {
 	switch (format) {
@@ -138,8 +147,8 @@ public:
 	   those before it; false when none is new. */
 	virtual bool take(double t) = 0;
 	/* Puts the frame taken last into dst, at w x h in a Picasso96
-	   RGBFormat; black before the first. */
-	virtual void render(uae_u8 *dst, int w, int h, int format) = 0;
+	   RGBFormat, rows stride bytes apart; black before the first. */
+	virtual void render(uae_u8 *dst, int w, int h, int stride, int format) = 0;
 	/* All frames taken. */
 	virtual bool ended() = 0;
 	/* Frames dropped by take(), for the log. */
@@ -424,7 +433,7 @@ class ffmpeg_source : public decoding_source {
 public:
 	~ffmpeg_source();
 	bool open(const char *path);
-	void render(uae_u8 *dst, int w, int h, int format);
+	void render(uae_u8 *dst, int w, int h, int stride, int format);
 
 protected:
 	bool decode_some();
@@ -586,11 +595,11 @@ bool ffmpeg_source::decode_some()
 	return more;
 }
 
-void ffmpeg_source::render(uae_u8 *dst, int w, int h, int format)
+void ffmpeg_source::render(uae_u8 *dst, int w, int h, int stride, int format)
 {
 	AVFrame *cur = (AVFrame *)current;
 	if (!cur) {
-		memset(dst, 0, (size_t)w * h * format_bpp(format));
+		clear(dst, w, h, stride, format);
 		return;
 	}
 	enum AVPixelFormat out = ffmpeg_format(format);
@@ -599,7 +608,7 @@ void ffmpeg_source::render(uae_u8 *dst, int w, int h, int format)
 	if (!sws)
 		return;
 	uint8_t *planes[4] = { dst, NULL, NULL, NULL };
-	int strides[4] = { w * format_bpp(format), 0, 0, 0 };
+	int strides[4] = { stride, 0, 0, 0 };
 	sws_scale(sws, cur->data, cur->linesize, 0, cur->height, planes, strides);
 }
 
@@ -674,7 +683,7 @@ struct yuv_frame {
 
 /* Scales a picture to w x h in a Picasso96 RGBFormat: luma bilinear,
    chroma from the nearest sample. */
-static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int format, bool bt709, bool full_range)
+static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int stride, int format, bool bt709, bool full_range)
 {
 	/* the colour matrix, in 1/1024 */
 	int ky, kvr, kug, kvg, kub;
@@ -715,7 +724,7 @@ static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int format
 		const uae_u8 *l0 = &f->y[(size_t)ys * f->w];
 		const uae_u8 *l1 = yf ? l0 + f->w : l0;
 		const uae_u8 *cl = &f->c[(size_t)(ys / 2) * f->c_stride];
-		uae_u8 *p = dst + (size_t)y * w * bpp;
+		uae_u8 *p = dst + (size_t)y * stride;
 		for (int x = 0; x < w; x++, p += bpp) {
 			int xi = xs[x], xw = xf[x];
 			int xi1 = xw ? xi + 1 : xi;
@@ -745,7 +754,7 @@ class mediacodec_source : public decoding_source {
 public:
 	~mediacodec_source();
 	bool open(const char *path);
-	void render(uae_u8 *dst, int w, int h, int format);
+	void render(uae_u8 *dst, int w, int h, int stride, int format);
 
 protected:
 	bool decode_some();
@@ -1114,14 +1123,14 @@ bool mediacodec_source::decode_some()
 	return true;
 }
 
-void mediacodec_source::render(uae_u8 *dst, int w, int h, int format)
+void mediacodec_source::render(uae_u8 *dst, int w, int h, int stride, int format)
 {
 	yuv_frame *f = (yuv_frame *)current;
 	if (!f || f->w < 2 || f->h < 2) {
-		memset(dst, 0, (size_t)w * h * format_bpp(format));
+		clear(dst, w, h, stride, format);
 		return;
 	}
-	yuv_render(f, dst, w, h, format, bt709, full_range);
+	yuv_render(f, dst, w, h, stride, format, bt709, full_range);
 }
 
 #endif /* HOSTVIDEO_MEDIACODEC */
@@ -1285,11 +1294,28 @@ static void copy_to_amiga(uaecptr dst, const uae_u8 *src, uae_u32 size)
 	}
 }
 
+/* The frame in the shape of the video, in the middle of the window, with
+   black bars where the window's shape differs. */
 static void render(struct hostvideo *v)
 {
 	if (!v->buffer || !v->bpp)
 		return;
-	v->source->render(v->pixels.data(), v->target_w, v->target_h, v->format);
+	int w = v->target_w, h = v->target_h;
+	int vw = v->source->width, vh = v->source->height;
+	int fw = w, fh = (int)((int64_t)w * vh / vw);
+	if (fh > h) {
+		fh = h;
+		fw = (int)((int64_t)h * vw / vh);
+	}
+	if (fw < 1)
+		fw = 1;
+	if (fh < 1)
+		fh = 1;
+	int stride = w * v->bpp;
+	if (fw != w || fh != h)
+		clear(v->pixels.data(), w, h, stride, v->format);
+	uae_u8 *at = v->pixels.data() + (size_t)((h - fh) / 2) * stride + (size_t)((w - fw) / 2) * v->bpp;
+	v->source->render(at, fw, fh, stride, v->format);
 	copy_to_amiga(v->buffer, v->pixels.data(), (uae_u32)v->pixels.size());
 }
 
