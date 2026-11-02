@@ -12,7 +12,8 @@
 | file. Space pauses too, Esc or the close gadget ends it.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
-| (uaegfx) with 15, 16, 24 or 32 bits. The tool hands the emulator a buffer
+| (uaegfx) with 16 or 32 bits; the emulator makes Picasso96's 15 and 24 bit
+| formats too, but uaegfx offers none. The tool hands the emulator a buffer
 | for the inside of the window through uaelib function 202; the emulator
 | puts each frame into it, scaled to the window and in the screen's own
 | pixel format, and signals the tool, which blits it with
@@ -1288,6 +1289,6 @@ msg_nosignal:	.asciz	"HostPlay: no free signal\n"
 msg_busy:	.asciz	"HostPlay: uae4arm plays two videos already\n"
 msg_nowindow:	.asciz	"HostPlay: the window does not open\n"
 msg_notrtg:	.asciz	"HostPlay: the Workbench screen has to be an RTG one\n"
-msg_format:	.asciz	"HostPlay: the screen needs 15, 16, 24 or 32 bits\n"
+msg_format:	.asciz	"HostPlay: the screen needs 16 or 32 bits\n"
 msg_nomem:	.asciz	"HostPlay: not enough memory for the window\n"
 		.even
