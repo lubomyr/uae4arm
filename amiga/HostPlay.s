@@ -1,8 +1,11 @@
 | HostPlay - plays a video in a window of the Amiga, decoded by the host
 |
-| Usage: HostPlay
-| For now it shows a test picture that moves, to try out the way the frames
-| come over. Space pauses, Esc or the close gadget ends it.
+| Usage: HostPlay [<file>]
+| Without a file - from the Shell, or started from its icon - it asks for one
+| with the file requester of asl.library. Set as the default tool of a
+| video's icon, a double click on the video plays it. Space pauses, Esc or
+| the close gadget ends it; at the end of the video the window closes.
+| The file has to be on a folder drive of uae4arm, where the host reaches it.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 15, 16, 24 or 32 bits. The tool hands the emulator a buffer
@@ -16,7 +19,7 @@
 | hunk.py - see build.sh. All code is PC relative, so the hunk needs no
 | relocation: the pointers in the tag list are filled in at run time.
 |
-| Registers kept: a3 the window, a4 uaelib, a5 DOSBase, d5 the emulator's
+| Registers kept: a3 the window (the file name before it opens), a4 uaelib, a5 DOSBase, d5 the emulator's
 | handle of the player, d6 the WBStartup message (0 from the Shell), d7 the
 | return code.
 
@@ -41,13 +44,19 @@
 	.set	RGBFORMAT, 24
 	.set	BPP, 28
 	.set	TASK, 32
-	.set	VARSIZE, 36
+	.set	ASLBASE, 36
+	.set	OLDDIR, 40
+	.set	DIRCHANGED, 44
+	.set	NAME, 48
+	.set	VARSIZE, 52
 
 	.text
 	.globl	_start
 
 _start:
 	movem.l	%d2-%d7/%a2-%a6,-(%sp)
+	movea.l	%a0,%a2			| arguments
+	move.l	%d0,%d3			| and their length
 	moveq	#0,%d5
 	moveq	#0,%d6
 	moveq	#20,%d7			| return code
@@ -66,12 +75,14 @@ _start:
 	jsr	-294(%a6)		| FindTask(NULL)
 	lea	vars(%pc),%a0
 	move.l	%d0,TASK(%a0)
-	movea.l	%d0,%a2
-	tst.l	172(%a2)		| pr_CLI
+	movea.l	%d0,%a1
+	tst.l	172(%a1)		| pr_CLI
 	bne.s	opendos
-	lea	92(%a2),%a0		| pr_MsgPort
+	lea	92(%a1),%a0		| pr_MsgPort
 	jsr	-384(%a6)		| WaitPort
-	lea	92(%a2),%a0
+	lea	vars(%pc),%a0
+	movea.l	TASK(%a0),%a0
+	lea	92(%a0),%a0
 	jsr	-372(%a6)		| GetMsg
 	move.l	%d0,%d6
 
@@ -117,6 +128,133 @@ haveuaelib:
 	lea	msg_oldemu(%pc),%a0
 	bra.w	failed
 newenough:
+	tst.l	%d6
+	beq.s	shellargs
+
+| From Workbench: the second argument is the file, if there is one
+	movea.l	%d6,%a0
+	cmp.l	#2,28(%a0)		| sm_NumArgs
+	blt.w	askfile
+	movea.l	36(%a0),%a0		| sm_ArgList
+	move.l	8(%a0),%d1		| wa_Lock of the file's drawer
+	movea.l	12(%a0),%a3		| wa_Name
+	movea.l	%a5,%a6
+	jsr	-126(%a6)		| CurrentDir
+	lea	vars(%pc),%a0
+	move.l	%d0,OLDDIR(%a0)
+	move.l	#1,DIRCHANGED(%a0)
+	bra.w	havename
+
+| From the Shell: the first argument, in quotes if it has spaces
+shellargs:
+	tst.l	%d3
+	beq.w	askfile
+	move.b	(%a2),%d0
+	cmp.b	#' ',%d0
+	beq.s	nextspace
+	cmp.b	#9,%d0
+	bne.s	namestart
+nextspace:
+	addq.l	#1,%a2
+	subq.l	#1,%d3
+	bra.s	shellargs
+namestart:
+	cmp.b	#10,%d0
+	beq.w	askfile
+	moveq	#' ',%d1		| what ends the name
+	cmp.b	#'"',%d0
+	bne.s	nameset
+	addq.l	#1,%a2
+	subq.l	#1,%d3
+	moveq	#'"',%d1
+nameset:
+	movea.l	%a2,%a3			| the name starts here
+nameloop:
+	tst.l	%d3
+	beq.s	nameend
+	move.b	(%a2),%d0
+	cmp.b	%d1,%d0
+	beq.s	nameend
+	cmp.b	#10,%d0
+	beq.s	nameend
+	addq.l	#1,%a2
+	subq.l	#1,%d3
+	bra.s	nameloop
+nameend:
+	clr.b	(%a2)
+	cmpa.l	%a3,%a2
+	beq.w	askfile
+	cmp.b	#'?',(%a3)		| "HostPlay ?"
+	bne.w	havename
+	tst.b	1(%a3)
+	bne.w	havename
+	lea	msg_usage(%pc),%a0
+	bsr.w	report
+	moveq	#0,%d7
+	suba.l	%a3,%a3
+	bra.w	closeall
+
+| No file given: the file requester of asl.library
+askfile:
+	movea.l	4,%a6
+	lea	aslname(%pc),%a1
+	moveq	#36,%d0
+	jsr	-552(%a6)		| OpenLibrary
+	tst.l	%d0
+	beq.w	noasl
+	lea	vars(%pc),%a0
+	move.l	%d0,ASLBASE(%a0)
+	movea.l	%d0,%a6
+	lea	asltags(%pc),%a0
+	lea	title(%pc),%a1
+	move.l	%a1,4(%a0)		| ASLFR_TitleText
+	lea	pattern(%pc),%a1
+	move.l	%a1,20(%a0)		| ASLFR_InitialPattern
+	moveq	#0,%d0			| ASL_FileRequest
+	jsr	-48(%a6)		| AllocAslRequest
+	tst.l	%d0
+	beq.w	noasl
+	move.l	%d0,%d4
+	movea.l	%d0,%a0
+	suba.l	%a1,%a1
+	jsr	-60(%a6)		| AslRequest
+	tst.l	%d0
+	beq.s	cancelled
+	movea.l	%d4,%a0
+	movea.l	4(%a0),%a1		| rf_File
+	tst.b	(%a1)
+	beq.s	cancelled
+| The path: the drawer, then the file added to it
+	movea.l	8(%a0),%a1		| rf_Dir
+	lea	pathbuf(%pc),%a0
+	move.w	#PATHSIZE-2,%d0
+copydir:
+	move.b	(%a1)+,(%a0)+
+	dbeq	%d0,copydir
+	clr.b	-1(%a0)
+	lea	pathbuf(%pc),%a0
+	move.l	%a0,%d1
+	movea.l	%d4,%a0
+	move.l	4(%a0),%d2		| rf_File
+	move.l	#PATHSIZE,%d3
+	movea.l	%a5,%a6
+	jsr	-882(%a6)		| AddPart
+	bsr.w	freereq
+	lea	pathbuf(%pc),%a3
+	bra.s	havename
+cancelled:
+	bsr.w	freereq
+	moveq	#0,%d7
+	bra.w	closeall
+noasl:
+	lea	msg_noasl(%pc),%a0
+	bra.w	failed
+
+| The file name goes to the vars, a3 is the window's from here
+havename:
+	lea	vars(%pc),%a0
+	move.l	%a3,NAME(%a0)
+	suba.l	%a3,%a3
 	movea.l	4,%a6
 	moveq	#-1,%d0
 	jsr	-330(%a6)		| AllocSignal
@@ -128,15 +266,39 @@ newenough:
 	lea	msg_nosignal(%pc),%a0
 	bra.w	failed
 havesignal:
+	move.l	NAME(%a0),%d1
+	moveq	#-2,%d2			| ACCESS_READ
+	movea.l	%a5,%a6
+	jsr	-84(%a6)		| Lock
+	move.l	%d0,%d5
+	bne.s	locked
+	lea	msg_notfound(%pc),%a0
+	bra.w	failed
+locked:
+	lea	vars(%pc),%a0
 	moveq	#1,%d0			| a player, for our task and signal
 	move.l	TASK(%a0),%d1
 	moveq	#0,%d2
 	move.l	SIGBIT(%a0),%d3
 	bset	%d3,%d2
+	move.l	%d5,%d3			| the Lock of the file
+	moveq	#0,%d4
 	bsr.w	callhost
-	move.l	%d0,%d5
-	bne.s	haveplayer
+	move.l	%d0,-(%sp)
+	move.l	%d5,%d1
+	movea.l	%a5,%a6
+	jsr	-90(%a6)		| UnLock
+	move.l	(%sp)+,%d5
+	bgt.s	haveplayer
 	lea	msg_busy(%pc),%a0
+	tst.l	%d5
+	beq.s	openfailed
+	lea	msg_nopath(%pc),%a0
+	cmp.l	#-2,%d5
+	beq.s	openfailed
+	lea	msg_cannot(%pc),%a0
+openfailed:
+	moveq	#0,%d5
 	bra.w	failed
 
 | The window, at the size of the video
@@ -144,15 +306,53 @@ haveplayer:
 	moveq	#3,%d0			| the size of the video
 	move.l	%d5,%d1
 	bsr.w	callhost
-	lea	wintags(%pc),%a1
-	moveq	#0,%d1
-	move.w	%d0,%d1
-	move.l	%d1,12(%a1)		| WA_InnerHeight
+	moveq	#0,%d2
+	move.w	%d0,%d2			| height
 	swap	%d0
-	move.w	%d0,%d1
+	moveq	#0,%d1
+	move.w	%d0,%d1			| width
+| A video larger than the screen gets a smaller window of the same shape
+	movem.l	%d1-%d2,-(%sp)
+	lea	vars(%pc),%a0
+	movea.l	INTUITIONBASE(%a0),%a6
+	suba.l	%a0,%a0
+	jsr	-510(%a6)		| LockPubScreen(NULL)
+	movem.l	(%sp)+,%d1-%d2
+	tst.l	%d0
+	beq.s	sized
+	movea.l	%d0,%a1
+	moveq	#0,%d3
+	move.w	12(%a1),%d3		| sc_Width
+	moveq	#0,%d4
+	move.w	14(%a1),%d4		| sc_Height
+	movem.l	%d1-%d2,-(%sp)
+	suba.l	%a0,%a0
+	jsr	-516(%a6)		| UnlockPubScreen
+	movem.l	(%sp)+,%d1-%d2
+	sub.l	#32,%d3			| room for the borders
+	sub.l	#64,%d4			| and the screen's title bar
+	cmp.l	%d3,%d1
+	bls.s	1f
+	mulu	%d3,%d2
+	divu	%d1,%d2
+	and.l	#0xFFFF,%d2
+	move.l	%d3,%d1
+1:	cmp.l	%d4,%d2
+	bls.s	sized
+	mulu	%d4,%d1
+	divu	%d2,%d1
+	and.l	#0xFFFF,%d1
+	move.l	%d4,%d2
+sized:
+	lea	wintags(%pc),%a1
 	move.l	%d1,4(%a1)		| WA_InnerWidth
-	lea	title(%pc),%a0
-	move.l	%a0,20(%a1)		| WA_Title
+	move.l	%d2,12(%a1)		| WA_InnerHeight
+	lea	vars(%pc),%a0
+	move.l	NAME(%a0),%d1
+	movea.l	%a5,%a6
+	jsr	-870(%a6)		| FilePart: the title
+	lea	wintags(%pc),%a1
+	move.l	%d0,20(%a1)		| WA_Title
 	lea	vars(%pc),%a0
 	movea.l	INTUITIONBASE(%a0),%a6
 	suba.l	%a0,%a0
@@ -213,6 +413,8 @@ mainloop:
 	moveq	#5,%d0			| the next frame, if one fell due
 	move.l	%d5,%d1
 	bsr.w	callhost
+	cmp.l	#2,%d0			| the end of the video
+	beq.w	quit
 	tst.l	%d0
 	beq.s	msgloop
 	bsr.w	draw
@@ -292,7 +494,17 @@ closeall:
 	move.l	SIGBIT(%a2),%d0
 	bmi.s	3f
 	jsr	-336(%a6)		| FreeSignal
-3:	move.l	P96BASE(%a2),%d0
+3:	tst.l	DIRCHANGED(%a2)
+	beq.s	6f
+	move.l	OLDDIR(%a2),%d1
+	movea.l	%a5,%a6
+	jsr	-126(%a6)		| CurrentDir
+	movea.l	4,%a6
+6:	move.l	ASLBASE(%a2),%d0
+	beq.s	7f
+	movea.l	%d0,%a1
+	jsr	-414(%a6)		| CloseLibrary
+7:	move.l	P96BASE(%a2),%d0
 	beq.s	4f
 	movea.l	%d0,%a1
 	jsr	-414(%a6)		| CloseLibrary
@@ -412,6 +624,13 @@ callhost:
 	lea	24(%sp),%sp
 	rts
 
+| Frees the file requester in %d4
+freereq:
+	lea	vars(%pc),%a0
+	movea.l	ASLBASE(%a0),%a6
+	movea.l	%d4,%a0
+	jmp	-54(%a6)		| FreeAslRequest
+
 | Z set if %a4 points at a trap followed by RTS
 isuaelib:
 	move.w	(%a4),%d0
@@ -472,6 +691,11 @@ renderinfo:	.long	0		| ri_Memory
 		.word	0, 0		| ri_BytesPerRow, pad
 		.long	0		| ri_RGBFormat
 easy:		.long	0, 0, 0, 0, 0	| struct EasyStruct
+asltags:	.long	0x80080001, 0	| ASLFR_TitleText
+		.long	0x80080032, 1	| ASLFR_DoPatterns
+		.long	0x8008000A, 0	| ASLFR_InitialPattern
+		.long	0x8008003C, 1	| ASLFR_RejectIcons
+		.long	0		| TAG_DONE
 wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x80000077, 0	| WA_InnerHeight
 		.long	0x8000006E, 0	| WA_Title
@@ -489,11 +713,24 @@ wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x8000008F, 1	| WA_SizeBBottom
 		.long	0		| TAG_DONE
 
+	.set	PATHSIZE, 512
+pathbuf:	.space	PATHSIZE
+
 dosname:	.asciz	"dos.library"
+aslname:	.asciz	"asl.library"
 intuiname:	.asciz	"intuition.library"
 p96name:	.asciz	"Picasso96API.library"
 title:		.asciz	"HostPlay"
 okgadget:	.asciz	"Ok"
+pattern:	.asciz	"#?.(mp4|m4v|mkv|webm|avi|mov|mpg|mpeg|ts|wmv|flv|3gp|ogv)"
+msg_usage:	.ascii	"Usage: HostPlay [<file>]\n"
+		.ascii	"Plays a video in a window, decoded by uae4arm; without a file\n"
+		.ascii	"it asks for one. Space pauses, Esc ends it. The file has to be\n"
+		.asciz	"on a folder drive of uae4arm.\n"
+msg_notfound:	.asciz	"HostPlay: no such file\n"
+msg_nopath:	.asciz	"HostPlay: the file has to be on a folder drive of uae4arm\n"
+msg_cannot:	.asciz	"HostPlay: uae4arm cannot play this file\n"
+msg_noasl:	.asciz	"HostPlay: no file requester - asl.library 36 or later is needed\n"
 msg_nop96:	.asciz	"HostPlay: this needs Picasso96API.library\n"
 msg_notuae:	.asciz	"HostPlay: this runs in uae4arm only\n"
 msg_oldemu:	.asciz	"HostPlay: this needs a newer uae4arm\n"

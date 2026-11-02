@@ -21,6 +21,10 @@ else ifeq ($(arch),linux)
 	USE_SDL_VERSION = sdl1
 	MORE_CFLAGS += `sdl-config --cflags` `pkg-config --cflags libxml-2.0` -I../../guichan/include -g
 	LDFLAGS += -Lbuild-linux `sdl-config --libs` -lSDL_image -lmpeg2convert -lasound
+	# HostPlay's video, decoded by FFmpeg
+	DEFS += -DHOSTVIDEO_FFMPEG
+	MORE_CFLAGS += `pkg-config --cflags libavformat libavcodec libswscale libavutil`
+	LDFLAGS += `pkg-config --libs libavformat libavcodec libswscale libavutil`
 	FLAC_LIB = -lFLAC
 	ifdef ASAN
 		MORE_CFLAGS += -fsanitize=address -fno-omit-frame-pointer
