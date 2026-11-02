@@ -2,12 +2,17 @@ ifeq ($(arch),armeabi-v7a)
 	CPU_FLAGS += -mfpu=vfp
 	DEFS += -DANDROID -DANDROIDSDL -DUSE_SDL -DPANDORA
     DEFS += -DCPU_arm -DARMV6_ASSEMBLY -DARMV6T2 -DARM_HAS_DIV
+	# HostPlay's video, decoded by the device's MediaCodec
+	DEFS += -DHOSTVIDEO_MEDIACODEC
+	LDFLAGS += -lmediandk
 	ANDROID = 1
 	USE_SDL_VERSION = sdl1
 	PROFILER_PATH = /storage/sdcard0/profile/
 else ifeq ($(arch),arm64-v8a)
 	DEFS += -DANDROID -DANDROIDSDL -DUSE_SDL -DPANDORA
     DEFS += -DCPU_AARCH64
+	DEFS += -DHOSTVIDEO_MEDIACODEC
+	LDFLAGS += -lmediandk
 	ANDROID = 1
     AARCH64 = 1
 	USE_SDL_VERSION = sdl1
