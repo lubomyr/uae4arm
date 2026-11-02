@@ -29,6 +29,11 @@ void update_resampler_clock(double clk)
 	base_event_clock = clk;
 }
 
+double resampler_clock(void)
+{
+	return base_event_clock > 0 ? base_event_clock : DEFAULT_EVENT_CLOCK;
+}
+
 static double bessel_i0(double x)
 {
 	double sum = 1.0, term = 1.0, q = x * x / 4.0;
@@ -76,8 +81,7 @@ void resampler_clear(struct resampler *rs)
 
 void resampler_rate(struct resampler *rs, int freq)
 {
-	double clk = base_event_clock > 0 ? base_event_clock : DEFAULT_EVENT_CLOCK;
-	rs->event_time = (int)(clk * CYCLE_UNIT / freq);
+	rs->event_time = (int)(resampler_clock() * CYCLE_UNIT / freq);
 	if (rs->cycle_acc >= rs->event_time)
 		rs->cycle_acc = 0;
 

@@ -80,5 +80,7 @@ extern uae_u32 audio_sample_cycles;
 
 /* Colour clocks per second, from update_sound(). */
 extern void update_resampler_clock(double clk);
+/* The same, for the other things that keep time with the sound. */
+extern double resampler_clock(void);
 
 #endif /* UAE_RESAMPLER_H */

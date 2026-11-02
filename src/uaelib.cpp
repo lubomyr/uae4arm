@@ -19,6 +19,7 @@
 #include "picasso96.h"
 #include "filesys.h"
 #include "mhi.h"
+#include "hostvideo.h"
 #if defined(ANDROIDSDL)
 #include <SDL_android.h>
 #elif defined(LINUX_HOST)
@@ -537,6 +538,7 @@ static uae_u32 uaelib_demux_common(TrapContext *ctx, uae_u32 ARG0, uae_u32 ARG1,
 		case 85: return native_dos_op(ctx, ARG1, ARG2, ARG3, ARG4);
 		case 200: return emulib_HostShow(ctx, ARG1, ARG2, ARG3);
 		case 201: return mhi_call(ARG1, ARG2, ARG3, ARG4);
+		case 202: return hostvideo_call(ARG1, ARG2, ARG3, ARG4, ARG5);
     case 86:
    	  if (valid_address(ARG1, 1)) {
 			  uae_char tmp[MAX_DPATH];

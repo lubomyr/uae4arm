@@ -31,6 +31,7 @@
 #ifdef AHI
 #include "ahi_v1.h"
 #include "mhi.h"
+#include "hostvideo.h"
 #endif
 #ifdef JIT
 #include "jit/compemu.h"
@@ -263,6 +264,7 @@ void virtualdevice_init (void)
 	ahi_init ();
 #endif
 	mhi_install ();
+	hostvideo_install ();
 }
 
 void devices_restore_start(void)

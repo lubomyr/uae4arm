@@ -211,6 +211,7 @@ OBJS =	\
 	src-$(arch)/osdep/charset.o \
 	src-$(arch)/osdep/fsdb_host.o \
 	src-$(arch)/osdep/keyboard.o \
+	src-$(arch)/osdep/hostvideo.o \
 	src-$(arch)/osdep/mhi.o \
 	src-$(arch)/osdep/mp3decoder.o \
 	src-$(arch)/osdep/picasso96.o \
