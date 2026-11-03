@@ -31,13 +31,17 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <memory>
+#include <string>
 #include <chrono>
+#include <unistd.h>
 
 #include "options.h"
 #include "memory-uae.h"
 #include "newcpu.h"
 #include "traps.h"
 #include "filesys.h"
+#include "autoconf.h"
 #include "devices.h"
 #include "audio.h"
 #include "native2amiga_api.h"
@@ -58,6 +62,7 @@ extern "C" {
 #include <sys/stat.h>
 #include <media/NdkMediaExtractor.h>
 #include <media/NdkMediaCodec.h>
+#include <dlfcn.h>
 #endif
 
 #define HOSTVIDEO_PLAYERS 2
@@ -74,8 +79,11 @@ extern "C" {
 #define HV_CMD_DURATION 8   /* handle: the length of the video in ms, 0 when unknown */
 #define HV_CMD_SEEK 9       /* handle, time in ms */
 #define HV_CMD_DESCRIBE 10  /* handle, buffer, its size: "(width x height) (codec)" */
+#define HV_CMD_OPENCOPY 11  /* task, signal mask: plays the copy made through
+                               uaelib function 200 (4, 5) of a file the host
+                               does not reach */
 
-#define HV_API_VERSION 2
+#define HV_API_VERSION 3
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -141,7 +149,8 @@ public:
 	/* Its length in seconds, 0 when unknown, and what it is, for the title */
 	double duration;
 	char codec[32];
-	/* Goes to t seconds from the start. */
+	/* Goes to t seconds from the start, in the background: the frames that
+	   come after are of there. */
 	virtual void seek(double t) = 0;
 	/* Takes the latest frame due by t seconds from the start, and drops
 	   those before it; false when none is new. */
@@ -176,7 +185,7 @@ protected:
 	virtual bool decode_some() = 0;
 	virtual void free_frame(void *f) = 0;
 	/* Moves the reading to the key frame at or before pts and empties the
-	   decoders; with the thread stopped. */
+	   decoders; in the decoding thread. */
 	virtual void seek_to(double pts) = 0;
 	void start_thread();
 	/* First thing in the destructor of a decoder, as the thread uses its
@@ -207,8 +216,19 @@ private:
 	std::condition_variable wake;
 	bool stop = false;
 	bool eof = false;
+	bool running = false;
 	struct frame { double pts; void *f; };
 	std::deque<frame> queue;
+
+	/* A seek the thread is yet to make: where to, as a time stamp and as
+	   seconds from the start. Each seek starts a new generation; what the
+	   thread decoded for an older one is left out. */
+	double seek_pts = -1, seek_t = 0;
+	std::atomic<unsigned int> generation{0};
+	unsigned int thread_generation = 0;
+	/* where the sound of the last seek starts in the ring: what lies
+	   before it the emulator's side skips */
+	std::atomic<unsigned int> audio_floor{0};
 
 	bool audio_started = false;
 	/* the time the sound in the ring starts at, and samples to leave out
@@ -222,6 +242,7 @@ private:
 
 void decoding_source::start_thread()
 {
+	running = true;
 	thread = std::thread(&decoding_source::decode_thread, this);
 }
 
@@ -252,6 +273,10 @@ void decoding_source::stop_thread()
 void decoding_source::queue_frame(double pts, void *f)
 {
 	std::unique_lock<std::mutex> g(lock);
+	if (thread_generation != generation) {
+		free_frame(f);
+		return;
+	}
 	/* without a time stamp, right after the one before */
 	if (pts < 0)
 		pts = queue.empty() ? 0 : queue.back().pts;
@@ -260,20 +285,29 @@ void decoding_source::queue_frame(double pts, void *f)
 	queue.push_back({ pts, f });
 }
 
-/* The frame shown stays until one of the new place falls due. */
+/* The frame shown stays until one of the new place falls due. Finding the
+   place can take a while in a large file, so the thread does it, and the
+   emulation goes on meanwhile. */
 void decoding_source::seek(double t)
 {
-	halt_thread();
-	seek_to((start >= 0 ? start : 0) + t);
-	for (auto &q : queue)
-		free_frame(q.f);
-	queue.clear();
-	eof = false;
-	audio_read_pos.store(audio_write_pos.load());
-	audio_started = false;
-	audio_origin = t;
-	audio_skip = 0;
-	start_thread();
+	bool restart;
+	{
+		std::lock_guard<std::mutex> g(lock);
+		seek_pts = (start >= 0 ? start : 0) + t;
+		seek_t = t;
+		generation++;
+		for (auto &q : queue)
+			free_frame(q.f);
+		queue.clear();
+		eof = false;
+		restart = !running;
+	}
+	/* a thread that had come to the end of the file starts anew */
+	if (restart) {
+		halt_thread();
+		start_thread();
+	}
+	wake.notify_all();
 }
 
 size_t decoding_source::queued()
@@ -306,6 +340,8 @@ void decoding_source::audio_start(double pts)
 
 void decoding_source::audio_write(const uae_s16 *in, int n)
 {
+	if (thread_generation != generation)
+		return;
 	if (audio_skip > 0) {
 		int k = n < audio_skip ? n : audio_skip;
 		audio_skip -= k;
@@ -339,19 +375,43 @@ bool decoding_source::want_more()
 void decoding_source::decode_thread()
 {
 	for (;;) {
+		double pts = -1, t = 0;
 		{
 			std::unique_lock<std::mutex> g(lock);
 			/* the sound is used up without a word to here, so look again
 			   now and then */
-			wake.wait_for(g, std::chrono::milliseconds(10), [this] { return stop || want_more(); });
-			if (stop)
+			wake.wait_for(g, std::chrono::milliseconds(10), [this] { return stop || seek_pts >= 0 || want_more(); });
+			if (stop) {
+				running = false;
 				return;
-			if (!want_more())
+			}
+			if (seek_pts >= 0) {
+				pts = seek_pts;
+				t = seek_t;
+				seek_pts = -1;
+			} else if (!want_more()) {
 				continue;
+			}
+			thread_generation = generation;
+		}
+		if (pts >= 0) {
+			auto began = std::chrono::steady_clock::now();
+			seek_to(pts);
+			audio_started = false;
+			audio_origin = t;
+			audio_skip = 0;
+			audio_floor.store(audio_write_pos.load(std::memory_order_relaxed), std::memory_order_release);
+			write_log(_T("HostPlay: seek to %.1f s found in %d ms\n"), t,
+				(int)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
+			continue;
 		}
 		if (!decode_some()) {
 			std::lock_guard<std::mutex> g(lock);
+			/* the end, unless a seek came meanwhile */
+			if (seek_pts >= 0)
+				continue;
 			eof = true;
+			running = false;
 			return;
 		}
 	}
@@ -396,6 +456,10 @@ int decoding_source::audio_read(uae_s16 (*out)[2], int n)
 	if (!audio)
 		return 0;
 	unsigned int r = audio_read_pos.load(std::memory_order_relaxed);
+	/* the sound from before the last seek goes */
+	unsigned int floor = audio_floor.load(std::memory_order_acquire);
+	if ((int)(floor - r) > 0)
+		r = floor;
 	unsigned int fill = audio_write_pos.load(std::memory_order_acquire) - r;
 	if ((unsigned int)n > fill)
 		n = fill;
@@ -742,6 +806,52 @@ static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int stride
 	}
 }
 
+/* A second reader of the file, which goes through it to the end in the
+   background. Android's reader of a fragmented MP4 - what downloaders
+   often save - finds a place by going through the fragments up to it, the
+   first time: seconds for a long video. Once this one went through them
+   all, it takes over at the next seek, and seeks are quick from then on.
+   Shared with its thread, which outlives a player that closes meanwhile. */
+struct scout_reader {
+	std::mutex lock;
+	bool ready = false, abandoned = false;
+	int fd = -1;
+	AMediaExtractor *ex = NULL;
+};
+
+static void scout_run(std::shared_ptr<scout_reader> sc, std::string path, int vtrack, int atrack, int64_t end_us)
+{
+	auto began = std::chrono::steady_clock::now();
+	int fd = ::open(path.c_str(), O_RDONLY);
+	struct stat st;
+	AMediaExtractor *ex = NULL;
+	if (fd >= 0 && fstat(fd, &st) == 0) {
+		ex = AMediaExtractor_new();
+		if (ex && AMediaExtractor_setDataSourceFd(ex, fd, 0, st.st_size) == AMEDIA_OK) {
+			AMediaExtractor_selectTrack(ex, vtrack);
+			if (atrack >= 0)
+				AMediaExtractor_selectTrack(ex, atrack);
+			AMediaExtractor_seekTo(ex, end_us, AMEDIAEXTRACTOR_SEEK_PREVIOUS_SYNC);
+		} else if (ex) {
+			AMediaExtractor_delete(ex);
+			ex = NULL;
+		}
+	}
+	std::lock_guard<std::mutex> g(sc->lock);
+	if (ex && !sc->abandoned) {
+		sc->ex = ex;
+		sc->fd = fd;
+		sc->ready = true;
+		write_log(_T("HostPlay: went through the file in %d ms\n"),
+			(int)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count());
+		return;
+	}
+	if (ex)
+		AMediaExtractor_delete(ex);
+	if (fd >= 0)
+		close(fd);
+}
+
 /* MediaCodec's colour formats */
 #define COLOR_YUV420_PLANAR 19
 #define COLOR_YUV420_SEMIPLANAR 21
@@ -769,13 +879,16 @@ private:
 
 	int fd = -1;
 	AMediaExtractor *ex = NULL;
+	std::shared_ptr<scout_reader> scout;
 	AMediaCodec *vcodec = NULL, *acodec = NULL;
 	int vtrack = -1, atrack = -1;
 	bool input_done = false, veos_sent = false, aeos_sent = false;
 	bool video_done = false, audio_done = false;
 
-	/* the decoder's pictures */
+	/* the decoder's pictures; with the flexible colour format, whether they
+	   are planar, as from Google's software decoders, or NV12 */
 	int pic_w = 0, pic_h = 0, stride = 0, slice_height = 0, color = 0;
+	bool flexible_planar = false;
 	int crop_left = 0, crop_top = 0, crop_right = -1, crop_bottom = -1;
 	bool bt709 = false, full_range = false;
 
@@ -839,7 +952,21 @@ bool mediacodec_source::open(const char *path)
 		if (vcodec && AMediaCodec_configure(vcodec, vfmt, NULL, NULL, 0) == AMEDIA_OK &&
 				AMediaCodec_start(vcodec) == AMEDIA_OK) {
 			AMediaExtractor_selectTrack(ex, vtrack);
-			write_log(_T("HostPlay: %s, %s %dx%d\n"), path, vmime, width, height);
+			/* The decoder's name, from Android 9 on: the hardware ones put the
+			   flexible format out as NV12, Google's software ones planar. */
+			typedef media_status_t (*getname_t)(AMediaCodec *, char **);
+			typedef void (*releasename_t)(AMediaCodec *, char *);
+			getname_t getname = (getname_t)dlsym(RTLD_DEFAULT, "AMediaCodec_getName");
+			releasename_t releasename = (releasename_t)dlsym(RTLD_DEFAULT, "AMediaCodec_releaseName");
+			char *name = NULL;
+			if (getname && getname(vcodec, &name) == AMEDIA_OK && name) {
+				flexible_planar = !strncmp(name, "c2.android.", 11) || !strncmp(name, "OMX.google.", 11);
+				write_log(_T("HostPlay: %s, %s %dx%d, decoder %s\n"), path, vmime, width, height, name);
+				if (releasename)
+					releasename(vcodec, name);
+			} else {
+				write_log(_T("HostPlay: %s, %s %dx%d\n"), path, vmime, width, height);
+			}
 			ok = true;
 		} else {
 			write_log(_T("HostPlay: no decoder for %s\n"), vmime);
@@ -873,12 +1000,26 @@ bool mediacodec_source::open(const char *path)
 	if (acodec && !audio_rate)
 		write_log(_T("HostPlay: no sound came out\n"));
 	start_thread();
+	if (duration > 0) {
+		scout = std::make_shared<scout_reader>();
+		std::thread(scout_run, scout, std::string(path), vtrack, acodec ? atrack : -1, (int64_t)(duration * 1000000)).detach();
+	}
 	return true;
 }
 
 mediacodec_source::~mediacodec_source()
 {
 	stop_thread();
+	if (scout) {
+		std::lock_guard<std::mutex> g(scout->lock);
+		scout->abandoned = true;
+		if (scout->ex)
+			AMediaExtractor_delete(scout->ex);
+		if (scout->fd >= 0)
+			close(scout->fd);
+		scout->ex = NULL;
+		scout->fd = -1;
+	}
 	if (vcodec) {
 		AMediaCodec_stop(vcodec);
 		AMediaCodec_delete(vcodec);
@@ -938,6 +1079,19 @@ bool mediacodec_source::feed()
 
 void mediacodec_source::seek_to(double pts)
 {
+	if (scout) {
+		std::lock_guard<std::mutex> g(scout->lock);
+		if (scout->ready) {
+			/* the reader that went through the file takes over */
+			AMediaExtractor_delete(ex);
+			close(fd);
+			ex = scout->ex;
+			fd = scout->fd;
+			scout->ex = NULL;
+			scout->fd = -1;
+			scout->ready = false;
+		}
+	}
 	AMediaExtractor_seekTo(ex, (int64_t)(pts * 1000000), AMEDIAEXTRACTOR_SEEK_PREVIOUS_SYNC);
 	AMediaCodec_flush(vcodec);
 	if (acodec)
@@ -1004,7 +1158,7 @@ bool mediacodec_source::drain_video()
 		int rows = slice_height;
 		if (color == COLOR_QCOM_SEMIPLANAR_32M)
 			rows = (rows + 31) & ~31;
-		bool planar = color == COLOR_YUV420_PLANAR;
+		bool planar = color == COLOR_YUV420_PLANAR || (color == COLOR_YUV420_FLEXIBLE && flexible_planar);
 		size_t c_base = (size_t)stride * rows;
 		int c_stride = planar ? stride / 2 : stride;
 		size_t c_size = (size_t)c_stride * ((rows + 1) / 2);
@@ -1170,11 +1324,17 @@ struct hostvideo {
 	/* a new frame or the end the tool has not seen yet, and it was told;
 	   the end once told is not told again */
 	bool ready, ended, signalled, end_told;
+	/* a seek waits for its first frame: the clock stands until then */
+	bool seeking;
+	std::chrono::steady_clock::time_point seek_began;
 
 	int stat_shown;
 	int stat_time;
 
 	std::vector<uae_u8> pixels;
+
+	/* a copy of the file, deleted with the player */
+	char copy[MAX_DPATH];
 
 	/* the sound: its clock, samples read ahead, and those that were not
 	   there when due, to be left out */
@@ -1224,7 +1384,7 @@ static void audio_fill(struct hostvideo *v)
 static void audio_tick(struct hostvideo *v)
 {
 	float l = 0, r = 0;
-	if (!v->paused) {
+	if (!v->paused && !v->seeking) {
 		if (v->apos == v->alen)
 			audio_fill(v);
 		if (v->apos < v->alen) {
@@ -1333,13 +1493,20 @@ static void catchup(struct hostvideo *v)
 	if (delta > second / 4)
 		delta = (uae_u32)(second / 4);
 	/* paused, the clock stands, but a seek still shows its frame */
-	if (!v->paused)
+	if (!v->paused && !v->seeking)
 		v->played += delta;
 	double t = v->played / second;
-	if (v->source->take(t))
+	if (v->source->take(t)) {
 		v->ready = true;
-	else if (v->source->ended())
+		if (v->seeking) {
+			v->seeking = false;
+			write_log(_T("HostPlay: seek to %.1f s played in %d ms\n"), t,
+				(int)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - v->seek_began).count());
+		}
+	} else if (v->source->ended()) {
 		v->ended = true;
+		v->seeking = false;
+	}
 	if ((int)t >= v->stat_time + 10) {
 		write_log(_T("HostPlay: %d frames shown, %d dropped by the host\n"), v->stat_shown, v->source->dropped);
 		v->stat_time = (int)t;
@@ -1378,6 +1545,10 @@ static void player_close(struct hostvideo *v)
 {
 	delete v->source;
 	v->source = NULL;
+	if (v->copy[0]) {
+		unlink(v->copy);
+		v->copy[0] = 0;
+	}
 	v->used = false;
 	v->task = 0;
 	v->buffer = 0;
@@ -1391,6 +1562,8 @@ static struct hostvideo *get_player(uae_u32 handle)
 	return &players[handle - 1];
 }
 
+/* A file of a folder drive by its Lock, or with no Lock the copy uaelib
+   made of one the host does not reach */
 static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_u32 lock)
 {
 	int i;
@@ -1398,15 +1571,33 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 		if (!players[i].used)
 			break;
 	}
-	if (i == HOSTVIDEO_PLAYERS)
+	if (i == HOSTVIDEO_PLAYERS) {
+		if (!lock) {
+			char copy[MAX_DPATH];
+			if (emulib_take_copy(copy, sizeof copy))
+				unlink(copy);
+		}
 		return HV_OPEN_BUSY;
+	}
 	TCHAR path[MAX_DPATH];
-	if (!lock || get_native_path(ctx, lock, path))
+	bool copy = !lock;
+	if (copy) {
+		if (!emulib_take_copy(path, sizeof path))
+			return HV_OPEN_CANNOT;
+	} else if (get_native_path(ctx, lock, path)) {
 		return HV_OPEN_NOPATH;
+	}
 	video_source *source = open_source(path);
-	if (!source)
+	if (!source) {
+		if (copy)
+			unlink(path);
 		return HV_OPEN_CANNOT;
+	}
 	struct hostvideo *v = &players[i];
+	if (copy)
+		snprintf(v->copy, sizeof v->copy, "%s", path);
+	else
+		v->copy[0] = 0;
 	v->used = true;
 	v->task = task;
 	v->sigmask = sigmask;
@@ -1417,6 +1608,7 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 	v->last_cycles = get_cycles();
 	v->played = 0;
 	v->ready = v->ended = v->signalled = v->end_told = false;
+	v->seeking = false;
 	v->stat_shown = v->stat_time = 0;
 	v->apos = v->alen = v->missed = 0;
 	v->quiet = RS_HIST;
@@ -1431,7 +1623,9 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	if (cmd == HV_CMD_VERSION)
 		return HV_API_VERSION;
 	if (cmd == HV_CMD_OPEN)
-		return player_open(ctx, arg1, arg2, arg3);
+		return arg3 ? player_open(ctx, arg1, arg2, arg3) : HV_OPEN_NOPATH;
+	if (cmd == HV_CMD_OPENCOPY)
+		return player_open(ctx, arg1, arg2, 0);
 
 	struct hostvideo *v = get_player(arg1);
 	if (!v)
@@ -1493,6 +1687,8 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		v->source->seek(t);
 		v->played = (uae_s64)(t * resampler_clock() * CYCLE_UNIT);
 		v->ready = v->ended = v->signalled = v->end_told = false;
+		v->seeking = true;
+		v->seek_began = std::chrono::steady_clock::now();
 		v->stat_time = (int)t;
 		v->apos = v->alen = v->missed = 0;
 		if (v->source->audio_rate > 0)

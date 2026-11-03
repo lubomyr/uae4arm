@@ -391,6 +391,22 @@ static bool copy_begin(const char *name)
 	return copy_file != NULL;
 }
 
+/* The finished copy, for HostPlay to play: from here on it is the player's
+   to delete. */
+bool emulib_take_copy(char *path, int size)
+{
+	if (!copy_file)
+		return false;
+	bool ok = fclose(copy_file) == 0;
+	copy_file = NULL;
+	if (!ok) {
+		unlink(copy_path);
+		return false;
+	}
+	snprintf(path, size, "%s", copy_path);
+	return true;
+}
+
 static bool copy_piece(TrapContext *ctx, uaecptr addr, uae_u32 len)
 {
 	if (!copy_file || len > 16 * 1024 * 1024 || !valid_address(addr, len))

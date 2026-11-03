@@ -113,6 +113,7 @@ extern void hardfile_reset (void);
 extern void emulib_install (void);
 extern void emulib_host_cleanup (void);
 extern void emulib_host_reset (void);
+extern bool emulib_take_copy (char *path, int size);
 extern void expansion_init (void);
 extern void expansion_cleanup (void);
 extern void expansion_clear (void);

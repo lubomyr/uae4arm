@@ -3,8 +3,11 @@
 | Usage: HostPlay [<file>]
 | Without a file - from the Shell, or started from its icon - it asks for one
 | with the file requester of asl.library. Set as the default tool of a
-| video's icon, a double click on the video plays it. The file has to be on a
-| folder drive of uae4arm, where the host reaches it.
+| video's icon, a double click on the video plays it. A file of a folder
+| drive of uae4arm the host plays where it is; one it cannot reach - inside
+| a hardfile, on a floppy, in RAM: - goes over to it first, into a copy it
+| deletes after: from the Shell HostPlay tells how far it is, and Ctrl-C
+| stops it.
 |
 | In the bottom border of the window: a slider for where the video is, to
 | drag to another place; a button that pauses and plays on, or plays again
@@ -29,7 +32,8 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 2	| the seek and the time
+	.set	HOSTVIDEO_VERSION, 3	| the seek, the time, the copy
+	.set	HOSTSHOW, 200		| uaelib function that makes the copy
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -100,7 +104,13 @@
 	.set	SIZEH, 108
 	.set	PLAYW, 112
 	.set	OPENW, 116
-	.set	VARSIZE, 120
+	.set	CFILE, 120		| the copy: the file, the buffer, its size,
+	.set	CBUF, 124		| the length of the file, how much went over,
+	.set	CBUFSIZE, 128		| the percent shown
+	.set	CTOTAL, 132
+	.set	CDONE, 136
+	.set	CPERCENT, 140
+	.set	VARSIZE, 144
 
 	.text
 	.globl	_start
@@ -565,17 +575,190 @@ openvideo:
 	movea.l	%a5,%a6
 	jsr	-90(%a6)		| UnLock
 	move.l	(%sp)+,%d0
+	cmp.l	#-2,%d0			| not on a folder drive: a copy
+	bne.s	openresult
+	bsr.w	copyvideo
+	tst.l	%d0
+	bgt.s	openvideo_end
+	cmpa.w	#0,%a0			| the copy told why
+	bne.s	2f
+openresult:
+	tst.l	%d0
 	bgt.s	openvideo_end
 	lea	msg_busy(%pc),%a0
-	tst.l	%d0
-	beq.s	2f
-	lea	msg_nopath(%pc),%a0
-	cmp.l	#-2,%d0
 	beq.s	2f
 	lea	msg_cannot(%pc),%a0
 2:	moveq	#-1,%d0
 openvideo_end:
 	movem.l	(%sp)+,%d2-%d4/%a6
+	rts
+
+| A file the host cannot reach goes over to it in pieces, into a copy that
+| the emulator plays. %d0 as from HostPlay's open: a handle, 0 busy, -1 not
+| played - or -1 with the reason in %a0 already, with %a0 then not 0.
+copyvideo:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	clr.l	CFILE(%a2)
+	clr.l	CBUF(%a2)
+	move.l	#-1,CPERCENT(%a2)
+	moveq	#4,%d0			| start a copy, named for the file
+	move.l	NAME(%a2),%d1
+	bsr.w	callshow
+	lea	msg_nocopy(%pc),%a0
+	cmp.l	#1,%d0
+	bne.w	copy_fail
+	move.l	NAME(%a2),%d1
+	move.l	#1005,%d2		| MODE_OLDFILE
+	movea.l	%a5,%a6
+	jsr	-30(%a6)		| Open
+	move.l	%d0,CFILE(%a2)
+	lea	msg_noread(%pc),%a0
+	beq.w	copy_drop
+| Its size, for the progress: the end, seen going back to the start
+	move.l	%d0,%d1
+	moveq	#0,%d2
+	moveq	#1,%d3			| OFFSET_END
+	jsr	-66(%a6)		| Seek
+	move.l	CFILE(%a2),%d1
+	moveq	#0,%d2
+	moveq	#-1,%d3			| OFFSET_BEGINNING
+	jsr	-66(%a6)		| Seek
+	move.l	%d0,CTOTAL(%a2)
+	bpl.s	1f
+	clr.l	CTOTAL(%a2)
+1:	clr.l	CDONE(%a2)
+| A large buffer, or a small one with little memory
+	movea.l	4,%a6
+	move.l	#BIGBUF,CBUFSIZE(%a2)
+	move.l	#BIGBUF,%d0
+	moveq	#1,%d1			| MEMF_PUBLIC
+	jsr	-198(%a6)		| AllocMem
+	tst.l	%d0
+	bne.s	2f
+	move.l	#SMALLBUF,CBUFSIZE(%a2)
+	move.l	#SMALLBUF,%d0
+	moveq	#1,%d1
+	jsr	-198(%a6)		| AllocMem
+	lea	msg_nomem(%pc),%a0
+	tst.l	%d0
+	beq.w	copy_drop
+2:	move.l	%d0,CBUF(%a2)
+copy_loop:
+	bsr.w	progress
+	movea.l	4,%a6
+	moveq	#0,%d0
+	move.l	#0x1000,%d1		| SIGBREAKF_CTRL_C
+	jsr	-306(%a6)		| SetSignal: takes Ctrl-C
+	lea	msg_stopped(%pc),%a0
+	btst	#12,%d0
+	bne.s	copy_drop
+	move.l	CFILE(%a2),%d1
+	move.l	CBUF(%a2),%d2
+	move.l	CBUFSIZE(%a2),%d3
+	movea.l	%a5,%a6
+	jsr	-42(%a6)		| Read
+	lea	msg_noread(%pc),%a0
+	tst.l	%d0
+	bmi.s	copy_drop
+	beq.s	copy_play
+	add.l	%d0,CDONE(%a2)
+	move.l	%d0,%d2			| bytes
+	move.l	CBUF(%a2),%d1		| at
+	moveq	#5,%d0			| add them to the copy
+	bsr.w	callshow
+	cmp.l	#1,%d0
+	beq.s	copy_loop
+	lea	msg_nocopy(%pc),%a0	| the emulator dropped it
+	bra.s	copy_fail
+copy_play:
+	bsr.w	progress_end
+	moveq	#11,%d0			| a player for the copy
+	move.l	TASK(%a2),%d1
+	moveq	#0,%d2
+	move.l	SIGBIT(%a2),%d3
+	bset	%d3,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	suba.l	%a0,%a0			| what the emulator said tells it
+	bra.s	copy_close
+copy_drop:
+	move.l	%a0,-(%sp)
+	moveq	#7,%d0			| drop the copy
+	bsr.w	callshow
+	movea.l	(%sp)+,%a0
+copy_fail:
+	bsr.w	progress_end
+	moveq	#-1,%d0
+copy_close:
+	movem.l	%d0/%a0,-(%sp)
+	movea.l	4,%a6
+	move.l	CBUF(%a2),%d0
+	beq.s	3f
+	movea.l	%d0,%a1
+	move.l	CBUFSIZE(%a2),%d0
+	jsr	-210(%a6)		| FreeMem
+3:	move.l	CFILE(%a2),%d1
+	beq.s	4f
+	movea.l	%a5,%a6
+	jsr	-36(%a6)		| Close
+4:	movem.l	(%sp)+,%d0/%a0
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| From the Shell: how much of the file went over, when it changed
+progress:
+	tst.l	%d6
+	bne.s	progress_ret
+	move.l	CDONE(%a2),%d0
+	move.l	CTOTAL(%a2),%d1
+	beq.s	progress_ret
+4:	cmp.l	#0xFFFF,%d1		| small enough for mulu and divu
+	bls.s	5f
+	lsr.l	#1,%d0
+	lsr.l	#1,%d1
+	bra.s	4b
+5:	mulu	#100,%d0
+	divu	%d1,%d0
+	and.l	#0xFFFF,%d0
+	cmp.l	CPERCENT(%a2),%d0
+	beq.s	progress_ret
+	move.l	%d0,CPERCENT(%a2)
+	lea	linebuf(%pc),%a0
+	lea	msg_copying(%pc),%a1
+6:	move.b	(%a1)+,(%a0)+
+	bne.s	6b
+	subq.l	#1,%a0
+	moveq	#0,%d1			| digits
+7:	divu	#10,%d0
+	swap	%d0
+	add.b	#'0',%d0
+	move.b	%d0,-(%sp)
+	addq.l	#1,%d1
+	clr.w	%d0
+	swap	%d0
+	tst.l	%d0
+	bne.s	7b
+8:	move.b	(%sp)+,(%a0)+
+	subq.l	#1,%d1
+	bne.s	8b
+	move.b	#'%',(%a0)+
+	clr.b	(%a0)
+	lea	linebuf(%pc),%a0
+	bsr.w	print
+progress_ret:
+	rts
+
+| Ends the line of the progress, if there is one
+progress_end:
+	move.l	%a0,-(%sp)
+	cmp.l	#-1,CPERCENT(%a2)
+	beq.s	9f
+	move.l	#-1,CPERCENT(%a2)
+	lea	newline(%pc),%a0
+	bsr.w	print
+9:	movea.l	(%sp)+,%a0
 	rts
 
 | The file requester: %d0 the name (in pathbuf, and in NAME), 0 when
@@ -1127,6 +1310,16 @@ draw_end:
 	movem.l	(%sp)+,%d2-%d5/%a2/%a6
 	rts
 
+| Calls uaelib function 200: %d0 what, %d1 and %d2 its arguments
+callshow:
+	move.l	%d2,-(%sp)
+	move.l	%d1,-(%sp)
+	move.l	%d0,-(%sp)
+	move.l	#HOSTSHOW,-(%sp)
+	jsr	(%a4)
+	lea	16(%sp),%sp
+	rts
+
 | Calls the emulator: %d0 the command, %d1-%d4 its arguments; %d0 the result
 callhost:
 	move.l	%d4,-(%sp)
@@ -1261,6 +1454,9 @@ pathbuf:	.space	PATHSIZE
 drawerbuf:	.space	PATHSIZE
 	.set	TITLESIZE, 256
 titlebuf:	.space	TITLESIZE
+	.set	BIGBUF, 262144
+	.set	SMALLBUF, 32768
+linebuf:	.space	48
 
 dosname:	.asciz	"dos.library"
 intuiname:	.asciz	"intuition.library"
@@ -1276,10 +1472,15 @@ msg_usage:	.ascii	"Usage: HostPlay [<file>]\n"
 		.ascii	"Plays a video in a window, decoded by uae4arm; without a file\n"
 		.ascii	"it asks for one. In the bottom border: where the video is,\n"
 		.ascii	"play and pause, another file. Space pauses, Esc ends it.\n"
-		.asciz	"The file has to be on a folder drive of uae4arm.\n"
+		.ascii	"A file the host cannot reach, such as one inside a hardfile,\n"
+		.asciz	"goes over to it first; Ctrl-C stops that.\n"
 msg_nointuition: .asciz	"HostPlay: this needs intuition.library 39\n"
 msg_notfound:	.asciz	"HostPlay: no such file\n"
-msg_nopath:	.asciz	"HostPlay: the file has to be on a folder drive of uae4arm\n"
+msg_copying:	.asciz	"\rHostPlay: processing "
+newline:	.asciz	"\n"
+msg_stopped:	.asciz	"HostPlay: stopped\n"
+msg_noread:	.asciz	"HostPlay: cannot read the file\n"
+msg_nocopy:	.asciz	"HostPlay: uae4arm could not take the file - it needs more room\n"
 msg_cannot:	.asciz	"HostPlay: uae4arm cannot play this file\n"
 msg_noasl:	.asciz	"HostPlay: no file requester - asl.library 36 or later is needed\n"
 msg_nop96:	.asciz	"HostPlay: this needs Picasso96API.library\n"
