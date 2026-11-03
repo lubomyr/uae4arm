@@ -10,11 +10,11 @@
 | stops it.
 |
 | In the bottom border of the window: a slider for where the video is, to
-| drag to another place; a button that pauses and plays on, or plays again
-| from the start once the video ended; and a button that asks for another
-| file. Space pauses too, Esc or the close gadget ends it. The zoom gadget
-| makes the window fill the screen, and gives it its size back. The title
-| tells the time played and the length of the video.
+| drag or click on to go to another place; a button that pauses and plays
+| on, or plays again from the start once the video ended; and a button that
+| asks for another file. Space pauses too, Esc or the close gadget ends it.
+| The zoom gadget makes the window fill the screen, and gives it its size
+| back. The title tells the time played and the length of the video.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits; the emulator makes Picasso96's 15 and 24 bit
@@ -113,7 +113,8 @@
 	.set	CDONE, 136
 	.set	CPERCENT, 140
 	.set	TITLETURN, 144		| which of the two titles with the time
-	.set	VARSIZE, 148
+	.set	CLICKED, 148		| the second clicked on in the slider, or -1
+	.set	VARSIZE, 152
 
 	.text
 	.globl	_start
@@ -133,6 +134,7 @@ _start:
 	dbra	%d0,1b
 	lea	vars(%pc),%a0
 	move.l	#-1,SIGBIT(%a0)
+	move.l	#-1,CLICKED(%a0)
 
 | From Workbench there is no CLI, and a WBStartup message to take and give back
 	movea.l	4,%a6
@@ -421,6 +423,8 @@ msgloop:
 	move.l	20(%a1),%d2		| im_Class
 	move.w	24(%a1),%d3		| im_Code
 	movea.l	28(%a1),%a2		| im_IAddress
+	move.w	32(%a1),%d4		| im_MouseX
+	ext.l	%d4
 	jsr	-378(%a6)		| ReplyMsg
 	cmp.l	#IDCMP_CLOSEWINDOW,%d2
 	beq.w	quit
@@ -453,6 +457,7 @@ notrefresh:
 	bne.w	msgloop
 	lea	vars(%pc),%a0
 	move.l	#1,DRAGGING(%a0)
+	bsr.w	sliderclick
 	bra.w	msgloop
 notdown:
 	cmp.l	#IDCMP_GADGETUP,%d2
@@ -1208,11 +1213,24 @@ seekslider:
 	movem.l	%d2-%d4/%a2/%a6,-(%sp)
 	lea	vars(%pc),%a2
 	clr.l	DRAGGING(%a2)
-	movea.l	INTUITIONBASE(%a2),%a6
+	move.l	CLICKED(%a2),%d0
+	bmi.s	1f
+| a click beside the knob: there, with the knob put there too
+	move.l	#-1,CLICKED(%a2)
+	move.l	%d0,SHOWN(%a2)
+	lea	proptags(%pc),%a0
+	move.l	#PGA_Top,(%a0)
+	move.l	%d0,4(%a0)
+	clr.l	8(%a0)
+	bsr.w	setslider
+	move.l	SHOWN(%a2),%d0
+	bra.s	2f
+1:	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	GADSLIDER(%a2),%a0
 	move.l	#PGA_Top,%d0
 	bsr.w	getattr
 	move.l	%d0,SHOWN(%a2)
+2:
 	mulu	#1000,%d0
 	move.l	%d0,%d2
 	moveq	#9,%d0			| seek
@@ -1223,6 +1241,38 @@ seekslider:
 	clr.l	ATEND(%a2)
 	bsr.w	showtime
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The slider pressed, at %d4 across the window, %a2 the gadget: beside the
+| knob - which on its own would move a page, a second here - CLICKED gets
+| the second of that place, for when the slider is let go.
+sliderclick:
+	movem.l	%d2/%a1-%a2,-(%sp)
+	lea	vars(%pc),%a1
+	move.l	#-1,CLICKED(%a1)
+	tst.l	DURATION(%a1)
+	beq.s	1f
+	movea.l	34(%a2),%a0		| gg_SpecialInfo: the PropInfo
+	btst	#0,(%a0)		| pi_Flags & KNOBHIT (0x100)
+	bne.s	1f
+	moveq	#0,%d0
+	move.w	10(%a0),%d0		| pi_CWidth
+	beq.s	1f
+	move.w	4(%a2),%d1		| gg_LeftEdge
+	add.w	18(%a0),%d1		| pi_LeftBorder
+	ext.l	%d1
+	move.l	%d4,%d2
+	sub.l	%d1,%d2
+	bpl.s	2f
+	moveq	#0,%d2
+2:	cmp.l	%d0,%d2
+	bls.s	3f
+	move.l	%d0,%d2
+3:	mulu	DURATION+2(%a1),%d2
+	divu	%d0,%d2
+	and.l	#0xFFFF,%d2
+	move.l	%d2,CLICKED(%a1)
+1:	movem.l	(%sp)+,%d2/%a1-%a2
 	rts
 
 | The title with the time first: "1:23 / 45:00  name (size) (codec)". The
