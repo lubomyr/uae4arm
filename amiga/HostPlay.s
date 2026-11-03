@@ -12,7 +12,8 @@
 | In the bottom border of the window: a slider for where the video is, to
 | drag to another place; a button that pauses and plays on, or plays again
 | from the start once the video ended; and a button that asks for another
-| file. Space pauses too, Esc or the close gadget ends it.
+| file. Space pauses too, Esc or the close gadget ends it. The zoom gadget
+| makes the window fill the screen, and gives it its size back.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits; the emulator makes Picasso96's 15 and 24 bit
@@ -322,8 +323,22 @@ havegadgets:
 	move.l	%a0,20(%a1)		| WA_Title
 	move.l	SCREEN(%a2),36(%a1)	| WA_PubScreen
 	move.l	GADSLIDER(%a2),44(%a1)	| WA_Gadgets
+| The zoom gadget's other size: the screen below its title bar
+	lea	zoombox(%pc),%a0
+	move.l	%a0,52(%a1)		| WA_Zoom
+	movea.l	SCREEN(%a2),%a1
+	clr.w	(%a0)			| left
+	moveq	#0,%d0
+	move.b	30(%a1),%d0		| sc_BarHeight
+	addq.w	#1,%d0
+	move.w	%d0,2(%a0)		| top
+	move.w	12(%a1),4(%a0)		| width: sc_Width
+	move.w	14(%a1),%d1		| sc_Height
+	sub.w	%d0,%d1
+	move.w	%d1,6(%a0)		| height
 	movea.l	INTUITIONBASE(%a2),%a6
 	suba.l	%a0,%a0
+	lea	wintags(%pc),%a1
 	jsr	-606(%a6)		| OpenWindowTagList
 	movea.l	%d0,%a3
 	tst.l	%d0
@@ -1388,6 +1403,7 @@ print_end:
 
 	.even
 vars:		.space	VARSIZE
+zoombox:	.word	0, 0, 0, 0	| struct IBox
 renderinfo:	.long	0		| ri_Memory
 		.word	0, 0		| ri_BytesPerRow, pad
 		.long	0		| ri_RGBFormat
@@ -1405,6 +1421,7 @@ wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_GADGETDOWN+IDCMP_GADGETUP+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY
 		.long	0x80000079, 0	| WA_PubScreen
 		.long	0x8000006C, 0	| WA_Gadgets
+		.long	0x8000007D, 0	| WA_Zoom
 		.long	0x80000072, 160	| WA_MinWidth: room for the slider
 		.long	0x80000073, 48	| WA_MinHeight
 		.long	0x80000074, -1	| WA_MaxWidth: the screen's
