@@ -13,7 +13,8 @@
 | drag to another place; a button that pauses and plays on, or plays again
 | from the start once the video ended; and a button that asks for another
 | file. Space pauses too, Esc or the close gadget ends it. The zoom gadget
-| makes the window fill the screen, and gives it its size back.
+| makes the window fill the screen, and gives it its size back. The title
+| tells the time played and the length of the video.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits; the emulator makes Picasso96's 15 and 24 bit
@@ -111,7 +112,8 @@
 	.set	CTOTAL, 132
 	.set	CDONE, 136
 	.set	CPERCENT, 140
-	.set	VARSIZE, 144
+	.set	TITLETURN, 144		| which of the two titles with the time
+	.set	VARSIZE, 148
 
 	.text
 	.globl	_start
@@ -1159,6 +1161,7 @@ newslider:
 	move.l	#PGA_Top,16(%a0)
 	clr.l	20(%a0)
 	bsr.s	setslider
+	bsr.w	showtime
 	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
 
@@ -1183,6 +1186,7 @@ moveslider:
 	move.l	%d0,4(%a0)
 	clr.l	8(%a0)			| TAG_DONE after the one
 	bsr.s	setslider
+	bsr.w	showtime
 1:	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
 
@@ -1217,7 +1221,92 @@ seekslider:
 	moveq	#0,%d4
 	bsr.w	callhost
 	clr.l	ATEND(%a2)
+	bsr.w	showtime
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The title with the time first: "1:23 / 45:00  name (size) (codec)". The
+| two buffers take turns, so that Intuition never draws one being written.
+showtime:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	lea	timetitle1(%pc),%a0
+	not.l	TITLETURN(%a2)
+	beq.s	1f
+	lea	timetitle2(%pc),%a0
+1:	move.l	%a0,-(%sp)
+	moveq	#0,%d1			| hours, for an hour or more
+	cmp.l	#3600,DURATION(%a2)
+	bcc.s	2f
+	cmp.l	#3600,SHOWN(%a2)
+	bcs.s	3f
+2:	moveq	#1,%d1
+3:	move.l	SHOWN(%a2),%d0
+	bsr.s	puttime
+	tst.l	DURATION(%a2)
+	beq.s	4f
+	move.b	#' ',(%a0)+
+	move.b	#'/',(%a0)+
+	move.b	#' ',(%a0)+
+	move.l	DURATION(%a2),%d0
+	bsr.s	puttime
+4:	move.b	#' ',(%a0)+
+	move.b	#' ',(%a0)+
+	lea	titlebuf(%pc),%a1
+5:	move.b	(%a1)+,(%a0)+
+	bne.s	5b
+	movea.l	(%sp)+,%a1
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	movea.l	#-1,%a2			| the screen's title stays
+	jsr	-276(%a6)		| SetWindowTitles
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Writes %d0 seconds at %a0 on: m:ss, or h:mm:ss with %d1 set
+puttime:
+	move.l	%d2,-(%sp)
+	and.l	#0xFFFF,%d0
+	tst.l	%d1
+	beq.s	1f
+	divu	#3600,%d0		| hours, and the seconds left
+	move.l	%d0,%d2
+	swap	%d2
+	and.l	#0xFFFF,%d2
+	bsr.s	putnum
+	move.b	#':',(%a0)+
+	move.l	%d2,%d0
+	divu	#60,%d0
+	move.l	%d0,%d2
+	swap	%d2
+	bsr.s	put2
+	bra.s	2f
+1:	divu	#60,%d0			| minutes, and the seconds left
+	move.l	%d0,%d2
+	swap	%d2
+	bsr.s	putnum
+2:	move.b	#':',(%a0)+
+	move.w	%d2,%d0
+	bsr.s	put2
+	move.l	(%sp)+,%d2
+	rts
+
+| %d0.w below 100: as it is
+putnum:
+	cmp.w	#10,%d0
+	bcc.s	put2
+	add.b	#'0',%d0
+	move.b	%d0,(%a0)+
+	rts
+| %d0.w below 100: two digits
+put2:
+	and.l	#0xFFFF,%d0
+	divu	#10,%d0
+	add.b	#'0',%d0
+	move.b	%d0,(%a0)+
+	swap	%d0
+	add.b	#'0',%d0
+	move.b	%d0,(%a0)+
 	rts
 
 | Pauses, plays on, or plays again from the start once the video ended
@@ -1471,6 +1560,8 @@ pathbuf:	.space	PATHSIZE
 drawerbuf:	.space	PATHSIZE
 	.set	TITLESIZE, 256
 titlebuf:	.space	TITLESIZE
+timetitle1:	.space	TITLESIZE+32
+timetitle2:	.space	TITLESIZE+32
 	.set	BIGBUF, 262144
 	.set	SMALLBUF, 32768
 linebuf:	.space	48
