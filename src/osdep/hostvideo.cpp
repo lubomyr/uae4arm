@@ -83,7 +83,7 @@ extern "C" {
                                uaelib function 200 (4, 5) of a file the host
                                does not reach */
 
-#define HV_API_VERSION 3
+#define HV_API_VERSION 4     /* pictures too, for HostView */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -1287,6 +1287,177 @@ void mediacodec_source::render(uae_u8 *dst, int w, int h, int stride, int format
 	yuv_render(f, dst, w, h, stride, format, bt709, full_range);
 }
 
+/* A still picture, for HostView: Android's own image decoder (AImageDecoder,
+   Android 11 on) - JPEG, PNG, WebP, GIF, BMP, and HEIF and AVIF through
+   the device's video decoders. Looked up at run time, as the app starts on
+   older Androids too. */
+struct AImageDecoder;
+struct AImageDecoderHeaderInfo;
+#define ANDROID_BITMAP_FORMAT_RGBA_8888 1
+#define ANDROID_IMAGE_DECODER_SUCCESS 0
+
+static struct {
+	bool tried, found;
+	int (*createFromFd)(int, AImageDecoder **);
+	void (*del)(AImageDecoder *);
+	const AImageDecoderHeaderInfo *(*getHeaderInfo)(const AImageDecoder *);
+	int32_t (*getWidth)(const AImageDecoderHeaderInfo *);
+	int32_t (*getHeight)(const AImageDecoderHeaderInfo *);
+	const char *(*getMimeType)(const AImageDecoderHeaderInfo *);
+	int (*setFormat)(AImageDecoder *, int32_t);
+	int (*setTargetSize)(AImageDecoder *, int32_t, int32_t);
+	size_t (*getMinimumStride)(AImageDecoder *);
+	int (*decodeImage)(AImageDecoder *, void *, size_t, size_t);
+} imagedecoder;
+
+static bool find_imagedecoder(void)
+{
+	if (imagedecoder.tried)
+		return imagedecoder.found;
+	imagedecoder.tried = true;
+	void *lib = dlopen("libjnigraphics.so", RTLD_NOW);
+	if (!lib)
+		return false;
+#define FIND(f, name) *(void **)&imagedecoder.f = dlsym(lib, name)
+	FIND(createFromFd, "AImageDecoder_createFromFd");
+	FIND(del, "AImageDecoder_delete");
+	FIND(getHeaderInfo, "AImageDecoder_getHeaderInfo");
+	FIND(getWidth, "AImageDecoderHeaderInfo_getWidth");
+	FIND(getHeight, "AImageDecoderHeaderInfo_getHeight");
+	FIND(getMimeType, "AImageDecoderHeaderInfo_getMimeType");
+	FIND(setFormat, "AImageDecoder_setAndroidBitmapFormat");
+	FIND(setTargetSize, "AImageDecoder_setTargetSize");
+	FIND(getMinimumStride, "AImageDecoder_getMinimumStride");
+	FIND(decodeImage, "AImageDecoder_decodeImage");
+#undef FIND
+	imagedecoder.found = imagedecoder.createFromFd && imagedecoder.del && imagedecoder.getHeaderInfo &&
+		imagedecoder.getWidth && imagedecoder.getHeight && imagedecoder.getMimeType &&
+		imagedecoder.setFormat && imagedecoder.setTargetSize && imagedecoder.getMinimumStride &&
+		imagedecoder.decodeImage;
+	if (!imagedecoder.found)
+		write_log(_T("HostPlay: no AImageDecoder, which Android 11 brought\n"));
+	return imagedecoder.found;
+}
+
+/* Pictures larger than this, on their longer side, are decoded smaller:
+   still more than a screen, without hundreds of MB for a photo. */
+#define IMAGE_MAX_SIDE 2560
+
+class image_source : public video_source {
+public:
+	image_source() { dropped = 0; audio_rate = 0; duration = 0; codec[0] = 0; }
+	bool open(const char *path);
+	/* one picture: it falls due at once, and stays */
+	bool take(double t) { if (taken) return false; taken = true; return true; }
+	void render(uae_u8 *dst, int w, int h, int stride, int format);
+	bool ended() { return false; }
+	void seek(double t) { taken = false; }
+	int audio_read(uae_s16 (*out)[2], int n) { return 0; }
+
+private:
+	bool taken = false;
+	int pw = 0, ph = 0;
+	std::vector<uae_u8> rgba;
+};
+
+bool image_source::open(const char *path)
+{
+	if (!find_imagedecoder())
+		return false;
+	int fd = ::open(path, O_RDONLY);
+	if (fd < 0)
+		return false;
+	AImageDecoder *dec = NULL;
+	bool ok = imagedecoder.createFromFd(fd, &dec) == ANDROID_IMAGE_DECODER_SUCCESS && dec;
+	if (ok) {
+		const AImageDecoderHeaderInfo *info = imagedecoder.getHeaderInfo(dec);
+		width = imagedecoder.getWidth(info);
+		height = imagedecoder.getHeight(info);
+		const char *mime = imagedecoder.getMimeType(info);
+		snprintf(codec, sizeof codec, "%s", mime && !strncmp(mime, "image/", 6) ? mime + 6 : (mime ? mime : "?"));
+		pw = width;
+		ph = height;
+		if (pw > IMAGE_MAX_SIDE || ph > IMAGE_MAX_SIDE) {
+			if (pw >= ph) {
+				ph = (int)((int64_t)ph * IMAGE_MAX_SIDE / pw);
+				pw = IMAGE_MAX_SIDE;
+			} else {
+				pw = (int)((int64_t)pw * IMAGE_MAX_SIDE / ph);
+				ph = IMAGE_MAX_SIDE;
+			}
+			if (pw < 1)
+				pw = 1;
+			if (ph < 1)
+				ph = 1;
+		}
+		ok = width > 0 && height > 0 && width <= 0xffff && height <= 0xffff &&
+			imagedecoder.setFormat(dec, ANDROID_BITMAP_FORMAT_RGBA_8888) == ANDROID_IMAGE_DECODER_SUCCESS &&
+			((pw == width && ph == height) || imagedecoder.setTargetSize(dec, pw, ph) == ANDROID_IMAGE_DECODER_SUCCESS);
+	}
+	if (ok) {
+		size_t stride = imagedecoder.getMinimumStride(dec);
+		std::vector<uae_u8> buf(stride * ph);
+		ok = imagedecoder.decodeImage(dec, buf.data(), stride, buf.size()) == ANDROID_IMAGE_DECODER_SUCCESS;
+		if (ok) {
+			rgba.resize((size_t)pw * ph * 4);
+			for (int y = 0; y < ph; y++)
+				memcpy(&rgba[(size_t)y * pw * 4], &buf[(size_t)y * stride], (size_t)pw * 4);
+			write_log(_T("HostPlay: %s, %s %dx%d, decoded at %dx%d\n"), path, codec, width, height, pw, ph);
+		}
+	}
+	if (dec)
+		imagedecoder.del(dec);
+	close(fd);
+	return ok;
+}
+
+/* The picture scaled to w x h, bilinear, in a Picasso96 RGBFormat; what
+   is see-through lies on black. */
+void image_source::render(uae_u8 *dst, int w, int h, int stride, int format)
+{
+	if (rgba.empty()) {
+		clear(dst, w, h, stride, format);
+		return;
+	}
+	int bpp = format_bpp(format);
+	std::vector<int> xs(w), xf(w);
+	for (int x = 0; x < w; x++) {
+		int sx = (int)(((2 * x + 1) * (int64_t)pw * 128) / w) - 128;
+		if (sx < 0)
+			sx = 0;
+		xs[x] = sx >> 8;
+		xf[x] = sx & 255;
+		if (xs[x] >= pw - 1) {
+			xs[x] = pw - 1;
+			xf[x] = 0;
+		}
+	}
+	for (int y = 0; y < h; y++) {
+		int sy = (int)(((2 * y + 1) * (int64_t)ph * 128) / h) - 128;
+		if (sy < 0)
+			sy = 0;
+		int ys = sy >> 8, yf = sy & 255;
+		if (ys >= ph - 1) {
+			ys = ph - 1;
+			yf = 0;
+		}
+		const uae_u8 *l0 = &rgba[(size_t)ys * pw * 4];
+		const uae_u8 *l1 = yf ? l0 + (size_t)pw * 4 : l0;
+		uae_u8 *p = dst + (size_t)y * stride;
+		for (int x = 0; x < w; x++, p += bpp) {
+			const uae_u8 *a = l0 + xs[x] * 4, *b = l1 + xs[x] * 4;
+			int xw = xf[x], o = xw ? 4 : 0;
+			int c[3];
+			for (int k = 0; k < 3; k++) {
+				int top = a[k] * (256 - xw) + a[k + o] * xw;
+				int bot = b[k] * (256 - xw) + b[k + o] * xw;
+				c[k] = (top * (256 - yf) + bot * yf) >> 16;
+			}
+			put_pixel(p, format, c[0], c[1], c[2]);
+		}
+	}
+}
+
 #endif /* HOSTVIDEO_MEDIACODEC */
 
 /* A source for the file, or NULL. */
@@ -1300,9 +1471,16 @@ static video_source *open_source(const char *path)
 #if defined(HOSTVIDEO_FFMPEG) || defined(HOSTVIDEO_MEDIACODEC)
 	if (s->open(path))
 		return s;
-	write_log(_T("HostPlay: %s does not play\n"), path);
 	delete s;
 #endif
+#if defined(HOSTVIDEO_MEDIACODEC)
+	/* FFmpeg takes pictures as videos of a frame; MediaCodec does not */
+	image_source *i = new image_source();
+	if (i->open(path))
+		return i;
+	delete i;
+#endif
+	write_log(_T("HostPlay: %s does not play\n"), path);
 	return NULL;
 }
 

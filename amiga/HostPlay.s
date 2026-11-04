@@ -1,4 +1,7 @@
 | HostPlay - plays a video in a window of the Amiga, decoded by the host
+| HostView - shows a picture the same way: built from this source with
+|            HOSTVIEW set (see build.sh), without the slider, the play
+|            button and the sound
 |
 | Usage: HostPlay [<file>]
 | Without a file - from the Shell, or started from its icon - it asks for one
@@ -34,7 +37,11 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
+	.ifdef	HOSTVIEW
+	.set	HOSTVIDEO_VERSION, 4	| pictures
+	.else
 	.set	HOSTVIDEO_VERSION, 3	| the seek, the time, the copy
+	.endif
 	.set	HOSTSHOW, 200		| uaelib function that makes the copy
 
 	.set	P96BMA_BYTESPERPIXEL, 5
@@ -167,7 +174,7 @@ opendos:
 	move.l	%d0,INTUITIONBASE(%a0)
 	bne.s	openp96
 	lea	msg_nointuition(%pc),%a0
-	bsr.w	print
+	bsr.w	printmsg
 	bra.w	closeall
 openp96:
 	lea	p96name(%pc),%a1
@@ -263,7 +270,7 @@ nameend:
 	tst.b	1(%a1)
 	bne.s	havename
 	lea	msg_usage(%pc),%a0
-	bsr.w	report
+	bsr.w	reportraw
 	moveq	#0,%d7
 	bra.w	closeall
 
@@ -326,7 +333,11 @@ havegadgets:
 	lea	titlebuf(%pc),%a0
 	move.l	%a0,20(%a1)		| WA_Title
 	move.l	SCREEN(%a2),36(%a1)	| WA_PubScreen
+	.ifdef	HOSTVIEW
+	move.l	GADOPEN(%a2),44(%a1)	| WA_Gadgets
+	.else
 	move.l	GADSLIDER(%a2),44(%a1)	| WA_Gadgets
+	.endif
 | The zoom gadget's other size: the screen below its title bar
 	lea	zoombox(%pc),%a0
 	move.l	%a0,52(%a1)		| WA_Zoom
@@ -378,7 +389,9 @@ isrtg:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
+	.ifndef	HOSTVIEW
 	bsr.w	newslider
+	.endif
 
 | Waits for a frame, the window, or Ctrl-C
 mainloop:
@@ -401,6 +414,11 @@ mainloop:
 	moveq	#5,%d0			| the next frame, if one fell due
 	move.l	%d5,%d1
 	bsr.w	callhost
+	.ifdef	HOSTVIEW
+	cmp.l	#1,%d0			| the picture
+	bne.s	msgloop
+	bsr.w	draw
+	.else
 	cmp.l	#2,%d0			| the end of the video
 	bne.s	notend
 	lea	vars(%pc),%a2
@@ -412,6 +430,7 @@ notend:
 	beq.s	msgloop
 	bsr.w	draw
 	bsr.w	moveslider
+	.endif
 
 msgloop:
 	movea.l	4,%a6
@@ -451,6 +470,7 @@ notsize:
 	jsr	-366(%a6)		| EndRefresh
 	bra.s	msgloop
 notrefresh:
+	.ifndef	HOSTVIEW
 	cmp.l	#IDCMP_GADGETDOWN,%d2
 	bne.s	notdown
 	cmp.w	#GAD_SLIDER,38(%a2)	| gg_GadgetID
@@ -460,9 +480,11 @@ notrefresh:
 	bsr.w	sliderclick
 	bra.w	msgloop
 notdown:
+	.endif
 	cmp.l	#IDCMP_GADGETUP,%d2
 	bne.s	notup
 	move.w	38(%a2),%d0		| gg_GadgetID
+	.ifndef	HOSTVIEW
 	cmp.w	#GAD_SLIDER,%d0
 	bne.s	notslider
 	bsr.w	seekslider
@@ -473,6 +495,7 @@ notslider:
 	bsr.w	playpause
 	bra.w	msgloop
 notplay:
+	.endif
 	cmp.w	#GAD_OPEN,%d0
 	bne.w	msgloop
 	bsr.w	newfile
@@ -484,9 +507,11 @@ notup:
 	bne.w	msgloop
 	cmp.b	#27,%d3			| Esc
 	beq.s	quit
+	.ifndef	HOSTVIEW
 	cmp.b	#' ',%d3
 	bne.w	msgloop
 	bsr.w	playpause
+	.endif
 	bra.w	msgloop
 
 badformat:
@@ -748,6 +773,11 @@ progress:
 	beq.s	progress_ret
 	move.l	%d0,CPERCENT(%a2)
 	lea	linebuf(%pc),%a0
+	move.b	#13,(%a0)+		| CR: the line anew
+	lea	title(%pc),%a1
+5:	move.b	(%a1)+,(%a0)+
+	bne.s	5b
+	subq.l	#1,%a0
 	lea	msg_copying(%pc),%a1
 6:	move.b	(%a1)+,(%a0)+
 	bne.s	6b
@@ -901,7 +931,9 @@ newfile:
 	lea	titlebuf(%pc),%a1
 	movea.l	#-1,%a2			| the screen's title stays
 	jsr	-276(%a6)		| SetWindowTitles
+	.ifndef	HOSTVIEW
 	bsr.w	newslider
+	.endif
 | The window at the new video's size, where it fits on the screen; the
 | emulator gets the buffer anew now, and again once the size changed
 	bsr.w	fitsize
@@ -1055,6 +1087,7 @@ makegadgets:
 	bsr.w	getattr
 	move.l	%d0,OPENW(%a2)
 
+	.ifndef	HOSTVIEW
 | The slider: from the left border up to the buttons
 	lea	slidertags(%pc),%a0
 	moveq	#0,%d0
@@ -1107,6 +1140,21 @@ makegadgets:
 	move.l	IMGOPEN(%a2),20(%a0)	| GA_Image
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
 	move.l	GADPLAY(%a2),36(%a0)	| GA_Previous
+	.else
+| The button, left of the size gadget
+	lea	buttontags(%pc),%a0
+	moveq	#1,%d1
+	sub.l	SIZEH(%a2),%d1
+	move.l	%d1,12(%a0)		| GA_RelBottom
+	move.l	SIZEW(%a2),%d0
+	add.l	OPENW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	%d0,%d1
+	move.l	%d1,4(%a0)		| GA_RelRight
+	move.l	IMGOPEN(%a2),20(%a0)	| GA_Image
+	move.l	#GAD_OPEN,28(%a0)	| GA_ID
+	clr.l	36(%a0)			| GA_Previous: the first
+	.endif
 	movea.l	%a0,%a1
 	lea	buttonclass(%pc),%a0
 	bsr.w	newobject
@@ -1144,6 +1192,7 @@ getattr:
 	movea.l	(%sp)+,%a2
 	rts
 
+	.ifndef	HOSTVIEW
 | The slider for a new video: its length, at the start
 newslider:
 	movem.l	%d2-%d4/%a2,-(%sp)
@@ -1377,6 +1426,7 @@ playpause:
 	bsr.w	callhost
 2:	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
+	.endif
 
 | Makes the buffer for the inside of the window anew and hands it to the
 | emulator, which puts the frame of now into it. %d0: 1 done, 0 no memory,
@@ -1496,8 +1546,22 @@ isuaelib:
 isuaelib_end:
 	rts
 
-| Tells the message at %a0: in the Shell, or in a requester from Workbench
+| Tells the message at %a0: in the Shell after the tool's name, or in a
+| requester from Workbench
 report:
+	tst.l	%d6
+	bne.s	reportraw
+| The message at %a0 to the output, after the tool's name
+printmsg:
+	move.l	%a0,-(%sp)
+	lea	title(%pc),%a0
+	bsr.s	print
+	lea	colon(%pc),%a0
+	bsr.s	print
+	movea.l	(%sp)+,%a0
+	bra.s	print
+| The same without the name: the usage
+reportraw:
 	tst.l	%d6
 	beq.s	print
 	movem.l	%d2/%a2-%a3/%a6,-(%sp)
@@ -1623,8 +1687,22 @@ p96name:	.asciz	"Picasso96API.library"
 sysiclass:	.asciz	"sysiclass"
 propclass:	.asciz	"propgclass"
 buttonclass:	.asciz	"buttongclass"
+	.ifdef	HOSTVIEW
+title:		.asciz	"HostView"
+	.else
 title:		.asciz	"HostPlay"
+	.endif
+colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
+	.ifdef	HOSTVIEW
+pattern:	.asciz	"#?.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif)"
+msg_usage:	.ascii	"Usage: HostView [<file>]\n"
+		.ascii	"Shows a picture in a window, decoded by uae4arm; without a\n"
+		.ascii	"file it asks for one. In the bottom border: another file.\n"
+		.ascii	"Esc ends it. A file the host cannot reach, such as one inside\n"
+		.asciz	"a hardfile, goes over to it first; Ctrl-C stops that.\n"
+msg_cannot:	.asciz	"uae4arm cannot show this file\n"
+	.else
 pattern:	.asciz	"#?.(mp4|m4v|mkv|webm|avi|mov|mpg|mpeg|ts|wmv|flv|3gp|ogv)"
 msg_usage:	.ascii	"Usage: HostPlay [<file>]\n"
 		.ascii	"Plays a video in a window, decoded by uae4arm; without a file\n"
@@ -1632,22 +1710,23 @@ msg_usage:	.ascii	"Usage: HostPlay [<file>]\n"
 		.ascii	"play and pause, another file. Space pauses, Esc ends it.\n"
 		.ascii	"A file the host cannot reach, such as one inside a hardfile,\n"
 		.asciz	"goes over to it first; Ctrl-C stops that.\n"
-msg_nointuition: .asciz	"HostPlay: this needs intuition.library 39\n"
-msg_notfound:	.asciz	"HostPlay: no such file\n"
-msg_copying:	.asciz	"\rHostPlay: processing "
+msg_cannot:	.asciz	"uae4arm cannot play this file\n"
+	.endif
+msg_nointuition: .asciz	"this needs intuition.library 39\n"
+msg_notfound:	.asciz	"no such file\n"
+msg_copying:	.asciz	": processing "
 newline:	.asciz	"\n"
-msg_stopped:	.asciz	"HostPlay: stopped\n"
-msg_noread:	.asciz	"HostPlay: cannot read the file\n"
-msg_nocopy:	.asciz	"HostPlay: uae4arm could not take the file - it needs more room\n"
-msg_cannot:	.asciz	"HostPlay: uae4arm cannot play this file\n"
-msg_noasl:	.asciz	"HostPlay: no file requester - asl.library 36 or later is needed\n"
-msg_nop96:	.asciz	"HostPlay: this needs Picasso96API.library\n"
-msg_notuae:	.asciz	"HostPlay: this runs in uae4arm only\n"
-msg_oldemu:	.asciz	"HostPlay: this needs a newer uae4arm\n"
-msg_nosignal:	.asciz	"HostPlay: no free signal\n"
-msg_busy:	.asciz	"HostPlay: uae4arm plays two videos already\n"
-msg_nowindow:	.asciz	"HostPlay: the window does not open\n"
-msg_notrtg:	.asciz	"HostPlay: the Workbench screen has to be an RTG one\n"
-msg_format:	.asciz	"HostPlay: the screen needs 16 or 32 bits\n"
-msg_nomem:	.asciz	"HostPlay: not enough memory for the window\n"
+msg_stopped:	.asciz	"stopped\n"
+msg_noread:	.asciz	"cannot read the file\n"
+msg_nocopy:	.asciz	"uae4arm could not take the file - it needs more room\n"
+msg_noasl:	.asciz	"no file requester - asl.library 36 or later is needed\n"
+msg_nop96:	.asciz	"this needs Picasso96API.library\n"
+msg_notuae:	.asciz	"this runs in uae4arm only\n"
+msg_oldemu:	.asciz	"this needs a newer uae4arm\n"
+msg_nosignal:	.asciz	"no free signal\n"
+msg_busy:	.asciz	"uae4arm has two open already\n"
+msg_nowindow:	.asciz	"the window does not open\n"
+msg_notrtg:	.asciz	"the Workbench screen has to be an RTG one\n"
+msg_format:	.asciz	"the screen needs 16 or 32 bits\n"
+msg_nomem:	.asciz	"not enough memory for the window\n"
 		.even

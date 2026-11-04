@@ -11,6 +11,12 @@ for t in AndroidPlay AndroidBrowser AndroidView HostPlay; do
 	rm -f $t.o $t.bin
 done
 
+# HostView is HostPlay for pictures, from the same source
+m68k-linux-gnu-as -m68000 --defsym HOSTVIEW=1 -o HostView.o HostPlay.s
+m68k-linux-gnu-objcopy -O binary -j .text HostView.o HostView.bin
+python3 hunk.py HostView.bin ../amigaApps/HostView
+rm -f HostView.o HostView.bin
+
 # Libraries need their ROMTag relocated: linked at 0, with the relocations
 # kept (-q), which hunk.py turns into a HUNK_RELOC32
 mkdir -p ../amigaApps/Libs/MHI
