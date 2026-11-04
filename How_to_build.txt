@@ -138,7 +138,8 @@ Notes
 - Changes to QuarkTex NG's host belong in quarktexng/quarktexng.patch: a git
   diff of its Source folder against the Aminet release.
 - amiga/build.sh builds the Amiga tools (AndroidPlay, AndroidBrowser,
-  AndroidView, HostPlay) into amigaApps/, and the MHI driver
+  AndroidView, HostPlay, and HostView from HostPlay.s with HOSTVIEW set)
+  into amigaApps/, and the MHI driver
   mhiuae.library into amigaApps/Libs/MHI/, for LIBS:MHI/ of the Amiga.
 - HostPlay's video is decoded by MediaCodec on Android (libmediandk) and by
   FFmpeg on the Linux PC: LinuxBuild.sh needs libavformat-dev
