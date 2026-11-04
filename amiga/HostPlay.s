@@ -1,7 +1,9 @@
 | HostPlay - plays a video in a window of the Amiga, decoded by the host
 | HostView - shows a picture the same way: built from this source with
 |            HOSTVIEW set (see build.sh), without the slider, the play
-|            button and the sound
+|            button and the sound; buttons in the border, the cursor
+|            keys and space go to the pictures before and after it in
+|            its drawer, by name
 |
 | Usage: HostPlay [<file>]
 | Without a file - from the Shell, or started from its icon - it asks for one
@@ -54,6 +56,7 @@
 	.set	IDCMP_GADGETUP, 0x40
 	.set	IDCMP_CLOSEWINDOW, 0x200
 	.set	IDCMP_VANILLAKEY, 0x200000
+	.set	IDCMP_RAWKEY, 0x400
 
 	.set	GA_Left, 0x80030001
 	.set	GA_RelRight, 0x80030002
@@ -121,7 +124,16 @@
 	.set	CPERCENT, 140
 	.set	TITLETURN, 144		| which of the two titles with the time
 	.set	CLICKED, 148		| the second clicked on in the slider, or -1
-	.set	VARSIZE, 152
+	.set	IMGPREV, 152		| HostView: the image of the button back
+	.set	PREVW, 156
+	.set	VARSIZE, 160
+| HostView's buttons for the pictures after and before take the places of
+| the slider and the play button; the image of the play button is the
+| arrow of the one after
+	.set	GADPREV, GADSLIDER
+	.set	GADNEXT, GADPLAY
+	.set	GAD_PREV, 4
+	.set	GAD_NEXT, 5
 
 	.text
 	.globl	_start
@@ -334,7 +346,7 @@ havegadgets:
 	move.l	%a0,20(%a1)		| WA_Title
 	move.l	SCREEN(%a2),36(%a1)	| WA_PubScreen
 	.ifdef	HOSTVIEW
-	move.l	GADOPEN(%a2),44(%a1)	| WA_Gadgets
+	move.l	GADPREV(%a2),44(%a1)	| WA_Gadgets
 	.else
 	move.l	GADSLIDER(%a2),44(%a1)	| WA_Gadgets
 	.endif
@@ -495,6 +507,19 @@ notslider:
 	bsr.w	playpause
 	bra.w	msgloop
 notplay:
+	.else
+	moveq	#-1,%d1			| the picture before
+	cmp.w	#GAD_PREV,%d0
+	beq.s	1f
+	moveq	#1,%d1			| the one after
+	cmp.w	#GAD_NEXT,%d0
+	bne.s	2f
+1:	move.l	%d1,%d0
+	bsr.w	nextfile
+	tst.l	%d0
+	bmi.w	badformat
+	bra.w	msgloop
+2:
 	.endif
 	cmp.w	#GAD_OPEN,%d0
 	bne.w	msgloop
@@ -503,13 +528,33 @@ notplay:
 	bmi.w	badformat
 	bra.w	msgloop
 notup:
+	.ifdef	HOSTVIEW
+	cmp.l	#IDCMP_RAWKEY,%d2
+	bne.s	notraw
+	moveq	#1,%d0
+	cmp.w	#0x4E,%d3		| cursor right: the next picture
+	beq.s	1f
+	moveq	#-1,%d0
+	cmp.w	#0x4F,%d3		| cursor left: the one before
+	bne.w	msgloop
+1:	bsr.w	nextfile
+	tst.l	%d0
+	bmi.w	badformat
+	bra.w	msgloop
+notraw:
+	.endif
 	cmp.l	#IDCMP_VANILLAKEY,%d2
 	bne.w	msgloop
 	cmp.b	#27,%d3			| Esc
 	beq.s	quit
-	.ifndef	HOSTVIEW
 	cmp.b	#' ',%d3
 	bne.w	msgloop
+	.ifdef	HOSTVIEW
+	moveq	#1,%d0			| space: the next picture
+	bsr.w	nextfile
+	tst.l	%d0
+	bmi.w	badformat
+	.else
 	bsr.w	playpause
 	.endif
 	bra.w	msgloop
@@ -546,7 +591,11 @@ closeall:
 	movea.l	%d0,%a0
 	jsr	-642(%a6)		| DisposeObject
 4:	dbra	%d2,3b
-	move.l	DRAWINFO(%a2),%d0
+	move.l	IMGPREV(%a2),%d0
+	beq.s	4f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+4:	move.l	DRAWINFO(%a2),%d0
 	beq.s	5f
 	movea.l	%d0,%a1
 	movea.l	SCREEN(%a2),%a0
@@ -912,6 +961,11 @@ newfile:
 	tst.l	%d0
 	bmi.w	newfile_noasl
 	beq.w	newfile_end
+	bra.s	newfile_open
+| The file in NAME in the same window, as newfile
+opennew:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+newfile_open:
 	bsr.w	openvideo
 	tst.l	%d0
 	bpl.s	1f
@@ -986,6 +1040,185 @@ newfile_noasl:
 newfile_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
+
+	.ifdef	HOSTVIEW
+| The next picture of the drawer by name with %d0 1, or the one before with
+| -1; past the last the first again. %d0 as from newfile; nothing when the
+| picture is the only one.
+nextfile:
+	movem.l	%d2-%d4/%d6-%d7/%a2/%a6,-(%sp)
+	move.l	%d0,%d7			| the way
+	lea	vars(%pc),%a2
+	movea.l	%a5,%a6
+	lea	pattern(%pc),%a0
+	move.l	%a0,%d1
+	lea	patbuf(%pc),%a0
+	move.l	%a0,%d2
+	move.l	#PATBUFSIZE,%d3
+	jsr	-966(%a6)		| ParsePatternNoCase
+	tst.l	%d0
+	bmi.w	next_end
+| The picture shown: its name as the drawer has it, and the drawer
+	move.l	NAME(%a2),%d1
+	moveq	#-2,%d2			| ACCESS_READ
+	jsr	-84(%a6)		| Lock
+	move.l	%d0,%d4
+	beq.w	next_end
+	move.l	%d4,%d1
+	lea	fib(%pc),%a0
+	move.l	%a0,%d2
+	jsr	-102(%a6)		| Examine
+	lea	curname(%pc),%a1
+	clr.b	(%a1)
+	tst.l	%d0
+	beq.s	1f
+	lea	fib+8(%pc),%a0		| fib_FileName
+	bsr.w	copyname
+1:	move.l	%d4,%d1
+	jsr	-210(%a6)		| ParentDir
+	move.l	%d0,%d6			| the drawer
+	move.l	%d4,%d1
+	jsr	-90(%a6)		| UnLock
+	tst.l	%d6
+	beq.w	next_end
+	lea	bestname(%pc),%a0
+	clr.b	(%a0)
+	lea	endname(%pc),%a0
+	clr.b	(%a0)
+	move.l	%d6,%d1
+	lea	fib(%pc),%a0
+	move.l	%a0,%d2
+	jsr	-102(%a6)		| Examine: the drawer itself
+	tst.l	%d0
+	beq.w	next_unlock
+| Through the drawer: of the pictures, the nearest after the one shown the
+| way it goes, and the first that way, for past the end
+next_loop:
+	move.l	%d6,%d1
+	lea	fib(%pc),%a0
+	move.l	%a0,%d2
+	jsr	-108(%a6)		| ExNext
+	tst.l	%d0
+	beq.s	next_done
+	lea	fib(%pc),%a0
+	tst.l	4(%a0)			| fib_DirEntryType: above 0 for drawers
+	bgt.s	next_loop
+	lea	patbuf(%pc),%a0
+	move.l	%a0,%d1
+	lea	fib+8(%pc),%a0
+	move.l	%a0,%d2
+	jsr	-972(%a6)		| MatchPatternNoCase
+	tst.l	%d0
+	beq.s	next_loop
+	lea	fib+8(%pc),%a0
+	lea	curname(%pc),%a1
+	bsr.w	cmpname
+	ble.s	3f			| not after the one shown
+	lea	bestname(%pc),%a1
+	tst.b	(%a1)
+	beq.s	2f
+	lea	fib+8(%pc),%a0
+	bsr.w	cmpname
+	bge.s	3f			| not nearer
+2:	lea	fib+8(%pc),%a0
+	lea	bestname(%pc),%a1
+	bsr.w	copyname
+3:	lea	endname(%pc),%a1
+	tst.b	(%a1)
+	beq.s	4f
+	lea	fib+8(%pc),%a0
+	bsr.w	cmpname
+	bge.s	next_loop
+4:	lea	fib+8(%pc),%a0
+	lea	endname(%pc),%a1
+	bsr.w	copyname
+	bra.s	next_loop
+next_done:
+	lea	bestname(%pc),%a0
+	tst.b	(%a0)
+	bne.s	5f
+	lea	endname(%pc),%a0	| past the end: from the other end
+	tst.b	(%a0)
+	beq.s	next_unlock
+	lea	curname(%pc),%a1
+	bsr.w	cmpname
+	beq.s	next_unlock		| the only picture
+	lea	endname(%pc),%a0
+| Its path: the drawer's, and the name added
+5:	move.l	%a0,-(%sp)
+	move.l	%d6,%d1
+	lea	pathbuf(%pc),%a0
+	move.l	%a0,%d2
+	move.l	#PATHSIZE,%d3
+	jsr	-402(%a6)		| NameFromLock
+	move.l	(%sp)+,%d2
+	tst.l	%d0
+	beq.s	next_unlock
+	lea	pathbuf(%pc),%a0
+	move.l	%a0,%d1
+	move.l	#PATHSIZE,%d3
+	jsr	-882(%a6)		| AddPart
+	tst.l	%d0
+	beq.s	next_unlock
+	move.l	%d6,%d1
+	jsr	-90(%a6)		| UnLock
+	lea	pathbuf(%pc),%a0
+	move.l	%a0,NAME(%a2)
+	bsr.w	setdrawer
+	bsr.w	opennew
+	bra.s	next_ret
+next_unlock:
+	move.l	%d6,%d1
+	movea.l	%a5,%a6
+	jsr	-90(%a6)		| UnLock
+next_end:
+	moveq	#0,%d0
+next_ret:
+	movem.l	(%sp)+,%d2-%d4/%d6-%d7/%a2/%a6
+	rts
+
+| Compares the names at %a0 and %a1, letters in either case alike: %d0 and
+| the flags above 0 when the first comes after the second the way %d7 goes,
+| below 0 before, 0 when they are the same
+cmpname:
+	movem.l	%d1/%a0-%a1,-(%sp)
+1:	move.b	(%a0)+,%d0
+	cmp.b	#'A',%d0
+	bcs.s	2f
+	cmp.b	#'Z',%d0
+	bhi.s	2f
+	add.b	#32,%d0
+2:	move.b	(%a1)+,%d1
+	cmp.b	#'A',%d1
+	bcs.s	3f
+	cmp.b	#'Z',%d1
+	bhi.s	3f
+	add.b	#32,%d1
+3:	cmp.b	%d1,%d0
+	bne.s	4f
+	tst.b	%d0
+	bne.s	1b
+	moveq	#0,%d0
+	bra.s	6f
+4:	bhi.s	5f
+	moveq	#-1,%d0
+	bra.s	7f
+5:	moveq	#1,%d0
+7:	tst.l	%d7
+	bpl.s	6f
+	neg.l	%d0
+6:	movem.l	(%sp)+,%d1/%a0-%a1
+	tst.l	%d0
+	rts
+
+| Copies the name at %a0 to %a1, as much as a FileInfoBlock holds
+copyname:
+	moveq	#106,%d0
+1:	move.b	(%a0)+,(%a1)+
+	dbeq	%d0,1b
+	clr.b	-1(%a1)
+	rts
+	.endif
 
 | The video's size, made to fit the screen in the same shape: %d1 width,
 | %d2 height
@@ -1079,6 +1312,15 @@ makegadgets:
 	move.l	#IA_Width,%d0
 	bsr.w	getattr
 	move.l	%d0,PLAYW(%a2)
+	.ifdef	HOSTVIEW
+	moveq	#0x0A,%d0		| LEFTIMAGE: the picture before
+	bsr.w	newimage
+	move.l	%d0,IMGPREV(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,PREVW(%a2)
+	.endif
 	moveq	#0x0B,%d0		| UPIMAGE: another file
 	bsr.w	newimage
 	move.l	%d0,IMGOPEN(%a2)
@@ -1141,11 +1383,42 @@ makegadgets:
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
 	move.l	GADPLAY(%a2),36(%a0)	| GA_Previous
 	.else
-| The button, left of the size gadget
+| The buttons, left of the size gadget: back, on, another file
 	lea	buttontags(%pc),%a0
 	moveq	#1,%d1
 	sub.l	SIZEH(%a2),%d1
 	move.l	%d1,12(%a0)		| GA_RelBottom
+	move.l	SIZEW(%a2),%d0
+	add.l	OPENW(%a2),%d0
+	add.l	PLAYW(%a2),%d0
+	add.l	PREVW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	%d0,%d1
+	move.l	%d1,4(%a0)		| GA_RelRight
+	move.l	IMGPREV(%a2),20(%a0)	| GA_Image
+	move.l	#GAD_PREV,28(%a0)	| GA_ID
+	clr.l	36(%a0)			| GA_Previous: the first
+	movea.l	%a0,%a1
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADPREV(%a2)
+	beq.w	makegadgets_end
+	lea	buttontags(%pc),%a0
+	move.l	SIZEW(%a2),%d0
+	add.l	OPENW(%a2),%d0
+	add.l	PLAYW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	%d0,%d1
+	move.l	%d1,4(%a0)		| GA_RelRight
+	move.l	IMGPLAY(%a2),20(%a0)	| GA_Image
+	move.l	#GAD_NEXT,28(%a0)	| GA_ID
+	move.l	GADPREV(%a2),36(%a0)	| GA_Previous
+	movea.l	%a0,%a1
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADNEXT(%a2)
+	beq.w	makegadgets_end
+	lea	buttontags(%pc),%a0
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
 	moveq	#1,%d1
@@ -1153,7 +1426,7 @@ makegadgets:
 	move.l	%d1,4(%a0)		| GA_RelRight
 	move.l	IMGOPEN(%a2),20(%a0)	| GA_Image
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
-	clr.l	36(%a0)			| GA_Previous: the first
+	move.l	GADNEXT(%a2),36(%a0)	| GA_Previous
 	.endif
 	movea.l	%a0,%a1
 	lea	buttonclass(%pc),%a0
@@ -1621,7 +1894,7 @@ asltags:	.long	0x80080001, 0	| ASLFR_TitleText
 wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x80000077, 0	| WA_InnerHeight
 		.long	0x8000006E, 0	| WA_Title
-		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_GADGETDOWN+IDCMP_GADGETUP+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY
+		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_GADGETDOWN+IDCMP_GADGETUP+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY
 		.long	0x80000079, 0	| WA_PubScreen
 		.long	0x8000006C, 0	| WA_Gadgets
 		.long	0x8000007D, 0	| WA_Zoom
@@ -1671,6 +1944,15 @@ proptags:	.long	PGA_Total, 0
 
 	.set	PATHSIZE, 512
 pathbuf:	.space	PATHSIZE
+	.ifdef	HOSTVIEW
+	.set	PATBUFSIZE, 256
+patbuf:		.space	PATBUFSIZE
+curname:	.space	108
+bestname:	.space	108
+endname:	.space	108
+	.balign	4
+fib:		.space	260		| struct FileInfoBlock
+	.endif
 drawerbuf:	.space	PATHSIZE
 	.set	TITLESIZE, 256
 titlebuf:	.space	TITLESIZE
@@ -1698,9 +1980,12 @@ okgadget:	.asciz	"Ok"
 pattern:	.asciz	"#?.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif)"
 msg_usage:	.ascii	"Usage: HostView [<file>]\n"
 		.ascii	"Shows a picture in a window, decoded by uae4arm; without a\n"
-		.ascii	"file it asks for one. In the bottom border: another file.\n"
-		.ascii	"Esc ends it. A file the host cannot reach, such as one inside\n"
-		.asciz	"a hardfile, goes over to it first; Ctrl-C stops that.\n"
+		.ascii	"file it asks for one. In the bottom border: the pictures\n"
+		.ascii	"before and after it in its drawer, another file. Cursor\n"
+		.ascii	"right or space: the next one, cursor left: the one before.\n"
+		.ascii	"Esc ends it. A file the host cannot\n"
+		.ascii	"reach, such as one inside a hardfile, goes over to it first;\n"
+		.asciz	"Ctrl-C stops that.\n"
 msg_cannot:	.asciz	"uae4arm cannot show this file\n"
 	.else
 pattern:	.asciz	"#?.(mp4|m4v|mkv|webm|avi|mov|mpg|mpeg|ts|wmv|flv|3gp|ogv)"
