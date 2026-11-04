@@ -996,13 +996,21 @@ int handle_msgpump (void)
                with it. A mouse starts in the corner and sits on x = 0, so
                every stroke was turned into "up and left" no matter which way
                it was actually going, and the pointer never left the corner. */
+    				/* The edges are those of the SDL screen: on an RTG screen, or
+    				   interlaced, it is not the size of the Amiga's native screen
+    				   in the configuration, and a cursor pinned against the right
+    				   or bottom edge stopped the Amiga pointer wherever it was - an
+    				   invisible wall, once the two had drifted apart. */
+    				SDL_Surface *screen = SDL_GetVideoSurface();
+    				int maxx = screen ? screen->w - 1 : currprefs.gfx_monitor.gfx_size.width - 1;
+    				int maxy = screen ? screen->h - 1 : currprefs.gfx_monitor.gfx_size.height - 1;
     				if(x == 0 && rEvent.motion.x == 0)
     					x = -4;
     				if(y == 0 && rEvent.motion.y == 0)
     					y = -4;
-    				if(x == 0 && rEvent.motion.x == currprefs.gfx_monitor.gfx_size.width - 1)
+    				if(x == 0 && rEvent.motion.x >= maxx)
     					x = 4;
-    				if(y == 0 && rEvent.motion.y == currprefs.gfx_monitor.gfx_size.height - 1)
+    				if(y == 0 && rEvent.motion.y >= maxy)
     					y = 4;
 
   				  setmousestate(sdlmouse, 0, x * mouseScale, 0);
