@@ -374,6 +374,31 @@ void onscreen_screen_size(int *w, int *h)
   }
 }
 
+// The shape a screen of w x h pixels is seen in, on the device: with the 4:3
+// setting one narrower than the device keeps its own shape, and a wider one is
+// squeezed to 4:3 (see SDL_androidvideo-1.2.c); without it every one fills the
+// device.
+void rtg_shown_shape(int w, int h, int *shown_w, int *shown_h)
+{
+  int screen_w, screen_h;
+
+  onscreen_screen_size(&screen_w, &screen_h);
+  if (screen_w <= 0 || screen_h <= 0) {
+    screen_w = w;
+    screen_h = h;
+  }
+  if (!onscreen_keeps_aspect()) {
+    *shown_w = screen_w;
+    *shown_h = screen_h;
+  } else if ((int64_t)w * screen_h < (int64_t)h * screen_w) {
+    *shown_w = (int)((int64_t)w * screen_h / h);
+    *shown_h = screen_h;
+  } else {
+    *shown_w = screen_h * 4 / 3;
+    *shown_h = screen_h;
+  }
+}
+
 // The default layout: the pad in the bottom left corner, the six buttons in
 // two columns of three in the bottom right. A stored position is a share of
 // the screen, but the buttons are square, so how far from the right edge the
@@ -455,6 +480,13 @@ void update_onscreen()
 	  SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_4, changed_prefs.onScreen_button5);
 	  SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5, changed_prefs.onScreen_button6);
 	}
+}
+#else
+// A window on the PC: a screen is seen the size it is
+void rtg_shown_shape(int w, int h, int *shown_w, int *shown_h)
+{
+  *shown_w = w;
+  *shown_h = h;
 }
 #endif
 

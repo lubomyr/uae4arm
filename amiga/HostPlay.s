@@ -3,7 +3,13 @@
 |            HOSTVIEW set (see build.sh), without the slider, the play
 |            button and the sound; buttons in the border, the cursor
 |            keys and space go to the pictures before and after it in
-|            its drawer, by name
+|            its drawer, by name. A button beside them, the key F, or the
+|            parameter FULLSCREEN show the picture on a screen of its own:
+|            an RTG mode near its size in the proportions of the Workbench,
+|            the emulator keeping its shape. There the left button goes to
+|            the next picture, cursor left to the one before; the right
+|            button or Esc go back to the window, or end it after
+|            FULLSCREEN, and F changes over.
 |
 | Usage: HostPlay [<file>]
 | Without a file - from the Shell, or started from its icon - it asks for one
@@ -40,7 +46,7 @@
 
 	.set	HOSTVIDEO, 202		| uaelib function
 	.ifdef	HOSTVIEW
-	.set	HOSTVIDEO_VERSION, 4	| pictures
+	.set	HOSTVIDEO_VERSION, 5	| pictures, on a screen of their own
 	.else
 	.set	HOSTVIDEO_VERSION, 3	| the seek, the time, the copy
 	.endif
@@ -52,6 +58,7 @@
 
 	.set	IDCMP_NEWSIZE, 0x2
 	.set	IDCMP_REFRESHWINDOW, 0x4
+	.set	IDCMP_MOUSEBUTTONS, 0x8
 	.set	IDCMP_GADGETDOWN, 0x20
 	.set	IDCMP_GADGETUP, 0x40
 	.set	IDCMP_CLOSEWINDOW, 0x200
@@ -126,7 +133,14 @@
 	.set	CLICKED, 148		| the second clicked on in the slider, or -1
 	.set	IMGPREV, 152		| HostView: the image of the button back
 	.set	PREVW, 156
-	.set	VARSIZE, 160
+	.set	IMGFULL, 160		| HostView: the button for the full screen,
+	.set	FULLW, 164
+	.set	GADFULL, 168
+	.set	GFXBASE, 172
+	.set	FULLSCR, 176		| the screen of its own, while it is shown
+	.set	WBWIN, 180		| and the window on Workbench behind it
+	.set	STARTFULL, 184		| the parameter FULLSCREEN
+	.set	VARSIZE, 188
 | HostView's buttons for the pictures after and before take the places of
 | the slider and the play button; the image of the play button is the
 | arrow of the one after
@@ -134,6 +148,7 @@
 	.set	GADNEXT, GADPLAY
 	.set	GAD_PREV, 4
 	.set	GAD_NEXT, 5
+	.set	GAD_FULL, 6
 
 	.text
 	.globl	_start
@@ -239,7 +254,7 @@ newenough:
 | From the Shell: the first argument, in quotes if it has spaces
 shellargs:
 	tst.l	%d3
-	beq.w	askfirst
+	beq.w	shellend
 	move.b	(%a2),%d0
 	cmp.b	#' ',%d0
 	beq.s	nextspace
@@ -251,7 +266,7 @@ nextspace:
 	bra.s	shellargs
 namestart:
 	cmp.b	#10,%d0
-	beq.w	askfirst
+	beq.w	shellend
 	moveq	#' ',%d1		| what ends the name
 	cmp.b	#'"',%d0
 	bne.s	nameset
@@ -274,17 +289,42 @@ nameloop:
 nameend:
 	clr.b	(%a2)
 	cmpa.l	%a1,%a2
-	beq.s	askfirst
+	beq.w	askfirst
+	.ifdef	HOSTVIEW
+| Any order: the file, and FULLSCREEN
+	tst.l	%d3
+	beq.s	1f
+	addq.l	#1,%a2
+	subq.l	#1,%d3
+1:	bsr.w	isfullword
+	bne.s	2f
+	lea	vars(%pc),%a0
+	move.l	#1,STARTFULL(%a0)
+	bra.w	shellargs
+2:
+	.endif
 	lea	vars(%pc),%a0
 	move.l	%a1,NAME(%a0)
 	cmp.b	#'?',(%a1)		| "HostPlay ?"
-	bne.s	havename
+	bne.s	gotname
 	tst.b	1(%a1)
-	bne.s	havename
+	bne.s	gotname
 	lea	msg_usage(%pc),%a0
 	bsr.w	reportraw
 	moveq	#0,%d7
 	bra.w	closeall
+gotname:
+	.ifdef	HOSTVIEW
+	bra.w	shellargs
+	.else
+	bra.s	havename
+	.endif
+shellend:
+	.ifdef	HOSTVIEW
+	lea	vars(%pc),%a0
+	tst.l	NAME(%a0)
+	bne.s	havename
+	.endif
 
 askfirst:
 	bsr.w	askfile
@@ -375,27 +415,12 @@ havegadgets:
 
 | The screen's bitmap: an RTG one, in a format the host makes
 havewindow:
-	lea	vars(%pc),%a2
-	movea.l	P96BASE(%a2),%a6
-	movea.l	50(%a3),%a0		| wd_RPort
-	movea.l	4(%a0),%a0		| rp_BitMap
-	moveq	#P96BMA_ISP96,%d0
-	jsr	-42(%a6)		| p96GetBitMapAttr
+	bsr.w	screenformat
 	tst.l	%d0
 	bne.s	isrtg
 	lea	msg_notrtg(%pc),%a0
 	bra.w	failed
 isrtg:
-	movea.l	50(%a3),%a0
-	movea.l	4(%a0),%a0
-	moveq	#P96BMA_RGBFORMAT,%d0
-	jsr	-42(%a6)		| p96GetBitMapAttr
-	move.l	%d0,RGBFORMAT(%a2)
-	movea.l	50(%a3),%a0
-	movea.l	4(%a0),%a0
-	moveq	#P96BMA_BYTESPERPIXEL,%d0
-	jsr	-42(%a6)		| p96GetBitMapAttr
-	move.l	%d0,BPP(%a2)
 	bsr.w	target
 	tst.l	%d0
 	bmi.w	badformat
@@ -403,6 +428,11 @@ isrtg:
 	bsr.w	draw
 	.ifndef	HOSTVIEW
 	bsr.w	newslider
+	.else
+	lea	vars(%pc),%a2
+	tst.l	STARTFULL(%a2)
+	beq.s	mainloop
+	bsr.w	fullswitch
 	.endif
 
 | Waits for a frame, the window, or Ctrl-C
@@ -519,7 +549,8 @@ notplay:
 	tst.l	%d0
 	bmi.w	badformat
 	bra.w	msgloop
-2:
+2:	cmp.w	#GAD_FULL,%d0
+	beq.w	doswitch
 	.endif
 	cmp.w	#GAD_OPEN,%d0
 	bne.w	msgloop
@@ -542,11 +573,42 @@ notup:
 	bmi.w	badformat
 	bra.w	msgloop
 notraw:
+| On the screen of its own: the left button goes to the next picture, the
+| right one back, as Esc
+	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
+	bne.s	notmouse
+	cmp.w	#0xE9,%d3		| MENUUP
+	beq.s	goback
+	cmp.w	#0xE8,%d3		| SELECTUP
+	bne.w	msgloop
+	moveq	#1,%d0
+	bsr.w	nextfile
+	tst.l	%d0
+	bmi.w	badformat
+	bra.w	msgloop
+notmouse:
 	.endif
 	cmp.l	#IDCMP_VANILLAKEY,%d2
 	bne.w	msgloop
 	cmp.b	#27,%d3			| Esc
+	.ifdef	HOSTVIEW
+	bne.s	1f
+| Back: to the window it came from; started on the screen, or in the window,
+| it ends
+goback:
+	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)
+	beq.w	quit
+	tst.l	STARTFULL(%a2)
+	bne.w	quit
+	bra.w	doswitch
+1:	move.b	%d3,%d0
+	and.b	#0xDF,%d0
+	cmp.b	#'F',%d0
+	beq.w	doswitch
+	.else
 	beq.s	quit
+	.endif
 	cmp.b	#' ',%d3
 	bne.w	msgloop
 	.ifdef	HOSTVIEW
@@ -558,6 +620,15 @@ notraw:
 	bsr.w	playpause
 	.endif
 	bra.w	msgloop
+
+	.ifdef	HOSTVIEW
+doswitch:
+	bsr.w	fullswitch
+	tst.l	%d0
+	bmi.s	badformat
+	beq.s	nomem
+	bra.w	msgloop
+	.endif
 
 badformat:
 	lea	msg_format(%pc),%a0
@@ -581,6 +652,12 @@ closeall:
 	movea.l	INTUITIONBASE(%a2),%a6
 	move.l	%a3,%d0
 	beq.s	2f
+	.ifdef	HOSTVIEW
+	tst.l	FULLSCR(%a2)
+	beq.s	1f
+	bsr.w	closefull
+1:
+	.endif
 	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
 | The gadgets, then the images, now that no window has them
@@ -592,6 +669,14 @@ closeall:
 	jsr	-642(%a6)		| DisposeObject
 4:	dbra	%d2,3b
 	move.l	IMGPREV(%a2),%d0
+	beq.s	4f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+4:	move.l	GADFULL(%a2),%d0
+	beq.s	4f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+4:	move.l	IMGFULL(%a2),%d0
 	beq.s	4f
 	movea.l	%d0,%a0
 	jsr	-642(%a6)		| DisposeObject
@@ -624,7 +709,11 @@ closeall:
 	beq.s	10f
 	movea.l	%d0,%a1
 	jsr	-414(%a6)		| CloseLibrary
-10:	move.l	INTUITIONBASE(%a2),%d0
+10:	move.l	GFXBASE(%a2),%d0
+	beq.s	12f
+	movea.l	%d0,%a1
+	jsr	-414(%a6)		| CloseLibrary
+12:	move.l	INTUITIONBASE(%a2),%d0
 	beq.s	11f
 	movea.l	%d0,%a1
 	jsr	-414(%a6)		| CloseLibrary
@@ -979,17 +1068,40 @@ newfile_open:
 	move.l	(%sp)+,%d5
 	lea	vars(%pc),%a2
 	clr.l	ATEND(%a2)
+	.ifdef	HOSTVIEW
+	tst.l	FULLSCR(%a2)		| the window waits until it is back
+	bne.s	1f
+	.endif
+	bsr.w	fitwindow
+	.ifndef	HOSTVIEW
+	bsr.w	newslider
+	.endif
+1:	bsr.w	target
+	tst.l	%d0
+	bmi.s	newfile_end
+	bsr.w	draw
+	moveq	#0,%d0
+	bra.s	newfile_end
+newfile_noasl:
+	lea	msg_noasl(%pc),%a0
+	bsr.w	report
+	moveq	#0,%d0
+newfile_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The title of the file now, and the window at its size, where that fits on
+| the screen; the emulator gets the buffer anew after this, and again once
+| the size changed
+fitwindow:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
 	bsr.w	maketitle
+	lea	vars(%pc),%a2
 	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	%a3,%a0
 	lea	titlebuf(%pc),%a1
 	movea.l	#-1,%a2			| the screen's title stays
 	jsr	-276(%a6)		| SetWindowTitles
-	.ifndef	HOSTVIEW
-	bsr.w	newslider
-	.endif
-| The window at the new video's size, where it fits on the screen; the
-| emulator gets the buffer anew now, and again once the size changed
 	bsr.w	fitsize
 	moveq	#0,%d0
 	move.b	54(%a3),%d0		| wd_BorderLeft
@@ -1027,21 +1139,212 @@ newfile_open:
 5:	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	%a3,%a0
 	jsr	-486(%a6)		| ChangeWindowBox
-	bsr.w	target
-	tst.l	%d0
-	bmi.s	newfile_end
-	bsr.w	draw
-	moveq	#0,%d0
-	bra.s	newfile_end
-newfile_noasl:
-	lea	msg_noasl(%pc),%a0
-	bsr.w	report
-	moveq	#0,%d0
-newfile_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
 
 	.ifdef	HOSTVIEW
+| To the screen of its own, or back to the window. %d0 as from target; 1 too
+| when the screen does not open, which it tells, and the window stays.
+fullswitch:
+	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)
+	bne.w	fulloff
+| The sizes the emulator names, the best first, until a screen opens
+fullon:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	tst.l	GFXBASE(%a2)
+	bne.s	1f
+	movea.l	4,%a6
+	lea	gfxname(%pc),%a1
+	moveq	#39,%d0
+	jsr	-552(%a6)		| OpenLibrary
+	move.l	%d0,GFXBASE(%a2)
+	beq.w	fullon_no
+1:	moveq	#0,%d2			| which size
+	movea.l	SCREEN(%a2),%a0
+	move.w	12(%a0),%d3		| sc_Width
+	swap	%d3
+	move.w	14(%a0),%d3		| sc_Height
+fullon_next:
+	moveq	#12,%d0			| HV_CMD_MODE
+	move.l	%d5,%d1
+	bsr.w	callhost
+	move.l	%d0,%d4
+	beq.w	fullon_no
+	bsr.w	findmode
+	cmp.l	#-1,%d0
+	beq.s	fullon_again
+	bsr.w	openfull
+	bne.s	fullon_open
+fullon_again:
+	addq.l	#1,%d2
+	bra.s	fullon_next
+fullon_open:
+	lea	vars(%pc),%a2
+	move.l	%a3,WBWIN(%a2)
+	movea.l	%d0,%a3
+	bsr.w	screenformat
+	moveq	#13,%d0			| HV_CMD_FULLSCREEN
+	move.l	%d5,%d1
+	moveq	#1,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	bsr.w	target
+	tst.l	%d0
+	ble.s	fullon_back
+	bsr.w	draw
+	moveq	#1,%d0
+	bra.s	fullon_end
+fullon_back:
+	bsr.w	fulloff
+fullon_no:
+	lea	msg_nofull(%pc),%a0
+	bsr.w	report
+	moveq	#1,%d0
+fullon_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Back to the window, at the size of the picture of now
+fulloff:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	bsr.w	closefull
+	moveq	#13,%d0			| HV_CMD_FULLSCREEN
+	move.l	%d5,%d1
+	moveq	#0,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	bsr.w	screenformat
+	bsr.w	fitwindow
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	jsr	-450(%a6)		| ActivateWindow
+	bsr.w	target
+	tst.l	%d0
+	ble.s	1f
+	bsr.w	draw
+	moveq	#1,%d0
+1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Closes the window and screen of its own; %a3 the one on Workbench again
+closefull:
+	movem.l	%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	jsr	-72(%a6)		| CloseWindow
+	movea.l	WBWIN(%a2),%a3
+	movea.l	FULLSCR(%a2),%a0
+	clr.l	FULLSCR(%a2)
+	jsr	-66(%a6)		| CloseScreen
+	movem.l	(%sp)+,%a2/%a6
+	rts
+
+| The mode of the size %d0 (width << 16 | height), of the most bits above 8
+| it comes in. Names come from the display database, so it needs nothing of
+| Picasso96. %d0 the ModeID or -1, %d1 its depth.
+findmode:
+	movem.l	%d2-%d5/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	GFXBASE(%a2),%a6
+	move.l	%d0,%d4			| the size
+	moveq	#-1,%d2			| INVALID_ID: from the first
+	moveq	#-1,%d3			| the best yet
+	moveq	#0,%d5			| its depth
+1:	move.l	%d2,%d0
+	jsr	-732(%a6)		| NextDisplayInfo
+	move.l	%d0,%d2
+	cmp.l	#-1,%d0
+	beq.s	2f
+	suba.l	%a0,%a0
+	lea	diminfo(%pc),%a1
+	moveq	#88,%d0			| sizeof(struct DimensionInfo)
+	move.l	#0x80001000,%d1		| DTAG_DIMS
+	jsr	-756(%a6)		| GetDisplayInfoData
+	tst.l	%d0
+	beq.s	1b
+	lea	diminfo(%pc),%a0
+	moveq	#0,%d0
+	move.w	16(%a0),%d0		| dim_MaxDepth
+	cmp.l	#15,%d0
+	bcs.s	1b
+	cmp.l	%d5,%d0
+	bls.s	1b
+	move.w	30(%a0),%d1		| Nominal.MaxX
+	sub.w	26(%a0),%d1
+	addq.w	#1,%d1
+	swap	%d1
+	move.w	32(%a0),%d1		| Nominal.MaxY
+	sub.w	28(%a0),%d1
+	addq.w	#1,%d1
+	cmp.l	%d4,%d1
+	bne.s	1b
+	move.l	%d2,%d3
+	move.l	%d0,%d5
+	bra.s	1b
+2:	move.l	%d3,%d0
+	move.l	%d5,%d1
+	movem.l	(%sp)+,%d2-%d5/%a2/%a6
+	rts
+
+| A screen of the mode %d0 of depth %d1 and the size %d4, with a window over
+| all of it. %d0: the window, or 0 with Z set; FULLSCR has the screen.
+openfull:
+	movem.l	%d2-%d3/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	moveq	#0,%d2
+	move.w	%d4,%d2			| height
+	move.l	%d4,%d3
+	clr.w	%d3
+	swap	%d3			| width
+	lea	fullscrtags(%pc),%a1
+	move.l	%d0,4(%a1)		| SA_DisplayID
+	move.l	%d3,12(%a1)		| SA_Width
+	move.l	%d2,20(%a1)		| SA_Height
+	move.l	%d1,28(%a1)		| SA_Depth
+	suba.l	%a0,%a0
+	jsr	-612(%a6)		| OpenScreenTagList
+	move.l	%d0,FULLSCR(%a2)
+	beq.s	1f
+	lea	fullwintags(%pc),%a1
+	move.l	%d3,4(%a1)		| WA_Width
+	move.l	%d2,12(%a1)		| WA_Height
+	move.l	%d0,20(%a1)		| WA_CustomScreen
+	suba.l	%a0,%a0
+	jsr	-606(%a6)		| OpenWindowTagList
+	tst.l	%d0
+	bne.s	1f
+	movea.l	FULLSCR(%a2),%a0
+	clr.l	FULLSCR(%a2)
+	jsr	-66(%a6)		| CloseScreen
+	moveq	#0,%d0
+1:	movem.l	(%sp)+,%d2-%d3/%a2/%a6
+	tst.l	%d0
+	rts
+
+| Z set if the name at %a1 is the word FULLSCREEN, in any case
+isfullword:
+	move.l	%a1,-(%sp)
+	lea	fullword(%pc),%a0
+1:	move.b	(%a1)+,%d0
+	cmp.b	#'a',%d0
+	bcs.s	2f
+	cmp.b	#'z',%d0
+	bhi.s	2f
+	sub.b	#32,%d0
+2:	cmp.b	(%a0)+,%d0
+	bne.s	3f
+	tst.b	%d0
+	bne.s	1b
+3:	movea.l	(%sp)+,%a1
+	rts
+
 | The next picture of the drawer by name with %d0 1, or the one before with
 | -1; past the last the first again. %d0 as from newfile; nothing when the
 | picture is the only one.
@@ -1279,6 +1582,31 @@ maketitle:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
 
+| What the window's screen is, for the buffer: %d0 0 when it is no RTG one
+screenformat:
+	movem.l	%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	P96BASE(%a2),%a6
+	movea.l	50(%a3),%a0		| wd_RPort
+	movea.l	4(%a0),%a0		| rp_BitMap
+	moveq	#P96BMA_ISP96,%d0
+	jsr	-42(%a6)		| p96GetBitMapAttr
+	tst.l	%d0
+	beq.s	1f
+	movea.l	50(%a3),%a0
+	movea.l	4(%a0),%a0
+	moveq	#P96BMA_RGBFORMAT,%d0
+	jsr	-42(%a6)		| p96GetBitMapAttr
+	move.l	%d0,RGBFORMAT(%a2)
+	movea.l	50(%a3),%a0
+	movea.l	4(%a0),%a0
+	moveq	#P96BMA_BYTESPERPIXEL,%d0
+	jsr	-42(%a6)		| p96GetBitMapAttr
+	move.l	%d0,BPP(%a2)
+	moveq	#1,%d0
+1:	movem.l	(%sp)+,%a2/%a6
+	rts
+
 | The images and gadgets of the bottom border, linked in the order of the
 | vars, on the screen in SCREEN with its DrawInfo. %d0: 0 when one did not
 | come.
@@ -1328,6 +1656,19 @@ makegadgets:
 	move.l	#IA_Width,%d0
 	bsr.w	getattr
 	move.l	%d0,OPENW(%a2)
+	.ifdef	HOSTVIEW
+| The look of the zoom gadget, at the height of the border
+	lea	zoomimagetags(%pc),%a1
+	move.l	DRAWINFO(%a2),4(%a1)	| SYSIA_DrawInfo
+	move.l	%d2,12(%a1)		| SYSIA_Size
+	move.l	PLAYW(%a2),28(%a1)	| IA_Width
+	move.l	SIZEH(%a2),36(%a1)	| IA_Height
+	lea	sysiclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,IMGFULL(%a2)
+	beq.w	makegadgets_end
+	move.l	PLAYW(%a2),FULLW(%a2)
+	.endif
 
 	.ifndef	HOSTVIEW
 | The slider: from the left border up to the buttons
@@ -1383,13 +1724,14 @@ makegadgets:
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
 	move.l	GADPLAY(%a2),36(%a0)	| GA_Previous
 	.else
-| The buttons, left of the size gadget: back, on, another file
+| The buttons, left of the size gadget: back, on, full screen, another file
 	lea	buttontags(%pc),%a0
 	moveq	#1,%d1
 	sub.l	SIZEH(%a2),%d1
 	move.l	%d1,12(%a0)		| GA_RelBottom
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
+	add.l	FULLW(%a2),%d0
 	add.l	PLAYW(%a2),%d0
 	add.l	PREVW(%a2),%d0
 	moveq	#1,%d1
@@ -1406,6 +1748,7 @@ makegadgets:
 	lea	buttontags(%pc),%a0
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
+	add.l	FULLW(%a2),%d0
 	add.l	PLAYW(%a2),%d0
 	moveq	#1,%d1
 	sub.l	%d0,%d1
@@ -1421,12 +1764,27 @@ makegadgets:
 	lea	buttontags(%pc),%a0
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
+	add.l	FULLW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	%d0,%d1
+	move.l	%d1,4(%a0)		| GA_RelRight
+	move.l	IMGFULL(%a2),20(%a0)	| GA_Image
+	move.l	#GAD_FULL,28(%a0)	| GA_ID
+	move.l	GADNEXT(%a2),36(%a0)	| GA_Previous
+	movea.l	%a0,%a1
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADFULL(%a2)
+	beq.w	makegadgets_end
+	lea	buttontags(%pc),%a0
+	move.l	SIZEW(%a2),%d0
+	add.l	OPENW(%a2),%d0
 	moveq	#1,%d1
 	sub.l	%d0,%d1
 	move.l	%d1,4(%a0)		| GA_RelRight
 	move.l	IMGOPEN(%a2),20(%a0)	| GA_Image
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
-	move.l	GADNEXT(%a2),36(%a0)	| GA_Previous
+	move.l	GADFULL(%a2),36(%a0)	| GA_Previous
 	.endif
 	movea.l	%a0,%a1
 	lea	buttonclass(%pc),%a0
@@ -1914,6 +2272,33 @@ imagetags:	.long	SYSIA_DrawInfo, 0
 		.long	SYSIA_Size, 0
 		.long	SYSIA_Which, 0
 		.long	0
+	.ifdef	HOSTVIEW
+zoomimagetags:	.long	SYSIA_DrawInfo, 0
+		.long	SYSIA_Size, 0
+		.long	SYSIA_Which, 1	| ZOOMIMAGE
+		.long	IA_Width, 0
+		.long	IA_Height, 0
+		.long	0
+fullscrtags:	.long	0x80000032, 0	| SA_DisplayID
+		.long	0x80000023, 0	| SA_Width
+		.long	0x80000024, 0	| SA_Height
+		.long	0x80000025, 0	| SA_Depth
+		.long	0x8000002D, 0x000F	| SA_Type: CUSTOMSCREEN
+		.long	0x80000036, 0	| SA_ShowTitle
+		.long	0x80000038, 1	| SA_Quiet
+		.long	0		| TAG_DONE
+fullwintags:	.long	0x80000066, 0	| WA_Width
+		.long	0x80000067, 0	| WA_Height
+		.long	0x80000070, 0	| WA_CustomScreen
+		.long	0x8000006A, IDCMP_MOUSEBUTTONS+IDCMP_REFRESHWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY
+		.long	0x80000085, 1	| WA_Backdrop
+		.long	0x80000088, 1	| WA_Borderless
+		.long	0x80000089, 1	| WA_Activate
+		.long	0x8000008A, 1	| WA_RMBTrap
+		.long	0x8000008C, 1	| WA_SimpleRefresh
+		.long	0		| TAG_DONE
+diminfo:	.space	88		| struct DimensionInfo
+	.endif
 slidertags:	.long	GA_Left, 0
 		.long	GA_RelBottom, 0
 		.long	GA_RelWidth, 0
@@ -1965,6 +2350,8 @@ linebuf:	.space	48
 dosname:	.asciz	"dos.library"
 intuiname:	.asciz	"intuition.library"
 aslname:	.asciz	"asl.library"
+gfxname:	.asciz	"graphics.library"
+fullword:	.asciz	"FULLSCREEN"
 p96name:	.asciz	"Picasso96API.library"
 sysiclass:	.asciz	"sysiclass"
 propclass:	.asciz	"propgclass"
@@ -1978,12 +2365,15 @@ colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
 	.ifdef	HOSTVIEW
 pattern:	.asciz	"#?.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif)"
-msg_usage:	.ascii	"Usage: HostView [<file>]\n"
+msg_usage:	.ascii	"Usage: HostView [<file>] [FULLSCREEN]\n"
 		.ascii	"Shows a picture in a window, decoded by uae4arm; without a\n"
 		.ascii	"file it asks for one. In the bottom border: the pictures\n"
-		.ascii	"before and after it in its drawer, another file. Cursor\n"
-		.ascii	"right or space: the next one, cursor left: the one before.\n"
-		.ascii	"Esc ends it. A file the host cannot\n"
+		.ascii	"before and after it in its drawer, full screen, another\n"
+		.ascii	"file. Cursor right or space: the next one, cursor left: the\n"
+		.ascii	"one before, F: full screen and back. There the left button\n"
+		.ascii	"goes to the next one, the right button or Esc back to the\n"
+		.ascii	"window. FULLSCREEN starts there, and they end it then. In\n"
+		.ascii	"the window Esc ends it. A file the host cannot\n"
 		.ascii	"reach, such as one inside a hardfile, goes over to it first;\n"
 		.asciz	"Ctrl-C stops that.\n"
 msg_cannot:	.asciz	"uae4arm cannot show this file\n"
@@ -2014,4 +2404,5 @@ msg_nowindow:	.asciz	"the window does not open\n"
 msg_notrtg:	.asciz	"the Workbench screen has to be an RTG one\n"
 msg_format:	.asciz	"the screen needs 16 or 32 bits\n"
 msg_nomem:	.asciz	"not enough memory for the window\n"
+msg_nofull:	.asciz	"no screen of the picture's own opens\n"
 		.even

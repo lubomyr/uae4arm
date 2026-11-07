@@ -47,6 +47,7 @@
 #include "native2amiga_api.h"
 #include "resampler.h"
 #include "hostvideo.h"
+#include "picasso96.h"
 
 #ifdef HOSTVIDEO_FFMPEG
 extern "C" {
@@ -83,7 +84,12 @@ extern "C" {
                                uaelib function 200 (4, 5) of a file the host
                                does not reach */
 
-#define HV_API_VERSION 4     /* pictures too, for HostView */
+#define HV_CMD_MODE 12      /* handle, n, width << 16 | height of the Workbench:
+                               the n-th size for a screen of its own, best
+                               first, as width << 16 | height; 0 past the last */
+#define HV_CMD_FULLSCREEN 13 /* handle, 1 on a screen of its own, 0 in a window */
+
+#define HV_API_VERSION 5     /* a screen of its own, for HostView */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -1504,6 +1510,7 @@ struct hostvideo {
 	bool ready, ended, signalled, end_told;
 	/* a seek waits for its first frame: the clock stands until then */
 	bool seeking;
+	bool fullscreen; /* on a screen of its own */
 	std::chrono::steady_clock::time_point seek_began;
 
 	int stat_shown;
@@ -1644,6 +1651,21 @@ static void render(struct hostvideo *v)
 	if (fh > h) {
 		fh = h;
 		fw = (int)((int64_t)h * vw / vh);
+	}
+	if (v->fullscreen) {
+		/* a screen of its own may be shown wider or narrower than its
+		   pixels say: the shape has to come out right where it is seen */
+		int sw, sh;
+		rtg_shown_shape(w, h, &sw, &sh);
+		double scale = (double)sw / vw;
+		if ((double)sh / vh < scale)
+			scale = (double)sh / vh;
+		fw = (int)(vw * scale * w / sw + 0.5);
+		fh = (int)(vh * scale * h / sh + 0.5);
+		if (fw > w)
+			fw = w;
+		if (fh > h)
+			fh = h;
 	}
 	if (fw < 1)
 		fw = 1;
@@ -1787,6 +1809,7 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 	v->played = 0;
 	v->ready = v->ended = v->signalled = v->end_told = false;
 	v->seeking = false;
+	v->fullscreen = false;
 	v->stat_shown = v->stat_time = 0;
 	v->apos = v->alen = v->missed = 0;
 	v->quiet = RS_HIST;
@@ -1794,6 +1817,58 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 		resampler_start(&v->rs, source->audio_rate);
 	update_playing();
 	return i + 1;
+}
+
+/* The n-th size of RTG mode for showing a picture of pw x ph on a screen of
+   its own. Only sizes of the Workbench's proportions, which it has itself
+   among them: they are shown the way it is. First those that hold the whole
+   picture, the smallest first, then the others, the largest first. A mode
+   with more pixels than the device shows gives nothing but a shrunk screen,
+   so such a size counts as holding the picture. */
+static uae_u32 pick_mode(int pw, int ph, int n, int wbw, int wbh)
+{
+	int sw, sh;
+	if (wbw <= 0 || wbh <= 0 || !DisplayModes)
+		return 0;
+	rtg_shown_shape(wbw, wbh, &sw, &sh);
+	/* the size of the Workbench's shape that holds the picture */
+	double need = (double)pw / wbw;
+	if ((double)ph / wbh > need)
+		need = (double)ph / wbh;
+	if (need > (double)sw / wbw && need > (double)sh / wbh)
+		need = (double)sw / wbw > (double)sh / wbh ? (double)sw / wbw : (double)sh / wbh;
+	int needw = (int)(wbw * need);
+	struct { int w, h; } modes[MAX_PICASSO_MODES];
+	int count = 0;
+	for (int i = 0; DisplayModes[i].depth >= 0; i++) {
+		int w = DisplayModes[i].res.width, h = DisplayModes[i].res.height;
+		/* within 2 per cent; a width comes rounded to 16 */
+		int64_t a = (int64_t)w * wbh, b = (int64_t)h * wbw;
+		if (llabs(a - b) * 50 > b)
+			continue;
+		bool have = false;
+		for (int j = 0; j < count; j++)
+			have = have || (modes[j].w == w && modes[j].h == h);
+		if (!have) {
+			modes[count].w = w;
+			modes[count].h = h;
+			count++;
+		}
+	}
+	for (int i = 0; i < count; i++) {
+		for (int j = i + 1; j < count; j++) {
+			bool ibig = modes[i].w >= needw, jbig = modes[j].w >= needw;
+			bool swap = ibig != jbig ? jbig
+				: ibig ? modes[j].w < modes[i].w : modes[j].w > modes[i].w;
+			if (swap) {
+				int t = modes[i].w; modes[i].w = modes[j].w; modes[j].w = t;
+				t = modes[i].h; modes[i].h = modes[j].h; modes[j].h = t;
+			}
+		}
+	}
+	if (n < 0 || n >= count)
+		return 0;
+	return (modes[n].w << 16) | modes[n].h;
 }
 
 uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2, uae_u32 arg3, uae_u32 arg4)
@@ -1816,6 +1891,11 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		return 1;
 	case HV_CMD_INFO:
 		return (v->source->width << 16) | v->source->height;
+	case HV_CMD_MODE:
+		return pick_mode(v->source->width, v->source->height, (int)arg2, arg3 >> 16, arg3 & 0xffff);
+	case HV_CMD_FULLSCREEN:
+		v->fullscreen = arg2 != 0;
+		return 1;
 	case HV_CMD_TARGET: {
 		int w = arg3 >> 16, h = arg3 & 0xffff, bpp = format_bpp(arg4);
 		v->buffer = 0;
