@@ -110,6 +110,7 @@ bool HelpPanelHWInfo(std::vector<std::string> &helptext);
 
 void InitPanelDisplay(const struct _ConfigCategory& category);
 void ExitPanelDisplay(const struct _ConfigCategory& category);
+void PollPanelDisplay(void);
 bool HelpPanelDisplay(std::vector<std::string> &helptext);
   
 void InitPanelSound(const struct _ConfigCategory& category);

@@ -115,6 +115,7 @@ void target_default_options (struct uae_prefs *p, int type)
 	p->onScreen_drawsize = 2;
 	p->onScreen_transparency = 2;
 	p->keepAspectRatio = 1;
+	p->externalMonitor = 0;
 	p->onScreen_dpad_mode = 0;
 	onscreen_default_positions(p);
 	p->extfilter = 1;
@@ -200,6 +201,7 @@ void target_save_options (struct zfile *f, struct uae_prefs *p)
   cfgfile_write (f, "pandora.onscreen_drawsize", "%d", p->onScreen_drawsize);
   cfgfile_write (f, "pandora.onscreen_transparency", "%d", p->onScreen_transparency);
   cfgfile_write (f, "pandora.keepaspectratio", "%d", p->keepAspectRatio);
+  cfgfile_write (f, "pandora.external_monitor", "%d", p->externalMonitor);
   cfgfile_write (f, "pandora.onscreen_dpad_mode", "%d", p->onScreen_dpad_mode);
   cfgfile_write (f, "pandora.pos_x_textinput", "%d", p->pos_x_textinput);
   cfgfile_write (f, "pandora.pos_y_textinput", "%d", p->pos_y_textinput);
@@ -252,6 +254,7 @@ int target_parse_option (struct uae_prefs *p, const char *option, const char *va
     || cfgfile_intval (option, value, "onscreen_drawsize", &p->onScreen_drawsize, 1)
     || cfgfile_intval (option, value, "onscreen_transparency", &p->onScreen_transparency, 1)
     || cfgfile_intval (option, value, "keepaspectratio", &p->keepAspectRatio, 1)
+    || cfgfile_intval (option, value, "external_monitor", &p->externalMonitor, 1)
     || cfgfile_intval (option, value, "onscreen_dpad_mode", &p->onScreen_dpad_mode, 1)
     || cfgfile_intval (option, value, "pos_x_textinput", &p->pos_x_textinput, 1)
     || cfgfile_intval (option, value, "pos_y_textinput", &p->pos_y_textinput, 1)

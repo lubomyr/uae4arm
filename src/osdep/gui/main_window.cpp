@@ -650,6 +650,9 @@ namespace sdl
       }
 #endif
 
+#ifdef ANDROIDSDL
+      PollPanelDisplay();
+#endif
       // Now we let the Gui object perform its logic.
       uae_gui->logic();
       // Now we let the Gui object draw itself.
@@ -1013,6 +1016,10 @@ void DisableResume(void)
 }
 
 
+#ifdef ANDROIDSDL
+extern void onscreen_external_monitor_now(int on);
+#endif
+
 void run_gui(void)
 {
 #ifdef ANDROIDSDL
@@ -1033,6 +1040,11 @@ void run_gui(void)
   {
     sdl::gui_init();
     widgets::gui_init();
+#ifdef ANDROIDSDL
+    // The menu stays on the device, under the fingers; the picture goes to the
+    // monitor when the emulation goes on
+    onscreen_external_monitor_now(0);
+#endif
     if(_tcslen(startup_message) > 0) {
       ShowMessage(startup_title, startup_message, _T(""), _T("Ok"), _T(""));
       _tcscpy(startup_title, _T(""));
@@ -1040,6 +1052,9 @@ void run_gui(void)
       widgets::cmdStart->requestFocus();
     }
     sdl::gui_run();
+#ifdef ANDROIDSDL
+    onscreen_external_monitor_now(workprefs.externalMonitor);
+#endif
     widgets::gui_halt();
     sdl::gui_halt();
 #ifdef ANDROIDSDL

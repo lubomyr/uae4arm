@@ -45,6 +45,10 @@ static gcn::UaeCheckBox* chkFrameskip;
 #ifdef ANDROIDSDL
 static gcn::UaeCheckBox* chkKeepAspectRatio;
 extern void gui_set_screen_ratio(int keep);
+static gcn::UaeCheckBox* chkExternalMonitor;
+static gcn::Label* lblExternalMonitor;
+extern void onscreen_screen_size(int *w, int *h);
+extern "C" void SDL_ANDROID_ExternalMonitorSize(int *w, int *h);
 #endif
 #if defined(RASPBERRY) && !defined(USE_SDL2)
 static gcn::Label*  lblFSRatio;
@@ -104,8 +108,45 @@ static void RefreshPanelDisplay(void)
   chkFrameskip->setSelected(workprefs.gfx_framerate);
 #ifdef ANDROIDSDL
   chkKeepAspectRatio->setSelected(workprefs.keepAspectRatio != 0);
+  chkExternalMonitor->setSelected(workprefs.externalMonitor != 0);
 #endif
 }
+
+#ifdef ANDROIDSDL
+static int shown_w = -1, shown_h = -1;
+
+// Each round of the menu: a monitor comes and goes with no event of the menu's
+// own, and once the picture moved the menu's mode has to be set for that screen.
+void PollPanelDisplay(void)
+{
+  static int screen_w = 0, screen_h = 0;
+  int w, h;
+
+  if (chkExternalMonitor != NULL) {
+    SDL_ANDROID_ExternalMonitorSize(&w, &h);
+    if (w != shown_w || h != shown_h) {
+      char tmp[64];
+      shown_w = w;
+      shown_h = h;
+      if (w > 0)
+        snprintf(tmp, sizeof tmp, "Connected, %dx%d", w, h);
+      else
+        snprintf(tmp, sizeof tmp, "Disconnected");
+      lblExternalMonitor->setCaption(tmp);
+      lblExternalMonitor->adjustSize();
+      chkExternalMonitor->setEnabled(w > 0);
+    }
+  }
+  onscreen_screen_size(&w, &h);
+  if (w != screen_w || h != screen_h) {
+    bool first = screen_w == 0;
+    screen_w = w;
+    screen_h = h;
+    if (!first)
+      gui_set_screen_ratio(workprefs.keepAspectRatio);
+  }
+}
+#endif
 
 
 class AmigaScreenActionListener : public gcn::ActionListener
@@ -142,6 +183,9 @@ class AmigaScreenActionListener : public gcn::ActionListener
       else if (actionEvent.getSource() == chkKeepAspectRatio) {
         workprefs.keepAspectRatio = chkKeepAspectRatio->isSelected() ? 1 : 0;
         gui_set_screen_ratio(workprefs.keepAspectRatio);
+
+      } else if (actionEvent.getSource() == chkExternalMonitor) {
+        workprefs.externalMonitor = chkExternalMonitor->isSelected() ? 1 : 0;
 
       }
 #endif
@@ -230,6 +274,12 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   chkKeepAspectRatio = new gcn::UaeCheckBox("Keep 4:3 screen ratio");
   chkKeepAspectRatio->setId("KeepAspect");
   chkKeepAspectRatio->addActionListener(amigaScreenActionListener);
+
+  chkExternalMonitor = new gcn::UaeCheckBox("Use External Display");
+  chkExternalMonitor->setId("ExternalMonitor");
+  chkExternalMonitor->addActionListener(amigaScreenActionListener);
+  lblExternalMonitor = new gcn::Label("Disconnected");
+  lblExternalMonitor->adjustSize();
 #endif
 
 	grpAmigaScreen = new gcn::Window("Amiga Screen");
@@ -273,9 +323,15 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
 #ifdef ANDROIDSDL
   posY += chkFrameskip->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkKeepAspectRatio, DISTANCE_BORDER, posY);
+  posY += chkKeepAspectRatio->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkExternalMonitor, DISTANCE_BORDER, posY);
+  category.panel->add(lblExternalMonitor, DISTANCE_BORDER + 230, posY);
 #endif
 
   RefreshPanelDisplay();
+#ifdef ANDROIDSDL
+  shown_w = shown_h = -1;
+#endif
 }
 
 
@@ -296,6 +352,10 @@ void ExitPanelDisplay(const struct _ConfigCategory& category)
   delete chkLineDbl;
 #ifdef ANDROIDSDL
   delete chkKeepAspectRatio;
+  delete chkExternalMonitor;
+  delete lblExternalMonitor;
+  chkExternalMonitor = NULL;
+  lblExternalMonitor = NULL;
 #endif
   delete chkFrameskip;
 #if defined(RASPBERRY) && !defined(USE_SDL2)

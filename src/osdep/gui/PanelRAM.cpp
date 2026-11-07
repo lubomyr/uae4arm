@@ -100,7 +100,7 @@ static void RefreshPanelRAM(void)
   }
   sldZ3mem->setEnabled(!workprefs.address_space_24);
 
-  for(i = 0; i < 6; ++i) {
+  for(i = 0; i < 8; ++i) {
     if(workprefs.rtgboards[0].rtgmem_size == FastMem_values[i]) {
       sldGfxmem->setValue(i);
       lblGfxsize->setCaption(FastMem_list[i]);
@@ -158,6 +158,8 @@ class MemorySliderActionListener : public gcn::ActionListener
 
 	    if (actionEvent.getSource() == sldGfxmem) {
      		workprefs.rtgboards[0].rtgmem_size = FastMem_values[(int)(sldGfxmem->getValue())];
+	      if (workprefs.rtgboards[0].rtgmem_size > max_rtgmem)
+	        workprefs.rtgboards[0].rtgmem_size = max_rtgmem;
      		workprefs.rtgboards[0].rtgmem_type = GFXBOARD_UAE_Z3;
   		}	
 
@@ -233,7 +235,7 @@ void InitPanelRAM(const struct _ConfigCategory& category)
   lblZ3size = new gcn::Label("None    ");
   
 	lblGfxmem = new gcn::Label("RTG board:");
-  sldGfxmem = new gcn::Slider(0, 5);
+  sldGfxmem = new gcn::Slider(0, 7);
   sldGfxmem->setSize(sldWidth, SLIDER_HEIGHT);
   sldGfxmem->setBaseColor(gui_baseCol);
 	sldGfxmem->setMarkerLength(markerLength);

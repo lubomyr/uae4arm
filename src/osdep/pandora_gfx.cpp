@@ -240,6 +240,9 @@ static void set_onscreen_button(int buttonId, int posX, int posY, float baseSize
 // Called before SDL_SetVideoMode(), which is where the wrapper picks up the
 // screen ratio - pushing it afterwards would only take effect one mode later.
 static int last_keepaspect = -1;
+static int last_external_monitor = 0;
+extern "C" int SDL_ANDROID_sRealWindowWidth;
+extern "C" int SDL_ANDROID_sRealWindowHeight;
 static int last_mouse_dpad = -1;
 
 // Not part of the on-screen controls, but held by the wrapper the same way:
@@ -262,6 +265,36 @@ void set_mousehack_mode(int on)
     return;
   last = relative;
   SDL_ANDROID_SetMouseEmulationMode(relative, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+}
+
+// Asks the wrapper to show the picture on the external monitor, or not
+void onscreen_external_monitor(int on)
+{
+  if (on != last_external_monitor) {
+    last_external_monitor = on;
+    SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_EXTERNAL_MONITOR, on);
+  }
+}
+
+// The same, waiting for the picture to get there: the move ends in a swap, and
+// a mode set before it would be for the screen it came from. Between the menu
+// and the emulation, where there is a screen to swap.
+void onscreen_external_monitor_now(int on)
+{
+  int w, h, real = SDL_ANDROID_sRealWindowWidth;
+
+  if (on == last_external_monitor)
+    return;
+  onscreen_external_monitor(on);
+  SDL_ANDROID_ExternalMonitorSize(&w, &h);
+  if (w <= 0)
+    return;
+  for (int i = 0; i < 100 && SDL_ANDROID_sRealWindowWidth == real; i++) {
+    SDL_Surface *surface = SDL_GetVideoSurface();
+    if (surface != NULL)
+      SDL_Flip(surface);
+    SDL_Delay(20);
+  }
 }
 
 static void update_onscreen_appearance()
@@ -292,6 +325,8 @@ static void update_onscreen_appearance()
     last_keepaspect = changed_prefs.keepAspectRatio;
     SDL_ANDROID_SetConfigOption(SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO, last_keepaspect);
   }
+
+  onscreen_external_monitor(changed_prefs.externalMonitor);
 
   static int last_mouse_dpad_speed = -1;
   static int last_mouse_dpad_accel = -1;
@@ -356,8 +391,6 @@ int onscreen_keeps_aspect()
 // whatever the screen ratio. SDL_ListModes() cannot tell its size: the largest
 // mode is worked out once, when SDL starts, and with the 4:3 ratio on at that
 // point it is only the 4:3 part of the screen.
-extern "C" int SDL_ANDROID_sRealWindowWidth;
-extern "C" int SDL_ANDROID_sRealWindowHeight;
 
 void onscreen_screen_size(int *w, int *h)
 {
@@ -1152,8 +1185,8 @@ void picasso_InitResolutions (void)
   int i, count = 0;
   char tmp[200];
   int bit_idx;
-  int mode_width[MAX_SCREEN_MODES + 4];
-  int mode_height[MAX_SCREEN_MODES + 4];
+  int mode_width[MAX_SCREEN_MODES + 9];
+  int mode_height[MAX_SCREEN_MODES + 9];
   int num_modes = 0;
   int bits[] = { 8, 16, 32 };
   
@@ -1193,11 +1226,25 @@ void picasso_InitResolutions (void)
     if (screen_w < screen_h) {
       int t = screen_w; screen_w = screen_h; screen_h = t;
     }
+    /* An external monitor connected by now gets its shape too, and its own
+       size. It cannot be told to change its mode, so that one fills it pixel
+       for pixel. */
+    int monitor_w, monitor_h;
+    SDL_ANDROID_ExternalMonitorSize(&monitor_w, &monitor_h);
+    for (int shape = 0; shape < 2; shape++) {
+    if (shape == 1) {
+      if (monitor_w <= 0 || monitor_h <= 0)
+        break;
+      screen_w = monitor_w;
+      screen_h = monitor_h;
+    }
     if (screen_w > 0 && screen_h > 0) {
       int k;
 
-      for (k = 0; k < 4 && num_modes < MAX_SCREEN_MODES + 4; k++) {
-        int h = heights[k];
+      for (k = 0; k < 5 && num_modes < MAX_SCREEN_MODES + 9; k++) {
+        int h = k < 4 ? heights[k] : screen_h;
+        if (k == 4 && shape == 0)
+          continue;
         /* Picasso96 wants the width in multiples of 16 - every size in the
            table above is one, and 600x400 came out as the one generated size
            that was not, and was the one mode that would not start. The
@@ -1226,6 +1273,7 @@ void picasso_InitResolutions (void)
         mode_height[num_modes] = h;
         num_modes++;
       }
+    }
     }
   }
 #endif

@@ -33,13 +33,16 @@ uae_u32 max_z3fastmem;
 
 static uae_u8 *map_at_address(void *addr, size_t size);
 static uae_u8* additional_mem = (uae_u8*) MAP_FAILED;
-/* The area for Z3 Fast RAM and the 16 MB of the RTG board. As much as can be
+/* The area for Z3 Fast RAM and the 64 MB of the RTG board. As much as can be
    had of 512, 256 and 128 MB for Z3 (Quake III wants 256): a 32-bit device may
    have no room for the larger ones, and the JIT needs all of it below 4 GB.
-   max_z3fastmem is what was had. */
-static const uae_u32 additional_memsizes[] = { (512 + 16) * 1024 * 1024, (256 + 16) * 1024 * 1024, (128 + 16) * 1024 * 1024 };
+   Failing all, 128 and an RTG board of 16 MB as before. max_z3fastmem and
+   max_rtgmem are what was had. */
+static const uae_u32 additional_memsizes[] = { (512 + 64) * 1024 * 1024, (256 + 64) * 1024 * 1024, (128 + 64) * 1024 * 1024, (128 + 16) * 1024 * 1024 };
 static uae_u32 additional_memsize = (128 + 16) * 1024 * 1024;
 #define ADDITIONAL_MEMSIZE additional_memsize
+#define RTG_RESERVE (additional_memsize == (128 + 16) * 1024 * 1024 ? 16 * 1024 * 1024 : 64 * 1024 * 1024)
+uae_u32 max_rtgmem = 16 * 1024 * 1024;
 
 static uae_u8 *map_additional(uae_u8 *at)
 {
@@ -155,7 +158,8 @@ void alloc_AmigaMem(void)
         continue;
       additional_mem = map_additional(regs.natmem_offset + Z3BASE_REAL);
       if (additional_mem != MAP_FAILED) {
-        max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
+        max_rtgmem = RTG_RESERVE;
+        max_z3fastmem = ADDITIONAL_MEMSIZE - max_rtgmem;
         changed_prefs.z3autoconfig_start = currprefs.z3autoconfig_start = Z3BASE_REAL;
         z3base_adr = Z3BASE_REAL;
         write_log("Allocated 16 MB for 24-bit area (%p) and %d MB for Z3 and RTG at real address (%p - %p)\n",
@@ -195,7 +199,8 @@ void alloc_AmigaMem(void)
 	}
   for (i = 0; i < (int)(sizeof(additional_memsizes) / sizeof(additional_memsizes[0])); ++i) {
     additional_memsize = additional_memsizes[i];
-    max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
+    max_rtgmem = RTG_RESERVE;
+        max_z3fastmem = ADDITIONAL_MEMSIZE - max_rtgmem;
     additional_mem = map_additional(regs.natmem_offset + Z3BASE_REAL);
     if(additional_mem != MAP_FAILED)
     {
@@ -232,7 +237,8 @@ void alloc_AmigaMem(void)
   }
   // The smallest did not fit either
   additional_memsize = additional_memsizes[sizeof(additional_memsizes) / sizeof(additional_memsizes[0]) - 1];
-  max_z3fastmem = ADDITIONAL_MEMSIZE - (16 * 1024 * 1024);
+  max_rtgmem = RTG_RESERVE;
+        max_z3fastmem = ADDITIONAL_MEMSIZE - max_rtgmem;
 #ifdef ANDROID
   munmap(regs.natmem_offset, natmem_size + BARRIER);
 #else

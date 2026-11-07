@@ -200,6 +200,10 @@ void fixup_prefs (struct uae_prefs *p, bool userconfig)
   }
 
 	struct rtgboardconfig *rbc = &p->rtgboards[0];
+  if (rbc->rtgmem_size > max_rtgmem && rbc->rtgmem_type == GFXBOARD_UAE_Z3) {
+	  error_log (_T("Graphics card memory size %d (0x%x) larger than maximum reserved %d (0x%x)."), rbc->rtgmem_size, rbc->rtgmem_size, max_rtgmem, max_rtgmem);
+	  rbc->rtgmem_size = max_rtgmem;
+  }
   if (rbc->rtgmem_size > max_z3fastmem && rbc->rtgmem_type == GFXBOARD_UAE_Z3) {
 	  error_log (_T("Graphics card memory size %d (0x%x) larger than maximum reserved %d (0x%x)."), rbc->rtgmem_size, rbc->rtgmem_size, max_z3fastmem, max_z3fastmem);
 	  rbc->rtgmem_size = max_z3fastmem;

@@ -411,6 +411,254 @@ index 000000000..32e9dcc70
 +		}, "Download").start();
 +	}
 +}
+diff --git a/project/java/ExternalMonitor.java b/project/java/ExternalMonitor.java
+new file mode 100644
+index 000000000..3a4c40da8
+--- /dev/null
++++ b/project/java/ExternalMonitor.java
+@@ -0,0 +1,242 @@
++/*
++Simple DirectMedia Layer
++Java source code, the picture on an external monitor for the Android port
++
++This software is provided 'as-is', without any express or implied
++warranty.  In no event will the authors be held liable for any damages
++arising from the use of this software.
++
++Permission is granted to anyone to use this software for any purpose,
++including commercial applications, and to alter it and redistribute it
++freely, subject to the following restrictions:
++
++1. The origin of this software must not be misrepresented; you must not
++   claim that you wrote the original software. If you use this software
++   in a product, an acknowledgment in the product documentation would be
++   appreciated but is not required.
++2. Altered source versions must be plainly marked as such, and must not be
++   misrepresented as being the original software.
++3. This notice may not be removed or altered from any source distribution.
++*/
++
++package net.sourceforge.clonekeenplus;
++
++import android.app.Presentation;
++import android.content.Context;
++import android.graphics.Color;
++import android.graphics.Matrix;
++import android.hardware.display.DisplayManager;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
++import android.util.Log;
++import android.view.Display;
++import android.view.Gravity;
++import android.view.KeyEvent;
++import android.view.MotionEvent;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.Window;
++import android.view.WindowManager;
++import android.widget.FrameLayout;
++import android.widget.TextView;
++
++/* A monitor that Android offers to apps as a presentation display can take the
++   picture: the video view moves into a window there, and the device's own
++   screen goes on as the touch area. Android does not let an app change the
++   monitor's mode, so the picture is scaled to the mode it is in. */
++class ExternalMonitor
++{
++	/* The view is taken out of one window for another: it has to live on */
++	static volatile boolean moving = false;
++
++	private static MainActivity activity;
++	private static DisplayManager manager;
++	private static boolean wanted = false;
++	private static Presentation window;
++	private static FrameLayout holder;
++	private static View touchArea;
++	private static ViewGroup parent;
++	private static int parentIndex;
++	private static ViewGroup.LayoutParams parentLayout;
++
++	static boolean isActive()
++	{
++		return window != null;
++	}
++
++	static void init(MainActivity a)
++	{
++		activity = a;
++		manager = (DisplayManager) a.getSystemService(Context.DISPLAY_SERVICE);
++		manager.registerDisplayListener(new DisplayManager.DisplayListener()
++		{
++			public void onDisplayAdded(int id) { changed(); }
++			public void onDisplayRemoved(int id) { changed(); }
++			public void onDisplayChanged(int id) { changed(); }
++		}, new Handler(Looper.getMainLooper()));
++		changed();
++	}
++
++	private static Display monitor()
++	{
++		Display[] d = manager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
++		return d.length > 0 ? d[0] : null;
++	}
++
++	/* Tells the native side which monitor there is */
++	static void report()
++	{
++		if (manager == null)
++			return;
++		int w = 0, h = 0;
++		Display d = monitor();
++		if (d != null) {
++			Display.Mode mode = d.getMode();
++			w = Math.max(mode.getPhysicalWidth(), mode.getPhysicalHeight());
++			h = Math.min(mode.getPhysicalWidth(), mode.getPhysicalHeight());
++		}
++		try {
++			Settings.nativeSetExternalMonitor(w, h);
++		} catch (UnsatisfiedLinkError e) {
++			// the library comes later; DemoRenderer reports again before main()
++		}
++	}
++
++	private static void changed()
++	{
++		report();
++		apply();
++	}
++
++	static void setWanted(final boolean on)
++	{
++		if (activity == null)
++			return;
++		activity.runOnUiThread(new Runnable()
++		{
++			public void run()
++			{
++				wanted = on;
++				apply();
++			}
++		});
++	}
++
++	private static void apply()
++	{
++		if (activity == null || activity.mGLView == null)
++			return;
++		Display d = wanted ? monitor() : null;
++		if (d != null && window == null)
++			moveTo(d);
++		else if (d == null && window != null)
++			moveBack();
++	}
++
++	private static void moveTo(Display d)
++	{
++		Log.i("SDL", "libSDL: ExternalMonitor: the picture goes to display " + d.getDisplayId() + " " + d.getMode());
++		final View view = activity.mGLView;
++		parent = (ViewGroup) view.getParent();
++		parentIndex = parent.indexOfChild(view);
++		parentLayout = view.getLayoutParams();
++		moving = true;
++		parent.removeView(view);
++		holder = new FrameLayout(activity);
++		holder.setBackgroundColor(Color.BLACK);
++		holder.addView(view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
++		window = new Presentation(activity, d)
++		{
++			@Override
++			protected void onCreate(Bundle b)
++			{
++				super.onCreate(b);
++				requestWindowFeature(Window.FEATURE_NO_TITLE);
++				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON | WindowManager.LayoutParams.FLAG_FULLSCREEN);
++				setContentView(holder);
++			}
++		};
++		try {
++			window.show();
++		} catch (WindowManager.InvalidDisplayException e) {
++			Log.i("SDL", "libSDL: ExternalMonitor: the display went away: " + e);
++			window = null;
++			holder.removeView(view);
++			parent.addView(view, parentIndex, parentLayout);
++			holder = null;
++			moving = false;
++			return;
++		}
++		moving = false;
++
++		TextView text = new TextView(activity);
++		text.setText("The picture is on the external display.\nThis screen is the touch area.");
++		text.setTextColor(Color.DKGRAY);
++		text.setGravity(Gravity.CENTER);
++		text.setBackgroundColor(Color.BLACK);
++		text.setFocusable(true);
++		text.setFocusableInTouchMode(true);
++		text.setOnTouchListener(new View.OnTouchListener()
++		{
++			public boolean onTouch(View v, MotionEvent e)
++			{
++				return forward(v, e, false);
++			}
++		});
++		text.setOnGenericMotionListener(new View.OnGenericMotionListener()
++		{
++			public boolean onGenericMotion(View v, MotionEvent e)
++			{
++				return forward(v, e, true);
++			}
++		});
++		text.setOnKeyListener(new View.OnKeyListener()
++		{
++			public boolean onKey(View v, int code, KeyEvent e)
++			{
++				if (e.getAction() == KeyEvent.ACTION_DOWN)
++					return activity.mGLView.onKeyDown(code, e);
++				if (e.getAction() == KeyEvent.ACTION_UP)
++					return activity.mGLView.onKeyUp(code, e);
++				return false;
++			}
++		});
++		touchArea = text;
++		parent.addView(text, parentIndex, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
++		text.requestFocus();
++	}
++
++	/* A touch here is one at the same place on the monitor */
++	private static boolean forward(View from, MotionEvent e, boolean generic)
++	{
++		View to = activity.mGLView;
++		if (from.getWidth() <= 0 || from.getHeight() <= 0 || to.getWidth() <= 0)
++			return false;
++		MotionEvent copy = MotionEvent.obtain(e);
++		Matrix scale = new Matrix();
++		scale.setScale((float) to.getWidth() / from.getWidth(), (float) to.getHeight() / from.getHeight());
++		copy.transform(scale);
++		boolean done = generic ? to.onGenericMotionEvent(copy) : to.onTouchEvent(copy);
++		copy.recycle();
++		return done || !generic;
++	}
++
++	private static void moveBack()
++	{
++		Log.i("SDL", "libSDL: ExternalMonitor: the picture comes back");
++		final View view = activity.mGLView;
++		moving = true;
++		if (touchArea != null) {
++			parent.removeView(touchArea);
++			touchArea = null;
++		}
++		holder.removeView(view);
++		window.dismiss();
++		window = null;
++		holder = null;
++		parent.addView(view, parentIndex, parentLayout);
++		moving = false;
++		view.requestFocus();
++	}
++}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
 index 000000000..d06e3e298
@@ -893,6 +1141,21 @@ index 000000000..d06e3e298
 +		setControlsVisible(!controlsHidden);
 +	}
 +}
+diff --git a/project/java/GLSurfaceView_SDL.java b/project/java/GLSurfaceView_SDL.java
+index 022b96f02..3877b335a 100644
+--- a/project/java/GLSurfaceView_SDL.java
++++ b/project/java/GLSurfaceView_SDL.java
+@@ -452,7 +452,9 @@ public class GLSurfaceView_SDL extends SurfaceView implements SurfaceHolder.Call
+ 	@Override
+ 	protected void onDetachedFromWindow() {
+ 		super.onDetachedFromWindow();
+-		mGLThread.requestExitAndWait();
++		// On its way to a window on another display, the thread that runs the app goes on
++		if (!ExternalMonitor.moving)
++			mGLThread.requestExitAndWait();
+ 	}
+ 
+ 	// ----------------------------------------------------------------------
 diff --git a/project/java/ImageWindow.java b/project/java/ImageWindow.java
 new file mode 100644
 index 000000000..b4542c32d
@@ -1312,7 +1575,7 @@ index 000000000..b4542c32d
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..e70603a12 100644
+index 69c7f86c2..9606ad1bb 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -116,6 +116,7 @@ public class MainActivity extends Activity
@@ -1323,7 +1586,15 @@ index 69c7f86c2..e70603a12 100644
  		// fullscreen mode
  		requestWindowFeature(Window.FEATURE_NO_TITLE);
  		getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-@@ -543,6 +544,18 @@ public class MainActivity extends Activity
+@@ -523,6 +524,7 @@ public class MainActivity extends Activity
+ 		{
+ 			_videoLayout.addView(mGLView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+ 		}
++		ExternalMonitor.init(this);
+ 		mGLView.captureMouse(true);
+ 		if( Globals.HideSystemMousePointer && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N )
+ 		{
+@@ -543,6 +545,18 @@ public class MainActivity extends Activity
  		mGLView.nativeScreenVisibleRect(r.left, r.top, r.right, r.bottom);
  		_videoLayout.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener()
  		{
@@ -1342,7 +1613,7 @@ index 69c7f86c2..e70603a12 100644
  			public void onGlobalLayout()
  			{
  				final Rect r = new Rect();
-@@ -575,12 +588,13 @@ public class MainActivity extends Activity
+@@ -575,12 +589,13 @@ public class MainActivity extends Activity
  				Log.v("SDL", "videoLayout: " + _videoLayout.getLeft() + ":" + _videoLayout.getTop() + ":" + _videoLayout.getWidth() + ":" + _videoLayout.getHeight() +
  						" videoLayout.getRootView() " + _videoLayout.getRootView().getLeft() + ":" + _videoLayout.getRootView().getTop() + ":" +
  						_videoLayout.getRootView().getWidth() + ":" + _videoLayout.getRootView().getHeight());
@@ -1357,7 +1628,7 @@ index 69c7f86c2..e70603a12 100644
  					}
  				}, 300 );
  				_videoLayout.postDelayed( new Runnable()
-@@ -588,7 +602,7 @@ public class MainActivity extends Activity
+@@ -588,7 +603,7 @@ public class MainActivity extends Activity
  					public void run()
  					{
  						DimSystemStatusBar.dim(_videoLayout, getWindow());
@@ -1366,7 +1637,7 @@ index 69c7f86c2..e70603a12 100644
  					}
  				}, 600 );
  			}
-@@ -597,6 +611,8 @@ public class MainActivity extends Activity
+@@ -597,6 +612,8 @@ public class MainActivity extends Activity
  
  	@Override
  	protected void onPause() {
@@ -1375,7 +1646,7 @@ index 69c7f86c2..e70603a12 100644
  		if( downloader != null )
  		{
  			synchronized( downloader )
-@@ -693,6 +709,155 @@ public class MainActivity extends Activity
+@@ -693,6 +710,155 @@ public class MainActivity extends Activity
  		backInvokedCallback = null;
  	}
  
@@ -1531,7 +1802,7 @@ index 69c7f86c2..e70603a12 100644
  	// Mirrors the KEYCODE_BACK branch of DemoGLSurfaceView.onKeyUp().
  	// The mouse button case is not handled here: a right click remapped to BACK
  	// still arrives as a key event, so onKeyUp() keeps taking care of it.
-@@ -786,12 +951,14 @@ public class MainActivity extends Activity
+@@ -786,12 +952,14 @@ public class MainActivity extends Activity
  							}
  							public boolean dispatchTouchEvent(final MotionEvent ev)
  							{
@@ -1549,7 +1820,7 @@ index 69c7f86c2..e70603a12 100644
  									return super.dispatchTouchEvent(converted);
  								}
  								return false;
-@@ -1590,6 +1757,21 @@ public class MainActivity extends Activity
+@@ -1590,6 +1758,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -2147,7 +2418,7 @@ index 000000000..9b9ce94be
 +	}
 +}
 diff --git a/project/java/Settings.java b/project/java/Settings.java
-index c99131b2a..f8c87722b 100644
+index c99131b2a..5210de167 100644
 --- a/project/java/Settings.java
 +++ b/project/java/Settings.java
 @@ -613,6 +613,7 @@ public class Settings
@@ -2158,7 +2429,7 @@ index c99131b2a..f8c87722b 100644
  		if( Globals.SwVideoMode && Globals.MultiThreadedVideo )
  			nativeSetVideoMultithreaded();
  		applyMouseEmulationOptions();
-@@ -940,6 +941,127 @@ public class Settings
+@@ -940,6 +941,128 @@ public class Settings
  
  	static final int SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0;
  	static final int SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1;
@@ -2168,6 +2439,7 @@ index c99131b2a..f8c87722b 100644
 +	static final int SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5;
 +	static final int SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO = 6;
 +	static final int SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED = 7;
++	static final int SDL_ANDROID_CONFIG_EXTERNAL_MONITOR = 8;
 +
 +	// Re-applies the on-screen control settings to the running app. The settings menu
 +	// only ever applies them at startup, but an app that offers them in its own UI
@@ -2286,7 +2558,7 @@ index c99131b2a..f8c87722b 100644
  
  	public static void setConfigOptionFromSDL(int option, int value)
  	{
-@@ -951,6 +1073,33 @@ public class Settings
+@@ -951,6 +1074,36 @@ public class Settings
  			case SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT:
  				Globals.HorizontalOrientation = (value == 0);
  				break;
@@ -2313,6 +2585,9 @@ index c99131b2a..f8c87722b 100644
 +				else
 +					Globals.KeepAspectRatio = (value != 0);
 +				break;
++			case SDL_ANDROID_CONFIG_EXTERNAL_MONITOR:
++				ExternalMonitor.setWanted(value != 0);
++				break;
 +			case SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED:
 +				Globals.MultiThreadedVideo = (value != 0);
 +				setVideoThreadTrial(MainActivity.instance, value != 0 ? VIDEO_THREAD_TRIAL_PENDING : null);
@@ -2320,8 +2595,16 @@ index c99131b2a..f8c87722b 100644
  			default:
  				Log.e("SDL", "setConfigOptionFromSDL: cannot find option with ID " + option + ", value " + value);
  				break;
+@@ -994,6 +1147,7 @@ public class Settings
+ 	private static native void nativeSetKeymapKeyMultitouchGesture(int keynum, int key);
+ 	private static native void nativeSetMultitouchGestureSensitivity(int sensitivity);
+ 	public static native void nativeSetTouchscreenCalibration(int x1, int y1, int x2, int y2);
++	public static native void nativeSetExternalMonitor(int w, int h);
+ 	// libsdl_native_helpers.so, exists in both versions
+ 	public static native void  nativeSetEnv(final String name, final String value);
+ 	public static native int   nativeChmod(final String name, int mode);
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..ba5c7ac84 100644
+index f0a437bb6..85e99de48 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -2371,7 +2654,24 @@ index f0a437bb6..ba5c7ac84 100644
  	int mLastPendingResize = 0;
  	public void onWindowResize(final int w, final int h)
  	{
-@@ -748,6 +770,14 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -665,7 +687,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 				int ww = w - w % 2;
+ 				int hh = h - h % 2;
+ 				View topView = context.getWindow().peekDecorView();
+-				if (topView != null && Globals.ImmersiveMode)
++				if (topView != null && Globals.ImmersiveMode && !ExternalMonitor.isActive())
+ 				{
+ 					ww = topView.getWidth() - topView.getWidth() % 2;
+ 					hh = topView.getHeight() - topView.getHeight() % 2;
+@@ -711,6 +733,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+ 			try { Thread.sleep(200); } catch (InterruptedException eeee) {}
+ 
+ 		Settings.Apply(context);
++		ExternalMonitor.report();
+ 		Settings.nativeSetEnv( "DISPLAY_RESOLUTION_WIDTH", String.valueOf(Math.max(mWidth, mHeight)) );
+ 		Settings.nativeSetEnv( "DISPLAY_RESOLUTION_HEIGHT", String.valueOf(Math.min(mWidth, mHeight)) ); // In Kitkat with immersive mode, getWindowManager().getDefaultDisplay().getMetrics() return inaccurate height
+ 
+@@ -748,6 +771,14 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  			super.SwapBuffers();
  		}
  
@@ -2386,7 +2686,7 @@ index f0a437bb6..ba5c7ac84 100644
  		// Unblock event processing thread only after we've finished rendering
  		if( context.isScreenKeyboardShown() && !context.keyboardWithoutTextInputShown )
  		{
-@@ -950,6 +980,11 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -950,6 +981,11 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		context.setSystemMousePointerVisible(visible);
  	}
  
@@ -2398,7 +2698,7 @@ index f0a437bb6..ba5c7ac84 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +998,67 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +999,67 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -2466,7 +2766,7 @@ index f0a437bb6..ba5c7ac84 100644
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1077,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1078,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -2474,7 +2774,7 @@ index f0a437bb6..ba5c7ac84 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1088,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1089,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -2482,7 +2782,7 @@ index f0a437bb6..ba5c7ac84 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1109,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1110,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -2493,7 +2793,7 @@ index f0a437bb6..ba5c7ac84 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1127,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1128,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -2511,7 +2811,7 @@ index f0a437bb6..ba5c7ac84 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1142,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1143,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -2524,7 +2824,7 @@ index f0a437bb6..ba5c7ac84 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1168,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1169,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -2537,7 +2837,7 @@ index f0a437bb6..ba5c7ac84 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1181,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1182,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -2549,7 +2849,7 @@ index f0a437bb6..ba5c7ac84 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1106,6 +1224,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1106,6 +1225,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	@Override
  	public boolean onTouchEvent(final MotionEvent event)
  	{
@@ -2558,7 +2858,7 @@ index f0a437bb6..ba5c7ac84 100644
  		if( mParent.keyboardWithoutTextInputShown && mParent._screenKeyboard != null &&
  			mParent._screenKeyboard.getY() <= event.getY() )
  		{
-@@ -1122,9 +1242,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1243,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -2598,7 +2898,7 @@ index f0a437bb6..ba5c7ac84 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1297,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1298,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -2606,7 +2906,7 @@ index f0a437bb6..ba5c7ac84 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1316,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1317,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -2614,7 +2914,7 @@ index f0a437bb6..ba5c7ac84 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
-@@ -1210,12 +1362,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1210,12 +1363,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  			setFocusableInTouchMode(true);
  			setFocusable(true);
  			requestFocus();
@@ -3171,10 +3471,10 @@ index a32209124..bdff81492 100755
          highlightColor.a = alpha;
          shadowColor = faceColor - 0x303030;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..8b0b4e095 100644
+index 14d8a4dd1..05030c552 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,76 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,80 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -3186,6 +3486,7 @@ index 14d8a4dd1..8b0b4e095 100644
 +	SDL_ANDROID_CONFIG_SCREENKB_TRANSPARENCY = 5, /* 0 = invisible to 4 = opaque */
 +	SDL_ANDROID_CONFIG_KEEP_ASPECT_RATIO = 6, /* 0 = stretch to the whole screen, 1 = keep 4:3 with black bars.
 +	                                             Read by SDL_SetVideoMode(), so set it before changing the mode. */
++	SDL_ANDROID_CONFIG_EXTERNAL_MONITOR = 8, /* 1 = show the picture on an external monitor while there is one */
 +	SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED = 7, /* 1 = draw on a separate video thread, needs SDL_ANDROID_RestartMyself().
 +	                                               It crashes on some devices, so it is turned on for a trial: unless the
 +	                                               app calls SDL_ANDROID_ConfirmConfigOptions() on the first start with it,
@@ -3196,6 +3497,9 @@ index 14d8a4dd1..8b0b4e095 100644
  /* Set SDL Android-specifc option, and save it to SDL config file, such as video depth or mouse emulation mode. Most options require restarting the app. */
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value);
  
++/* The size of the external monitor that can take the picture, 0 x 0 when there is none */
++extern DECLSPEC void SDLCALL SDL_ANDROID_ExternalMonitorSize(int *w, int *h);
++
 +/* Tell that the app started fine, for options on trial such as SDL_ANDROID_CONFIG_VIDEO_MULTITHREADED.
 +   Call it once the app is up, e.g. when its menu shows. */
 +extern DECLSPEC void SDLCALL SDL_ANDROID_ConfirmConfigOptions(void);
@@ -3252,7 +3556,7 @@ index 14d8a4dd1..8b0b4e095 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +221,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +225,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -3431,8 +3735,41 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchButton(int id, int pressed, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
+diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c
+index 43e7bb12d..4e393b75a 100644
+--- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c
++++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c
+@@ -1264,10 +1264,25 @@ void SDL_ANDROID_VideoContextRecreated()
+ 		}
+ 	}
+ 
+-	SDL_ANDROID_ScreenKeyboardUpdateToNewVideoMode(SDL_modelist[0]->w, SDL_modelist[0]->h, SDL_ANDROID_sWindowWidth, SDL_ANDROID_sWindowHeight);
++	{
++		static int screenKbW = 0, screenKbH = 0;
++		if( !screenKbW )
++		{
++			screenKbW = SDL_modelist[0]->w;
++			screenKbH = SDL_modelist[0]->h;
++		}
++		SDL_ANDROID_ScreenKeyboardUpdateToNewVideoMode(screenKbW, screenKbH, SDL_ANDROID_sWindowWidth, SDL_ANDROID_sWindowHeight);
++		screenKbW = SDL_ANDROID_sWindowWidth;
++		screenKbH = SDL_ANDROID_sWindowHeight;
++	}
+ 
+-	SDL_modelist[0]->w = SDL_ANDROID_sWindowWidth;
+-	SDL_modelist[0]->h = SDL_ANDROID_sWindowHeight;
++	// The largest mode an app may ask for: it never shrinks. sWindowWidth is the width of
++	// the picture of the last mode, narrower with the 4:3 ratio on, and an app's surface
++	// is scaled to any screen, so a smaller monitor does not make a mode too large either.
++	if( SDL_modelist[0]->w < SDL_ANDROID_sRealWindowWidth )
++		SDL_modelist[0]->w = SDL_ANDROID_sRealWindowWidth;
++	if( SDL_modelist[0]->h < SDL_ANDROID_sRealWindowHeight )
++		SDL_modelist[0]->h = SDL_ANDROID_sRealWindowHeight;
+ 
+ 	if( ! sdl_opengl )
+ 	{
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..e4ee13d44 100644
+index 30df36343..5e3cfbe93 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -3483,10 +3820,25 @@ index 30df36343..e4ee13d44 100644
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +711,212 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +711,227 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
++static volatile int externalMonitorW = 0, externalMonitorH = 0;
++
++JNIEXPORT void JNICALL
++JAVA_EXPORT_NAME(Settings_nativeSetExternalMonitor) (JNIEnv* env, jobject thiz, jint w, jint h)
++{
++	externalMonitorW = w;
++	externalMonitorH = h;
++}
++
++void SDLCALL SDL_ANDROID_ExternalMonitorSize(int *w, int *h)
++{
++	*w = externalMonitorW;
++	*h = externalMonitorH;
++}
++
 +void SDLCALL SDL_ANDROID_ConfirmConfigOptions(void)
 +{
 +	JNIEnv *JavaEnv = GetJavaEnv();
@@ -3696,7 +4048,7 @@ index 30df36343..e4ee13d44 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +928,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +943,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  

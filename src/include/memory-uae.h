@@ -36,6 +36,7 @@ typedef uae_u8 *(REGPARAM3 *xlate_func)(uaecptr) REGPARAM;
 typedef int (REGPARAM3 *check_func)(uaecptr, uae_u32) REGPARAM;
 
 extern uae_u32 max_z3fastmem;
+extern uae_u32 max_rtgmem;
 
 extern uae_u32 wait_cpu_cycle_read (uaecptr addr, int mode);
 extern void wait_cpu_cycle_write (uaecptr addr, int mode, uae_u32 v);
