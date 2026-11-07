@@ -2364,7 +2364,7 @@ title:		.asciz	"HostPlay"
 colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
 	.ifdef	HOSTVIEW
-pattern:	.asciz	"#?.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif)"
+pattern:	.asciz	"#?.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif|iff|ilbm|lbm|ham)"
 msg_usage:	.ascii	"Usage: HostView [<file>] [FULLSCREEN]\n"
 		.ascii	"Shows a picture in a window, decoded by uae4arm; without a\n"
 		.ascii	"file it asks for one. In the bottom border: the pictures\n"

@@ -20,6 +20,7 @@
  *
  * The decoding: FFmpeg's libraries on the Linux PC (HOSTVIDEO_FFMPEG), the
  * device's decoders through MediaCodec on Android (HOSTVIDEO_MEDIACODEC).
+ * Pictures of the Amiga, IFF ILBM, it decodes itself on both.
  */
 
 #include "sysconfig.h"
@@ -684,10 +685,6 @@ void ffmpeg_source::render(uae_u8 *dst, int w, int h, int stride, int format)
 
 #endif /* HOSTVIDEO_FFMPEG */
 
-#ifdef HOSTVIDEO_MEDIACODEC
-
-/* One pixel in the screen's format, as it lies in the Amiga's memory: the
-   PC formats are little endian words. */
 static inline void put_pixel(uae_u8 *p, int format, int r, int g, int b)
 {
 	uae_u16 w;
@@ -737,6 +734,318 @@ static inline void put_pixel(uae_u8 *p, int format, int r, int g, int b)
 	}
 }
 
+/* One picture, in memory: it falls due at once, and stays. */
+class picture_source : public video_source {
+public:
+	picture_source() { dropped = 0; audio_rate = 0; duration = 0; codec[0] = 0; }
+	bool take(double t) { if (taken) return false; taken = true; return true; }
+	void render(uae_u8 *dst, int w, int h, int stride, int format);
+	bool ended() { return false; }
+	void seek(double t) { taken = false; }
+	int audio_read(uae_s16 (*out)[2], int n) { return 0; }
+
+protected:
+	bool taken = false;
+	int pw = 0, ph = 0;
+	std::vector<uae_u8> rgba;
+};
+
+/* The picture scaled to w x h, bilinear, in a Picasso96 RGBFormat; what
+   is see-through lies on black. */
+void picture_source::render(uae_u8 *dst, int w, int h, int stride, int format)
+{
+	if (rgba.empty()) {
+		clear(dst, w, h, stride, format);
+		return;
+	}
+	int bpp = format_bpp(format);
+	std::vector<int> xs(w), xf(w);
+	for (int x = 0; x < w; x++) {
+		int sx = (int)(((2 * x + 1) * (int64_t)pw * 128) / w) - 128;
+		if (sx < 0)
+			sx = 0;
+		xs[x] = sx >> 8;
+		xf[x] = sx & 255;
+		if (xs[x] >= pw - 1) {
+			xs[x] = pw - 1;
+			xf[x] = 0;
+		}
+	}
+	for (int y = 0; y < h; y++) {
+		int sy = (int)(((2 * y + 1) * (int64_t)ph * 128) / h) - 128;
+		if (sy < 0)
+			sy = 0;
+		int ys = sy >> 8, yf = sy & 255;
+		if (ys >= ph - 1) {
+			ys = ph - 1;
+			yf = 0;
+		}
+		const uae_u8 *l0 = &rgba[(size_t)ys * pw * 4];
+		const uae_u8 *l1 = yf ? l0 + (size_t)pw * 4 : l0;
+		uae_u8 *p = dst + (size_t)y * stride;
+		for (int x = 0; x < w; x++, p += bpp) {
+			const uae_u8 *a = l0 + xs[x] * 4, *b = l1 + xs[x] * 4;
+			int xw = xf[x], o = xw ? 4 : 0;
+			int c[3];
+			for (int k = 0; k < 3; k++) {
+				int top = a[k] * (256 - xw) + a[k + o] * xw;
+				int bot = b[k] * (256 - xw) + b[k + o] * xw;
+				c[k] = (top * (256 - yf) + bot * yf) >> 16;
+			}
+			put_pixel(p, format, c[0], c[1], c[2]);
+		}
+	}
+}
+
+/* Pictures of the Amiga, which no decoder of the device knows: IFF ILBM with
+   up to 8 planes, EHB, HAM6, HAM8, 24 and 32 planes, and the chunky PBM of
+   Deluxe Paint. */
+
+#define ILBM_MAX_FILE (64 * 1024 * 1024)
+#define ILBM_MAX_PIXELS (64 * 1024 * 1024)
+#define ILBM_CAMG_EHB 0x80
+#define ILBM_CAMG_HAM 0x800
+
+static inline uae_u32 ilbm_be32(const uae_u8 *p)
+{
+	return ((uae_u32)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+}
+
+/* Unpacks BODY into rows of rowbytes each; what is missing stays 0. */
+static void ilbm_body(const uae_u8 *in, size_t inlen, bool packed, uae_u8 *out, size_t outlen)
+{
+	if (!packed) {
+		memcpy(out, in, inlen < outlen ? inlen : outlen);
+		return;
+	}
+	size_t i = 0, o = 0;
+	while (i < inlen && o < outlen) {
+		int n = (signed char)in[i++];
+		if (n >= 0) {
+			size_t c = (size_t)n + 1;
+			if (c > inlen - i)
+				c = inlen - i;
+			if (c > outlen - o)
+				c = outlen - o;
+			memcpy(out + o, in + i, c);
+			i += (size_t)n + 1;
+			o += c;
+		} else if (n != -128) {
+			if (i >= inlen)
+				break;
+			size_t c = (size_t)(1 - n);
+			if (c > outlen - o)
+				c = outlen - o;
+			memset(out + o, in[i++], c);
+			o += c;
+		}
+	}
+}
+
+/* Decodes the file data[0..len) into w x h RGBA. The picture's shape, from
+   the aspect of its pixels, goes to shown_w x shown_h. */
+static bool ilbm_decode(const uae_u8 *data, size_t len, std::vector<uae_u8> &rgba,
+	int *pw, int *ph, int *shown_w, int *shown_h, char *kind, size_t kindsize, int depth = 0)
+{
+	if (len < 12 || memcmp(data, "FORM", 4))
+		return false;
+	bool pbm = !memcmp(data + 8, "PBM ", 4);
+	if (!pbm && memcmp(data + 8, "ILBM", 4))
+		return false;
+
+	const uae_u8 *bmhd = NULL, *cmap = NULL, *body = NULL;
+	size_t ncolors = 0, bodylen = 0;
+	uae_u32 camg = 0;
+	bool have_camg = false;
+	size_t at = 12;
+	while (at + 8 <= len) {
+		const uae_u8 *id = data + at;
+		size_t size = ilbm_be32(id + 4);
+		const uae_u8 *chunk = id + 8;
+		size_t left = len - at - 8;
+		if (size > left)
+			size = left;		/* cut short: as much as there is */
+		if (!memcmp(id, "BMHD", 4) && size >= 20)
+			bmhd = chunk;
+		else if (!memcmp(id, "CMAP", 4)) {
+			cmap = chunk;
+			ncolors = size / 3;
+		} else if (!memcmp(id, "CAMG", 4) && size >= 4) {
+			camg = ilbm_be32(chunk);
+			have_camg = true;
+		} else if (!memcmp(id, "BODY", 4)) {
+			body = chunk;
+			bodylen = size;
+		} else if (!memcmp(id, "FORM", 4) && !bmhd && size >= 12 && depth < 2) {
+			/* a picture wrapped in another, as MUI's patterns are */
+			return ilbm_decode(id, size + 8, rgba, pw, ph, shown_w, shown_h, kind, kindsize, depth + 1);
+		}
+		at += 8 + size + (size & 1);
+	}
+	if (!bmhd || !body)
+		return false;
+
+	int w = (bmhd[0] << 8) | bmhd[1], h = (bmhd[2] << 8) | bmhd[3];
+	int planes = bmhd[8], masking = bmhd[9], compression = bmhd[10];
+	int xaspect = bmhd[14], yaspect = bmhd[15];
+	if (w <= 0 || h <= 0 || (int64_t)w * h > ILBM_MAX_PIXELS || compression > 1)
+		return false;
+	if (pbm ? planes != 8 && planes != 24 : !((planes >= 1 && planes <= 8) || planes == 24 || planes == 32))
+		return false;
+
+	/* the mask, an extra plane, is there only to be passed over */
+	size_t planerow = (size_t)((w + 15) >> 4) * 2;
+	size_t rowbytes = pbm ? (size_t)(((int64_t)w * planes / 8 + 1) & ~1)
+		: planerow * (planes + (masking == 1 ? 1 : 0));
+	std::vector<uae_u8> rows;
+	rows.resize(rowbytes * h);
+	ilbm_body(body, bodylen, compression == 1, rows.data(), rows.size());
+
+	/* the colours; files from before colours had 8 bits hold 4 in the top */
+	uae_u8 pal[256][3];
+	memset(pal, 0, sizeof pal);
+	int count = ncolors > 256 ? 256 : (int)ncolors;
+	bool fours = count > 0;
+	for (int i = 0; i < count * 3; i++)
+		fours = fours && !(cmap[i] & 0x0f);
+	for (int i = 0; i < count; i++) {
+		for (int k = 0; k < 3; k++) {
+			int v = cmap[i * 3 + k];
+			pal[i][k] = fours ? v | (v >> 4) : v;
+		}
+	}
+	if (!count && planes <= 8) {
+		for (int i = 0; i < (1 << planes); i++)
+			pal[i][0] = pal[i][1] = pal[i][2] = i * 255 / ((1 << planes) - 1);
+	}
+
+	bool ham = false, ehb = false;
+	if (!pbm && planes <= 8) {
+		/* a value with a monitor's number above the low 16 bits is an RTG
+		   ModeID, whose bits mean nothing of HAM */
+		if (have_camg && (camg >> 24) == 0) {
+			ham = (camg & ILBM_CAMG_HAM) && (planes == 6 || planes == 8 || planes == 5 || planes == 7);
+			ehb = (camg & ILBM_CAMG_EHB) && planes == 6;
+		} else if (have_camg) {
+		} else if (planes == 6) {
+			/* an old file with no CAMG: the palette tells */
+			ham = count == 16;
+			ehb = count == 32;
+		} else if (planes == 8) {
+			ham = count == 64;
+		}
+	}
+	if (ehb) {
+		for (int i = 0; i < 32; i++) {
+			for (int k = 0; k < 3; k++)
+				pal[32 + i][k] = pal[i][k] >> 1;
+		}
+	}
+
+	rgba.resize((size_t)w * h * 4);
+	int hambits = planes > 6 ? 6 : 4;	/* the bits of a modified colour */
+	for (int y = 0; y < h; y++) {
+		const uae_u8 *row = rows.data() + rowbytes * y;
+		uae_u8 *out = rgba.data() + (size_t)w * y * 4;
+		int r = pal[0][0], g = pal[0][1], b = pal[0][2];
+		for (int x = 0; x < w; x++, out += 4) {
+			uae_u32 v = 0;
+			if (pbm) {
+				if (planes == 8) {
+					v = row[x];
+				} else {
+					const uae_u8 *c = row + x * 3;
+					v = c[0] | (c[1] << 8) | (c[2] << 16);
+				}
+			} else {
+				int byte = x >> 3, bit = 7 - (x & 7);
+				for (int p = 0; p < planes; p++)
+					v |= (uae_u32)((row[planerow * p + byte] >> bit) & 1) << p;
+			}
+			if (planes > 8) {
+				r = v & 255;
+				g = (v >> 8) & 255;
+				b = (v >> 16) & 255;
+			} else if (ham) {
+				int low = v & ((1 << hambits) - 1), mode = v >> hambits;
+				int full = hambits == 4 ? low * 17 : (low << 2) | (low >> 4);
+				switch (mode) {
+				case 1: b = full; break;
+				case 2: r = full; break;
+				case 3: g = full; break;
+				default:
+					r = pal[low][0];
+					g = pal[low][1];
+					b = pal[low][2];
+					break;
+				}
+			} else {
+				r = pal[v][0];
+				g = pal[v][1];
+				b = pal[v][2];
+			}
+			out[0] = r;
+			out[1] = g;
+			out[2] = b;
+			out[3] = 255;
+		}
+	}
+
+	*pw = *shown_w = w;
+	*ph = *shown_h = h;
+	/* pixels that are not square come out taller or wider, never smaller;
+	   an aspect of nonsense is left alone */
+	if (xaspect && yaspect && xaspect * 4 >= yaspect && yaspect * 4 >= xaspect) {
+		if (yaspect > xaspect)
+			*shown_h = (int)((int64_t)h * yaspect / xaspect);
+		else if (xaspect > yaspect)
+			*shown_w = (int)((int64_t)w * xaspect / yaspect);
+		if (*shown_w > 0xffff || *shown_h > 0xffff) {
+			*shown_w = w;
+			*shown_h = h;
+		}
+	}
+	snprintf(kind, kindsize, "%s", pbm ? "PBM" : ham ? (planes > 6 ? "HAM8" : "HAM6")
+		: ehb ? "EHB" : "ILBM");
+	return true;
+}
+
+class ilbm_source : public picture_source {
+public:
+	bool open(const char *path);
+};
+
+bool ilbm_source::open(const char *path)
+{
+	FILE *f = fopen(path, "rb");
+	if (!f)
+		return false;
+	uae_u8 head[12];
+	bool ok = fread(head, 1, 12, f) == 12 && !memcmp(head, "FORM", 4) &&
+		(!memcmp(head + 8, "ILBM", 4) || !memcmp(head + 8, "PBM ", 4));
+	std::vector<uae_u8> file;
+	if (ok) {
+		fseek(f, 0, SEEK_END);
+		long size = ftell(f);
+		ok = size >= 12 && size <= ILBM_MAX_FILE;
+		if (ok) {
+			file.resize(size);
+			fseek(f, 0, SEEK_SET);
+			ok = fread(file.data(), 1, file.size(), f) == file.size();
+		}
+	}
+	fclose(f);
+	if (ok)
+		ok = ilbm_decode(file.data(), file.size(), rgba, &pw, &ph, &width, &height, codec, sizeof codec);
+	if (ok)
+		write_log(_T("HostPlay: %s, %s %dx%d, shown at %dx%d\n"), path, codec, pw, ph, width, height);
+	return ok;
+}
+
+#ifdef HOSTVIDEO_MEDIACODEC
+
+/* One pixel in the screen's format, as it lies in the Amiga's memory: the
+   PC formats are little endian words. */
 static inline int clamp255(int v)
 {
 	return v < 0 ? 0 : (v > 255 ? 255 : v);
@@ -1349,21 +1658,9 @@ static bool find_imagedecoder(void)
    still more than a screen, without hundreds of MB for a photo. */
 #define IMAGE_MAX_SIDE 2560
 
-class image_source : public video_source {
+class image_source : public picture_source {
 public:
-	image_source() { dropped = 0; audio_rate = 0; duration = 0; codec[0] = 0; }
 	bool open(const char *path);
-	/* one picture: it falls due at once, and stays */
-	bool take(double t) { if (taken) return false; taken = true; return true; }
-	void render(uae_u8 *dst, int w, int h, int stride, int format);
-	bool ended() { return false; }
-	void seek(double t) { taken = false; }
-	int audio_read(uae_s16 (*out)[2], int n) { return 0; }
-
-private:
-	bool taken = false;
-	int pw = 0, ph = 0;
-	std::vector<uae_u8> rgba;
 };
 
 bool image_source::open(const char *path)
@@ -1417,58 +1714,15 @@ bool image_source::open(const char *path)
 	return ok;
 }
 
-/* The picture scaled to w x h, bilinear, in a Picasso96 RGBFormat; what
-   is see-through lies on black. */
-void image_source::render(uae_u8 *dst, int w, int h, int stride, int format)
-{
-	if (rgba.empty()) {
-		clear(dst, w, h, stride, format);
-		return;
-	}
-	int bpp = format_bpp(format);
-	std::vector<int> xs(w), xf(w);
-	for (int x = 0; x < w; x++) {
-		int sx = (int)(((2 * x + 1) * (int64_t)pw * 128) / w) - 128;
-		if (sx < 0)
-			sx = 0;
-		xs[x] = sx >> 8;
-		xf[x] = sx & 255;
-		if (xs[x] >= pw - 1) {
-			xs[x] = pw - 1;
-			xf[x] = 0;
-		}
-	}
-	for (int y = 0; y < h; y++) {
-		int sy = (int)(((2 * y + 1) * (int64_t)ph * 128) / h) - 128;
-		if (sy < 0)
-			sy = 0;
-		int ys = sy >> 8, yf = sy & 255;
-		if (ys >= ph - 1) {
-			ys = ph - 1;
-			yf = 0;
-		}
-		const uae_u8 *l0 = &rgba[(size_t)ys * pw * 4];
-		const uae_u8 *l1 = yf ? l0 + (size_t)pw * 4 : l0;
-		uae_u8 *p = dst + (size_t)y * stride;
-		for (int x = 0; x < w; x++, p += bpp) {
-			const uae_u8 *a = l0 + xs[x] * 4, *b = l1 + xs[x] * 4;
-			int xw = xf[x], o = xw ? 4 : 0;
-			int c[3];
-			for (int k = 0; k < 3; k++) {
-				int top = a[k] * (256 - xw) + a[k + o] * xw;
-				int bot = b[k] * (256 - xw) + b[k + o] * xw;
-				c[k] = (top * (256 - yf) + bot * yf) >> 16;
-			}
-			put_pixel(p, format, c[0], c[1], c[2]);
-		}
-	}
-}
-
 #endif /* HOSTVIDEO_MEDIACODEC */
 
 /* A source for the file, or NULL. */
 static video_source *open_source(const char *path)
 {
+	ilbm_source *pic = new ilbm_source();
+	if (pic->open(path))
+		return pic;
+	delete pic;
 #if defined(HOSTVIDEO_FFMPEG)
 	ffmpeg_source *s = new ffmpeg_source();
 #elif defined(HOSTVIDEO_MEDIACODEC)
