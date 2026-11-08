@@ -661,10 +661,10 @@ index 000000000..3a4c40da8
 +}
 diff --git a/project/java/FloatingWindow.java b/project/java/FloatingWindow.java
 new file mode 100644
-index 000000000..d06e3e298
+index 000000000..2a0c165c7
 --- /dev/null
 +++ b/project/java/FloatingWindow.java
-@@ -0,0 +1,476 @@
+@@ -0,0 +1,541 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, windows over the app for the Android port
@@ -700,8 +700,8 @@ index 000000000..d06e3e298
 +import android.widget.LinearLayout;
 +import android.widget.TextView;
 +
-+// A window over the app, such as the video window: a title bar to move it by, buttons for full
-+// screen and to close it, and the content, with a bar of controls over its bottom and a corner to
++// A window over the app, such as the video window: a title bar to move it by, buttons to fold it
++// up to that bar, for full screen and to close it, and the content, with a bar of controls over its bottom and a corner to
 +// drag for the size over its bottom right. The app goes on underneath; the window hides while the
 +// app shows its menu. Made and used on the UI thread.
 +abstract class FloatingWindow
@@ -714,6 +714,10 @@ index 000000000..d06e3e298
 +	protected TextView title;
 +	protected int width, contentHeight; // the height when the content does not keep its own shape
 +	private boolean fullScreen = false, hidden = false, closed = false;
++	private boolean folded = false; // only the title bar shows
++	private int[] foldedVisibility;
++	private View foldIcon;
++	private LinearLayout titleBar;
 +	private final int cascade; // windows open before it, for a place a step aside of theirs
 +	private LinearLayout bottom;
 +	private View corner;
@@ -846,7 +850,7 @@ index 000000000..d06e3e298
 +	}
 +
 +	// Icons drawn to a size, not characters of the font: those come out in all sizes
-+	private static final int ICON_RESIZE = 0, ICON_FULLSCREEN = 1;
++	private static final int ICON_RESIZE = 0, ICON_FULLSCREEN = 1, ICON_FOLD = 2;
 +
 +	private View icon(final int kind, View.OnClickListener click)
 +	{
@@ -874,6 +878,21 @@ index 000000000..d06e3e298
 +							c.drawLine(w - m, h - d, w - d, h - m, paint);
 +						}
 +					}
++				}
++				else if (kind == ICON_FOLD)
++				{
++					// A line low down, or the frame of the window to bring back
++					paint.setColor(Color.WHITE);
++					float r = px(7);
++					if (folded)
++					{
++						c.drawLine(cx - r, cy - r, cx + r, cy - r, paint);
++						c.drawLine(cx + r, cy - r, cx + r, cy + r, paint);
++						c.drawLine(cx + r, cy + r, cx - r, cy + r, paint);
++						c.drawLine(cx - r, cy + r, cx - r, cy - r, paint);
++					}
++					else
++						c.drawLine(cx - r, cy + r, cx + r, cy + r, paint);
 +				}
 +				else
 +				{
@@ -943,6 +962,7 @@ index 000000000..d06e3e298
 +
 +		// Title bar: drag it to move the window
 +		LinearLayout bar = new LinearLayout(context);
++		titleBar = bar;
 +		bar.setOrientation(LinearLayout.HORIZONTAL);
 +		bar.setBackgroundColor(Color.rgb(0x2a, 0x5d, 0x9f));
 +		bar.setGravity(Gravity.CENTER_VERTICAL);
@@ -953,6 +973,8 @@ index 000000000..d06e3e298
 +		title.setPadding(px(10), 0, px(4), 0);
 +		bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 +		addTitleButtons(bar);
++		foldIcon = icon(ICON_FOLD, new View.OnClickListener() { public void onClick(View v) { toggleFolded(); } });
++		addButton(bar, foldIcon);
 +		addButton(bar, icon(ICON_FULLSCREEN, new View.OnClickListener() { public void onClick(View v) { toggleFullScreen(); } }));
 +		addButton(bar, button("✕", new View.OnClickListener() { public void onClick(View v) { close(); } }));
 +		bar.setOnTouchListener(new View.OnTouchListener()
@@ -975,6 +997,11 @@ index 000000000..d06e3e298
 +			}
 +		});
 +		window.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)));
++		if (width < minWidth())
++		{
++			width = minWidth();
++			contentHeight = width * 3 / 4;
++		}
 +
 +		addRows(window);
 +		FrameLayout stack = new FrameLayout(context);
@@ -1011,7 +1038,7 @@ index 000000000..d06e3e298
 +				}
 +				else if (e.getActionMasked() == MotionEvent.ACTION_MOVE)
 +				{
-+					width = Math.max(px(200), Math.min(parent.getWidth(), startWidth + (int)(e.getRawX() - downX)));
++					width = Math.max(minWidth(), Math.min(parent.getWidth(), startWidth + (int)(e.getRawX() - downX)));
 +					contentHeight = Math.max(px(100), startHeight + (int)(e.getRawY() - downY));
 +					layout();
 +				}
@@ -1068,8 +1095,16 @@ index 000000000..d06e3e298
 +		corner.setVisibility(show && !fullScreen ? View.VISIBLE : View.INVISIBLE);
 +	}
 +
++	// Room for the buttons of the title bar, and some of its title
++	private int minWidth()
++	{
++		return Math.min(parent.getWidth(), Math.max(px(200), (titleBar.getChildCount() - 1) * px(44) + px(24)));
++	}
++
 +	private int windowHeight()
 +	{
++		if (folded)
++			return px(40);
 +		int h = shapedHeight(width);
 +		return (h >= 0 ? h : contentHeight) + rowsHeight() + px(40);
 +	}
@@ -1116,8 +1151,38 @@ index 000000000..d06e3e298
 +		return ((FrameLayout.LayoutParams) window.getLayoutParams()).topMargin;
 +	}
 +
++	// Only the title bar, or the whole window again where it was. Gone, the content goes on as
++	// it is: a video keeps playing, its sound with it.
++	private void toggleFolded()
++	{
++		if (fullScreen)
++			toggleFullScreen();
++		folded = !folded;
++		int n = window.getChildCount();
++		if (folded)
++		{
++			if (hasFocus())
++				context.releaseOverlayFocus();
++			foldedVisibility = new int[n];
++			for (int i = 1; i < n; i++)
++			{
++				foldedVisibility[i] = window.getChildAt(i).getVisibility();
++				window.getChildAt(i).setVisibility(View.GONE);
++			}
++		}
++		else
++			for (int i = 1; i < n; i++)
++				window.getChildAt(i).setVisibility(foldedVisibility[i]);
++		foldIcon.invalidate();
++		layout();
++		if (!folded)
++			showControls();
++	}
++
 +	private void toggleFullScreen()
 +	{
++		if (folded)
++			toggleFolded();
 +		fullScreen = !fullScreen;
 +		if (fullScreen)
 +		{
