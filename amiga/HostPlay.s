@@ -7,9 +7,9 @@
 |            parameter FULLSCREEN show the picture on a screen of its own:
 |            an RTG mode near its size in the proportions of the Workbench,
 |            the emulator keeping its shape. There the left button goes to
-|            the next picture, cursor left to the one before; the right
-|            button or Esc go back to the window, or end it after
-|            FULLSCREEN, and F changes over.
+|            the picture before on the left half of the screen, to the next
+|            on the right half; the right button or Esc go back to the
+|            window, or end it after FULLSCREEN, and F changes over.
 |
 | Usage: HostPlay [<file>]
 | Without a file - from the Shell, or started from its icon - it asks for one
@@ -573,16 +573,23 @@ notup:
 	bmi.w	badformat
 	bra.w	msgloop
 notraw:
-| On the screen of its own: the left button goes to the next picture, the
-| right one back, as Esc
+| On the screen of its own: the left button goes to the picture before on the
+| left half of the screen, to the next on the right half; the right one back,
+| as Esc
 	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
 	bne.s	notmouse
 	cmp.w	#0xE9,%d3		| MENUUP
 	beq.s	goback
 	cmp.w	#0xE8,%d3		| SELECTUP
 	bne.w	msgloop
+	lea	vars(%pc),%a2
+	move.l	WIDTH(%a2),%d1
+	lsr.l	#1,%d1
 	moveq	#1,%d0
-	bsr.w	nextfile
+	cmp.l	%d1,%d4
+	bge.s	1f
+	moveq	#-1,%d0
+1:	bsr.w	nextfile
 	tst.l	%d0
 	bmi.w	badformat
 	bra.w	msgloop
@@ -2371,8 +2378,9 @@ msg_usage:	.ascii	"Usage: HostView [<file>] [FULLSCREEN]\n"
 		.ascii	"before and after it in its drawer, full screen, another\n"
 		.ascii	"file. Cursor right or space: the next one, cursor left: the\n"
 		.ascii	"one before, F: full screen and back. There the left button\n"
-		.ascii	"goes to the next one, the right button or Esc back to the\n"
-		.ascii	"window. FULLSCREEN starts there, and they end it then. In\n"
+		.ascii	"goes back on the left half, on on the right half; the right\n"
+		.ascii	"button or Esc back to the window. FULLSCREEN starts there,\n"
+		.ascii	"and they end it then. In\n"
 		.ascii	"the window Esc ends it. A file the host cannot\n"
 		.ascii	"reach, such as one inside a hardfile, goes over to it first;\n"
 		.asciz	"Ctrl-C stops that.\n"
