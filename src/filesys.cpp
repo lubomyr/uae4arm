@@ -4696,6 +4696,7 @@ static void	action_set_protect(TrapContext *ctx, Unit *unit, dpacket *packet)
   	PUT_PCK_RES2 (packet, err);
   } else {
   	PUT_PCK_RES1 (packet, DOS_TRUE);
+  	fsdb_aino_writeback (a);
   }
 	notify_check(ctx, unit, a);
 	gui_flicker_led (UNIT_LED(unit), unit->unit, 2);
@@ -4756,6 +4757,7 @@ static void action_set_comment(TrapContext *ctx, Unit * unit, dpacket *packet)
   	xfree (a->comment);
   a->comment = commented;
   fsdb_set_file_attrs (a);
+  fsdb_aino_writeback (a);
 	notify_check(ctx, unit, a);
 	gui_flicker_led (UNIT_LED(unit), unit->unit, 2);
 }

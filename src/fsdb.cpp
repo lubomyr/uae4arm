@@ -341,6 +341,79 @@ static void write_aino (FILE *f, a_inode *aino)
   aino->has_dbentry = aino->needs_dbentry;
 }
 
+/* Whether the db file has an entry in use for a file not in memory: a directory
+   holds only the files looked at so far. */
+
+static int other_entries_in_db (a_inode *dir)
+{
+  uae_u8 buf[1 + 4 + 257 + 257 + 81];
+  int found = 0;
+  FILE *f = get_fsdb (dir, _T("rb"));
+
+  if (f == 0)
+  	return 0;
+  while (! found && fread (buf, 1, sizeof buf, f) == sizeof buf) {
+  	a_inode *aino;
+  	TCHAR *s;
+
+  	if (buf[0] == 0)
+	    continue;
+  	s = au ((char*)buf + 5);
+  	for (aino = dir->child; aino; aino = aino->sibling) {
+	    if (!_tcscmp (s, aino->aname))
+	    	break;
+  	}
+  	found = aino == 0;
+  	xfree (s);
+  }
+  fclose (f);
+  return found;
+}
+
+/* Write back the entry of one file at once, for what the host has no place for
+   but the db file: a process that gets killed never writes what still waits in
+   memory. The others in the directory stay as they are. */
+
+void fsdb_aino_writeback (a_inode *aino)
+{
+  FILE *f;
+  a_inode *dir = aino->parent;
+  uae_u8 buf[1 + 4 + 257 + 257 + 81];
+
+  if (! dir || ! aino->dirty)
+  	return;
+  aino->needs_dbentry = needs_dbentry (aino);
+  if (! aino->needs_dbentry && ! aino->has_dbentry) {
+  	aino->dirty = 0;
+  	return;
+  }
+  f = get_fsdb (dir, _T("r+b"));
+  if (f == 0) {
+  	f = get_fsdb (dir, _T("w+b"));
+  	if (f == 0)
+	    return;
+  }
+  if (! aino->has_dbentry) {
+  	long off = 0;
+  	while (! aino->has_dbentry && fread (buf, 1, sizeof buf, f) == sizeof buf) {
+			TCHAR *s = au ((char*)buf + 5);
+			if (!_tcscmp (s, aino->aname)) {
+    		aino->has_dbentry = 1;
+    		aino->db_offset = off;
+	    }
+			xfree (s);
+	    off += sizeof buf;
+	  }
+  }
+  if (aino->has_dbentry)
+  	fseek (f, aino->db_offset, SEEK_SET);
+  else
+  	fseek (f, 0, SEEK_END);
+  write_aino (f, aino);
+  aino->dirty = 0;
+  fclose (f);
+}
+
 /* Write back the db file for a directory.  */
 
 void fsdb_dir_writeback (a_inode *dir)
@@ -366,7 +439,7 @@ void fsdb_dir_writeback (a_inode *dir)
   	else
 	    changes_needed = 1;
   }
-  if (! entries_needed) {
+  if (! entries_needed && ! other_entries_in_db (dir)) {
   	kill_fsdb (dir);
   	return;
   }

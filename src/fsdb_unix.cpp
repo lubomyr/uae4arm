@@ -134,7 +134,7 @@ int fsdb_mode_representable_p (const a_inode *aino, int amigaos_mode)
   if (0 && aino->dir)
   	return amigaos_mode == 0;
     
-  if (mask & A_FIBF_SCRIPT) /* script */
+  if (mask & (A_FIBF_HIDDEN | A_FIBF_SCRIPT | A_FIBF_PURE | A_FIBF_ARCHIVE)) /* no native bit for these */
     return 0;
   if ((mask & 15) == 15) /* xxxxRWED == OK */
     return 1;
