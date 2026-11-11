@@ -83,33 +83,92 @@ static const struct kbtab kbtable[] =
 
 static int record_key_direct(int);
 
-static void keytoscancode(int key, bool release)
+/* 0xA0-0xFF on the usa keymap of Kickstart 3.1: dead key (1-5 =
+   Alt + F, G, H, J, K: acute, grave, circumflex, tilde, umlaut), key,
+   qualifiers (1 Shift, 2 Alt) */
+static const struct latin1tab { uae_u8 dead, code, qual; } latin1table[0x60] =
 {
-	int v = 0x40;
-	int q = 0x00;
-	int mask = release ? 0x80 : 0x00;
+	{ 0, 0x40, 2 }, { 0, 0x17, 2 }, { 0, 0x04, 2 }, { 0, 0x28, 2 },  /* A0 */
+	{ 0, 0x15, 2 }, { 0, 0x15, 3 }, { 0, 0x17, 3 }, { 0, 0x21, 3 },  /* A4 */
+	{ 5, 0x40, 0 }, { 0, 0x12, 2 }, { 0, 0x34, 2 }, { 0, 0x09, 2 },  /* A8 */
+	{ 0, 0x31, 3 }, { 0, 0x36, 2 }, { 0, 0x13, 2 }, { 0, 0x36, 3 },  /* AC */
+	{ 0, 0x11, 2 }, { 0, 0x31, 2 }, { 0, 0x02, 2 }, { 0, 0x03, 2 },  /* B0 */
+	{ 1, 0x40, 0 }, { 0, 0x16, 2 }, { 0, 0x19, 2 }, { 0, 0x08, 2 },  /* B4 */
+	{ 0, 0x37, 2 }, { 0, 0x01, 2 }, { 0, 0x35, 2 }, { 0, 0x0a, 2 },  /* B8 */
+	{ 0, 0x05, 2 }, { 0, 0x06, 2 }, { 0, 0x07, 2 }, { 0, 0x37, 3 },  /* BC */
+	{ 2, 0x20, 1 }, { 1, 0x20, 1 }, { 3, 0x20, 1 }, { 4, 0x20, 1 },  /* C0 */
+	{ 5, 0x20, 1 }, { 0, 0x10, 3 }, { 0, 0x20, 3 }, { 0, 0x33, 3 },  /* C4 */
+	{ 2, 0x12, 1 }, { 1, 0x12, 1 }, { 3, 0x12, 1 }, { 5, 0x12, 1 },  /* C8 */
+	{ 2, 0x17, 1 }, { 1, 0x17, 1 }, { 3, 0x17, 1 }, { 5, 0x17, 1 },  /* CC */
+	{ 0, 0x22, 3 }, { 4, 0x36, 1 }, { 2, 0x18, 1 }, { 1, 0x18, 1 },  /* D0 */
+	{ 3, 0x18, 1 }, { 4, 0x18, 1 }, { 5, 0x18, 1 }, { 0, 0x32, 2 },  /* D4 */
+	{ 0, 0x18, 3 }, { 2, 0x16, 1 }, { 1, 0x16, 1 }, { 3, 0x16, 1 },  /* D8 */
+	{ 5, 0x16, 1 }, { 1, 0x15, 1 }, { 0, 0x14, 3 }, { 0, 0x21, 2 },  /* DC */
+	{ 2, 0x20, 0 }, { 1, 0x20, 0 }, { 3, 0x20, 0 }, { 4, 0x20, 0 },  /* E0 */
+	{ 5, 0x20, 0 }, { 0, 0x10, 2 }, { 0, 0x20, 2 }, { 0, 0x33, 2 },  /* E4 */
+	{ 2, 0x12, 0 }, { 1, 0x12, 0 }, { 3, 0x12, 0 }, { 5, 0x12, 0 },  /* E8 */
+	{ 2, 0x17, 0 }, { 1, 0x17, 0 }, { 3, 0x17, 0 }, { 5, 0x17, 0 },  /* EC */
+	{ 0, 0x22, 2 }, { 4, 0x36, 0 }, { 2, 0x18, 0 }, { 1, 0x18, 0 },  /* F0 */
+	{ 3, 0x18, 0 }, { 4, 0x18, 0 }, { 5, 0x18, 0 }, { 0, 0x32, 3 },  /* F4 */
+	{ 0, 0x18, 2 }, { 2, 0x16, 0 }, { 1, 0x16, 0 }, { 3, 0x16, 0 },  /* F8 */
+	{ 5, 0x16, 0 }, { 1, 0x15, 0 }, { 0, 0x14, 2 }, { 5, 0x15, 0 },  /* FC */
+};
+
+/* Amiga key code (bit 7 set for a release), rotated as the keyboard sends it */
+static void sendkey(int code, bool release)
+{
+	int v = code | (release ? 0x80 : 0x00);
+	record_key_direct(((v << 1) | (v >> 7)) & 0xff);
+}
+
+#define AK_LSHIFT 0x60
+#define AK_LALT   0x64
+
+/* How to type c: an optional dead key first, then the key with Shift
+   (qual 1) and/or Alt (qual 2) */
+static bool keyrecipe(int c, int *dead, int *code, int *qual)
+{
+	if (c >= 0xa0 && c <= 0xff) {
+		const struct latin1tab *t = &latin1table[c - 0xa0];
+		*dead = t->dead;
+		*code = t->code;
+		*qual = t->qual;
+		return true;
+	}
 	for (int i = 0; kbtable[i].ascii; i++) {
-		if (kbtable[i].ascii == key) {
-			v = kbtable[i].code;
-			q = kbtable[i].qual;
-			break;
+		if (kbtable[i].ascii == c) {
+			*dead = 0;
+			*code = kbtable[i].code;
+			*qual = kbtable[i].qual ? 1 : 0;
+			return true;
 		}
 	}
-	v |= mask;
-	v = ((v << 1) | (v >> 7)) & 0xff;
-	q |= mask;
+	return false;
+}
+
+static void keytoscancode(int key, bool release)
+{
+	int dead = 0, code = 0x40, qual = 0;
+	keyrecipe(key, &dead, &code, &qual);
 	if (release) {
-		record_key_direct(v);
-		if (q & 0x7f) {
-			q = ((q << 1) | (q >> 7)) & 0xff;
-			record_key_direct(q);
-		}
+		sendkey(code, true);
+		if (qual & 2)
+			sendkey(AK_LALT, true);
+		if (qual & 1)
+			sendkey(AK_LSHIFT, true);
 	} else {
-		if (q & 0x7f) {
-			q = ((q << 1) | (q >> 7)) & 0xff;
-			record_key_direct(q);
+		if (dead) {
+			/* Alt + F, G, H, J or K */
+			sendkey(AK_LALT, false);
+			sendkey(0x22 + dead, false);
+			sendkey(0x22 + dead, true);
+			sendkey(AK_LALT, true);
 		}
-		record_key_direct(v);
+		if (qual & 1)
+			sendkey(AK_LSHIFT, false);
+		if (qual & 2)
+			sendkey(AK_LALT, false);
+		sendkey(code, false);
 	}
 }
 
@@ -198,14 +257,12 @@ void keybuf_init (void)
 
 static bool typable(int c)
 {
-	for (int i = 0; kbtable[i].ascii; i++) {
-		if (kbtable[i].ascii == c)
-			return true;
-	}
-	return false;
+	int dead, code, qual;
+	return keyrecipe(c, &dead, &code, &qual);
 }
 
-/* Ascii of the UTF-8 character at *pp, or 0 if it has none; moves *pp on */
+/* Latin-1 of the UTF-8 character at *pp, or the nearest ascii, or 0 if
+   it has none; moves *pp on */
 static int utf8_to_ascii(const unsigned char **pp)
 {
 	const unsigned char *p = *pp;
@@ -228,6 +285,8 @@ static int utf8_to_ascii(const unsigned char **pp)
 		cp = (cp << 6) | (p[i] & 0x3f);
 	}
 	*pp = p + len;
+	if (cp >= 0xa1 && cp <= 0xff && cp != 0xad)
+		return cp;
 	switch (cp) {
 		case 0x00a0: case 0x2002: case 0x2003: case 0x2009: case 0x202f:
 			return ' ';
@@ -245,8 +304,9 @@ static int utf8_to_ascii(const unsigned char **pp)
 	return 0;
 }
 
-/* Types the UTF-8 text in as key presses on the US keymap. Characters
-   without a key are left out; CR LF and CR become Return. */
+/* Types the UTF-8 text in as key presses on the usa keymap, Latin-1
+   letters with Alt or the dead keys. Characters without a key are left
+   out; CR LF and CR become Return. */
 void keybuf_inject(const char *txt)
 {
 	size_t len = strlen(txt);
