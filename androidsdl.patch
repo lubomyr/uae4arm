@@ -1640,7 +1640,7 @@ index 000000000..b4542c32d
 +	}
 +}
 diff --git a/project/java/MainActivity.java b/project/java/MainActivity.java
-index 69c7f86c2..9606ad1bb 100644
+index 69c7f86c2..4e82eb3ac 100644
 --- a/project/java/MainActivity.java
 +++ b/project/java/MainActivity.java
 @@ -116,6 +116,7 @@ public class MainActivity extends Activity
@@ -1885,7 +1885,33 @@ index 69c7f86c2..9606ad1bb 100644
  									return super.dispatchTouchEvent(converted);
  								}
  								return false;
-@@ -1590,6 +1758,21 @@ public class MainActivity extends Activity
+@@ -829,7 +997,7 @@ public class MainActivity extends Activity
+ 							{
+ 								if (key == KeyEvent.KEYCODE_BACK)
+ 									return;
+-								if (key < 0)
++								if (key < 0 || key > 200000)
+ 									return;
+ 								for (Keyboard.Key k: builtinKeyboard.getKeyboard().getKeys())
+ 								{
+@@ -873,6 +1041,16 @@ public class MainActivity extends Activity
+ 								}
+ 								if (key < 0)
+ 									return;
++								if (key == 200001 || key == 200002)
++								{
++									// Copy and Paste: Right Amiga + C or V
++									int letter = (key == 200001) ? KeyEvent.KEYCODE_C : KeyEvent.KEYCODE_V;
++									mGLView.onKeyDown(KeyEvent.KEYCODE_META_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_META_RIGHT));
++									mGLView.onKeyDown(letter, new KeyEvent(KeyEvent.ACTION_DOWN, letter));
++									mGLView.onKeyUp(letter, new KeyEvent(KeyEvent.ACTION_UP, letter));
++									mGLView.onKeyUp(KeyEvent.KEYCODE_META_RIGHT, new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_META_RIGHT));
++									return;
++								}
+ 								for (Keyboard.Key k: builtinKeyboard.getKeyboard().getKeys())
+ 								{
+ 									if (k.sticky && key == k.codes[0])
+@@ -1590,6 +1768,21 @@ public class MainActivity extends Activity
  		}
  	}
  
@@ -4195,10 +4221,19 @@ index 34787ac17..79dfc3a75 100644
  	return 0;
  }
 diff --git a/project/jni/sdl-1.2/src/video/android/keymap.c b/project/jni/sdl-1.2/src/video/android/keymap.c
-index 400c01b8a..f41e34d67 100644
+index 400c01b8a..4dda29cd2 100644
 --- a/project/jni/sdl-1.2/src/video/android/keymap.c
 +++ b/project/jni/sdl-1.2/src/video/android/keymap.c
-@@ -269,11 +269,19 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -160,6 +160,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+   keymap[KEYCODE_META_RIGHT] = SDL_KEY(RGUI);
+   keymap[KEYCODE_FUNCTION] = SDL_KEY(RGUI);
+   keymap[KEYCODE_SYSRQ] = SDL_KEY(PRINT);
++  // SDL 1.2 has no Paste key: the application sees Compose
++  keymap[KEYCODE_PASTE] = SDL_KEY(COMPOSE);
+   keymap[KEYCODE_BREAK] = SDL_KEY(PAUSE);
+   keymap[KEYCODE_MOVE_HOME] = SDL_KEY(HOME);
+   keymap[KEYCODE_MOVE_END] = SDL_KEY(END);
+@@ -269,11 +271,19 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      }
    }
  
@@ -4218,7 +4253,7 @@ index 400c01b8a..f41e34d67 100644
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_4)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_5)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_6)),
-@@ -293,9 +301,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -293,9 +303,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_20)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_21)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_0_KEYCODE_22)),
@@ -4229,7 +4264,7 @@ index 400c01b8a..f41e34d67 100644
    );
  
    SDL_ANDROID_SetIndividualGamepadKeymap(   1,
-@@ -303,6 +309,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -303,6 +311,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_1)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_2)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_3)),
@@ -4238,7 +4273,7 @@ index 400c01b8a..f41e34d67 100644
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_4)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_5)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_6)),
-@@ -322,9 +330,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -322,9 +332,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_20)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_21)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_1_KEYCODE_22)),
@@ -4249,7 +4284,7 @@ index 400c01b8a..f41e34d67 100644
    );
  
    SDL_ANDROID_SetIndividualGamepadKeymap(   2,
-@@ -332,6 +338,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -332,6 +340,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_1)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_2)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_3)),
@@ -4258,7 +4293,7 @@ index 400c01b8a..f41e34d67 100644
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_4)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_5)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_6)),
-@@ -351,9 +359,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -351,9 +361,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_20)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_21)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_2_KEYCODE_22)),
@@ -4269,7 +4304,7 @@ index 400c01b8a..f41e34d67 100644
    );
  
    SDL_ANDROID_SetIndividualGamepadKeymap(   3,
-@@ -361,6 +367,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -361,6 +369,8 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_1)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_2)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_3)),
@@ -4278,7 +4313,7 @@ index 400c01b8a..f41e34d67 100644
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_4)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_5)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_6)),
-@@ -380,9 +388,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
+@@ -380,9 +390,7 @@ void SDL_android_init_keymap(SDLKey *SDL_android_keymap)
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_20)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_21)),
      SDL_KEY(SDL_KEY_VAL(SDL_ANDROID_GAMEPAD_3_KEYCODE_22)),
@@ -4316,3 +4351,20 @@ index 05c7f7acf..fcdebc33f 100644
  }
  
  extern C_LINKAGE void
+diff --git a/project/res/xml/amiga_alt_shift.xml b/project/res/xml/amiga_alt_shift.xml
+index 02ed96018..ecc1328d2 100644
+--- a/project/res/xml/amiga_alt_shift.xml
++++ b/project/res/xml/amiga_alt_shift.xml
+@@ -32,9 +32,9 @@
+ 	</Row>
+ 	<Row>
+ 		<Key android:codes="-1"  android:keyLabel="123…" android:keyEdgeFlags="left"/>
+-		<Key android:codes="143" android:keyLabel="NumLk" android:isSticky="true"/>
+-		<Key android:codes="120" android:keyLabel="Print"/>
+-		<Key android:codes="116" android:keyLabel="ScrollLk"/>
++		<Key android:codes="200001" android:keyLabel="Copy"/>
++		<Key android:codes="200002" android:keyLabel="Paste"/>
++		<Key android:codes="279" android:keyLabel="Clipboard"/>
+ 		<Key android:codes="121" android:keyLabel="Pause"/>
+ 		<Key android:codes="158" android:keyLabel="Kp ."/>
+ 		<Key android:codes="135" android:keyLabel="F5"/>

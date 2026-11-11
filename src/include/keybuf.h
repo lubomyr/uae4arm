@@ -14,6 +14,8 @@ extern int get_next_key (void);
 extern int keys_available (void);
 extern int record_key (int);
 extern void keybuf_init (void);
+extern void keybuf_inject (const char *txt);
+extern bool keybuf_injecting (void);
 extern int getcapslockstate (void);
 extern void setcapslockstate (int);
 

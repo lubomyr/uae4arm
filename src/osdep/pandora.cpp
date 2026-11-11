@@ -10,8 +10,10 @@
 #include "rtgmodes.h"
 #include "savestate.h"
 #include "gfxboard.h"
+#include "keybuf.h"
 #ifdef ANDROIDSDL
 #include <SDL_android.h>
+#include <SDL_screenkeyboard.h>
 #endif
 
 extern bool input_initialize_alldevices (void);
@@ -719,6 +721,13 @@ int handle_msgpump (void)
   			break;
   			
   		case SDL_KEYDOWN:
+#ifdef ANDROIDSDL
+  		  // Android's Paste key (the Clipboard key of the built-in keyboard)
+  		  if (rEvent.key.keysym.sym == SDLK_COMPOSE) {
+  		    inputdevice_add_inputcode(AKS_PASTE, 1, NULL);
+  		    break;
+  		  }
+#endif
   		  if (keyboard_amiga_only && key_from_keyboard(rEvent.key) && rEvent.key.keysym.sym != SDLK_F12) {
   		    if (sdlkbd >= 0)
   		      keyboard_as_amiga(rEvent.key.keysym, 1);
@@ -749,9 +758,12 @@ int handle_msgpump (void)
                         inputdevice_do_keyboard(AK_RALT, 1);
                         break;
 		    case SDLK_LMETA:
+		    case SDLK_LSUPER: // Meta keys of the built-in keyboard
                         inputdevice_do_keyboard(AK_LAMI, 1);
                         break;
 		    case SDLK_RMETA:
+		    case SDLK_RSUPER:
+		    case SDLK_MENU:
                         inputdevice_do_keyboard(AK_RAMI, 1);
                         break;
 		    case SDLK_CAPSLOCK:
@@ -870,9 +882,12 @@ int handle_msgpump (void)
                         inputdevice_do_keyboard(AK_RALT, 0);
                         break;
 		    case SDLK_LMETA:
+		    case SDLK_LSUPER: // Meta keys of the built-in keyboard
                         inputdevice_do_keyboard(AK_LAMI, 0);
                         break;
 		    case SDLK_RMETA:
+		    case SDLK_RSUPER:
+		    case SDLK_MENU:
                         inputdevice_do_keyboard(AK_RAMI, 0);
                         break;
 		    case SDLK_CAPSLOCK:
@@ -1024,6 +1039,43 @@ int handle_msgpump (void)
 		}
 	}
 	return got;
+}
+
+
+/* Types the text in the host's clipboard in as key presses */
+void target_paste_to_keyboard(void)
+{
+#ifdef ANDROIDSDL
+  char *txt = SDL_GetClipboardText();
+  if (txt) {
+    write_log(_T("Paste: %d bytes from the clipboard\n"), (int)strlen(txt));
+    keybuf_inject(txt);
+    SDL_free(txt);
+  }
+#elif defined(LINUX_HOST)
+  static const char *cmds[] = {
+    "xclip -selection clipboard -o 2>/dev/null",
+    "xsel --clipboard --output 2>/dev/null",
+    "wl-paste --no-newline 2>/dev/null",
+    NULL
+  };
+  const int maxlen = 64 * 1024;
+  char *txt = xmalloc(char, maxlen + 1);
+  for (int i = 0; cmds[i]; i++) {
+    FILE *f = popen(cmds[i], "r");
+    if (f == NULL)
+      continue;
+    size_t len = fread(txt, 1, maxlen, f);
+    int status = pclose(f);
+    if (status == 0 && len > 0) {
+      txt[len] = 0;
+      write_log(_T("Paste: %d bytes from the clipboard\n"), (int)len);
+      keybuf_inject(txt);
+      break;
+    }
+  }
+  xfree(txt);
+#endif
 }
 
 

@@ -2445,6 +2445,9 @@ static bool inputdevice_handle_inputcode2(int code, int state, const TCHAR *s)
 	  changed_prefs.leds_on_screen = currprefs.leds_on_screen;
 	  set_config_changed ();
 	  break;
+	case AKS_PASTE:
+		target_paste_to_keyboard ();
+		break;
   }
 end:
 	if (tracer_enable) {

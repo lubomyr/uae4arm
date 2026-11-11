@@ -29,6 +29,7 @@ extern void target_addtorecent (const TCHAR*, int);
 extern void target_run (void);
 extern void target_quit (void);
 extern void target_restart (void);
+extern void target_paste_to_keyboard (void);
 extern void target_getdate(int *y, int *m, int *d);
 extern bool get_plugin_path (TCHAR *out, int size, const TCHAR *path);
 extern void target_startup_msg(const TCHAR *title, const TCHAR *msg);
