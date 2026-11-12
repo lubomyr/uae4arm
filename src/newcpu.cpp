@@ -1010,7 +1010,13 @@ void init_m68k (void)
 	write_log (_T("%d CPU functions\n"), nr_cpuop_funcs);
 }
 
-struct regstruct regs;
+/* regs is the hottest data of the emulation: the JIT reaches the 68k registers
+   through it on almost every instruction. How fast it runs depended on where
+   the linker happened to put it - from release to release SysInfo changed by
+   up to 9% with no change in the CPU code, and 48 bytes into a cache line was
+   the fast place. So it is pinned there, in a block of its own. */
+extern "C" { __attribute__((aligned(64), used)) uae_u8 regs_block[(48 + sizeof(struct regstruct) + 63) & ~63]; }
+__asm__(".globl regs\n\t.set regs, regs_block + 48\n\t.type regs, %object");
 
 STATIC_INLINE int in_rom (uaecptr pc)
 {
