@@ -523,6 +523,10 @@ void rtg_shown_shape(int w, int h, int *shown_w, int *shown_h)
 }
 #endif
 
+#ifdef ANDROIDSDL
+void update_display_frame_rate(void);
+#endif
+
 static void open_screen(struct uae_prefs *p)
 {
   char layersize[20];
@@ -597,6 +601,9 @@ static void open_screen(struct uae_prefs *p)
     if(current_vsync_frame != 0)
       current_vsync_frame += 2;
   }
+#ifdef ANDROIDSDL
+  update_display_frame_rate();
+#endif
 }
 
 
@@ -613,6 +620,28 @@ void update_display(struct uae_prefs *p)
 
 
 static int currVSyncRate = 0;
+
+#ifdef ANDROIDSDL
+/* "Match display refresh" in Misc: ask Android for a display refresh rate that
+   fits the Amiga's frames - 50 Hz for PAL, 60 Hz for NTSC - so that each frame
+   shows for as long as the others. RTG screens are timed differently, they
+   leave the display as the system likes it. */
+int match_display_rate = 0;
+static float last_display_rate = -1;
+void update_display_frame_rate(void)
+{
+  float rate = 0;
+  if (match_display_rate && !screen_is_picasso) {
+    int hz = currVSyncRate ? currVSyncRate : (currprefs.ntscmode ? 60 : 50);
+    rate = hz;
+  }
+  if (rate != last_display_rate) {
+    last_display_rate = rate;
+    SDL_ANDROID_SetDisplayFrameRate(rate);
+  }
+}
+#endif
+
 static bool SetVSyncRate(int hz)
 {
 	char cmd[64];
@@ -624,6 +653,9 @@ static bool SetVSyncRate(int hz)
     system(cmd);
 #endif
     currVSyncRate = hz;
+#ifdef ANDROIDSDL
+    update_display_frame_rate();
+#endif
     return true;
   }
   return false;

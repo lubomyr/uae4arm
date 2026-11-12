@@ -47,6 +47,7 @@ static gcn::UaeCheckBox* chkKeepAspectRatio;
 extern void gui_set_screen_ratio(int keep);
 static gcn::UaeCheckBox* chkExternalMonitor;
 static gcn::Label* lblExternalMonitor;
+static gcn::UaeCheckBox* chkMatchRefresh;
 extern void onscreen_screen_size(int *w, int *h);
 extern "C" void SDL_ANDROID_ExternalMonitorSize(int *w, int *h);
 #endif
@@ -109,6 +110,7 @@ static void RefreshPanelDisplay(void)
 #ifdef ANDROIDSDL
   chkKeepAspectRatio->setSelected(workprefs.keepAspectRatio != 0);
   chkExternalMonitor->setSelected(workprefs.externalMonitor != 0);
+  chkMatchRefresh->setSelected(match_display_rate != 0);
 #endif
 }
 
@@ -187,6 +189,11 @@ class AmigaScreenActionListener : public gcn::ActionListener
       } else if (actionEvent.getSource() == chkExternalMonitor) {
         workprefs.externalMonitor = chkExternalMonitor->isSelected() ? 1 : 0;
 
+      } else if (actionEvent.getSource() == chkMatchRefresh) {
+        // Of the app, not of the configuration: the display belongs to the device
+        match_display_rate = chkMatchRefresh->isSelected() ? 1 : 0;
+        saveAdfDir();
+        update_display_frame_rate();
       }
 #endif
 #if defined(RASPBERRY) && !defined(USE_SDL2)
@@ -280,6 +287,10 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   chkExternalMonitor->addActionListener(amigaScreenActionListener);
   lblExternalMonitor = new gcn::Label("Disconnected");
   lblExternalMonitor->adjustSize();
+
+  chkMatchRefresh = new gcn::UaeCheckBox("Match display refresh rate");
+  chkMatchRefresh->setId("MatchRefresh");
+  chkMatchRefresh->addActionListener(amigaScreenActionListener);
 #endif
 
 	grpAmigaScreen = new gcn::Window("Amiga Screen");
@@ -326,6 +337,8 @@ void InitPanelDisplay(const struct _ConfigCategory& category)
   posY += chkKeepAspectRatio->getHeight() + DISTANCE_NEXT_Y;
   category.panel->add(chkExternalMonitor, DISTANCE_BORDER, posY);
   category.panel->add(lblExternalMonitor, DISTANCE_BORDER + 230, posY);
+  posY += chkExternalMonitor->getHeight() + DISTANCE_NEXT_Y;
+  category.panel->add(chkMatchRefresh, DISTANCE_BORDER, posY);
 #endif
 
   RefreshPanelDisplay();
@@ -356,6 +369,7 @@ void ExitPanelDisplay(const struct _ConfigCategory& category)
   delete lblExternalMonitor;
   chkExternalMonitor = NULL;
   lblExternalMonitor = NULL;
+  delete chkMatchRefresh;
 #endif
   delete chkFrameskip;
 #if defined(RASPBERRY) && !defined(USE_SDL2)
@@ -386,5 +400,13 @@ bool HelpPanelDisplay(std::vector<std::string> &helptext)
   helptext.push_back(" ");
   helptext.push_back("When you activate \"Frameskip\", only every second frame is drawn. This will improve performance and some");
   helptext.push_back("more games are playable.");
+#ifdef ANDROIDSDL
+  helptext.push_back(" ");
+  helptext.push_back("\"Match display refresh rate\" asks Android to run the display at a rate that fits the Amiga's frames: 50 Hz");
+  helptext.push_back("for PAL, 60 Hz for NTSC (or a multiple), so that each frame shows for as long as the others and scrolling");
+  helptext.push_back("is even. It works only if the display has such a mode and the system lets apps choose it - some, such as");
+  helptext.push_back("HyperOS, keep their own rate. RTG screens are left as they are. It is kept for the app, not in the");
+  helptext.push_back("configuration. \"Show refresh rate\" in the developer options of Android shows the rate the display runs at.");
+#endif
   return true;
 }

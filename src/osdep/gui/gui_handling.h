@@ -56,6 +56,10 @@ extern int quickstart_start;
 extern int gui_theme;
 extern int gui_aspect;
 extern int keyboard_amiga_only;
+#ifdef ANDROIDSDL
+extern int match_display_rate;
+void update_display_frame_rate(void);
+#endif
 void gui_rebuild_for_theme(void);
 extern int quickstart_model;
 extern int quickstart_conf;

@@ -72,6 +72,9 @@ int quickstart_start = 1;
 int gui_theme = 0;
 int gui_aspect = 2;
 int keyboard_amiga_only = 0;
+#ifdef ANDROIDSDL
+extern int match_display_rate; /* in pandora_gfx.cpp */
+#endif
 int quickstart_model = 0;
 int quickstart_conf = 0;
 bool host_poweroff = false;
@@ -694,6 +697,10 @@ void saveAdfDir(void)
   fputs(buffer, f);
   snprintf(buffer, MAX_DPATH - 1, "KeyboardAmigaOnly=%d\n", keyboard_amiga_only);
   fputs(buffer, f);
+#ifdef ANDROIDSDL
+  snprintf(buffer, MAX_DPATH - 1, "MatchDisplayRate=%d\n", match_display_rate);
+  fputs(buffer, f);
+#endif
 
 	fclose(f);
 }
@@ -856,6 +863,9 @@ void loadAdfDir(void)
           cfgfile_intval(option, value, "MenuTheme", &gui_theme, 1);
           cfgfile_intval(option, value, "MenuAspect", &gui_aspect, 1);
           cfgfile_intval(option, value, "KeyboardAmigaOnly", &keyboard_amiga_only, 1);
+#ifdef ANDROIDSDL
+          cfgfile_intval(option, value, "MatchDisplayRate", &match_display_rate, 1);
+#endif
         }
     	}
     }

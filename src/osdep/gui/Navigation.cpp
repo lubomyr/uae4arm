@@ -224,7 +224,16 @@ static NavigationMap navMap[] =
   { "CDVol",          "",                 "",                 "cboCD",          "cmdProp0" },
   
 // PanelDisplay
-#ifndef RASPBERRY
+#if defined(ANDROIDSDL)
+  { "sldWidth",       "",             "",               "MatchRefresh",   "sldHeight" },
+  { "sldHeight",      "",             "",               "sldWidth",       "sldVertPos" },
+  { "sldVertPos",     "",             "",               "sldHeight",      "Line doubling" },
+  { "Line doubling",  "Display",      "Display",        "sldVertPos",     "Frameskip" },
+  { "Frameskip",      "Display",      "Display",        "Line doubling",  "KeepAspect" },
+  { "KeepAspect",     "Display",      "Display",        "Frameskip",      "ExternalMonitor" },
+  { "ExternalMonitor","Display",      "Display",        "KeepAspect",     "MatchRefresh" },
+  { "MatchRefresh",   "Display",      "Display",        "ExternalMonitor","sldWidth" },
+#elif !defined(RASPBERRY)
   { "sldWidth",       "",             "",               "Frameskip",      "sldHeight" },
   { "sldHeight",      "",             "",               "sldWidth",       "sldVertPos" },
   { "sldVertPos",     "",             "",               "sldHeight",      "Line doubling" },

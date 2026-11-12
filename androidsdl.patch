@@ -1207,10 +1207,92 @@ index 000000000..2a0c165c7
 +	}
 +}
 diff --git a/project/java/GLSurfaceView_SDL.java b/project/java/GLSurfaceView_SDL.java
-index 022b96f02..3877b335a 100644
+index 022b96f02..62fbde2b2 100644
 --- a/project/java/GLSurfaceView_SDL.java
 +++ b/project/java/GLSurfaceView_SDL.java
-@@ -452,7 +452,9 @@ public class GLSurfaceView_SDL extends SurfaceView implements SurfaceHolder.Call
+@@ -394,6 +394,81 @@ public class GLSurfaceView_SDL extends SurfaceView implements SurfaceHolder.Call
+ 	 */
+ 	public void surfaceCreated(SurfaceHolder holder) {
+ 		mGLThread.surfaceCreated();
++		applyDisplayFrameRate(); // A new surface does not keep the rate asked for the old one
++	}
++
++	/**
++	 * Tells the system the rate the app shows frames at, so that it can switch the display to a refresh rate
++	 * that fits - 50 Hz for 50 frames a second - and every frame shows for as long as the others.
++	 * 0 takes the hint back. Only a hint: the display has to have such a mode, and it applies while
++	 * the surface is visible. Android 11 and later; can be called from any thread.
++	 */
++	private float mDisplayFrameRate = 0;
++	public void setDisplayFrameRate(float hz) {
++		mDisplayFrameRate = hz;
++		post(new Runnable() { public void run() { applyDisplayFrameRate(); } });
++	}
++
++	private void applyDisplayFrameRate() {
++		applyPreferredDisplayMode();
++		if (android.os.Build.VERSION.SDK_INT < 30)
++			return;
++		android.view.Surface s = getHolder().getSurface();
++		if (s == null || !s.isValid())
++			return;
++		try {
++			if (android.os.Build.VERSION.SDK_INT >= 31)
++				s.setFrameRate(mDisplayFrameRate, android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
++						android.view.Surface.CHANGE_FRAME_RATE_ALWAYS);
++			else
++				s.setFrameRate(mDisplayFrameRate, android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
++			Log.i("SDL", "Display frame rate hint: " + mDisplayFrameRate);
++		} catch (Exception e) {
++			Log.i("SDL", "Display frame rate hint failed: " + e);
++		}
++	}
++
++	/* Some systems (HyperOS) keep their own refresh rate and pass over the surface's hint, but they follow
++	   the mode the window asks for. So the window asks for the display mode of that rate as well - of the
++	   same size, the rate itself or else a multiple of it; 0 takes it back. It goes away with the window. */
++	private int mPreferredModeId = 0;
++	private void applyPreferredDisplayMode() {
++		if (android.os.Build.VERSION.SDK_INT < 23 || !(getContext() instanceof android.app.Activity))
++			return;
++		android.view.Window w = ((android.app.Activity) getContext()).getWindow();
++		if (w == null)
++			return;
++		// The modes of the display the window is on: on an external monitor this view is in a Presentation
++		// on another display, whose mode ids mean other modes here - then the window asks for nothing
++		android.view.Display d = w.getDecorView().getDisplay();
++		android.view.Display mine = getDisplay();
++		if (d == null)
++			return;
++		int id = 0;
++		float hz = mDisplayFrameRate;
++		if (hz > 0 && mine != null && mine.getDisplayId() == d.getDisplayId()) {
++			android.view.Display.Mode cur = d.getMode();
++			int best = 0;
++			for (android.view.Display.Mode m : d.getSupportedModes()) {
++				if (m.getPhysicalWidth() != cur.getPhysicalWidth() || m.getPhysicalHeight() != cur.getPhysicalHeight())
++					continue;
++				float n = m.getRefreshRate() / hz;
++				int k = Math.round(n);
++				if (k < 1 || Math.abs(n - k) > 0.01f)
++					continue;
++				if (best == 0 || k < best) { // the lowest multiple, the rate itself if there is one
++					best = k;
++					id = m.getModeId();
++				}
++			}
++		}
++		if (id == mPreferredModeId)
++			return;
++		mPreferredModeId = id;
++		android.view.WindowManager.LayoutParams lp = w.getAttributes();
++		lp.preferredDisplayModeId = id;
++		w.setAttributes(lp);
++		Log.i("SDL", "Preferred display mode: " + id + " for " + hz + " Hz");
+ 	}
+ 
+ 	/**
+@@ -452,7 +527,9 @@ public class GLSurfaceView_SDL extends SurfaceView implements SurfaceHolder.Call
  	@Override
  	protected void onDetachedFromWindow() {
  		super.onDetachedFromWindow();
@@ -2695,7 +2777,7 @@ index c99131b2a..5210de167 100644
  	public static native void  nativeSetEnv(final String name, final String value);
  	public static native int   nativeChmod(final String name, int mode);
 diff --git a/project/java/Video.java b/project/java/Video.java
-index f0a437bb6..85e99de48 100644
+index f0a437bb6..48e058407 100644
 --- a/project/java/Video.java
 +++ b/project/java/Video.java
 @@ -81,6 +81,10 @@ abstract class DifferentTouchInput
@@ -2789,7 +2871,7 @@ index f0a437bb6..85e99de48 100644
  	public void restartMyself(String restartParams)
  	{
  		Intent intent = new Intent(context, RestartMainActivity.class);
-@@ -963,6 +999,67 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -963,6 +999,73 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  		Settings.setConfigOptionFromSDL(option, value);
  	}
  
@@ -2811,6 +2893,12 @@ index f0a437bb6..85e99de48 100644
 +	public void closeFloatingWindows() // Called from native code
 +	{
 +		context.closeFloatingWindows();
++	}
++
++	public void setDisplayFrameRate(float hz) // Called from native code
++	{
++		if (context.mGLView != null)
++			context.mGLView.setDisplayFrameRate(hz);
 +	}
 +
 +	public void setFloatingWindowsHidden(int hide) // Called from native code
@@ -2857,7 +2945,7 @@ index f0a437bb6..85e99de48 100644
  	private int PowerOf2(int i)
  	{
  		int value = 1;
-@@ -981,6 +1078,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -981,6 +1084,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	public static native void nativeTextInput( int ascii, int unicode );
  	public static native void nativeTextInputFinished();
  	public static native void nativeClipboardChanged();
@@ -2865,7 +2953,7 @@ index f0a437bb6..85e99de48 100644
  
  	private MainActivity context = null;
  	public AccelerometerReader accelerometer = null;
-@@ -991,6 +1089,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
+@@ -991,6 +1095,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer
  	private EGLSurface mEglSurface = null;
  	private EGLContext mEglContext = null;
  	private boolean mGlContextLost = false;
@@ -2873,7 +2961,7 @@ index f0a437bb6..85e99de48 100644
  	public boolean mGlSurfaceCreated = false;
  	public boolean mPaused = false;
  	private boolean mFirstTimeStart = true;
-@@ -1011,6 +1110,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1011,6 +1116,10 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		setContentDescription(context.getResources().getString(R.string.app_name));
  	}
  
@@ -2884,7 +2972,7 @@ index f0a437bb6..85e99de48 100644
  	@Override
  	public boolean onKeyDown(int keyCode, final KeyEvent event)
  	{
-@@ -1025,10 +1128,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1025,10 +1134,14 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -2902,7 +2990,7 @@ index f0a437bb6..85e99de48 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1036,6 +1143,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1036,6 +1149,12 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -2915,7 +3003,7 @@ index f0a437bb6..85e99de48 100644
  
  		if( nativeKey( keyCode, 1, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyDown(keyCode, event);
-@@ -1056,10 +1169,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1056,10 +1175,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				if( (event.getSource() & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE )
  					mouseInput = true;
  			}
@@ -2928,7 +3016,7 @@ index f0a437bb6..85e99de48 100644
  				return true;
  			}
  			else if( mParent.keyboardWithoutTextInputShown )
-@@ -1068,6 +1182,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1068,6 +1188,11 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  				return true;
  			}
  		}
@@ -2940,7 +3028,7 @@ index f0a437bb6..85e99de48 100644
  
  		if( nativeKey( keyCode, 0, event.getUnicodeChar(), DifferentTouchInput.processGamepadDeviceId(event.getDevice()) ) == 0 )
  			return super.onKeyUp(keyCode, event);
-@@ -1106,6 +1225,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1106,6 +1231,8 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	@Override
  	public boolean onTouchEvent(final MotionEvent event)
  	{
@@ -2949,7 +3037,7 @@ index f0a437bb6..85e99de48 100644
  		if( mParent.keyboardWithoutTextInputShown && mParent._screenKeyboard != null &&
  			mParent._screenKeyboard.getY() <= event.getY() )
  		{
-@@ -1122,9 +1243,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1122,9 +1249,39 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		return true;
  	};
  
@@ -2989,7 +3077,7 @@ index f0a437bb6..85e99de48 100644
  		DifferentTouchInput.touchInput.processGenericEvent(event);
  		return true;
  	}
-@@ -1147,6 +1298,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1147,6 +1304,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  		//				" W " + this.getWidth() + " H " + this.getHeight() + " getX " + event.getX() + " getY " + event.getY() +
  		//				" RelX " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_X) + " RelY " + event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y) );
  
@@ -2997,7 +3085,7 @@ index f0a437bb6..85e99de48 100644
  		event.setLocation(DifferentTouchInput.capturedMouseX, DifferentTouchInput.capturedMouseY);
  		event.setAction(MotionEvent.ACTION_HOVER_MOVE);
  
-@@ -1165,6 +1317,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1165,6 +1323,7 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  	{
  		Log.v("SDL", "DemoGLSurfaceView::onPointerCaptureChange(): " + hasCapture);
  		super.onPointerCaptureChange(hasCapture);
@@ -3005,7 +3093,7 @@ index f0a437bb6..85e99de48 100644
  		DifferentTouchInput.capturedMouseX = this.getWidth() / 2;
  		DifferentTouchInput.capturedMouseY = this.getHeight() / 2;
  	}
-@@ -1210,12 +1363,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
+@@ -1210,12 +1369,15 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
  			setFocusableInTouchMode(true);
  			setFocusable(true);
  			requestFocus();
@@ -3562,10 +3650,10 @@ index a32209124..bdff81492 100755
          highlightColor.a = alpha;
          shadowColor = faceColor - 0x303030;
 diff --git a/project/jni/sdl-1.2/include/SDL_android.h b/project/jni/sdl-1.2/include/SDL_android.h
-index 14d8a4dd1..05030c552 100644
+index 14d8a4dd1..86921b187 100644
 --- a/project/jni/sdl-1.2/include/SDL_android.h
 +++ b/project/jni/sdl-1.2/include/SDL_android.h
-@@ -139,14 +139,80 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
+@@ -139,14 +139,85 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_RestartMyself(const char *restartParams
  enum {
  	SDL_ANDROID_CONFIG_VIDEO_DEPTH_BPP = 0, /* Can be 16 or 24 for software video modes, OpenGL supports 16/24/32 */
  	SDL_ANDROID_CONFIG_VIDEO_ORIENTATION_PORTRAIT = 1, /* 0 = landscape screen orientation, 1 = portrait screen orientation */
@@ -3626,6 +3714,11 @@ index 14d8a4dd1..05030c552 100644
 +   it starts again. */
 +extern DECLSPEC void SDLCALL SDL_ANDROID_CloseFloatingWindows(void);
 +
++/* Tells the system how many frames a second the app shows, so that it can switch the display to a refresh rate
++   that fits - 50 or 100 Hz for 50 frames - and the frames come at even intervals. 0 takes the hint back.
++   Only a hint: the display needs such a mode, Android 11 and later. It goes away with the app. */
++extern DECLSPEC void SDLCALL SDL_ANDROID_SetDisplayFrameRate(float hz);
++
 +/* MIDI through the system's MIDI service, Android 6 and later: a USB MIDI device, or an app with a MIDI
 +   synthesizer. Bytes are raw MIDI; give whole messages to SDL_ANDROID_MidiSend(), some synthesizer apps want that.
 +   It sends to the first device that takes MIDI and receives from the first one that sends it, and picks up
@@ -3647,7 +3740,7 @@ index 14d8a4dd1..05030c552 100644
  extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  	int relativeMovement, int relativeMovementSpeed, int relativeMovementAcceleration,
  	int leftClickMode, int leftClickKey, int leftClickTimeout,
-@@ -159,6 +225,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
+@@ -159,6 +230,15 @@ extern DECLSPEC void SDLCALL SDL_ANDROID_SetMouseEmulationMode(
  
  extern DECLSPEC int SDLCALL SDL_ANDROID_GetMouseEmulationMode();
  
@@ -3860,7 +3953,7 @@ index 43e7bb12d..4e393b75a 100644
  	if( ! sdl_opengl )
  	{
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
-index 30df36343..5e3cfbe93 100644
+index 30df36343..7d098ff5f 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo.c
 @@ -32,6 +32,7 @@ If you compile this code with SDL 1.3 or newer, or use in some other way, the li
@@ -3871,7 +3964,7 @@ index 30df36343..5e3cfbe93 100644
  
  #include "SDL_opengles.h"
  
-@@ -121,7 +122,19 @@ static jmethodID JavaRequestCloudLoad = NULL;
+@@ -121,7 +122,20 @@ static jmethodID JavaRequestCloudLoad = NULL;
  static jmethodID JavaRequestOpenExternalApp = NULL;
  static jmethodID JavaRequestRestartMyself = NULL;
  static jmethodID JavaRequestSetConfigOption = NULL;
@@ -3880,6 +3973,7 @@ index 30df36343..5e3cfbe93 100644
 +static jmethodID JavaPlayVideo = NULL;
 +static jmethodID JavaShowImage = NULL;
 +static jmethodID JavaSetFloatingWindowsHidden = NULL;
++static jmethodID JavaSetDisplayFrameRate = NULL;
 +static jmethodID JavaCloseFloatingWindows = NULL;
 +static jmethodID JavaOpenBrowser = NULL;
 +static jmethodID JavaSetBrowserDownloadDir = NULL;
@@ -3891,7 +3985,7 @@ index 30df36343..5e3cfbe93 100644
  static jmethodID JavaSetCapturedMousePosition = NULL;
  static int glContextLost = 0;
  static int showScreenKeyboardDeferred = 0;
-@@ -428,7 +441,19 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
+@@ -428,7 +442,20 @@ JAVA_EXPORT_NAME(DemoRenderer_nativeInitJavaCallbacks) ( JNIEnv*  env, jobject t
  	JavaRequestOpenExternalApp = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openExternalApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
  	JavaRequestRestartMyself = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "restartMyself", "(Ljava/lang/String;)V");
  	JavaRequestSetConfigOption = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setConfigOptionFromSDL", "(II)V");
@@ -3900,6 +3994,7 @@ index 30df36343..5e3cfbe93 100644
 +	JavaPlayVideo = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "playVideo", "(Ljava/lang/String;)V");
 +	JavaShowImage = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "showImage", "(Ljava/lang/String;)V");
 +	JavaSetFloatingWindowsHidden = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setFloatingWindowsHidden", "(I)V");
++	JavaSetDisplayFrameRate = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setDisplayFrameRate", "(F)V");
 +	JavaCloseFloatingWindows = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "closeFloatingWindows", "()V");
 +	JavaOpenBrowser = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "openBrowser", "(Ljava/lang/String;II)V");
 +	JavaSetBrowserDownloadDir = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setBrowserDownloadDir", "(Ljava/lang/String;)V");
@@ -3911,7 +4006,7 @@ index 30df36343..5e3cfbe93 100644
  	JavaSetCapturedMousePosition = (*JavaEnv)->GetMethodID(JavaEnv, JavaRendererClass, "setCapturedMousePosition", "(II)V");
  
  	ANDROID_InitOSKeymap();
-@@ -686,6 +711,227 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
+@@ -686,6 +713,235 @@ void SDLCALL SDL_ANDROID_SetConfigOption(int option, int value)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaRequestSetConfigOption, (jint)option, (jint)value );
  }
  
@@ -4003,6 +4098,14 @@ index 30df36343..5e3cfbe93 100644
 +	if( !JavaEnv || !JavaRenderer || !JavaCloseFloatingWindows )
 +		return;
 +	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaCloseFloatingWindows );
++}
++
++void SDLCALL SDL_ANDROID_SetDisplayFrameRate(float hz)
++{
++	JNIEnv *JavaEnv = GetJavaEnvAttached();
++	if( !JavaEnv || !JavaRenderer || !JavaSetDisplayFrameRate )
++		return;
++	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetDisplayFrameRate, (jfloat) hz );
 +}
 +
 +void SDLCALL SDL_ANDROID_SetFloatingWindowsHidden(int hide)
@@ -4139,7 +4242,7 @@ index 30df36343..5e3cfbe93 100644
  void SDLCALL SDL_ANDROID_OpenExternalWebBrowser(const char *url)
  {
  	SDL_ANDROID_OpenExternalApp(NULL, NULL, url);
-@@ -697,6 +943,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
+@@ -697,6 +953,14 @@ void SDLCALL SDL_ANDROID_SetSystemMousePointerVisible(int visible)
  	(*JavaEnv)->CallVoidMethod( JavaEnv, JavaRenderer, JavaSetSystemMousePointerVisible, (jint)visible );
  }
  
