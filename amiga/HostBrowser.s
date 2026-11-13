@@ -1,6 +1,6 @@
 | HostBrowser - shows a web page in a window of the Amiga, drawn by the host
 |
-| Usage: HostBrowser [HIDEADDRESS] [<address>]
+| Usage: HostBrowser [HIDEADDRESS] [TOUCH] [<address>]
 | Without an address - from the Shell, or started from its icon - it opens
 | the home page. "aminet.net" means https://aminet.net.
 |
@@ -16,7 +16,9 @@
 | the screen's own pixel format, and signals the tool, which blits it with
 | p96WritePixelArray(). When the window gets another size, so does the page.
 |
-| The left mouse button goes over as a touch: a click follows a link, a drag
+| The mouse goes over as a mouse, as in a browser of the PC: hovering shows
+| what it does on a page, a click follows a link, a drag selects or moves
+| what a page lets it. TOUCH makes the left button a finger instead: a drag
 | moves the page. The wheel scrolls it under the pointer. The keys go to the
 | page - into a text field, or the cursor keys move it - but for these: the
 | right button or Alt-cursor left go back to the page before, Alt-cursor
@@ -40,7 +42,7 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 9	| web pages, with keys, scroll bars, address
+	.set	HOSTVIDEO_VERSION, 10	| web pages, with keys, scroll bars, address
 
 	.set	HV_OPENURL, 14
 	.set	HV_POINTER, 15
@@ -52,6 +54,7 @@
 	.set	HV_SCROLLACROSS, 21
 	.set	HV_ADDRESS, 22
 	.set	HV_LOAD, 23
+	.set	HV_TOUCH, 24
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -173,7 +176,8 @@
 	.set	BACKH, 204		| the height of a button
 	.set	GAP, 208		| around the buttons, as above and below them
 	.set	GRAYCLASS, 212		| the class of their images
-	.set	VARSIZE, 216
+	.set	TOUCHMODE, 216		| TOUCH
+	.set	VARSIZE, 220
 
 	.text
 	.globl	_start
@@ -277,7 +281,7 @@ nextspace:
 	bra.s	shellargs
 namestart:
 	cmp.b	#10,%d0
-	beq.s	haveurl
+	beq.w	haveurl
 	moveq	#' ',%d1		| what ends the address
 	cmp.b	#'"',%d0
 	bne.s	nameset
@@ -306,9 +310,18 @@ nameend:
 	lea	kw_hideaddress(%pc),%a1
 	bsr.w	strieq
 	movea.l	(%sp)+,%a1
-	bne.s	2f
+	bne.s	3f
 	lea	vars(%pc),%a0
 	move.l	#1,NOADDR(%a0)
+	bra.s	nextarg
+3:	movea.l	%a1,%a0
+	move.l	%a1,-(%sp)
+	lea	kw_touch(%pc),%a1
+	bsr.w	strieq
+	movea.l	(%sp)+,%a1
+	bne.s	2f
+	lea	vars(%pc),%a0
+	move.l	#1,TOUCHMODE(%a0)
 	bra.s	nextarg
 2:	cmp.b	#'?',(%a1)		| "HostBrowser ?"
 	bne.s	1f
@@ -429,6 +442,16 @@ isrtg:
 	bra.w	failed
 haveopened:
 	move.l	%d0,%d5
+	lea	vars(%pc),%a2
+	tst.l	TOUCHMODE(%a2)
+	beq.s	1f
+	moveq	#HV_TOUCH,%d0
+	move.l	%d5,%d1
+	moveq	#1,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+1:
 	bsr.w	target
 	tst.l	%d0
 	bmi.w	badformat
@@ -604,8 +627,13 @@ notbutton:
 	bsr.w	propmove
 	bra.w	msgloop
 1:	tst.l	PRESSED(%a0)
-	beq.w	msgloop
-	bsr.w	innerpos
+	bne.s	2f
+	bsr.w	innerpos		| hovering, over the page
+	tst.l	%d1
+	bne.w	msgloop
+	moveq	#3,%d2
+	bra.s	sendpointer
+2:	bsr.w	innerpos
 	moveq	#2,%d2			| moved while pressed
 sendpointer:
 	move.l	%d0,%d3
@@ -1733,14 +1761,16 @@ buttonclass:	.asciz	"buttongclass"
 frameiclass:	.asciz	"frameiclass"
 strgclass:	.asciz	"strgclass"
 kw_hideaddress:	.asciz	"HIDEADDRESS"
+kw_touch:	.asciz	"TOUCH"
 title:		.asciz	"HostBrowser"
 colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
 homepage:	.asciz	"https://www.google.com/"
-msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [<address>]\n"
+msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [TOUCH] [<address>]\n"
 		.ascii	"Shows a web page in a window, drawn by uae4arm; without an\n"
-		.ascii	"address the home page. A click follows a link, a drag moves\n"
-		.ascii	"the page, the wheel scrolls it; the keys go to the page. The\n"
+		.ascii	"address the home page. The mouse works as on a PC; TOUCH\n"
+		.ascii	"makes the left button a finger, a drag moving the page. The\n"
+		.ascii	"wheel scrolls it; the keys go to the page. The\n"
 		.ascii	"right button or Alt-cursor left go back, Alt-cursor right\n"
 		.ascii	"forward, F5 loads the page again, Right Amiga-Q ends it.\n"
 		.ascii	"The scroll bars in the borders scroll it too, and so do the\n"

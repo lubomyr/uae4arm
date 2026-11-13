@@ -99,7 +99,8 @@ extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
 #define HV_CMD_OPENURL 14   /* task, signal mask, the address (Latin-1),
                                width << 16 | height: a web page, for
                                HostBrowser, the size of the window */
-#define HV_CMD_POINTER 15   /* handle, 0 pressed 1 let go 2 moved, x << 16 | y */
+#define HV_CMD_POINTER 15   /* handle, 0 pressed 1 let go 2 moved 3 moved with
+                               no button, x << 16 | y */
 #define HV_CMD_SCROLL 16    /* handle, notches (up > 0), x << 16 | y */
 #define HV_CMD_NAVIGATE 17  /* handle, 0 back 1 forward 2 reload */
 #define HV_CMD_KEY 18       /* handle, a Latin-1 character or 0x100 + a raw
@@ -119,7 +120,9 @@ extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
                                field (Latin-1): an address, or words to
                                search for */
 
-#define HV_API_VERSION 9     /* web pages, for HostBrowser, with an address field */
+#define HV_CMD_TOUCH 24     /* handle, 1: the left button as a finger, not a mouse */
+
+#define HV_API_VERSION 10    /* web pages, for HostBrowser, with the mouse as a mouse */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -207,7 +210,8 @@ public:
 	/* A web page (HostBrowser) has more: */
 	/* the window got w x h large inside */
 	virtual void resize(int w, int h) {}
-	/* the left mouse button: 0 pressed, 1 let go, 2 moved while pressed */
+	/* the left mouse button: 0 pressed, 1 let go, 2 moved while pressed,
+	   3 moved with no button */
 	virtual void pointer(int action, int x, int y) {}
 	/* the wheel, notches up when more than 0 */
 	virtual void scroll(int notches, int x, int y) {}
@@ -226,6 +230,8 @@ public:
 	virtual int address(char *text, size_t size) { return 0; }
 	/* an address or words to search for, in Latin-1 */
 	virtual void load(const char *text) {}
+	/* the left button as a finger, not a mouse */
+	virtual void set_touch(bool touch) {}
 	/* the title for the window, in Latin-1: 2 when it changed since the
 	   last time, 1 when not, 0 for no title of its own */
 	virtual int title(char *text, size_t size) { return 0; }
@@ -1824,7 +1830,7 @@ static bool find_imagereader(void)
 static struct {
 	bool tried;
 	jclass cls;
-	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, address, load, close;
+	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, address, load, setTouch, close;
 	jfieldID titleVersion, scrollVersion;
 } hb;
 
@@ -1917,11 +1923,12 @@ static bool find_hostbrowser(JNIEnv *env)
 	hb.title = env->GetMethodID(cls, "title", "()[B");
 	hb.address = env->GetMethodID(cls, "address", "()[B");
 	hb.load = env->GetMethodID(cls, "load", "(Ljava/lang/String;)V");
+	hb.setTouch = env->GetMethodID(cls, "setTouch", "(Z)V");
 	hb.close = env->GetMethodID(cls, "close", "()V");
 	if (env->ExceptionCheck() || !hb.open || !hb.resize || !hb.pointer || !hb.scroll ||
 		!hb.navigate || !hb.key || !hb.titleVersion || !hb.title || !hb.close ||
 		!hb.scrollAcross || !hb.scrollNumbers || !hb.scrollTo || !hb.scrollVersion ||
-		!hb.address || !hb.load) {
+		!hb.address || !hb.load || !hb.setTouch) {
 		env->ExceptionClear();
 		write_log(_T("HostBrowser: %s lacks a method\n"), name.c_str());
 		return false;
@@ -1989,6 +1996,7 @@ public:
 	int title(char *text, size_t size);
 	int address(char *text, size_t size);
 	void load(const char *text);
+	void set_touch(bool touch);
 
 private:
 	std::string last_address;
@@ -2302,6 +2310,15 @@ int browser_source::address(char *text, size_t size)
 	last_address = t;
 	address_told = true;
 	return changed ? 2 : 1;
+}
+
+void browser_source::set_touch(bool touch)
+{
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.setTouch, (jboolean)touch);
+		j.failed();
+	}
 }
 
 void browser_source::load(const char *text)
@@ -2902,6 +2919,9 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 			put_byte(arg2 + i, i == n - 1 ? 0 : text[i]);
 		return result;
 	}
+	case HV_CMD_TOUCH:
+		v->source->set_touch(arg2 != 0);
+		return 1;
 	case HV_CMD_LOAD: {
 		char text[1024];
 		size_t n = 0;

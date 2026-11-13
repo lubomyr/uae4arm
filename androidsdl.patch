@@ -1225,10 +1225,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..85cbb8be6
+index 000000000..06c55db65
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,660 @@
+@@ -0,0 +1,738 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1336,7 +1336,7 @@ index 000000000..85cbb8be6
 +	private volatile byte[] title = new byte[0];
 +	volatile int titleVersion = 0;
 +	private String pageTitle = "";
-+	// A press of the mouse goes over as a touch, until the button is let go
++	// The left button is down, since then
 +	private boolean down = false;
 +	private long downTime = 0;
 +
@@ -1563,7 +1563,17 @@ index 000000000..85cbb8be6
 +		});
 +	}
 +
-+	// The left mouse button: 0 pressed, 1 let go, 2 moved while pressed; at x, y in the page
++	// The mouse goes over as a mouse, with hovering, as in a browser of the PC; with touch set, the
++	// left button goes over as a finger instead, which drags the page along
++	private volatile boolean touch = false;
++
++	void setTouch(boolean t)
++	{
++		touch = t;
++	}
++
++	// The left mouse button: 0 pressed, 1 let go, 2 moved while pressed, 3 moved with no button;
++	// at x, y in the page
 +	void pointer(final int action, final int x, final int y)
 +	{
 +		ui.post(new Runnable() {
@@ -1572,34 +1582,102 @@ index 000000000..85cbb8be6
 +				if (presentation == null)
 +					return;
 +				long now = SystemClock.uptimeMillis();
-+				int a;
++				if (action == 3)
++				{
++					if (!touch && !down)
++						mouse(MotionEvent.ACTION_HOVER_MOVE, now, x, y, 0, true);
++					return;
++				}
 +				if (action == 0)
 +				{
 +					if (down)
-+						touch(MotionEvent.ACTION_UP, now, x, y);
++						release(now, x, y);
 +					down = true;
 +					downTime = now;
-+					a = MotionEvent.ACTION_DOWN;
++					if (touch)
++						finger(MotionEvent.ACTION_DOWN, now, x, y);
++					else
++					{
++						mouse(MotionEvent.ACTION_DOWN, now, x, y, MotionEvent.BUTTON_PRIMARY, false);
++						if (android.os.Build.VERSION.SDK_INT >= 23)
++							mouse(MotionEvent.ACTION_BUTTON_PRESS, now, x, y, MotionEvent.BUTTON_PRIMARY, true);
++					}
 +				}
 +				else if (!down)
 +					return;
 +				else if (action == 1)
-+				{
-+					down = false;
-+					a = MotionEvent.ACTION_UP;
-+				}
++					release(now, x, y);
++				else if (touch)
++					finger(MotionEvent.ACTION_MOVE, now, x, y);
 +				else
-+					a = MotionEvent.ACTION_MOVE;
-+				touch(a, now, x, y);
++					mouse(MotionEvent.ACTION_MOVE, now, x, y, MotionEvent.BUTTON_PRIMARY, false);
 +			}
 +		});
 +	}
 +
-+	private void touch(int action, long now, int x, int y)
++	private void release(long now, int x, int y)
++	{
++		down = false;
++		if (touch)
++			finger(MotionEvent.ACTION_UP, now, x, y);
++		else
++		{
++			if (android.os.Build.VERSION.SDK_INT >= 23)
++				mouse(MotionEvent.ACTION_BUTTON_RELEASE, now, x, y, 0, true);
++			mouse(MotionEvent.ACTION_UP, now, x, y, 0, false);
++		}
++	}
++
++	// Which button a press or release is of, as a real mouse's events have it; the setter is not
++	// public, so it is looked up
++	private static java.lang.reflect.Method actionButton = null;
++	private static boolean actionButtonTried = false;
++
++	private static void setActionButton(MotionEvent e, int button)
++	{
++		try
++		{
++			if (!actionButtonTried)
++			{
++				actionButtonTried = true;
++				actionButton = MotionEvent.class.getMethod("setActionButton", int.class);
++			}
++			if (actionButton != null)
++				actionButton.invoke(e, button);
++		}
++		catch (Exception x)
++		{
++			actionButton = null;
++		}
++	}
++
++	private void finger(int action, long now, int x, int y)
 +	{
 +		MotionEvent e = MotionEvent.obtain(downTime, now, action, x, y, 0);
 +		e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
 +		presentation.getWindow().getDecorView().dispatchTouchEvent(e);
++		e.recycle();
++	}
++
++	// An event of a mouse: hovering and the buttons' own go as generic motion, the rest as touches
++	private void mouse(int action, long now, int x, int y, int buttons, boolean generic)
++	{
++		MotionEvent.PointerProperties[] pp = { new MotionEvent.PointerProperties() };
++		pp[0].id = 0;
++		pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
++		MotionEvent.PointerCoords[] pc = { new MotionEvent.PointerCoords() };
++		pc[0].x = x;
++		pc[0].y = y;
++		pc[0].pressure = buttons != 0 ? 1f : 0f;
++		MotionEvent e = MotionEvent.obtain(down ? downTime : now, now, action, 1, pp, pc,
++			0, buttons, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
++		if (android.os.Build.VERSION.SDK_INT >= 23 && (action == MotionEvent.ACTION_BUTTON_PRESS || action == MotionEvent.ACTION_BUTTON_RELEASE))
++			setActionButton(e, MotionEvent.BUTTON_PRIMARY);
++		View v = presentation.getWindow().getDecorView();
++		if (generic)
++			v.dispatchGenericMotionEvent(e);
++		else
++			v.dispatchTouchEvent(e);
 +		e.recycle();
 +	}
 +
