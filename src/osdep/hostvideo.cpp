@@ -64,7 +64,12 @@ extern "C" {
 #include <sys/stat.h>
 #include <media/NdkMediaExtractor.h>
 #include <media/NdkMediaCodec.h>
+#include <media/NdkImageReader.h>
+#include <android/native_window_jni.h>
+#include <jni.h>
 #include <dlfcn.h>
+/* not through SDL_android.h, whose JavaVM clashes with jni.h's */
+extern "C" JavaVM *SDL_ANDROID_JavaVM(void);
 #endif
 
 #define HOSTVIDEO_PLAYERS 2
@@ -90,7 +95,14 @@ extern "C" {
                                first, as width << 16 | height; 0 past the last */
 #define HV_CMD_FULLSCREEN 13 /* handle, 1 on a screen of its own, 0 in a window */
 
-#define HV_API_VERSION 5     /* a screen of its own, for HostView */
+#define HV_CMD_OPENURL 14   /* task, signal mask, the address (Latin-1),
+                               width << 16 | height: a web page, for
+                               HostBrowser, the size of the window */
+#define HV_CMD_POINTER 15   /* handle, 0 pressed 1 let go 2 moved, x << 16 | y */
+#define HV_CMD_SCROLL 16    /* handle, notches (up > 0), x << 16 | y */
+#define HV_CMD_NAVIGATE 17  /* handle, 0 back 1 forward 2 reload */
+
+#define HV_API_VERSION 6     /* web pages, for HostBrowser */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -174,6 +186,19 @@ public:
 	/* Takes up to n stereo samples, from the start of the video on;
 	   fewer when the decoder is behind. */
 	virtual int audio_read(uae_s16 (*out)[2], int n) = 0;
+
+	/* A web page (HostBrowser) has more: */
+	/* the window got w x h large inside */
+	virtual void resize(int w, int h) {}
+	/* the left mouse button: 0 pressed, 1 let go, 2 moved while pressed */
+	virtual void pointer(int action, int x, int y) {}
+	/* the wheel, notches up when more than 0 */
+	virtual void scroll(int notches, int x, int y) {}
+	/* 0 back, 1 forward, 2 reload */
+	virtual void navigate(int what) {}
+	/* the title for the window, in Latin-1: 2 when it changed since the
+	   last time, 1 when not, 0 for no title of its own */
+	virtual int title(char *text, size_t size) { return 0; }
 };
 
 /* What the decoders share: a thread that decodes ahead into a queue of
@@ -1714,6 +1739,408 @@ bool image_source::open(const char *path)
 	return ok;
 }
 
+/* A web page, for HostBrowser: a WebView of the wrapper (HostBrowser.java)
+   lies on a display of its own that nobody sees, whose pictures come here
+   through an AImageReader. The reader is Android 7's, its Surface for Java
+   Android 8's: looked up at run time. */
+static struct {
+	bool tried, found;
+	media_status_t (*make)(int32_t, int32_t, int32_t, int32_t, AImageReader **);
+	void (*del)(AImageReader *);
+	media_status_t (*getWindow)(AImageReader *, ANativeWindow **);
+	media_status_t (*setListener)(AImageReader *, AImageReader_ImageListener *);
+	media_status_t (*acquireLatest)(AImageReader *, AImage **);
+	void (*imageDelete)(AImage *);
+	media_status_t (*planeData)(const AImage *, int, uint8_t **, int *);
+	media_status_t (*rowStride)(const AImage *, int, int32_t *);
+	media_status_t (*imageWidth)(const AImage *, int32_t *);
+	media_status_t (*imageHeight)(const AImage *, int32_t *);
+	jobject (*toSurface)(JNIEnv *, ANativeWindow *);
+} imagereader;
+
+static bool find_imagereader(void)
+{
+	if (imagereader.tried)
+		return imagereader.found;
+	imagereader.tried = true;
+	void *media = dlopen("libmediandk.so", RTLD_NOW);
+	void *android = dlopen("libandroid.so", RTLD_NOW);
+	if (!media || !android)
+		return false;
+#define FIND(lib, f, name) *(void **)&imagereader.f = dlsym(lib, name)
+	FIND(media, make, "AImageReader_new");
+	FIND(media, del, "AImageReader_delete");
+	FIND(media, getWindow, "AImageReader_getWindow");
+	FIND(media, setListener, "AImageReader_setImageListener");
+	FIND(media, acquireLatest, "AImageReader_acquireLatestImage");
+	FIND(media, imageDelete, "AImage_delete");
+	FIND(media, planeData, "AImage_getPlaneData");
+	FIND(media, rowStride, "AImage_getPlaneRowStride");
+	FIND(media, imageWidth, "AImage_getWidth");
+	FIND(media, imageHeight, "AImage_getHeight");
+	FIND(android, toSurface, "ANativeWindow_toSurface");
+#undef FIND
+	imagereader.found = imagereader.make && imagereader.del && imagereader.getWindow &&
+		imagereader.setListener && imagereader.acquireLatest && imagereader.imageDelete &&
+		imagereader.planeData && imagereader.rowStride && imagereader.imageWidth &&
+		imagereader.imageHeight && imagereader.toSurface;
+	if (!imagereader.found)
+		write_log(_T("HostBrowser: no AImageReader or ANativeWindow_toSurface, which Android 8 has\n"));
+	return imagereader.found;
+}
+
+/* The Java side: the class HostBrowser of the app's package, and its
+   methods */
+static struct {
+	bool tried;
+	jclass cls;
+	jmethodID open, resize, pointer, scroll, navigate, title, close;
+} hb;
+
+/* The emulator's thread is Java's own; should it not be, it is attached
+   for the call. */
+class jni_env {
+public:
+	JNIEnv *env = NULL;
+	jni_env()
+	{
+		vm = SDL_ANDROID_JavaVM();
+		if (!vm)
+			return;
+		if (vm->GetEnv((void **)&env, JNI_VERSION_1_4) == JNI_EDETACHED) {
+			if (vm->AttachCurrentThread(&env, NULL) != 0)
+				env = NULL;
+			else
+				attached = true;
+		}
+	}
+	~jni_env()
+	{
+		if (env && env->ExceptionCheck()) {
+			env->ExceptionDescribe();
+			env->ExceptionClear();
+		}
+		if (attached)
+			vm->DetachCurrentThread();
+	}
+	/* a pending exception, now cleared */
+	bool failed()
+	{
+		if (!env->ExceptionCheck())
+			return false;
+		env->ExceptionDescribe();
+		env->ExceptionClear();
+		return true;
+	}
+private:
+	JavaVM *vm = NULL;
+	bool attached = false;
+};
+
+/* The class through the app's class loader: FindClass on a thread Java did
+   not start sees only Android's own. */
+static bool find_hostbrowser(JNIEnv *env)
+{
+	if (hb.tried)
+		return hb.cls != NULL;
+	hb.tried = true;
+	jclass at = env->FindClass("android/app/ActivityThread");
+	jmethodID current = at ? env->GetStaticMethodID(at, "currentApplication", "()Landroid/app/Application;") : NULL;
+	jobject app = current ? env->CallStaticObjectMethod(at, current) : NULL;
+	if (env->ExceptionCheck() || !app) {
+		env->ExceptionClear();
+		return false;
+	}
+	jclass ctxcls = env->FindClass("android/content/Context");
+	jmethodID getpkg = env->GetMethodID(ctxcls, "getPackageName", "()Ljava/lang/String;");
+	jmethodID getloader = env->GetMethodID(ctxcls, "getClassLoader", "()Ljava/lang/ClassLoader;");
+	jstring pkg = (jstring)env->CallObjectMethod(app, getpkg);
+	jobject loader = env->CallObjectMethod(app, getloader);
+	if (env->ExceptionCheck() || !pkg || !loader) {
+		env->ExceptionClear();
+		return false;
+	}
+	const char *p = env->GetStringUTFChars(pkg, NULL);
+	std::string name = std::string(p) + ".HostBrowser";
+	env->ReleaseStringUTFChars(pkg, p);
+	jclass loadercls = env->FindClass("java/lang/ClassLoader");
+	jmethodID loadclass = env->GetMethodID(loadercls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+	jstring jname = env->NewStringUTF(name.c_str());
+	jclass cls = (jclass)env->CallObjectMethod(loader, loadclass, jname);
+	if (env->ExceptionCheck() || !cls) {
+		env->ExceptionClear();
+		write_log(_T("HostBrowser: no class %s\n"), name.c_str());
+		return false;
+	}
+	hb.open = env->GetStaticMethodID(cls, "open", "(Landroid/view/Surface;IILjava/lang/String;)Ljava/lang/Object;");
+	hb.resize = env->GetMethodID(cls, "resize", "(Landroid/view/Surface;II)V");
+	hb.pointer = env->GetMethodID(cls, "pointer", "(III)V");
+	hb.scroll = env->GetMethodID(cls, "scroll", "(III)V");
+	hb.navigate = env->GetMethodID(cls, "navigate", "(I)V");
+	hb.title = env->GetMethodID(cls, "title", "()[B");
+	hb.close = env->GetMethodID(cls, "close", "()V");
+	if (env->ExceptionCheck() || !hb.open || !hb.resize || !hb.pointer || !hb.scroll ||
+		!hb.navigate || !hb.title || !hb.close) {
+		env->ExceptionClear();
+		write_log(_T("HostBrowser: %s lacks a method\n"), name.c_str());
+		return false;
+	}
+	hb.cls = (jclass)env->NewGlobalRef(cls);
+	return true;
+}
+
+class browser_source : public video_source {
+public:
+	browser_source() { dropped = 0; audio_rate = 0; duration = 0; snprintf(codec, sizeof codec, "web"); }
+	~browser_source();
+	bool open(const char *url, int w, int h);
+	void seek(double t) {}
+	bool take(double t) { return fresh.exchange(false); }
+	void render(uae_u8 *dst, int w, int h, int stride, int format);
+	bool ended() { return false; }
+	int audio_read(uae_s16 (*out)[2], int n) { return 0; }
+	void resize(int w, int h);
+	void pointer(int action, int x, int y);
+	void scroll(int notches, int x, int y);
+	void navigate(int what);
+	int title(char *text, size_t size);
+
+private:
+	jobject browser = NULL;
+	/* where the pictures come now, and those it replaced, which go once
+	   the new one gave a picture: till then the display may still draw
+	   into them */
+	std::atomic<AImageReader *> reader{NULL};
+	std::vector<AImageReader *> old;
+	std::atomic<bool> new_came{false};
+	/* the latest picture, RGBA, taken from the reader on its own thread */
+	std::mutex lock;
+	std::vector<uae_u8> frame;
+	int fw = 0, fh = 0;
+	std::atomic<bool> fresh{false};
+	std::string last_title;
+	bool title_told = false;
+
+	AImageReader *make_reader(int w, int h);
+	jobject surface_of(JNIEnv *env, AImageReader *r);
+	static void image_came(void *context, AImageReader *r);
+};
+
+AImageReader *browser_source::make_reader(int w, int h)
+{
+	AImageReader *r = NULL;
+	/* a few, so that the display does not wait on us */
+	if (imagereader.make(w, h, AIMAGE_FORMAT_RGBA_8888, 3, &r) != AMEDIA_OK || !r) {
+		write_log(_T("HostBrowser: no AImageReader of %dx%d\n"), w, h);
+		return NULL;
+	}
+	AImageReader_ImageListener l = { this, image_came };
+	imagereader.setListener(r, &l);
+	return r;
+}
+
+jobject browser_source::surface_of(JNIEnv *env, AImageReader *r)
+{
+	ANativeWindow *win = NULL;
+	if (imagereader.getWindow(r, &win) != AMEDIA_OK || !win)
+		return NULL;
+	return imagereader.toSurface(env, win);
+}
+
+/* On the reader's thread: the newest picture into frame */
+void browser_source::image_came(void *context, AImageReader *r)
+{
+	browser_source *b = (browser_source *)context;
+	AImage *img = NULL;
+	if (imagereader.acquireLatest(r, &img) != AMEDIA_OK || !img)
+		return;
+	if (r == b->reader.load()) {
+		int32_t w = 0, h = 0, stride = 0;
+		uint8_t *data = NULL;
+		int len = 0;
+		imagereader.imageWidth(img, &w);
+		imagereader.imageHeight(img, &h);
+		if (imagereader.planeData(img, 0, &data, &len) == AMEDIA_OK && data &&
+			imagereader.rowStride(img, 0, &stride) == AMEDIA_OK && w > 0 && h > 0 &&
+			stride >= w * 4 && (int64_t)stride * (h - 1) + w * 4 <= len) {
+			std::lock_guard<std::mutex> g(b->lock);
+			b->frame.resize((size_t)w * h * 4);
+			for (int y = 0; y < h; y++)
+				memcpy(&b->frame[(size_t)y * w * 4], data + (size_t)y * stride, (size_t)w * 4);
+			b->fw = w;
+			b->fh = h;
+			b->fresh = true;
+			b->new_came = true;
+		}
+	}
+	imagereader.imageDelete(img);
+}
+
+bool browser_source::open(const char *url, int w, int h)
+{
+	if (!find_imagereader())
+		return false;
+	jni_env j;
+	if (!j.env || !find_hostbrowser(j.env))
+		return false;
+	width = w;
+	height = h;
+	AImageReader *r = make_reader(w, h);
+	if (!r)
+		return false;
+	reader = r;
+	jobject surface = surface_of(j.env, r);
+	/* Latin-1 into UTF-8 */
+	std::string u;
+	for (const unsigned char *p = (const unsigned char *)url; *p; p++) {
+		if (*p < 0x80) {
+			u += (char)*p;
+		} else {
+			u += (char)(0xc0 | (*p >> 6));
+			u += (char)(0x80 | (*p & 0x3f));
+		}
+	}
+	jstring jurl = j.env->NewStringUTF(u.c_str());
+	jobject b = surface ? j.env->CallStaticObjectMethod(hb.cls, hb.open, surface, w, h, jurl) : NULL;
+	if (j.failed() || !b) {
+		write_log(_T("HostBrowser: the page does not open\n"));
+		reader = NULL;
+		imagereader.del(r);
+		return false;
+	}
+	browser = j.env->NewGlobalRef(b);
+	write_log(_T("HostBrowser: %s at %dx%d\n"), url, w, h);
+	return true;
+}
+
+browser_source::~browser_source()
+{
+	if (browser) {
+		jni_env j;
+		if (j.env) {
+			j.env->CallVoidMethod(browser, hb.close);
+			j.failed();
+			j.env->DeleteGlobalRef(browser);
+		}
+	}
+	AImageReader *r = reader.exchange(NULL);
+	if (r)
+		imagereader.del(r);
+	for (AImageReader *o : old)
+		imagereader.del(o);
+}
+
+void browser_source::resize(int w, int h)
+{
+	/* the replaced ones that can go now */
+	if (new_came && !old.empty()) {
+		for (AImageReader *o : old)
+			imagereader.del(o);
+		old.clear();
+	}
+	if (w == width && h == height)
+		return;
+	jni_env j;
+	if (!j.env)
+		return;
+	AImageReader *r = make_reader(w, h);
+	if (!r)
+		return;
+	jobject surface = surface_of(j.env, r);
+	if (!surface) {
+		imagereader.del(r);
+		return;
+	}
+	width = w;
+	height = h;
+	new_came = false;
+	old.push_back(reader.exchange(r));
+	j.env->CallVoidMethod(browser, hb.resize, surface, w, h);
+	j.failed();
+}
+
+/* The picture scaled to w x h, in a Picasso96 RGBFormat; the same size but
+   for a moment after the window changed */
+void browser_source::render(uae_u8 *dst, int w, int h, int stride, int format)
+{
+	std::lock_guard<std::mutex> g(lock);
+	if (frame.empty()) {
+		/* white, as a page starts */
+		for (int y = 0; y < h; y++) {
+			uae_u8 *d = dst + (size_t)y * stride;
+			for (int x = 0; x < w; x++, d += format_bpp(format))
+				put_pixel(d, format, 255, 255, 255);
+		}
+		return;
+	}
+	int bpp = format_bpp(format);
+	for (int y = 0; y < h; y++) {
+		const uae_u8 *row = &frame[(size_t)((int64_t)y * fh / h) * fw * 4];
+		uae_u8 *d = dst + (size_t)y * stride;
+		if (fw == w && format == RGBFB_R8G8B8A8) {
+			memcpy(d, row, (size_t)w * 4);
+			continue;
+		}
+		for (int x = 0; x < w; x++, d += bpp) {
+			const uae_u8 *s = fw == w ? row + x * 4 : row + (size_t)((int64_t)x * fw / w) * 4;
+			put_pixel(d, format, s[0], s[1], s[2]);
+		}
+	}
+}
+
+void browser_source::pointer(int action, int x, int y)
+{
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.pointer, action, x, y);
+		j.failed();
+	}
+}
+
+void browser_source::scroll(int notches, int x, int y)
+{
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.scroll, notches, x, y);
+		j.failed();
+	}
+}
+
+void browser_source::navigate(int what)
+{
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.navigate, what);
+		j.failed();
+	}
+}
+
+int browser_source::title(char *text, size_t size)
+{
+	std::string t;
+	jni_env j;
+	if (j.env) {
+		jbyteArray a = (jbyteArray)j.env->CallObjectMethod(browser, hb.title);
+		if (!j.failed() && a) {
+			jsize n = j.env->GetArrayLength(a);
+			t.resize(n);
+			if (n)
+				j.env->GetByteArrayRegion(a, 0, n, (jbyte *)&t[0]);
+			j.env->DeleteLocalRef(a);
+		}
+	}
+	/* no control characters in a window's title */
+	for (char &c : t) {
+		if ((unsigned char)c < 32)
+			c = ' ';
+	}
+	snprintf(text, size, "%s", t.c_str());
+	bool changed = !title_told || t != last_title;
+	last_title = t;
+	title_told = true;
+	return changed ? 2 : 1;
+}
+
 #endif /* HOSTVIDEO_MEDIACODEC */
 
 /* A source for the file, or NULL. */
@@ -2016,6 +2443,44 @@ static struct hostvideo *get_player(uae_u32 handle)
 	return &players[handle - 1];
 }
 
+static uae_u32 player_start(int i, uaecptr task, uae_u32 sigmask, video_source *source, const char *copy);
+
+static int free_player(void)
+{
+	for (int i = 0; i < HOSTVIDEO_PLAYERS; i++) {
+		if (!players[i].used)
+			return i;
+	}
+	return -1;
+}
+
+/* A web page at the address, to show at w x h */
+static uae_u32 page_open(uaecptr task, uae_u32 sigmask, uaecptr url, int w, int h)
+{
+	int i = free_player();
+	if (i < 0)
+		return HV_OPEN_BUSY;
+	char address[2048];
+	size_t n = 0;
+	while (n < sizeof address - 1) {
+		uae_u8 c = get_byte(url + n);
+		if (!c)
+			break;
+		address[n++] = c;
+	}
+	address[n] = 0;
+	if (!n || w <= 0 || h <= 0)
+		return HV_OPEN_CANNOT;
+#ifdef HOSTVIDEO_MEDIACODEC
+	browser_source *b = new browser_source();
+	if (b->open(address, w, h))
+		return player_start(i, task, sigmask, b, NULL);
+	delete b;
+#endif
+	write_log(_T("HostBrowser: %s does not open\n"), address);
+	return HV_OPEN_CANNOT;
+}
+
 /* A file of a folder drive by its Lock, or with no Lock the copy uaelib
    made of one the host does not reach */
 static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_u32 lock)
@@ -2047,9 +2512,15 @@ static uae_u32 player_open(TrapContext *ctx, uaecptr task, uae_u32 sigmask, uae_
 			unlink(path);
 		return HV_OPEN_CANNOT;
 	}
+	return player_start(i, task, sigmask, source, copy ? path : NULL);
+}
+
+/* Player i, free, for the source; the copy to delete with it, if any */
+static uae_u32 player_start(int i, uaecptr task, uae_u32 sigmask, video_source *source, const char *copy)
+{
 	struct hostvideo *v = &players[i];
 	if (copy)
-		snprintf(v->copy, sizeof v->copy, "%s", path);
+		snprintf(v->copy, sizeof v->copy, "%s", copy);
 	else
 		v->copy[0] = 0;
 	v->used = true;
@@ -2133,6 +2604,8 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		return arg3 ? player_open(ctx, arg1, arg2, arg3) : HV_OPEN_NOPATH;
 	if (cmd == HV_CMD_OPENCOPY)
 		return player_open(ctx, arg1, arg2, 0);
+	if (cmd == HV_CMD_OPENURL)
+		return page_open(arg1, arg2, arg3, arg4 >> 16, arg4 & 0xffff);
 
 	struct hostvideo *v = get_player(arg1);
 	if (!v)
@@ -2163,6 +2636,7 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		v->format = arg4;
 		v->bpp = bpp;
 		v->pixels.resize((size_t)w * h * bpp);
+		v->source->resize(w, h);
 		/* the frame of now, for the window to show at once */
 		render(v);
 		v->ready = v->signalled = false;
@@ -2209,9 +2683,23 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		update_playing();
 		return 1;
 	}
+	case HV_CMD_POINTER:
+		v->source->pointer((int)arg2, (uae_s16)(arg3 >> 16), (uae_s16)arg3);
+		return 1;
+	case HV_CMD_SCROLL:
+		v->source->scroll((uae_s32)arg2, (uae_s16)(arg3 >> 16), (uae_s16)arg3);
+		return 1;
+	case HV_CMD_NAVIGATE:
+		v->source->navigate((int)arg2);
+		return 1;
 	case HV_CMD_DESCRIBE: {
-		char text[64];
-		snprintf(text, sizeof text, "(%dx%d) (%s)", v->source->width, v->source->height, v->source->codec);
+		char text[256];
+		/* a page's title, or what the video is */
+		uae_u32 result = v->source->title(text, sizeof text);
+		if (!result) {
+			snprintf(text, sizeof text, "(%dx%d) (%s)", v->source->width, v->source->height, v->source->codec);
+			result = 1;
+		}
 		if (!arg2 || !arg3)
 			return 0;
 		uae_u32 n = (uae_u32)strlen(text) + 1;
@@ -2219,7 +2707,7 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 			n = arg3;
 		for (uae_u32 i = 0; i < n; i++)
 			put_byte(arg2 + i, i == n - 1 ? 0 : text[i]);
-		return 1;
+		return result;
 	}
 	}
 	return 0;

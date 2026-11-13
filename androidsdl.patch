@@ -1221,6 +1221,295 @@ index 022b96f02..3877b335a 100644
  	}
  
  	// ----------------------------------------------------------------------
+diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
+new file mode 100644
+index 000000000..ab039cf93
+--- /dev/null
++++ b/project/java/HostBrowser.java
+@@ -0,0 +1,283 @@
++/*
++Simple DirectMedia Layer
++Java source code, a web page shown inside a window of the app for the Android port
++
++This software is provided 'as-is', without any express or implied
++warranty.  In no event will the authors be held liable for any damages
++arising from the use of this software.
++
++Permission is granted to anyone to use this software for any purpose,
++including commercial applications, and to alter it and redistribute it
++freely, subject to the following restrictions:
++
++1. The origin of this software must not be misrepresented; you must not
++   claim that you wrote the original software. If you use this software
++   in a product, an acknowledgment in the product documentation would be
++   appreciated but is not required.
++2. Altered source versions must be plainly marked as such, and must not be
++   misrepresented as being the original software.
++3. This notice may not be removed or altered from any source distribution.
++*/
++
++package net.sourceforge.clonekeenplus;
++
++import android.app.Presentation;
++import android.content.Context;
++import android.graphics.Bitmap;
++import android.hardware.display.DisplayManager;
++import android.hardware.display.VirtualDisplay;
++import android.os.Handler;
++import android.os.Looper;
++import android.os.SystemClock;
++import android.util.Log;
++import android.view.InputDevice;
++import android.view.MotionEvent;
++import android.view.Surface;
++import android.view.View;
++import android.webkit.WebChromeClient;
++import android.webkit.WebSettings;
++import android.webkit.WebView;
++import android.webkit.WebViewClient;
++
++
++// A web page that the app shows itself, inside a window of its own drawing - uae4arm's HostBrowser
++// tool, in a window of the Amiga. The WebView lies on a display of its own that nobody sees; its
++// pictures go into the Surface the app gives, that of an AImageReader it reads them from. The app
++// hands over the mouse, and asks for the page's title.
++//
++// The app calls from its own thread; everything with the WebView happens on the UI thread.
++class HostBrowser
++{
++	// A CSS pixel is a pixel of the window
++	private static final int DPI = 160;
++
++	private final MainActivity activity;
++	private final Handler ui = new Handler(Looper.getMainLooper());
++	private VirtualDisplay display = null;
++	private Presentation presentation = null;
++	private WebView web = null;
++	private boolean closed = false;
++	// The title, or the address while there is none, in Latin-1 for the Amiga
++	private volatile byte[] title = new byte[0];
++	// A press of the mouse goes over as a touch, until the button is let go
++	private boolean down = false;
++	private long downTime = 0;
++
++	private HostBrowser(MainActivity activity)
++	{
++		this.activity = activity;
++	}
++
++	// The page at url, w x h pixels large, its pictures into surface; null without the app's
++	// activity
++	static Object open(final Surface surface, final int w, final int h, final String url)
++	{
++		MainActivity a = MainActivity.instance;
++		if (a == null)
++			return null;
++		final HostBrowser b = new HostBrowser(a);
++		final String u = withScheme(url);
++		b.ui.post(new Runnable() {
++			public void run() { b.create(surface, w, h, u); }
++		});
++		return b;
++	}
++
++	// "aminet.net" means https://aminet.net
++	private static String withScheme(String url)
++	{
++		url = url.trim();
++		if (url.contains("://") || url.startsWith("about:") || url.startsWith("data:") || url.startsWith("javascript:"))
++			return url;
++		return "https://" + url;
++	}
++
++	private void create(Surface surface, int w, int h, String url)
++	{
++		if (closed)
++			return;
++		try
++		{
++			DisplayManager dm = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
++			// Private, of this app alone: no permission is needed
++			display = dm.createVirtualDisplay("HostBrowser", w, h, DPI, surface, 0);
++			presentation = new Presentation(activity, display.getDisplay());
++			web = new WebView(presentation.getContext());
++			WebSettings s = web.getSettings();
++			s.setJavaScriptEnabled(true);
++			s.setDomStorageEnabled(true);
++			s.setLoadWithOverviewMode(true);
++			s.setUseWideViewPort(true);
++			s.setSupportZoom(true);
++			s.setBuiltInZoomControls(true);
++			s.setDisplayZoomControls(false);
++			web.setWebViewClient(new WebViewClient() {
++				@Override
++				public boolean shouldOverrideUrlLoading(WebView view, String u)
++				{
++					return false;
++				}
++				@Override
++				public void onPageStarted(WebView view, String u, Bitmap favicon)
++				{
++					setTitle(u);
++				}
++				@Override
++				public void onPageFinished(WebView view, String u)
++				{
++					String t = view.getTitle();
++					setTitle(t != null && t.length() > 0 ? t : u);
++				}
++			});
++			web.setWebChromeClient(new WebChromeClient() {
++				@Override
++				public void onReceivedTitle(WebView view, String t)
++				{
++					if (t != null && t.length() > 0)
++						setTitle(t);
++				}
++			});
++			presentation.setContentView(web);
++			presentation.show();
++			setTitle(url);
++			web.loadUrl(url);
++		}
++		catch (Exception e)
++		{
++			Log.i("SDL", "HostBrowser: " + e);
++			setTitle("HostBrowser: " + e.getMessage());
++		}
++	}
++
++	private void setTitle(String t)
++	{
++		try
++		{
++			title = t.getBytes("ISO-8859-1");
++		}
++		catch (java.io.UnsupportedEncodingException e)
++		{
++		}
++	}
++
++	// The title for the window, in Latin-1
++	byte[] title()
++	{
++		return title;
++	}
++
++	// The window got another size: so does the page, its pictures into the new surface
++	void resize(final Surface surface, final int w, final int h)
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				if (display == null)
++					return;
++				display.setSurface(surface);
++				display.resize(w, h, DPI);
++			}
++		});
++	}
++
++	// The left mouse button: 0 pressed, 1 let go, 2 moved while pressed; at x, y in the page
++	void pointer(final int action, final int x, final int y)
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				if (presentation == null)
++					return;
++				long now = SystemClock.uptimeMillis();
++				int a;
++				if (action == 0)
++				{
++					if (down)
++						touch(MotionEvent.ACTION_UP, now, x, y);
++					down = true;
++					downTime = now;
++					a = MotionEvent.ACTION_DOWN;
++				}
++				else if (!down)
++					return;
++				else if (action == 1)
++				{
++					down = false;
++					a = MotionEvent.ACTION_UP;
++				}
++				else
++					a = MotionEvent.ACTION_MOVE;
++				touch(a, now, x, y);
++			}
++		});
++	}
++
++	private void touch(int action, long now, int x, int y)
++	{
++		MotionEvent e = MotionEvent.obtain(downTime, now, action, x, y, 0);
++		e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
++		presentation.getWindow().getDecorView().dispatchTouchEvent(e);
++		e.recycle();
++	}
++
++	// The wheel, notches up when more than 0, over x, y in the page
++	void scroll(final int notches, final int x, final int y)
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				if (presentation == null)
++					return;
++				long now = SystemClock.uptimeMillis();
++				MotionEvent.PointerProperties[] pp = { new MotionEvent.PointerProperties() };
++				pp[0].id = 0;
++				pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
++				MotionEvent.PointerCoords[] pc = { new MotionEvent.PointerCoords() };
++				pc[0].x = x;
++				pc[0].y = y;
++				pc[0].setAxisValue(MotionEvent.AXIS_VSCROLL, notches);
++				MotionEvent e = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1, pp, pc,
++					0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
++				presentation.getWindow().getDecorView().dispatchGenericMotionEvent(e);
++				e.recycle();
++			}
++		});
++	}
++
++	// 0 back, 1 forward, 2 reload
++	void navigate(final int what)
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				if (web == null)
++					return;
++				if (what == 0 && web.canGoBack())
++					web.goBack();
++				else if (what == 1 && web.canGoForward())
++					web.goForward();
++				else if (what == 2)
++					web.reload();
++			}
++		});
++	}
++
++	void close()
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				closed = true;
++				if (presentation != null)
++					presentation.dismiss();
++				presentation = null;
++				if (web != null)
++					web.destroy();
++				web = null;
++				if (display != null)
++					display.release();
++				display = null;
++			}
++		});
++	}
++}
 diff --git a/project/java/ImageWindow.java b/project/java/ImageWindow.java
 new file mode 100644
 index 000000000..b4542c32d
