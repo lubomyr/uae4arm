@@ -1251,10 +1251,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..e7f476bff
+index 000000000..b52c30e75
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,626 @@
+@@ -0,0 +1,697 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1297,6 +1297,7 @@ index 000000000..e7f476bff
 +import android.webkit.WebSettings;
 +import android.webkit.WebView;
 +import android.webkit.WebViewClient;
++import android.widget.FrameLayout;
 +
 +
 +// A web page that the app shows itself, inside a window of its own drawing - uae4arm's HostBrowser
@@ -1465,6 +1466,16 @@ index 000000000..e7f476bff
 +			});
 +			web.setWebChromeClient(new WebChromeClient() {
 +				@Override
++				public void onShowCustomView(View view, WebChromeClient.CustomViewCallback done)
++				{
++					showFull(view, done);
++				}
++				@Override
++				public void onHideCustomView()
++				{
++					leaveFull();
++				}
++				@Override
 +				public void onReceivedTitle(WebView view, String t)
 +				{
 +					if (t != null && t.length() > 0)
@@ -1485,7 +1496,9 @@ index 000000000..e7f476bff
 +					});
 +				}
 +			});
-+			presentation.setContentView(web);
++			area = new FrameLayout(presentation.getContext());
++			area.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
++			presentation.setContentView(area);
 +			// Esc goes to the page, it does not take the page away
 +			presentation.setCancelable(false);
 +			presentation.show();
@@ -1591,6 +1604,7 @@ index 000000000..e7f476bff
 +				if (web == null || text.trim().length() == 0)
 +					return;
 +				String u = typed(text);
++				leaveFull();
 +				setAddress(u);
 +				web.loadUrl(u);
 +			}
@@ -1718,6 +1732,12 @@ index 000000000..e7f476bff
 +	// browser of the PC - with Shift by a page
 +	private void cursorKey(final int keyCode, final int meta, final boolean shift)
 +	{
++		// a video in full screen takes them: YouTube seeks with them
++		if (fullView != null)
++		{
++			press(keyCode, meta);
++			return;
++		}
 +		web.evaluateJavascript(TAKES_KEYS, new android.webkit.ValueCallback<String>() {
 +			public void onReceiveValue(String takes)
 +			{
@@ -1827,7 +1847,7 @@ index 000000000..e7f476bff
 +				int ctrl = meta & (KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON);
 +				long now = SystemClock.uptimeMillis();
 +				for (KeyEvent e: events)
-+					web.dispatchKeyEvent(new KeyEvent(now, now, e.getAction(), e.getKeyCode(), 0, e.getMetaState() | ctrl));
++					keyTarget().dispatchKeyEvent(new KeyEvent(now, now, e.getAction(), e.getKeyCode(), 0, e.getMetaState() | ctrl));
 +				return;
 +			}
 +		}
@@ -1839,8 +1859,58 @@ index 000000000..e7f476bff
 +	private void press(int keyCode, int meta)
 +	{
 +		long now = SystemClock.uptimeMillis();
-+		web.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta));
-+		web.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, meta));
++		// Esc ends a video's full screen, as in a browser of the PC
++		if (keyCode == KeyEvent.KEYCODE_ESCAPE && fullView != null)
++		{
++			leaveFull();
++			return;
++		}
++		View v = keyTarget();
++		v.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta));
++		v.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, meta));
++	}
++
++	// What a page shows "full screen", such as the video of YouTube: in place of the page, as large
++	// as the window - the display the page lies on is the window's size
++	private FrameLayout area = null;
++	private View fullView = null;
++	private WebChromeClient.CustomViewCallback fullDone = null;
++
++	private void showFull(View view, WebChromeClient.CustomViewCallback done)
++	{
++		if (fullView != null || area == null)
++		{
++			done.onCustomViewHidden();
++			return;
++		}
++		fullView = view;
++		fullDone = done;
++		// Over the page, which stays visible: hidden, the page counts as a tab in the background,
++		// and YouTube pauses its video then
++		view.setBackgroundColor(android.graphics.Color.BLACK);
++		area.addView(view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
++		view.setFocusable(true);
++		view.requestFocus();
++	}
++
++	private void leaveFull()
++	{
++		if (fullView == null)
++			return;
++		area.removeView(fullView);
++		fullView = null;
++		WebChromeClient.CustomViewCallback done = fullDone;
++		fullDone = null;
++		if (done != null)
++			done.onCustomViewHidden();
++		if (web != null)
++			web.requestFocus();
++	}
++
++	// The keys go to the video in full screen, else to the page
++	private View keyTarget()
++	{
++		return fullView != null ? fullView : web;
 +	}
 +
 +	// 0 back, 1 forward, 2 reload
@@ -1867,6 +1937,7 @@ index 000000000..e7f476bff
 +			public void run()
 +			{
 +				closed = true;
++				leaveFull();
 +				statusTurn++;
 +				if (presentation != null)
 +					presentation.dismiss();
