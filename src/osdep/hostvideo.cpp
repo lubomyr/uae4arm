@@ -112,7 +112,14 @@ extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
 #define HV_CMD_SCROLLTO 20  /* handle, 0 up and down 1 across, top in those units */
 #define HV_CMD_SCROLLACROSS 21 /* handle, notches (right > 0), x << 16 | y */
 
-#define HV_API_VERSION 8     /* web pages, for HostBrowser, with scroll bars */
+#define HV_CMD_ADDRESS 22   /* handle, buffer, its size: the page's address
+                               in Latin-1; 2 when it changed since the
+                               last time, 1 when not */
+#define HV_CMD_LOAD 23      /* handle, what was typed into the address
+                               field (Latin-1): an address, or words to
+                               search for */
+
+#define HV_API_VERSION 9     /* web pages, for HostBrowser, with an address field */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -215,6 +222,10 @@ public:
 	virtual bool scroll_bars(uae_u32 bars[6]) { return false; }
 	/* to where a scroll bar was dragged, in its units */
 	virtual void scroll_to(bool across, uae_u32 top) {}
+	/* the page's address, in Latin-1: as title() */
+	virtual int address(char *text, size_t size) { return 0; }
+	/* an address or words to search for, in Latin-1 */
+	virtual void load(const char *text) {}
 	/* the title for the window, in Latin-1: 2 when it changed since the
 	   last time, 1 when not, 0 for no title of its own */
 	virtual int title(char *text, size_t size) { return 0; }
@@ -1813,7 +1824,7 @@ static bool find_imagereader(void)
 static struct {
 	bool tried;
 	jclass cls;
-	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, close;
+	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, address, load, close;
 	jfieldID titleVersion, scrollVersion;
 } hb;
 
@@ -1904,16 +1915,57 @@ static bool find_hostbrowser(JNIEnv *env)
 	hb.titleVersion = env->GetFieldID(cls, "titleVersion", "I");
 	hb.scrollVersion = env->GetFieldID(cls, "scrollVersion", "I");
 	hb.title = env->GetMethodID(cls, "title", "()[B");
+	hb.address = env->GetMethodID(cls, "address", "()[B");
+	hb.load = env->GetMethodID(cls, "load", "(Ljava/lang/String;)V");
 	hb.close = env->GetMethodID(cls, "close", "()V");
 	if (env->ExceptionCheck() || !hb.open || !hb.resize || !hb.pointer || !hb.scroll ||
 		!hb.navigate || !hb.key || !hb.titleVersion || !hb.title || !hb.close ||
-		!hb.scrollAcross || !hb.scrollNumbers || !hb.scrollTo || !hb.scrollVersion) {
+		!hb.scrollAcross || !hb.scrollNumbers || !hb.scrollTo || !hb.scrollVersion ||
+		!hb.address || !hb.load) {
 		env->ExceptionClear();
 		write_log(_T("HostBrowser: %s lacks a method\n"), name.c_str());
 		return false;
 	}
 	hb.cls = (jclass)env->NewGlobalRef(cls);
 	return true;
+}
+
+/* Latin-1 into UTF-8, for Java */
+static std::string latin1_utf8(const char *in)
+{
+	std::string u;
+	for (const unsigned char *p = (const unsigned char *)in; *p; p++) {
+		if (*p < 0x80) {
+			u += (char)*p;
+		} else {
+			u += (char)(0xc0 | (*p >> 6));
+			u += (char)(0x80 | (*p & 0x3f));
+		}
+	}
+	return u;
+}
+
+/* What a method of the browser that gives bytes gives, with no control
+   characters in it */
+static std::string browser_bytes(jobject browser, jmethodID m)
+{
+	std::string t;
+	jni_env j;
+	if (j.env) {
+		jbyteArray a = (jbyteArray)j.env->CallObjectMethod(browser, m);
+		if (!j.failed() && a) {
+			jsize n = j.env->GetArrayLength(a);
+			t.resize(n);
+			if (n)
+				j.env->GetByteArrayRegion(a, 0, n, (jbyte *)&t[0]);
+			j.env->DeleteLocalRef(a);
+		}
+	}
+	for (char &c : t) {
+		if ((unsigned char)c < 32)
+			c = ' ';
+	}
+	return t;
 }
 
 class browser_source : public video_source {
@@ -1935,8 +1987,12 @@ public:
 	bool scroll_bars(uae_u32 bars[6]);
 	void scroll_to(bool across, uae_u32 top);
 	int title(char *text, size_t size);
+	int address(char *text, size_t size);
+	void load(const char *text);
 
 private:
+	std::string last_address;
+	bool address_told = false;
 	/* the scroll bars told last, and the pixels of their units */
 	uae_u32 bars_told[6] = { 0 };
 	bool bars_were_told = false;
@@ -2030,17 +2086,7 @@ bool browser_source::open(const char *url, int w, int h)
 		return false;
 	reader = r;
 	jobject surface = surface_of(j.env, r);
-	/* Latin-1 into UTF-8 */
-	std::string u;
-	for (const unsigned char *p = (const unsigned char *)url; *p; p++) {
-		if (*p < 0x80) {
-			u += (char)*p;
-		} else {
-			u += (char)(0xc0 | (*p >> 6));
-			u += (char)(0x80 | (*p & 0x3f));
-		}
-	}
-	jstring jurl = j.env->NewStringUTF(u.c_str());
+	jstring jurl = j.env->NewStringUTF(latin1_utf8(url).c_str());
 	jobject b = surface ? j.env->CallStaticObjectMethod(hb.cls, hb.open, surface, w, h, jurl) : NULL;
 	if (j.failed() || !b) {
 		write_log(_T("HostBrowser: the page does not open\n"));
@@ -2248,25 +2294,30 @@ void browser_source::navigate(int what)
 	}
 }
 
-int browser_source::title(char *text, size_t size)
+int browser_source::address(char *text, size_t size)
 {
-	std::string t;
+	std::string t = browser_bytes(browser, hb.address);
+	snprintf(text, size, "%s", t.c_str());
+	bool changed = !address_told || t != last_address;
+	last_address = t;
+	address_told = true;
+	return changed ? 2 : 1;
+}
+
+void browser_source::load(const char *text)
+{
 	jni_env j;
 	if (j.env) {
-		jbyteArray a = (jbyteArray)j.env->CallObjectMethod(browser, hb.title);
-		if (!j.failed() && a) {
-			jsize n = j.env->GetArrayLength(a);
-			t.resize(n);
-			if (n)
-				j.env->GetByteArrayRegion(a, 0, n, (jbyte *)&t[0]);
-			j.env->DeleteLocalRef(a);
-		}
+		jstring s = j.env->NewStringUTF(latin1_utf8(text).c_str());
+		j.env->CallVoidMethod(browser, hb.load, s);
+		j.failed();
+		j.env->DeleteLocalRef(s);
 	}
-	/* no control characters in a window's title */
-	for (char &c : t) {
-		if ((unsigned char)c < 32)
-			c = ' ';
-	}
+}
+
+int browser_source::title(char *text, size_t size)
+{
+	std::string t = browser_bytes(browser, hb.title);
 	snprintf(text, size, "%s", t.c_str());
 	bool changed = !title_told || t != last_title;
 	last_title = t;
@@ -2839,6 +2890,32 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	case HV_CMD_SCROLLTO:
 		v->source->scroll_to(arg2 != 0, arg3);
 		return 1;
+	case HV_CMD_ADDRESS: {
+		char text[1024];
+		uae_u32 result = v->source->address(text, sizeof text);
+		if (!result || !arg2 || !arg3)
+			return 0;
+		uae_u32 n = (uae_u32)strlen(text) + 1;
+		if (n > arg3)
+			n = arg3;
+		for (uae_u32 i = 0; i < n; i++)
+			put_byte(arg2 + i, i == n - 1 ? 0 : text[i]);
+		return result;
+	}
+	case HV_CMD_LOAD: {
+		char text[1024];
+		size_t n = 0;
+		while (arg2 && n < sizeof text - 1) {
+			uae_u8 c = get_byte(arg2 + n);
+			if (!c)
+				break;
+			text[n++] = c;
+		}
+		text[n] = 0;
+		if (n)
+			v->source->load(text);
+		return 1;
+	}
 	case HV_CMD_SCROLLINFO: {
 		uae_u32 bars[6];
 		bool changed = v->source->scroll_bars(bars);

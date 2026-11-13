@@ -1251,10 +1251,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..aef19c217
+index 000000000..e7f476bff
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,561 @@
+@@ -0,0 +1,626 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1397,6 +1397,25 @@ index 000000000..aef19c217
 +		return "https://" + url;
 +	}
 +
++	// What was typed into the address field: an address, else words to search for
++	private static String typed(String text)
++	{
++		text = text.trim();
++		if (text.contains("://") || text.startsWith("about:") || text.startsWith("data:") || text.startsWith("javascript:"))
++			return text;
++		if (text.contains(" ") || (!text.contains(".") && !text.startsWith("localhost")))
++		{
++			try
++			{
++				return "https://www.google.com/search?q=" + java.net.URLEncoder.encode(text, "UTF-8");
++			}
++			catch (java.io.UnsupportedEncodingException e)
++			{
++			}
++		}
++		return "https://" + text;
++	}
++
 +	private void create(Surface surface, int w, int h, String url)
 +	{
 +		if (closed)
@@ -1428,7 +1447,14 @@ index 000000000..aef19c217
 +				@Override
 +				public void onPageStarted(WebView view, String u, Bitmap favicon)
 +				{
++					setAddress(u);
 +					setTitle(u);
++				}
++				// Pages that change their address with no new page, as YouTube does
++				@Override
++				public void doUpdateVisitedHistory(WebView view, String u, boolean reload)
++				{
++					setAddress(u);
 +				}
 +				@Override
 +				public void onPageFinished(WebView view, String u)
@@ -1470,6 +1496,7 @@ index 000000000..aef19c217
 +			web.requestFocus();
 +			if (!web.hasWindowFocus())
 +				web.onWindowFocusChanged(true);
++			setAddress(url);
 +			setTitle(url);
 +			web.loadUrl(url);
 +		}
@@ -1530,6 +1557,44 @@ index 000000000..aef19c217
 +	byte[] title()
 +	{
 +		return title;
++	}
++
++	// The address of the page, in Latin-1, for the address field of the window
++	private volatile byte[] address = new byte[0];
++
++	private void setAddress(String u)
++	{
++		if (u == null)
++			return;
++		try
++		{
++			address = u.getBytes("ISO-8859-1");
++		}
++		catch (java.io.UnsupportedEncodingException e)
++		{
++		}
++		// the app looks at it when the title changes
++		titleVersion++;
++	}
++
++	byte[] address()
++	{
++		return address;
++	}
++
++	// What was typed into the address field
++	void load(final String text)
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				if (web == null || text.trim().length() == 0)
++					return;
++				String u = typed(text);
++				setAddress(u);
++				web.loadUrl(u);
++			}
++		});
 +	}
 +
 +	// The window got another size: so does the page, its pictures into the new surface

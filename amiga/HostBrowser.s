@@ -1,8 +1,12 @@
 | HostBrowser - shows a web page in a window of the Amiga, drawn by the host
 |
-| Usage: HostBrowser [<address>]
+| Usage: HostBrowser [HIDEADDRESS] [<address>]
 | Without an address - from the Shell, or started from its icon - it opens
 | the home page. "aminet.net" means https://aminet.net.
+|
+| Above the page an address field shows where the page is; another address
+| typed into it and Return go there, and words that are no address search
+| for them. Ctrl-L or F6 put the cursor in it. HIDEADDRESS leaves it out.
 |
 | The page is the host's: on Android a WebView, on a display of its own that
 | nobody sees, whose pictures come to the emulator. As in HostPlay, the tool
@@ -35,7 +39,7 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 8	| web pages, with the keys and scroll bars
+	.set	HOSTVIDEO_VERSION, 9	| web pages, with keys, scroll bars, address
 
 	.set	HV_OPENURL, 14
 	.set	HV_POINTER, 15
@@ -45,6 +49,8 @@
 	.set	HV_SCROLLINFO, 19
 	.set	HV_SCROLLTO, 20
 	.set	HV_SCROLLACROSS, 21
+	.set	HV_ADDRESS, 22
+	.set	HV_LOAD, 23
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -83,11 +89,18 @@
 	.set	PGA_Visible, 0x80031008
 	.set	PGA_Top, 0x80031009
 	.set	PGA_NewLook, 0x8003100A
+	.set	IA_Left, 0x80020001
+	.set	IA_Top, 0x80020002
 	.set	IA_Width, 0x80020003
 	.set	IA_Height, 0x80020004
 	.set	SYSIA_Size, 0x8002000B
 	.set	SYSIA_Which, 0x8002000D
 	.set	SYSIA_DrawInfo, 0x80020018
+	.set	IA_EdgesOnly, 0x80020015
+	.set	IA_FrameType, 0x8002001B
+	.set	STRINGA_MaxChars, 0x80032001
+	.set	STRINGA_TextVal, 0x80032012
+	.set	ADDRSIZE, 1024		| the longest address
 
 | The gadgets of the borders: the scroll bars, then their arrows
 	.set	GAD_V, 1
@@ -96,6 +109,7 @@
 	.set	GAD_DOWN, 4
 	.set	GAD_LEFT, 5
 	.set	GAD_RIGHT, 6
+	.set	GAD_ADDR, 7		| the address field
 
 | The size the window opens at, if the screen has room
 	.set	WINW, 800
@@ -119,29 +133,35 @@
 	.set	LASTV, 56		| the tops of the scroll bars, by GAD_V, GAD_H
 	.set	LASTH, 60
 	.set	DRAWINFO, 64
-	.set	IMGSIZE, 68		| the images - of the size gadget, for its
-	.set	IMGUP, 72		| size - then the gadgets, by their GAD_
-	.set	IMGDOWN, 76
-	.set	IMGLEFT, 80
-	.set	IMGRIGHT, 84
-	.set	GADV, 88
-	.set	GADH, 92
-	.set	GADUP, 96
-	.set	GADDOWN, 100
-	.set	GADLEFT, 104
-	.set	GADRIGHT, 108
-	.set	SIZEW, 112
-	.set	SIZEH, 116
-	.set	ARROWW, 120		| of the arrows up and down
-	.set	ARROWH, 124
-	.set	LEFTW, 128		| of those left and right
-	.set	DRAGGING, 132		| the scroll bar being dragged, or 0
-	.set	HELD, 136		| the arrow held, or 0, and for how long
-	.set	HELDTICKS, 140
-	.set	STORE, 144		| for GetAttr()
-	.set	IADDR, 148		| im_IAddress of the message
-	.set	BARTOP, 152		| the height of the window's title bar
-	.set	VARSIZE, 156
+	.set	IMGFRAME, 68		| the images - the address field's frame,
+	.set	IMGSIZE, 72		| the size gadget, for its size - then the
+	.set	IMGUP, 76		| gadgets, by their GAD_
+	.set	IMGDOWN, 80
+	.set	IMGLEFT, 84
+	.set	IMGRIGHT, 88
+	.set	GADV, 92
+	.set	GADH, 96
+	.set	GADUP, 100
+	.set	GADDOWN, 104
+	.set	GADLEFT, 108
+	.set	GADRIGHT, 112
+	.set	GADADDR, 116
+	.set	SIZEW, 120
+	.set	SIZEH, 124
+	.set	ARROWW, 128		| of the arrows up and down
+	.set	ARROWH, 132
+	.set	LEFTW, 136		| of those left and right
+	.set	DRAGGING, 140		| the scroll bar being dragged, or 0
+	.set	HELD, 144		| the arrow held, or 0, and for how long
+	.set	HELDTICKS, 148
+	.set	STORE, 152		| for GetAttr()
+	.set	IADDR, 156		| im_IAddress of the message
+	.set	BARTOP, 160		| the height of the window's title bar
+	.set	NOADDR, 164		| HIDEADDRESS
+	.set	PAGETOP, 168		| the page below the address field
+	.set	FONTH, 172		| the height of the screen's font
+	.set	ADDRDIRTY, 176		| the address changed while it was typed into
+	.set	VARSIZE, 180
 
 	.text
 	.globl	_start
@@ -228,12 +248,12 @@ haveuaelib:
 	bra.w	failed
 newenough:
 	tst.l	%d6			| from Workbench: the home page
-	bne.s	haveurl
+	bne.w	haveurl
 
-| From the Shell: the first argument, in quotes if it has spaces
+| From the Shell: HIDEADDRESS, and the address, in quotes if it has spaces
 shellargs:
 	tst.l	%d3
-	beq.s	haveurl
+	beq.w	haveurl
 	move.b	(%a2),%d0
 	cmp.b	#' ',%d0
 	beq.s	nextspace
@@ -269,7 +289,16 @@ nameend:
 	clr.b	(%a2)
 	cmpa.l	%a1,%a2
 	beq.s	haveurl
-	cmp.b	#'?',(%a1)		| "HostBrowser ?"
+	movea.l	%a1,%a0
+	move.l	%a1,-(%sp)
+	lea	kw_hideaddress(%pc),%a1
+	bsr.w	strieq
+	movea.l	(%sp)+,%a1
+	bne.s	2f
+	lea	vars(%pc),%a0
+	move.l	#1,NOADDR(%a0)
+	bra.s	nextarg
+2:	cmp.b	#'?',(%a1)		| "HostBrowser ?"
 	bne.s	1f
 	tst.b	1(%a1)
 	bne.s	1f
@@ -279,6 +308,12 @@ nameend:
 	bra.w	closeall
 1:	lea	vars(%pc),%a0
 	move.l	%a1,URL(%a0)
+nextarg:
+	tst.l	%d3
+	beq.s	haveurl
+	addq.l	#1,%a2			| past the end of the argument
+	subq.l	#1,%d3
+	bra.w	shellargs
 
 haveurl:
 	movea.l	4,%a6
@@ -387,7 +422,9 @@ haveopened:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
+	bsr.w	drawaddr
 	bsr.w	updatebars
+	bsr.w	newaddress
 
 | Waits for a picture, the window, or Ctrl-C
 mainloop:
@@ -415,6 +452,7 @@ mainloop:
 	bsr.w	draw
 	bsr.w	newtitle
 	bsr.w	updatebars
+	bsr.w	newaddress
 
 msgloop:
 	movea.l	4,%a6
@@ -441,6 +479,7 @@ msgloop:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
+	bsr.w	drawaddr
 	bsr.w	updatebars
 	bra.w	msgloop
 notsize:
@@ -451,6 +490,7 @@ notsize:
 	movea.l	%a3,%a0
 	jsr	-354(%a6)		| BeginRefresh
 	bsr.w	draw
+	bsr.w	drawaddr
 	lea	vars(%pc),%a2
 	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	%a3,%a0
@@ -466,6 +506,8 @@ notrefresh:
 	movea.l	IADDR(%a2),%a0
 	moveq	#0,%d0
 	move.w	38(%a0),%d0		| gg_GadgetID
+	cmp.w	#GAD_ADDR,%d0
+	beq.w	msgloop
 	cmp.w	#GAD_H,%d0
 	bls.s	1f
 	move.l	%d0,HELD(%a2)
@@ -481,7 +523,11 @@ notdown:
 	movea.l	IADDR(%a2),%a0
 	moveq	#0,%d0
 	move.w	38(%a0),%d0		| gg_GadgetID
-	cmp.w	#GAD_H,%d0
+	cmp.w	#GAD_ADDR,%d0
+	bne.s	2f
+	bsr.w	addressgo		| Return in the address field
+	bra.w	msgloop
+2:	cmp.w	#GAD_H,%d0
 	bls.s	1f
 	clr.l	HELD(%a2)
 	bra.w	msgloop
@@ -562,6 +608,11 @@ notmove:
 	moveq	#2,%d2			| F5: reload
 	cmp.w	#0x54,%d3
 	beq.s	navigate
+	cmp.w	#0x55,%d3		| F6: into the address field
+	bne.s	2f
+	bsr.w	toaddress
+	bra.w	msgloop
+2:
 	cmp.w	#0x60,%d3		| the qualifier keys, and keys let go,
 	bcc.w	msgloop			| are left out
 	lea	vars(%pc),%a0
@@ -599,7 +650,13 @@ notraw:
 	moveq	#0,%d2
 	move.b	%d3,%d2			| the character
 	lea	vars(%pc),%a0
-	btst	#7,QUAL+3(%a0)		| Right Amiga
+	cmp.b	#12,%d2			| Ctrl-L: into the address field
+	bne.s	1f
+	tst.l	GADADDR(%a0)
+	beq.s	1f
+	bsr.w	toaddress
+	bra.w	msgloop
+1:	btst	#7,QUAL+3(%a0)		| Right Amiga
 	beq.s	sendkey
 	move.b	%d2,%d0
 	and.b	#0xDF,%d0
@@ -640,8 +697,8 @@ closeall:
 	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
 | The gadgets, then the images, now that no window has them
-2:	lea	GADRIGHT+4(%a2),%a3
-	moveq	#10,%d2
+2:	lea	GADADDR+4(%a2),%a3
+	moveq	#12,%d2
 7:	move.l	-(%a3),%d0
 	beq.s	8f
 	movea.l	%d0,%a0
@@ -700,6 +757,7 @@ innerpos:
 	ext.l	%d3			| y
 	move.b	55(%a3),%d0		| wd_BorderTop
 	sub.l	%d0,%d3
+	sub.l	PAGETOP(%a2),%d3
 	tst.l	%d2
 	bpl.s	1f
 	moveq	#0,%d2
@@ -808,9 +866,19 @@ makegadgets:
 	moveq	#0,%d0
 	move.b	35(%a0),%d0		| sc_WBorTop
 	movea.l	40(%a0),%a1		| sc_Font
-	add.w	4(%a1),%d0		| ta_YSize
+	moveq	#0,%d1
+	move.w	4(%a1),%d1		| ta_YSize
+	move.l	%d1,FONTH(%a2)
+	add.l	%d1,%d0
 	addq.l	#1,%d0
 	move.l	%d0,BARTOP(%a2)
+| The address field's row above the page: the field in a frame
+	tst.l	NOADDR(%a2)
+	bne.s	1f
+	move.l	FONTH(%a2),%d0
+	addq.l	#6,%d0
+	move.l	%d0,PAGETOP(%a2)
+1:
 
 | Up and down: in the right border, above the arrows
 	lea	vproptags(%pc),%a0
@@ -874,7 +942,7 @@ makegadgets:
 	movea.l	IMGUP(%a2),%a0
 	bsr.w	newarrow
 	move.l	%d0,GADUP(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 	moveq	#1,%d0
 	sub.l	ARROWW(%a2),%d0
 	moveq	#1,%d1
@@ -885,7 +953,7 @@ makegadgets:
 	movea.l	IMGDOWN(%a2),%a0
 	bsr.w	newarrow
 	move.l	%d0,GADDOWN(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 	move.l	#GA_BottomBorder,%d3
 	moveq	#1,%d0
 	sub.l	SIZEW(%a2),%d0
@@ -898,7 +966,7 @@ makegadgets:
 	movea.l	IMGLEFT(%a2),%a0
 	bsr.w	newarrow
 	move.l	%d0,GADLEFT(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 	moveq	#1,%d0
 	sub.l	SIZEW(%a2),%d0
 	sub.l	LEFTW(%a2),%d0
@@ -909,6 +977,37 @@ makegadgets:
 	movea.l	IMGRIGHT(%a2),%a0
 	bsr.w	newarrow
 	move.l	%d0,GADRIGHT(%a2)
+	beq.s	makegadgets_end
+	tst.l	NOADDR(%a2)
+	bne.s	makegadgets_end
+
+| The address field: inside the window, across it in a ridge
+	lea	frametags(%pc),%a1
+	move.l	FONTH(%a2),%d0
+	addq.l	#4,%d0
+	move.l	%d0,12(%a1)		| IA_Height
+	lea	frameiclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,IMGFRAME(%a2)
+	beq.s	makegadgets_end
+	lea	addrtags(%pc),%a1
+	moveq	#0,%d0
+	movea.l	SCREEN(%a2),%a0
+	move.b	36(%a0),%d0		| sc_WBorLeft
+	addq.l	#6,%d0
+	move.l	%d0,4(%a1)		| GA_Left
+	move.l	BARTOP(%a2),%d1
+	addq.l	#3,%d1
+	move.l	%d1,12(%a1)		| GA_Top
+	addq.l	#6,%d0
+	add.l	SIZEW(%a2),%d0
+	neg.l	%d0
+	move.l	%d0,20(%a1)		| GA_RelWidth
+	move.l	FONTH(%a2),28(%a1)	| GA_Height
+	move.l	GADRIGHT(%a2),36(%a1)	| GA_Previous
+	lea	strgclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADADDR(%a2)
 makegadgets_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
@@ -954,6 +1053,121 @@ getattr:
 	move.l	STORE(%a2),%d0
 	movea.l	(%sp)+,%a2
 	rts
+
+| The frame of the address field, and the field in it, after the page was
+| drawn or the window got another size
+drawaddr:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	tst.l	GADADDR(%a2)
+	beq.s	1f
+	movea.l	INTUITIONBASE(%a2),%a6
+	lea	framesize(%pc),%a1
+	move.l	WIDTH(%a2),%d0
+	subq.l	#4,%d0
+	move.l	%d0,4(%a1)		| IA_Width
+	movea.l	IMGFRAME(%a2),%a0
+	jsr	-648(%a6)		| SetAttrsA
+	movea.l	50(%a3),%a0		| wd_RPort
+	movea.l	IMGFRAME(%a2),%a1
+	moveq	#0,%d0
+	move.b	54(%a3),%d0		| wd_BorderLeft
+	addq.l	#2,%d0
+	moveq	#0,%d1
+	move.b	55(%a3),%d1		| wd_BorderTop
+	addq.l	#1,%d1
+	moveq	#0,%d2			| IDS_NORMAL
+	movea.l	DRAWINFO(%a2),%a2
+	jsr	-618(%a6)		| DrawImageState
+	lea	vars(%pc),%a2
+	movea.l	GADADDR(%a2),%a0
+	movea.l	%a3,%a1
+	suba.l	%a2,%a2
+	moveq	#1,%d0
+	jsr	-432(%a6)		| RefreshGList
+1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The page's address into the field, when it changed - but not while it is
+| typed into: then once it is left
+newaddress:
+	movem.l	%d2-%d4/%a2-%a3/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	tst.l	GADADDR(%a2)
+	beq.s	2f
+	moveq	#HV_ADDRESS,%d0
+	move.l	%d5,%d1
+	lea	addrbuf(%pc),%a0
+	move.l	%a0,%d2
+	move.l	#ADDRSIZE,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	cmp.l	#2,%d0
+	beq.s	1f
+	tst.l	ADDRDIRTY(%a2)
+	beq.s	2f
+1:	move.l	#1,ADDRDIRTY(%a2)
+	movea.l	GADADDR(%a2),%a0
+	btst	#7,13(%a0)		| gg_Flags & GFLG_SELECTED: typed into
+	bne.s	2f
+	clr.l	ADDRDIRTY(%a2)
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a1			| the window
+	lea	addrset(%pc),%a3
+	lea	addrbuf(%pc),%a2
+	move.l	%a2,4(%a3)		| STRINGA_TextVal
+	suba.l	%a2,%a2
+	jsr	-660(%a6)		| SetGadgetAttrsA
+2:	movem.l	(%sp)+,%d2-%d4/%a2-%a3/%a6
+	rts
+
+| The cursor into the address field
+toaddress:
+	movem.l	%a2/%a6,-(%sp)
+	lea	vars(%pc),%a0
+	move.l	GADADDR(%a0),%d0
+	beq.s	1f
+	movea.l	INTUITIONBASE(%a0),%a6
+	movea.l	%d0,%a0
+	movea.l	%a3,%a1
+	suba.l	%a2,%a2
+	jsr	-462(%a6)		| ActivateGadget
+1:	movem.l	(%sp)+,%a2/%a6
+	rts
+
+| Return in the address field: the page goes to what is in it
+addressgo:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	GADADDR(%a2),%a0
+	move.l	#STRINGA_TextVal,%d0
+	bsr.w	getattr
+	tst.l	%d0
+	beq.s	1f
+	move.l	%d0,%d2
+	moveq	#HV_LOAD,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Z set if the string at %a0 is the one at %a1 - capitals - in any case
+strieq:
+	move.b	(%a0)+,%d0
+	cmp.b	#'a',%d0
+	blt.s	1f
+	cmp.b	#'z',%d0
+	bgt.s	1f
+	sub.b	#32,%d0
+1:	move.b	(%a1)+,%d1
+	cmp.b	%d1,%d0
+	bne.s	2f
+	tst.b	%d1
+	bne.s	strieq
+2:	rts
 
 | The scroll bars to where the page is, if that changed
 updatebars:
@@ -1093,7 +1307,10 @@ innersize:
 	sub.l	%d0,%d3
 	move.b	57(%a3),%d0		| wd_BorderBottom
 	sub.l	%d0,%d3
-	move.l	%d2,WIDTH(%a2)
+	sub.l	PAGETOP(%a2),%d3	| the address field above the page
+	bgt.s	1f
+	moveq	#1,%d3
+1:	move.l	%d2,WIDTH(%a2)
 	move.l	%d3,HEIGHT(%a2)
 	movem.l	(%sp)+,%d2-%d3/%a2
 	rts
@@ -1167,6 +1384,7 @@ draw:
 	move.b	54(%a3),%d2		| wd_BorderLeft
 	moveq	#0,%d3
 	move.b	55(%a3),%d3		| wd_BorderTop
+	add.l	PAGETOP(%a2),%d3
 	jsr	-102(%a6)		| p96WritePixelArray
 draw_end:
 	movem.l	(%sp)+,%d2-%d5/%a2/%a6
@@ -1328,11 +1546,29 @@ arrowtags:	.long	GA_RelRight, 0
 		.long	GA_RelVerify, 1
 		.long	GA_Immediate, 1
 		.long	0
+frametags:	.long	IA_Width, 100
+		.long	IA_Height, 0
+		.long	IA_FrameType, 2	| FRAME_RIDGE
+		.long	0
+framesize:	.long	IA_Width, 0
+		.long	0
+addrtags:	.long	GA_Left, 0
+		.long	GA_Top, 0
+		.long	GA_RelWidth, 0
+		.long	GA_Height, 0
+		.long	GA_Previous, 0
+		.long	GA_ID, GAD_ADDR
+		.long	GA_RelVerify, 1
+		.long	STRINGA_MaxChars, ADDRSIZE
+		.long	0
+addrset:	.long	STRINGA_TextVal, 0
+		.long	0
 bartags:	.long	PGA_Total, 0
 		.long	PGA_Visible, 0
 		.long	PGA_Top, 0
 		.long	0
 barinfo:	.long	0, 0, 0, 0, 0, 0
+addrbuf:	.space	ADDRSIZE
 
 	.set	TITLESIZE, 256
 titlebuf1:	.space	TITLESIZE
@@ -1344,11 +1580,14 @@ p96name:	.asciz	"Picasso96API.library"
 sysiclass:	.asciz	"sysiclass"
 propclass:	.asciz	"propgclass"
 buttonclass:	.asciz	"buttongclass"
+frameiclass:	.asciz	"frameiclass"
+strgclass:	.asciz	"strgclass"
+kw_hideaddress:	.asciz	"HIDEADDRESS"
 title:		.asciz	"HostBrowser"
 colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
 homepage:	.asciz	"https://www.google.com/"
-msg_usage:	.ascii	"Usage: HostBrowser [<address>]\n"
+msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [<address>]\n"
 		.ascii	"Shows a web page in a window, drawn by uae4arm; without an\n"
 		.ascii	"address the home page. A click follows a link, a drag moves\n"
 		.ascii	"the page, the wheel scrolls it; the keys go to the page. The\n"
@@ -1356,6 +1595,9 @@ msg_usage:	.ascii	"Usage: HostBrowser [<address>]\n"
 		.ascii	"forward, F5 loads the page again, Right Amiga-Q ends it.\n"
 		.ascii	"The scroll bars in the borders scroll it too, and so do the\n"
 		.ascii	"cursor keys outside a text field, with Shift by a page.\n"
+		.ascii	"The address field above the page goes to what is typed into\n"
+		.ascii	"it, or searches for it; Ctrl-L or F6 put the cursor in it.\n"
+		.ascii	"HIDEADDRESS leaves it out.\n"
 		.asciz	"Files of the page go to the folder of Browser downloads.\n"
 msg_cannot:	.asciz	"uae4arm cannot show web pages here - it needs Android 8 or later\n"
 msg_nointuition: .asciz	"this needs intuition.library 39\n"
