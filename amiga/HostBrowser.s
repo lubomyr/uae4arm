@@ -4,7 +4,8 @@
 | Without an address - from the Shell, or started from its icon - it opens
 | the home page. "aminet.net" means https://aminet.net.
 |
-| Above the page an address field shows where the page is; another address
+| Above the page an address field shows where the page is, with buttons
+| back and forward before it; another address
 | typed into it and Return go there, and words that are no address search
 | for them. Ctrl-L or F6 put the cursor in it. HIDEADDRESS leaves it out.
 |
@@ -110,6 +111,8 @@
 	.set	GAD_LEFT, 5
 	.set	GAD_RIGHT, 6
 	.set	GAD_ADDR, 7		| the address field
+	.set	GAD_BACK, 8		| and the buttons before it
+	.set	GAD_FWD, 9
 
 | The size the window opens at, if the screen has room
 	.set	WINW, 800
@@ -133,35 +136,44 @@
 	.set	LASTV, 56		| the tops of the scroll bars, by GAD_V, GAD_H
 	.set	LASTH, 60
 	.set	DRAWINFO, 64
-	.set	IMGFRAME, 68		| the images - the address field's frame,
-	.set	IMGSIZE, 72		| the size gadget, for its size - then the
-	.set	IMGUP, 76		| gadgets, by their GAD_
-	.set	IMGDOWN, 80
-	.set	IMGLEFT, 84
-	.set	IMGRIGHT, 88
-	.set	GADV, 92
-	.set	GADH, 96
-	.set	GADUP, 100
-	.set	GADDOWN, 104
-	.set	GADLEFT, 108
-	.set	GADRIGHT, 112
-	.set	GADADDR, 116
-	.set	SIZEW, 120
-	.set	SIZEH, 124
-	.set	ARROWW, 128		| of the arrows up and down
-	.set	ARROWH, 132
-	.set	LEFTW, 136		| of those left and right
-	.set	DRAGGING, 140		| the scroll bar being dragged, or 0
-	.set	HELD, 144		| the arrow held, or 0, and for how long
-	.set	HELDTICKS, 148
-	.set	STORE, 152		| for GetAttr()
-	.set	IADDR, 156		| im_IAddress of the message
-	.set	BARTOP, 160		| the height of the window's title bar
-	.set	NOADDR, 164		| HIDEADDRESS
-	.set	PAGETOP, 168		| the page below the address field
-	.set	FONTH, 172		| the height of the screen's font
-	.set	ADDRDIRTY, 176		| the address changed while it was typed into
-	.set	VARSIZE, 180
+	.set	IMGBACK, 68		| the images - the buttons back and forward,
+	.set	IMGFWD, 72		| the address field's frame, the size
+	.set	IMGFRAME, 76		| gadget, for its size - then the gadgets,
+	.set	IMGSIZE, 80		| by their GAD_
+	.set	IMGUP, 84
+	.set	IMGDOWN, 88
+	.set	IMGLEFT, 92
+	.set	IMGRIGHT, 96
+	.set	GADV, 100
+	.set	GADH, 104
+	.set	GADUP, 108
+	.set	GADDOWN, 112
+	.set	GADLEFT, 116
+	.set	GADRIGHT, 120
+	.set	GADADDR, 124
+	.set	GADBACK, 128
+	.set	GADFWD, 132
+	.set	SIZEW, 136
+	.set	SIZEH, 140
+	.set	ARROWW, 144		| of the arrows up and down
+	.set	ARROWH, 148
+	.set	LEFTW, 152		| of those left and right
+	.set	DRAGGING, 156		| the scroll bar being dragged, or 0
+	.set	HELD, 160		| the arrow held, or 0, and for how long
+	.set	HELDTICKS, 164
+	.set	STORE, 168		| for GetAttr()
+	.set	IADDR, 172		| im_IAddress of the message
+	.set	BARTOP, 176		| the height of the window's title bar
+	.set	NOADDR, 180		| HIDEADDRESS
+	.set	PAGETOP, 184		| the page below the address field
+	.set	FONTH, 188		| the height of the screen's font
+	.set	ADDRDIRTY, 192		| the address changed while it was typed into
+	.set	BACKW, 196		| the width of a button back or forward
+	.set	FRAMEX, 200		| the frame of the field, from the left border
+	.set	BACKH, 204		| the height of a button
+	.set	GAP, 208		| around the buttons, as above and below them
+	.set	GRAYCLASS, 212		| the class of their images
+	.set	VARSIZE, 216
 
 	.text
 	.globl	_start
@@ -506,8 +518,8 @@ notrefresh:
 	movea.l	IADDR(%a2),%a0
 	moveq	#0,%d0
 	move.w	38(%a0),%d0		| gg_GadgetID
-	cmp.w	#GAD_ADDR,%d0
-	beq.w	msgloop
+	cmp.w	#GAD_ADDR,%d0		| the field and the buttons by it: on
+	bcc.w	msgloop			| GADGETUP
 	cmp.w	#GAD_H,%d0
 	bls.s	1f
 	move.l	%d0,HELD(%a2)
@@ -527,7 +539,13 @@ notdown:
 	bne.s	2f
 	bsr.w	addressgo		| Return in the address field
 	bra.w	msgloop
-2:	cmp.w	#GAD_H,%d0
+2:	moveq	#0,%d2			| back
+	cmp.w	#GAD_BACK,%d0
+	beq.w	navigate
+	moveq	#1,%d2			| forward
+	cmp.w	#GAD_FWD,%d0
+	beq.w	navigate
+	cmp.w	#GAD_H,%d0
 	bls.s	1f
 	clr.l	HELD(%a2)
 	bra.w	msgloop
@@ -697,14 +715,18 @@ closeall:
 	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
 | The gadgets, then the images, now that no window has them
-2:	lea	GADADDR+4(%a2),%a3
-	moveq	#12,%d2
+2:	lea	GADFWD+4(%a2),%a3
+	moveq	#16,%d2
 7:	move.l	-(%a3),%d0
 	beq.s	8f
 	movea.l	%d0,%a0
 	jsr	-642(%a6)		| DisposeObject
 8:	dbra	%d2,7b
-	move.l	DRAWINFO(%a2),%d0
+	move.l	GRAYCLASS(%a2),%d0	| no image of it is left
+	beq.s	10f
+	movea.l	%d0,%a0
+	jsr	-714(%a6)		| FreeClass
+10:	move.l	DRAWINFO(%a2),%d0
 	beq.s	9f
 	movea.l	%d0,%a1
 	movea.l	SCREEN(%a2),%a0
@@ -977,9 +999,59 @@ makegadgets:
 	movea.l	IMGRIGHT(%a2),%a0
 	bsr.w	newarrow
 	move.l	%d0,GADRIGHT(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 	tst.l	NOADDR(%a2)
-	bne.s	makegadgets_end
+	bne.w	makegadgets_end
+
+| Back and forward: arrows as those of the scroll bars, at the left of the
+| row, in the middle of the field's height; as far apart, and from the
+| border and the field, as they are from the frame's top and bottom
+| They are grey, as in a window that is not the active one: inside the
+| window they would be in the colours of the active window's border
+	move.l	%a2,-(%sp)
+	suba.l	%a0,%a0
+	lea	sysiclass(%pc),%a1
+	suba.l	%a2,%a2
+	moveq	#0,%d0
+	moveq	#0,%d1
+	jsr	-678(%a6)		| MakeClass
+	movea.l	(%sp)+,%a2
+	move.l	%d0,GRAYCLASS(%a2)
+	beq.w	makegadgets_end
+	movea.l	%d0,%a0
+	lea	graydispatch(%pc),%a1
+	move.l	%a1,8(%a0)		| cl_Dispatcher.h_Entry
+	lea	imagetags(%pc),%a1
+	move.l	#0x0A,20(%a1)		| LEFTIMAGE
+	movea.l	GRAYCLASS(%a2),%a0
+	bsr.w	newprivate
+	move.l	%d0,IMGBACK(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0		| sysiclass keeps the size of its own
+	bsr.w	getattr
+	move.l	%d0,BACKW(%a2)
+	move.l	#IA_Height,%d0
+	movea.l	IMGBACK(%a2),%a0
+	bsr.w	getattr
+	move.l	%d0,BACKH(%a2)
+	move.l	FONTH(%a2),%d1
+	addq.l	#4,%d1			| the frame's height
+	sub.l	%d0,%d1
+	asr.l	#1,%d1
+	bgt.s	1f
+	moveq	#1,%d1
+1:	move.l	%d1,GAP(%a2)
+	move.l	BACKW(%a2),%d0
+	add.l	%d1,%d0
+	add.l	%d0,%d0
+	add.l	%d1,%d0
+	move.l	%d0,FRAMEX(%a2)		| gap, button, gap, button, gap
+	lea	imagetags(%pc),%a1
+	move.l	#0x0C,20(%a1)		| RIGHTIMAGE
+	movea.l	GRAYCLASS(%a2),%a0
+	bsr.w	newprivate
+	move.l	%d0,IMGFWD(%a2)
+	beq.w	makegadgets_end
 
 | The address field: inside the window, across it in a ridge
 	lea	frametags(%pc),%a1
@@ -989,12 +1061,13 @@ makegadgets:
 	lea	frameiclass(%pc),%a0
 	bsr.w	newobject
 	move.l	%d0,IMGFRAME(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 	lea	addrtags(%pc),%a1
 	moveq	#0,%d0
 	movea.l	SCREEN(%a2),%a0
 	move.b	36(%a0),%d0		| sc_WBorLeft
-	addq.l	#6,%d0
+	add.l	FRAMEX(%a2),%d0
+	addq.l	#4,%d0
 	move.l	%d0,4(%a1)		| GA_Left
 	move.l	BARTOP(%a2),%d1
 	addq.l	#3,%d1
@@ -1008,6 +1081,38 @@ makegadgets:
 	lea	strgclass(%pc),%a0
 	bsr.w	newobject
 	move.l	%d0,GADADDR(%a2)
+	beq.s	makegadgets_end
+| the buttons, after the field in the list
+	lea	btntags(%pc),%a1
+	moveq	#0,%d0
+	movea.l	SCREEN(%a2),%a0
+	move.b	36(%a0),%d0		| sc_WBorLeft
+	add.l	GAP(%a2),%d0
+	move.l	%d0,4(%a1)		| GA_Left
+	move.l	FONTH(%a2),%d1		| in the middle of the frame
+	addq.l	#4,%d1
+	sub.l	BACKH(%a2),%d1
+	asr.l	#1,%d1
+	add.l	BARTOP(%a2),%d1
+	addq.l	#1,%d1
+	move.l	%d1,12(%a1)		| GA_Top
+	move.l	IMGBACK(%a2),20(%a1)	| GA_Image
+	move.l	#GAD_BACK,28(%a1)	| GA_ID
+	move.l	GADADDR(%a2),36(%a1)	| GA_Previous
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADBACK(%a2)
+	beq.s	makegadgets_end
+	lea	btntags(%pc),%a1
+	move.l	BACKW(%a2),%d0
+	add.l	GAP(%a2),%d0
+	add.l	%d0,4(%a1)		| GA_Left: beside it
+	move.l	IMGFWD(%a2),20(%a1)
+	move.l	#GAD_FWD,28(%a1)
+	move.l	GADBACK(%a2),36(%a1)
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADFWD(%a2)
 makegadgets_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
@@ -1043,6 +1148,43 @@ newobject:
 	tst.l	%d0
 	rts
 
+| An object of the private class at %a0, with the tags at %a1
+newprivate:
+	move.l	%a2,-(%sp)
+	movea.l	%a1,%a2
+	suba.l	%a1,%a1
+	jsr	-636(%a6)		| NewObjectA
+	movea.l	%d0,%a0
+	movea.l	(%sp)+,%a2
+	tst.l	%d0
+	rts
+
+| The dispatcher of the buttons' images: sysiclass, but IM_DRAW of the normal
+| and the selected look draws those of an inactive window. A0 the class, A2
+| the object, A1 the message.
+graydispatch:
+	movea.l	24(%a0),%a0		| cl_Super
+	cmp.l	#0x202,(%a1)		| IM_DRAW
+	bne.s	2f
+	move.l	12(%a1),%d0		| imp_State
+	cmp.l	#1,%d0			| IDS_NORMAL or IDS_SELECTED
+	bhi.s	2f
+	lea	-20(%sp),%sp		| a copy of the message
+	move.l	(%a1),(%sp)
+	move.l	4(%a1),4(%sp)		| imp_RPort
+	move.l	8(%a1),8(%sp)		| imp_Offset
+	addq.l	#5,%d0			| IDS_INACTIVENORMAL, IDS_INACTIVESELECTED
+	move.l	%d0,12(%sp)
+	move.l	16(%a1),16(%sp)		| imp_DrInfo
+	movea.l	%sp,%a1
+	pea	1f(%pc)
+	move.l	8(%a0),-(%sp)		| the superclass's h_Entry
+	rts
+1:	lea	20(%sp),%sp
+	rts
+2:	move.l	8(%a0),-(%sp)		| the rest as sysiclass does it
+	rts
+
 | The attribute %d0 of the object %a0, with INTUITIONBASE in %a6
 getattr:
 	move.l	%a2,-(%sp)
@@ -1064,7 +1206,8 @@ drawaddr:
 	movea.l	INTUITIONBASE(%a2),%a6
 	lea	framesize(%pc),%a1
 	move.l	WIDTH(%a2),%d0
-	subq.l	#4,%d0
+	sub.l	FRAMEX(%a2),%d0
+	subq.l	#2,%d0
 	move.l	%d0,4(%a1)		| IA_Width
 	movea.l	IMGFRAME(%a2),%a0
 	jsr	-648(%a6)		| SetAttrsA
@@ -1072,7 +1215,7 @@ drawaddr:
 	movea.l	IMGFRAME(%a2),%a1
 	moveq	#0,%d0
 	move.b	54(%a3),%d0		| wd_BorderLeft
-	addq.l	#2,%d0
+	add.l	FRAMEX(%a2),%d0
 	moveq	#0,%d1
 	move.b	55(%a3),%d1		| wd_BorderTop
 	addq.l	#1,%d1
@@ -1083,7 +1226,7 @@ drawaddr:
 	movea.l	GADADDR(%a2),%a0
 	movea.l	%a3,%a1
 	suba.l	%a2,%a2
-	moveq	#1,%d0
+	moveq	#3,%d0			| with the buttons after it
 	jsr	-432(%a6)		| RefreshGList
 1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
@@ -1550,6 +1693,13 @@ frametags:	.long	IA_Width, 100
 		.long	IA_Height, 0
 		.long	IA_FrameType, 2	| FRAME_RIDGE
 		.long	0
+btntags:	.long	GA_Left, 0
+		.long	GA_Top, 0
+		.long	GA_Image, 0
+		.long	GA_ID, 0
+		.long	GA_Previous, 0
+		.long	GA_RelVerify, 1
+		.long	0
 framesize:	.long	IA_Width, 0
 		.long	0
 addrtags:	.long	GA_Left, 0
@@ -1597,6 +1747,7 @@ msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [<address>]\n"
 		.ascii	"cursor keys outside a text field, with Shift by a page.\n"
 		.ascii	"The address field above the page goes to what is typed into\n"
 		.ascii	"it, or searches for it; Ctrl-L or F6 put the cursor in it.\n"
+		.ascii	"The buttons before it go back and forward.\n"
 		.ascii	"HIDEADDRESS leaves it out.\n"
 		.asciz	"Files of the page go to the folder of Browser downloads.\n"
 msg_cannot:	.asciz	"uae4arm cannot show web pages here - it needs Android 8 or later\n"
