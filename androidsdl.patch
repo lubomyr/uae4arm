@@ -1251,10 +1251,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..063a20e5d
+index 000000000..aef19c217
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,561 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1315,7 +1315,46 @@ index 000000000..063a20e5d
 +	private final Handler ui = new Handler(Looper.getMainLooper());
 +	private VirtualDisplay display = null;
 +	private Presentation presentation = null;
-+	private WebView web = null;
++	private PageView web = null;
++	// How far the page scrolls, for the scroll bars of the Amiga's window: the range, the part
++	// shown and where that is, up and down, then across; in pixels of the page's view
++	private volatile int[] scrollNumbers = new int[6];
++	volatile int scrollVersion = 0;
++
++	// The numbers of its scroll bars are WebView's own, but not public
++	private class PageView extends WebView
++	{
++		PageView(Context context)
++		{
++			super(context);
++		}
++
++		// After every picture of the page: the size of the page changes with no scrolling too
++		@Override
++		protected void onDraw(android.graphics.Canvas canvas)
++		{
++			super.onDraw(canvas);
++			takeNumbers();
++		}
++
++		@Override
++		protected void onScrollChanged(int l, int t, int oldl, int oldt)
++		{
++			super.onScrollChanged(l, t, oldl, oldt);
++			takeNumbers();
++		}
++
++		private void takeNumbers()
++		{
++			int[] n = { computeVerticalScrollRange(), computeVerticalScrollExtent(), computeVerticalScrollOffset(),
++				computeHorizontalScrollRange(), computeHorizontalScrollExtent(), computeHorizontalScrollOffset() };
++			if (!java.util.Arrays.equals(n, scrollNumbers))
++			{
++				scrollNumbers = n;
++				scrollVersion++;
++			}
++		}
++	}
 +	private boolean closed = false;
 +	// The title, or the address while there is none, in Latin-1 for the Amiga; one more each time
 +	// it changes, for the app to look at often
@@ -1368,7 +1407,10 @@ index 000000000..063a20e5d
 +			// Private, of this app alone: no permission is needed
 +			display = dm.createVirtualDisplay("HostBrowser", w, h, DPI, surface, 0);
 +			presentation = new Presentation(activity, display.getDisplay());
-+			web = new WebView(presentation.getContext());
++			web = new PageView(presentation.getContext());
++			// The Amiga's window has scroll bars of its own
++			web.setVerticalScrollBarEnabled(false);
++			web.setHorizontalScrollBarEnabled(false);
 +			WebSettings s = web.getSettings();
 +			s.setJavaScriptEnabled(true);
 +			s.setDomStorageEnabled(true);
@@ -1548,22 +1590,101 @@ index 000000000..063a20e5d
 +	void scroll(final int notches, final int x, final int y)
 +	{
 +		ui.post(new Runnable() {
++			public void run() { wheel(MotionEvent.AXIS_VSCROLL, notches, x, y); }
++		});
++	}
++
++	// The same across, notches to the right when more than 0
++	void scrollAcross(final int notches, final int x, final int y)
++	{
++		ui.post(new Runnable() {
++			public void run() { wheel(MotionEvent.AXIS_HSCROLL, notches, x, y); }
++		});
++	}
++
++	// What scrolls under x, y scrolls, as with a mouse's wheel
++	private void wheel(int axis, int notches, int x, int y)
++	{
++		if (presentation == null)
++			return;
++		long now = SystemClock.uptimeMillis();
++		MotionEvent.PointerProperties[] pp = { new MotionEvent.PointerProperties() };
++		pp[0].id = 0;
++		pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
++		MotionEvent.PointerCoords[] pc = { new MotionEvent.PointerCoords() };
++		pc[0].x = x;
++		pc[0].y = y;
++		pc[0].setAxisValue(axis, notches);
++		MotionEvent e = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1, pp, pc,
++			0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
++		presentation.getWindow().getDecorView().dispatchGenericMotionEvent(e);
++		e.recycle();
++	}
++
++	// The numbers of the scroll bars, see scrollNumbers
++	int[] scrollNumbers()
++	{
++		return scrollNumbers;
++	}
++
++	// The page to where a scroll bar was dragged: pos pixels down, or across
++	void scrollTo(final boolean across, final int pos)
++	{
++		ui.post(new Runnable() {
 +			public void run()
 +			{
-+				if (presentation == null)
++				if (web == null)
 +					return;
-+				long now = SystemClock.uptimeMillis();
-+				MotionEvent.PointerProperties[] pp = { new MotionEvent.PointerProperties() };
-+				pp[0].id = 0;
-+				pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
-+				MotionEvent.PointerCoords[] pc = { new MotionEvent.PointerCoords() };
-+				pc[0].x = x;
-+				pc[0].y = y;
-+				pc[0].setAxisValue(MotionEvent.AXIS_VSCROLL, notches);
-+				MotionEvent e = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1, pp, pc,
-+					0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
-+				presentation.getWindow().getDecorView().dispatchGenericMotionEvent(e);
-+				e.recycle();
++				if (across)
++					web.scrollTo(pos, web.getScrollY());
++				else
++					web.scrollTo(web.getScrollX(), pos);
++			}
++		});
++	}
++
++	// What has the focus takes keys of its own: a text field, a list, a frame with such inside
++	private static final String TAKES_KEYS =
++		"(function() { var e = document.activeElement;" +
++		" while (e && e.shadowRoot && e.shadowRoot.activeElement) e = e.shadowRoot.activeElement;" +
++		" return !!(e && (e.isContentEditable || /^(INPUT|TEXTAREA|SELECT|IFRAME)$/.test(e.tagName))); })()";
++
++	// A cursor key: into what has the focus, if it takes keys; else it scrolls the page, as in a
++	// browser of the PC - with Shift by a page
++	private void cursorKey(final int keyCode, final int meta, final boolean shift)
++	{
++		web.evaluateJavascript(TAKES_KEYS, new android.webkit.ValueCallback<String>() {
++			public void onReceiveValue(String takes)
++			{
++				if (web == null)
++					return;
++				if ("true".equals(takes))
++				{
++					press(keyCode, meta);
++					return;
++				}
++				int x = web.getWidth() / 2, y = web.getHeight() / 2;
++				switch (keyCode)
++				{
++				case KeyEvent.KEYCODE_DPAD_UP:
++					if (shift)
++						web.pageUp(false);
++					else
++						wheel(MotionEvent.AXIS_VSCROLL, 1, x, y);
++					break;
++				case KeyEvent.KEYCODE_DPAD_DOWN:
++					if (shift)
++						web.pageDown(false);
++					else
++						wheel(MotionEvent.AXIS_VSCROLL, -1, x, y);
++					break;
++				case KeyEvent.KEYCODE_DPAD_LEFT:
++					wheel(MotionEvent.AXIS_HSCROLL, -1, x, y);
++					break;
++				case KeyEvent.KEYCODE_DPAD_RIGHT:
++					wheel(MotionEvent.AXIS_HSCROLL, 1, x, y);
++					break;
++				}
 +			}
 +		});
 +	}
@@ -1606,7 +1727,9 @@ index 000000000..063a20e5d
 +				kc = KeyEvent.KEYCODE_DPAD_LEFT;
 +			else if (raw >= 0x50 && raw <= 0x59)
 +				kc = KeyEvent.KEYCODE_F1 + raw - 0x50;
-+			if (kc != 0)
++			if (kc >= KeyEvent.KEYCODE_DPAD_UP && kc <= KeyEvent.KEYCODE_DPAD_RIGHT)
++				cursorKey(kc, meta, (qual & QUAL_SHIFT) != 0);
++			else if (kc != 0)
 +				press(kc, meta);
 +			return;
 +		}

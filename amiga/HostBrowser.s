@@ -19,6 +19,10 @@
 | Amiga-Q end it. The title of the window is the page's; while a file of the
 | page downloads, it tells how far it is.
 |
+| Scroll bars in the right and bottom borders show where the page is: drag
+| one, click beside its knob for a page, or hold an arrow. Outside a text
+| field the cursor keys scroll as well, with Shift by a page.
+|
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits.
 |
@@ -31,13 +35,16 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 7	| web pages, with the keys
+	.set	HOSTVIDEO_VERSION, 8	| web pages, with the keys and scroll bars
 
 	.set	HV_OPENURL, 14
 	.set	HV_POINTER, 15
 	.set	HV_SCROLL, 16
 	.set	HV_NAVIGATE, 17
 	.set	HV_KEY, 18
+	.set	HV_SCROLLINFO, 19
+	.set	HV_SCROLLTO, 20
+	.set	HV_SCROLLACROSS, 21
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -47,9 +54,48 @@
 	.set	IDCMP_REFRESHWINDOW, 0x4
 	.set	IDCMP_MOUSEBUTTONS, 0x8
 	.set	IDCMP_MOUSEMOVE, 0x10
+	.set	IDCMP_GADGETDOWN, 0x20
+	.set	IDCMP_GADGETUP, 0x40
 	.set	IDCMP_CLOSEWINDOW, 0x200
 	.set	IDCMP_RAWKEY, 0x400
 	.set	IDCMP_VANILLAKEY, 0x200000
+	.set	IDCMP_INTUITICKS, 0x400000
+
+	.set	GA_Left, 0x80030001
+	.set	GA_RelRight, 0x80030002
+	.set	GA_Top, 0x80030003
+	.set	GA_RelBottom, 0x80030004
+	.set	GA_Width, 0x80030005
+	.set	GA_RelWidth, 0x80030006
+	.set	GA_Height, 0x80030007
+	.set	GA_RelHeight, 0x80030008
+	.set	GA_Image, 0x8003000A
+	.set	GA_ID, 0x80030010
+	.set	GA_Immediate, 0x80030015
+	.set	GA_RelVerify, 0x80030016
+	.set	GA_FollowMouse, 0x80030017
+	.set	GA_RightBorder, 0x80030018
+	.set	GA_BottomBorder, 0x8003001B
+	.set	GA_Previous, 0x8003001F
+	.set	PGA_Freedom, 0x80031001
+	.set	PGA_Borderless, 0x80031002
+	.set	PGA_Total, 0x80031007
+	.set	PGA_Visible, 0x80031008
+	.set	PGA_Top, 0x80031009
+	.set	PGA_NewLook, 0x8003100A
+	.set	IA_Width, 0x80020003
+	.set	IA_Height, 0x80020004
+	.set	SYSIA_Size, 0x8002000B
+	.set	SYSIA_Which, 0x8002000D
+	.set	SYSIA_DrawInfo, 0x80020018
+
+| The gadgets of the borders: the scroll bars, then their arrows
+	.set	GAD_V, 1
+	.set	GAD_H, 2
+	.set	GAD_UP, 3
+	.set	GAD_DOWN, 4
+	.set	GAD_LEFT, 5
+	.set	GAD_RIGHT, 6
 
 | The size the window opens at, if the screen has room
 	.set	WINW, 800
@@ -70,7 +116,32 @@
 	.set	PRESSED, 44		| the left button went down on the page
 	.set	TITLETURN, 48		| which of the two title buffers is free
 	.set	QUAL, 52		| im_Qualifier of the message
-	.set	VARSIZE, 56
+	.set	LASTV, 56		| the tops of the scroll bars, by GAD_V, GAD_H
+	.set	LASTH, 60
+	.set	DRAWINFO, 64
+	.set	IMGSIZE, 68		| the images - of the size gadget, for its
+	.set	IMGUP, 72		| size - then the gadgets, by their GAD_
+	.set	IMGDOWN, 76
+	.set	IMGLEFT, 80
+	.set	IMGRIGHT, 84
+	.set	GADV, 88
+	.set	GADH, 92
+	.set	GADUP, 96
+	.set	GADDOWN, 100
+	.set	GADLEFT, 104
+	.set	GADRIGHT, 108
+	.set	SIZEW, 112
+	.set	SIZEH, 116
+	.set	ARROWW, 120		| of the arrows up and down
+	.set	ARROWH, 124
+	.set	LEFTW, 128		| of those left and right
+	.set	DRAGGING, 132		| the scroll bar being dragged, or 0
+	.set	HELD, 136		| the arrow held, or 0, and for how long
+	.set	HELDTICKS, 140
+	.set	STORE, 144		| for GetAttr()
+	.set	IADDR, 148		| im_IAddress of the message
+	.set	BARTOP, 152		| the height of the window's title bar
+	.set	VARSIZE, 156
 
 	.text
 	.globl	_start
@@ -233,6 +304,15 @@ havesignal:
 	bra.w	failed
 havescreen:
 	movea.l	%d0,%a0
+	jsr	-690(%a6)		| GetScreenDrawInfo
+	move.l	%d0,DRAWINFO(%a2)
+	bsr.w	makegadgets
+	tst.l	%d0
+	bne.s	1f
+	lea	msg_nowindow(%pc),%a0
+	bra.w	failed
+1:	move.l	SCREEN(%a2),%d0
+	movea.l	%d0,%a0
 	moveq	#0,%d1
 	move.w	12(%a0),%d1		| sc_Width
 	sub.l	#32,%d1			| room for the borders
@@ -254,6 +334,7 @@ havescreen:
 | The zoom gadget's other size: the screen below its title bar
 	lea	zoombox(%pc),%a0
 	move.l	%a0,44(%a1)		| WA_Zoom
+	move.l	GADV(%a2),52(%a1)	| WA_Gadgets
 	movea.l	%d0,%a1
 	clr.w	(%a0)			| left
 	moveq	#0,%d0
@@ -306,6 +387,7 @@ haveopened:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
+	bsr.w	updatebars
 
 | Waits for a picture, the window, or Ctrl-C
 mainloop:
@@ -332,6 +414,7 @@ mainloop:
 	bne.s	msgloop
 	bsr.w	draw
 	bsr.w	newtitle
+	bsr.w	updatebars
 
 msgloop:
 	movea.l	4,%a6
@@ -347,6 +430,7 @@ msgloop:
 	moveq	#0,%d0
 	move.w	26(%a1),%d0
 	move.l	%d0,QUAL(%a0)
+	move.l	28(%a1),IADDR(%a0)
 	jsr	-378(%a6)		| ReplyMsg
 	cmp.l	#IDCMP_CLOSEWINDOW,%d2
 	beq.w	quit
@@ -357,7 +441,8 @@ msgloop:
 	bmi.w	badformat
 	beq.w	nomem
 	bsr.w	draw
-	bra.s	msgloop
+	bsr.w	updatebars
+	bra.w	msgloop
 notsize:
 	cmp.l	#IDCMP_REFRESHWINDOW,%d2
 	bne.s	notrefresh
@@ -371,8 +456,58 @@ notsize:
 	movea.l	%a3,%a0
 	moveq	#1,%d0
 	jsr	-366(%a6)		| EndRefresh
-	bra.s	msgloop
+	bra.w	msgloop
 notrefresh:
+| A scroll bar pressed is dragged till let go; an arrow scrolls, and again
+| while held
+	cmp.l	#IDCMP_GADGETDOWN,%d2
+	bne.s	notdown
+	lea	vars(%pc),%a2
+	movea.l	IADDR(%a2),%a0
+	moveq	#0,%d0
+	move.w	38(%a0),%d0		| gg_GadgetID
+	cmp.w	#GAD_H,%d0
+	bls.s	1f
+	move.l	%d0,HELD(%a2)
+	clr.l	HELDTICKS(%a2)
+	bsr.w	arrowstep
+	bra.w	msgloop
+1:	move.l	%d0,DRAGGING(%a2)
+	bra.w	msgloop
+notdown:
+	cmp.l	#IDCMP_GADGETUP,%d2
+	bne.s	notup
+	lea	vars(%pc),%a2
+	movea.l	IADDR(%a2),%a0
+	moveq	#0,%d0
+	move.w	38(%a0),%d0		| gg_GadgetID
+	cmp.w	#GAD_H,%d0
+	bls.s	1f
+	clr.l	HELD(%a2)
+	bra.w	msgloop
+1:	bsr.w	propmove		| a click beside the knob ends here too
+	lea	vars(%pc),%a2
+	clr.l	DRAGGING(%a2)
+	bra.w	msgloop
+notup:
+	cmp.l	#IDCMP_INTUITICKS,%d2
+	bne.s	notticks
+	lea	vars(%pc),%a2
+	move.l	HELD(%a2),%d0
+	beq.w	msgloop
+	move.l	%d0,%d1
+	lsl.l	#2,%d1
+	movea.l	GADV-4(%a2,%d1.l),%a0
+	btst	#7,13(%a0)		| gg_Flags & GFLG_SELECTED: still held
+	bne.s	1f
+	clr.l	HELD(%a2)
+	bra.w	msgloop
+1:	addq.l	#1,HELDTICKS(%a2)
+	cmp.l	#2,HELDTICKS(%a2)	| a moment before it goes on
+	bcs.w	msgloop
+	bsr.w	arrowstep
+	bra.w	msgloop
+notticks:
 	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
 	bne.s	notbutton
 	bsr.w	innerpos
@@ -400,7 +535,11 @@ notbutton:
 	cmp.l	#IDCMP_MOUSEMOVE,%d2
 	bne.s	notmove
 	lea	vars(%pc),%a0
-	tst.l	PRESSED(%a0)
+	move.l	DRAGGING(%a0),%d0
+	beq.s	1f
+	bsr.w	propmove
+	bra.w	msgloop
+1:	tst.l	PRESSED(%a0)
 	beq.w	msgloop
 	bsr.w	innerpos
 	moveq	#2,%d2			| moved while pressed
@@ -500,7 +639,20 @@ closeall:
 	beq.s	2f
 	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
-2:	move.l	SCREEN(%a2),%d0
+| The gadgets, then the images, now that no window has them
+2:	lea	GADRIGHT+4(%a2),%a3
+	moveq	#10,%d2
+7:	move.l	-(%a3),%d0
+	beq.s	8f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+8:	dbra	%d2,7b
+	move.l	DRAWINFO(%a2),%d0
+	beq.s	9f
+	movea.l	%d0,%a1
+	movea.l	SCREEN(%a2),%a0
+	jsr	-696(%a6)		| FreeScreenDrawInfo
+9:	move.l	SCREEN(%a2),%d0
 	beq.s	3f
 	movea.l	%d0,%a1
 	suba.l	%a0,%a0
@@ -597,6 +749,306 @@ newtitle:
 	movea.w	#-1,%a2			| the screen's title stays
 	jsr	-276(%a6)		| SetWindowTitles
 2:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The images and gadgets of the borders, linked in the order of their GAD_,
+| on the screen in SCREEN with its DrawInfo. %d0: 0 when one did not come.
+makegadgets:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	moveq	#1,%d2			| SYSISIZE_LOWRES
+	movea.l	SCREEN(%a2),%a0
+	btst	#1,20(%a0)		| sc_Flags & SCREENHIRES (0x200)
+	beq.s	1f
+	moveq	#0,%d2			| SYSISIZE_MEDRES
+1:	lea	imagetags(%pc),%a0
+	move.l	DRAWINFO(%a2),4(%a0)	| SYSIA_DrawInfo
+	move.l	%d2,12(%a0)		| SYSIA_Size
+	moveq	#2,%d0			| SIZEIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGSIZE(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,SIZEW(%a2)
+	move.l	#IA_Height,%d0
+	movea.l	IMGSIZE(%a2),%a0
+	bsr.w	getattr
+	move.l	%d0,SIZEH(%a2)
+	moveq	#0x0B,%d0		| UPIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGUP(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,ARROWW(%a2)
+	move.l	#IA_Height,%d0
+	movea.l	IMGUP(%a2),%a0
+	bsr.w	getattr
+	move.l	%d0,ARROWH(%a2)
+	moveq	#0x0D,%d0		| DOWNIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGDOWN(%a2)
+	beq.w	makegadgets_end
+	moveq	#0x0A,%d0		| LEFTIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGLEFT(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,LEFTW(%a2)
+	moveq	#0x0C,%d0		| RIGHTIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGRIGHT(%a2)
+	beq.w	makegadgets_end
+
+| The height of the title bar, below which the bar up and down starts
+	movea.l	SCREEN(%a2),%a0
+	moveq	#0,%d0
+	move.b	35(%a0),%d0		| sc_WBorTop
+	movea.l	40(%a0),%a1		| sc_Font
+	add.w	4(%a1),%d0		| ta_YSize
+	addq.l	#1,%d0
+	move.l	%d0,BARTOP(%a2)
+
+| Up and down: in the right border, above the arrows
+	lea	vproptags(%pc),%a0
+	moveq	#5,%d0
+	sub.l	SIZEW(%a2),%d0
+	move.l	%d0,4(%a0)		| GA_RelRight
+	move.l	BARTOP(%a2),%d0
+	addq.l	#1,%d0
+	move.l	%d0,12(%a0)		| GA_Top
+	move.l	SIZEW(%a2),%d0
+	subq.l	#8,%d0
+	move.l	%d0,20(%a0)		| GA_Width
+	move.l	BARTOP(%a2),%d0
+	add.l	SIZEH(%a2),%d0
+	add.l	ARROWH(%a2),%d0
+	add.l	ARROWH(%a2),%d0
+	addq.l	#2,%d0
+	neg.l	%d0
+	move.l	%d0,28(%a0)		| GA_RelHeight
+	movea.l	%a0,%a1
+	lea	propclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADV(%a2)
+	beq.w	makegadgets_end
+
+| Across: in the bottom border, left of the arrows
+	lea	hproptags(%pc),%a0
+	moveq	#0,%d0
+	movea.l	SCREEN(%a2),%a1
+	move.b	36(%a1),%d0		| sc_WBorLeft
+	move.l	%d0,4(%a0)		| GA_Left
+	moveq	#3,%d1
+	sub.l	SIZEH(%a2),%d1
+	move.l	%d1,12(%a0)		| GA_RelBottom
+	add.l	LEFTW(%a2),%d0
+	add.l	LEFTW(%a2),%d0
+	add.l	SIZEW(%a2),%d0
+	addq.l	#1,%d0
+	neg.l	%d0
+	move.l	%d0,20(%a0)		| GA_RelWidth
+	move.l	SIZEH(%a2),%d0
+	subq.l	#4,%d0
+	move.l	%d0,28(%a0)		| GA_Height
+	move.l	GADV(%a2),124(%a0)	| GA_Previous
+	movea.l	%a0,%a1
+	lea	propclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADH(%a2)
+	beq.w	makegadgets_end
+
+| The arrows, up and down above the size gadget, left and right beside it
+	move.l	#GA_RightBorder,%d3
+	moveq	#1,%d0
+	sub.l	ARROWW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	SIZEH(%a2),%d1
+	sub.l	ARROWH(%a2),%d1
+	sub.l	ARROWH(%a2),%d1
+	moveq	#GAD_UP,%d2
+	move.l	GADH(%a2),%d4
+	movea.l	IMGUP(%a2),%a0
+	bsr.w	newarrow
+	move.l	%d0,GADUP(%a2)
+	beq.s	makegadgets_end
+	moveq	#1,%d0
+	sub.l	ARROWW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	SIZEH(%a2),%d1
+	sub.l	ARROWH(%a2),%d1
+	moveq	#GAD_DOWN,%d2
+	move.l	GADUP(%a2),%d4
+	movea.l	IMGDOWN(%a2),%a0
+	bsr.w	newarrow
+	move.l	%d0,GADDOWN(%a2)
+	beq.s	makegadgets_end
+	move.l	#GA_BottomBorder,%d3
+	moveq	#1,%d0
+	sub.l	SIZEW(%a2),%d0
+	sub.l	LEFTW(%a2),%d0
+	sub.l	LEFTW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	SIZEH(%a2),%d1
+	moveq	#GAD_LEFT,%d2
+	move.l	GADDOWN(%a2),%d4
+	movea.l	IMGLEFT(%a2),%a0
+	bsr.w	newarrow
+	move.l	%d0,GADLEFT(%a2)
+	beq.s	makegadgets_end
+	moveq	#1,%d0
+	sub.l	SIZEW(%a2),%d0
+	sub.l	LEFTW(%a2),%d0
+	moveq	#1,%d1
+	sub.l	SIZEH(%a2),%d1
+	moveq	#GAD_RIGHT,%d2
+	move.l	GADLEFT(%a2),%d4
+	movea.l	IMGRIGHT(%a2),%a0
+	bsr.w	newarrow
+	move.l	%d0,GADRIGHT(%a2)
+makegadgets_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| An arrow: %d0 GA_RelRight, %d1 GA_RelBottom, %d2 its GAD_, %d3 the tag of
+| its border, %d4 the gadget before, %a0 its image; in %d0
+newarrow:
+	lea	arrowtags(%pc),%a1
+	move.l	%d0,4(%a1)		| GA_RelRight
+	move.l	%d1,12(%a1)		| GA_RelBottom
+	move.l	%a0,20(%a1)		| GA_Image
+	move.l	%d2,28(%a1)		| GA_ID
+	move.l	%d4,36(%a1)		| GA_Previous
+	move.l	%d3,40(%a1)		| GA_RightBorder or GA_BottomBorder
+	lea	buttonclass(%pc),%a0
+	bra.s	newobject
+
+| A sysiclass image of the kind in %d0, with imagetags; in %d0 and %a0.
+| Needs INTUITIONBASE in %a6.
+newimage:
+	lea	imagetags(%pc),%a1
+	move.l	%d0,20(%a1)		| SYSIA_Which
+	lea	sysiclass(%pc),%a0
+| An object of the class named at %a0, with the tags at %a1
+newobject:
+	move.l	%a2,-(%sp)
+	movea.l	%a1,%a2
+	movea.l	%a0,%a1
+	suba.l	%a0,%a0
+	jsr	-636(%a6)		| NewObjectA
+	movea.l	%d0,%a0
+	movea.l	(%sp)+,%a2
+	tst.l	%d0
+	rts
+
+| The attribute %d0 of the object %a0, with INTUITIONBASE in %a6
+getattr:
+	move.l	%a2,-(%sp)
+	lea	vars(%pc),%a2
+	lea	STORE(%a2),%a1
+	clr.l	(%a1)
+	jsr	-654(%a6)		| GetAttr
+	move.l	STORE(%a2),%d0
+	movea.l	(%sp)+,%a2
+	rts
+
+| The scroll bars to where the page is, if that changed
+updatebars:
+	movem.l	%d2-%d4,-(%sp)
+	moveq	#HV_SCROLLINFO,%d0
+	move.l	%d5,%d1
+	lea	barinfo(%pc),%a0
+	move.l	%a0,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	tst.l	%d0
+	beq.s	1f
+	moveq	#GAD_V,%d0
+	lea	barinfo(%pc),%a0
+	bsr.s	setbar
+	moveq	#GAD_H,%d0
+	lea	barinfo+12(%pc),%a0
+	bsr.s	setbar
+1:	movem.l	(%sp)+,%d2-%d4
+	rts
+
+| The scroll bar %d0 (GAD_V or GAD_H) to the total, visible and top at %a0,
+| unless it is being dragged
+setbar:
+	movem.l	%a2-%a3/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	cmp.l	DRAGGING(%a2),%d0
+	beq.s	1f
+	move.l	%d0,%d1
+	lsl.l	#2,%d1
+	move.l	8(%a0),LASTV-4(%a2,%d1.l)
+	lea	bartags(%pc),%a1
+	move.l	(%a0),4(%a1)		| PGA_Total
+	move.l	4(%a0),12(%a1)		| PGA_Visible
+	move.l	8(%a0),20(%a1)		| PGA_Top
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	GADV-4(%a2,%d1.l),%a0
+	movea.l	%a3,%a1			| the window
+	lea	bartags(%pc),%a3
+	suba.l	%a2,%a2
+	jsr	-660(%a6)		| SetGadgetAttrsA
+1:	movem.l	(%sp)+,%a2-%a3/%a6
+	rts
+
+| The scroll bar %d0 (GAD_V or GAD_H) moved: the page goes there
+propmove:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	%d0,%d2
+	lsl.l	#2,%d0
+	movea.l	GADV-4(%a2,%d0.l),%a0
+	movea.l	INTUITIONBASE(%a2),%a6
+	move.l	#PGA_Top,%d0
+	bsr.w	getattr
+	move.l	%d2,%d1
+	lsl.l	#2,%d1
+	cmp.l	LASTV-4(%a2,%d1.l),%d0
+	beq.s	1f
+	move.l	%d0,LASTV-4(%a2,%d1.l)
+	move.l	%d0,%d3			| the top
+	subq.l	#1,%d2			| 0 up and down, 1 across
+	moveq	#HV_SCROLLTO,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The arrow %d0 pressed: the page scrolls a step, at the middle of the window
+arrowstep:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	WIDTH(%a2),%d3
+	lsr.l	#1,%d3
+	swap	%d3
+	move.l	HEIGHT(%a2),%d1
+	lsr.l	#1,%d1
+	move.w	%d1,%d3
+	move.l	%d0,%d1
+	moveq	#HV_SCROLL,%d0
+	moveq	#1,%d2			| up
+	cmp.w	#GAD_UP,%d1
+	beq.s	1f
+	moveq	#-1,%d2			| down
+	cmp.w	#GAD_DOWN,%d1
+	beq.s	1f
+	moveq	#HV_SCROLLACROSS,%d0	| left
+	cmp.w	#GAD_LEFT,%d1
+	beq.s	1f
+	moveq	#1,%d2			| right
+1:	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
 
 | What the window's screen is, for the buffer: %d0 0 when it is no RTG one
@@ -810,11 +1262,12 @@ easy:		.long	0, 0, 0, 0, 0	| struct EasyStruct
 wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x80000077, 0	| WA_InnerHeight
 		.long	0x8000006E, 0	| WA_Title
-		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_MOUSEBUTTONS+IDCMP_MOUSEMOVE+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY
+		.long	0x8000006A, IDCMP_NEWSIZE+IDCMP_REFRESHWINDOW+IDCMP_MOUSEBUTTONS+IDCMP_MOUSEMOVE+IDCMP_CLOSEWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY+IDCMP_GADGETDOWN+IDCMP_GADGETUP+IDCMP_INTUITICKS
 		.long	0x80000079, 0	| WA_PubScreen
 		.long	0x8000007D, 0	| WA_Zoom
+		.long	0x8000006C, 0	| WA_Gadgets
 		.long	0x80000072, 160	| WA_MinWidth
-		.long	0x80000073, 64	| WA_MinHeight
+		.long	0x80000073, 120	| WA_MinHeight
 		.long	0x80000074, -1	| WA_MaxWidth: the screen's
 		.long	0x80000075, -1	| WA_MaxHeight
 		.long	0x80000081, 1	| WA_SizeGadget
@@ -825,7 +1278,61 @@ wintags:	.long	0x80000076, 0	| WA_InnerWidth
 		.long	0x80000089, 1	| WA_Activate
 		.long	0x8000008A, 1	| WA_RMBTrap: the right button goes back
 		.long	0x8000008C, 1	| WA_SimpleRefresh
+		.long	0x8000008E, 1	| WA_SizeBRight
+		.long	0x8000008F, 1	| WA_SizeBBottom
 		.long	0		| TAG_DONE
+imagetags:	.long	SYSIA_DrawInfo, 0
+		.long	SYSIA_Size, 0
+		.long	SYSIA_Which, 0
+		.long	0
+vproptags:	.long	GA_RelRight, 0
+		.long	GA_Top, 0
+		.long	GA_Width, 0
+		.long	GA_RelHeight, 0
+		.long	GA_ID, GAD_V
+		.long	GA_RightBorder, 1
+		.long	GA_RelVerify, 1
+		.long	GA_Immediate, 1
+		.long	GA_FollowMouse, 1
+		.long	PGA_Freedom, 4	| FREEVERT
+		.long	PGA_NewLook, 1
+		.long	PGA_Borderless, 1
+		.long	PGA_Total, 1
+		.long	PGA_Visible, 1
+		.long	PGA_Top, 0
+		.long	GA_Previous, 0
+		.long	0
+hproptags:	.long	GA_Left, 0
+		.long	GA_RelBottom, 0
+		.long	GA_RelWidth, 0
+		.long	GA_Height, 0
+		.long	GA_ID, GAD_H
+		.long	GA_BottomBorder, 1
+		.long	GA_RelVerify, 1
+		.long	GA_Immediate, 1
+		.long	GA_FollowMouse, 1
+		.long	PGA_Freedom, 2	| FREEHORIZ
+		.long	PGA_NewLook, 1
+		.long	PGA_Borderless, 1
+		.long	PGA_Total, 1
+		.long	PGA_Visible, 1
+		.long	PGA_Top, 0
+		.long	GA_Previous, 0
+		.long	0
+arrowtags:	.long	GA_RelRight, 0
+		.long	GA_RelBottom, 0
+		.long	GA_Image, 0
+		.long	GA_ID, 0
+		.long	GA_Previous, 0
+		.long	GA_RightBorder, 1
+		.long	GA_RelVerify, 1
+		.long	GA_Immediate, 1
+		.long	0
+bartags:	.long	PGA_Total, 0
+		.long	PGA_Visible, 0
+		.long	PGA_Top, 0
+		.long	0
+barinfo:	.long	0, 0, 0, 0, 0, 0
 
 	.set	TITLESIZE, 256
 titlebuf1:	.space	TITLESIZE
@@ -834,6 +1341,9 @@ titlebuf2:	.space	TITLESIZE
 dosname:	.asciz	"dos.library"
 intuiname:	.asciz	"intuition.library"
 p96name:	.asciz	"Picasso96API.library"
+sysiclass:	.asciz	"sysiclass"
+propclass:	.asciz	"propgclass"
+buttonclass:	.asciz	"buttongclass"
 title:		.asciz	"HostBrowser"
 colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
@@ -844,6 +1354,8 @@ msg_usage:	.ascii	"Usage: HostBrowser [<address>]\n"
 		.ascii	"the page, the wheel scrolls it; the keys go to the page. The\n"
 		.ascii	"right button or Alt-cursor left go back, Alt-cursor right\n"
 		.ascii	"forward, F5 loads the page again, Right Amiga-Q ends it.\n"
+		.ascii	"The scroll bars in the borders scroll it too, and so do the\n"
+		.ascii	"cursor keys outside a text field, with Shift by a page.\n"
 		.asciz	"Files of the page go to the folder of Browser downloads.\n"
 msg_cannot:	.asciz	"uae4arm cannot show web pages here - it needs Android 8 or later\n"
 msg_nointuition: .asciz	"this needs intuition.library 39\n"

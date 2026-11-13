@@ -105,7 +105,14 @@ extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
 #define HV_CMD_KEY 18       /* handle, a Latin-1 character or 0x100 + a raw
                                key code, Intuition's qualifiers */
 
-#define HV_API_VERSION 7     /* web pages, for HostBrowser, with the keys */
+#define HV_CMD_SCROLLINFO 19 /* handle, buffer for 6 longs: the scroll bars
+                               up and down, then across - total, visible,
+                               top - in units of up to 16 bits; 1 when they
+                               changed since the last time */
+#define HV_CMD_SCROLLTO 20  /* handle, 0 up and down 1 across, top in those units */
+#define HV_CMD_SCROLLACROSS 21 /* handle, notches (right > 0), x << 16 | y */
+
+#define HV_API_VERSION 8     /* web pages, for HostBrowser, with scroll bars */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -201,6 +208,13 @@ public:
 	virtual void navigate(int what) {}
 	/* a key: a Latin-1 character, or 0x100 + a raw key code */
 	virtual void key(int code, int qualifiers) {}
+	/* the wheel across, notches right when more than 0 */
+	virtual void scroll_across(int notches, int x, int y) {}
+	/* the scroll bars: total, visible, top, up and down then across, as
+	   propgclass takes them; true when they changed */
+	virtual bool scroll_bars(uae_u32 bars[6]) { return false; }
+	/* to where a scroll bar was dragged, in its units */
+	virtual void scroll_to(bool across, uae_u32 top) {}
 	/* the title for the window, in Latin-1: 2 when it changed since the
 	   last time, 1 when not, 0 for no title of its own */
 	virtual int title(char *text, size_t size) { return 0; }
@@ -1799,8 +1813,8 @@ static bool find_imagereader(void)
 static struct {
 	bool tried;
 	jclass cls;
-	jmethodID open, resize, pointer, scroll, navigate, key, title, close;
-	jfieldID titleVersion;
+	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, close;
+	jfieldID titleVersion, scrollVersion;
 } hb;
 
 /* The emulator's thread is Java's own; should it not be, it is attached
@@ -1884,11 +1898,16 @@ static bool find_hostbrowser(JNIEnv *env)
 	hb.scroll = env->GetMethodID(cls, "scroll", "(III)V");
 	hb.navigate = env->GetMethodID(cls, "navigate", "(I)V");
 	hb.key = env->GetMethodID(cls, "key", "(II)V");
+	hb.scrollAcross = env->GetMethodID(cls, "scrollAcross", "(III)V");
+	hb.scrollNumbers = env->GetMethodID(cls, "scrollNumbers", "()[I");
+	hb.scrollTo = env->GetMethodID(cls, "scrollTo", "(ZI)V");
 	hb.titleVersion = env->GetFieldID(cls, "titleVersion", "I");
+	hb.scrollVersion = env->GetFieldID(cls, "scrollVersion", "I");
 	hb.title = env->GetMethodID(cls, "title", "()[B");
 	hb.close = env->GetMethodID(cls, "close", "()V");
 	if (env->ExceptionCheck() || !hb.open || !hb.resize || !hb.pointer || !hb.scroll ||
-		!hb.navigate || !hb.key || !hb.titleVersion || !hb.title || !hb.close) {
+		!hb.navigate || !hb.key || !hb.titleVersion || !hb.title || !hb.close ||
+		!hb.scrollAcross || !hb.scrollNumbers || !hb.scrollTo || !hb.scrollVersion) {
 		env->ExceptionClear();
 		write_log(_T("HostBrowser: %s lacks a method\n"), name.c_str());
 		return false;
@@ -1912,9 +1931,17 @@ public:
 	void scroll(int notches, int x, int y);
 	void navigate(int what);
 	void key(int code, int qualifiers);
+	void scroll_across(int notches, int x, int y);
+	bool scroll_bars(uae_u32 bars[6]);
+	void scroll_to(bool across, uae_u32 top);
 	int title(char *text, size_t size);
 
 private:
+	/* the scroll bars told last, and the pixels of their units */
+	uae_u32 bars_told[6] = { 0 };
+	bool bars_were_told = false;
+	int bar_scale[2] = { 1, 1 };
+	int seen_scroll = 0;
 	/* the title is looked at now and then, for it changes without a new
 	   picture too, as a download goes on */
 	int polls = 0;
@@ -2134,9 +2161,73 @@ bool browser_source::take(double t)
 				seen_version = v;
 				f = true;
 			}
+			/* the scroll bars come with a picture too, but should the
+			   numbers come after it */
+			v = j.env->GetIntField(browser, hb.scrollVersion);
+			if (v != seen_scroll) {
+				seen_scroll = v;
+				f = true;
+			}
 		}
 	}
 	return f;
+}
+
+void browser_source::scroll_across(int notches, int x, int y)
+{
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.scrollAcross, notches, x, y);
+		j.failed();
+	}
+}
+
+/* The page's pixels as propgclass takes them: its numbers are 16 bits in
+   OS 3, so a long page counts in steps of a few pixels */
+bool browser_source::scroll_bars(uae_u32 bars[6])
+{
+	int n[6] = { 0 };
+	jni_env j;
+	if (j.env) {
+		jintArray a = (jintArray)j.env->CallObjectMethod(browser, hb.scrollNumbers);
+		if (!j.failed() && a) {
+			if (j.env->GetArrayLength(a) >= 6)
+				j.env->GetIntArrayRegion(a, 0, 6, n);
+			j.env->DeleteLocalRef(a);
+		}
+	}
+	for (int axis = 0; axis < 2; axis++) {
+		int range = n[axis * 3], extent = n[axis * 3 + 1], offset = n[axis * 3 + 2];
+		if (extent < 1)
+			extent = 1;
+		if (range < extent)
+			range = extent;
+		if (offset < 0)
+			offset = 0;
+		if (offset > range - extent)
+			offset = range - extent;
+		int scale = range / 0xffff + 1;
+		bar_scale[axis] = scale;
+		bars[axis * 3] = range / scale;
+		bars[axis * 3 + 1] = (extent + scale - 1) / scale;
+		bars[axis * 3 + 2] = offset / scale;
+	}
+	bool changed = !bars_were_told || memcmp(bars, bars_told, sizeof bars_told);
+	memcpy(bars_told, bars, sizeof bars_told);
+	bars_were_told = true;
+	return changed;
+}
+
+void browser_source::scroll_to(bool across, uae_u32 top)
+{
+	int pos = (int)top * bar_scale[across ? 1 : 0];
+	/* what it is told back does not move the bar being dragged */
+	bars_told[across ? 5 : 2] = top;
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.scrollTo, (jboolean)across, pos);
+		j.failed();
+	}
 }
 
 void browser_source::key(int code, int qualifiers)
@@ -2742,6 +2833,21 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	case HV_CMD_KEY:
 		v->source->key((int)arg2, (int)arg3);
 		return 1;
+	case HV_CMD_SCROLLACROSS:
+		v->source->scroll_across((uae_s32)arg2, (uae_s16)(arg3 >> 16), (uae_s16)arg3);
+		return 1;
+	case HV_CMD_SCROLLTO:
+		v->source->scroll_to(arg2 != 0, arg3);
+		return 1;
+	case HV_CMD_SCROLLINFO: {
+		uae_u32 bars[6];
+		bool changed = v->source->scroll_bars(bars);
+		if (!arg2)
+			return 0;
+		for (int i = 0; i < 6; i++)
+			put_long(arg2 + i * 4, bars[i]);
+		return changed ? 1 : 0;
+	}
 	case HV_CMD_DESCRIBE: {
 		char text[256];
 		/* a page's title, or what the video is */
