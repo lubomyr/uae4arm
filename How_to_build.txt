@@ -141,6 +141,9 @@ Notes
   AndroidView, HostPlay, HostBrowser, and HostView from HostPlay.s with
   HOSTVIEW set) into amigaApps/, and the MHI driver
   mhiuae.library into amigaApps/Libs/MHI/, for LIBS:MHI/ of the Amiga.
+- amiga/makeicons.py draws the pictures of the icons in amigaApps/ (needs
+  python3-pil): an 8-colour MagicWB image for any Workbench and a GlowIcon
+  for OS 3.5 on, in each .info; --preview sheet.png shows them first.
 - HostPlay's video is decoded by MediaCodec on Android (libmediandk) and by
   FFmpeg on the Linux PC: LinuxBuild.sh needs libavformat-dev
   libavcodec-dev libswscale-dev libswresample-dev.
