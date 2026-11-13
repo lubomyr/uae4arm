@@ -32,6 +32,8 @@ Kickstart ROMs are not included; without them the built-in AROS ROM is used.
 - Host tools in `amigaApps/` for the Amiga side:
   - **HostPlay / HostVideoPlay** — plays a video file in a native Amiga window, decoded by MediaCodec
   - **HostView / HostImageView** — shows images (including IFF ILBM) in a native Amiga window
+  - **HostBrowser** — a web page in a native Amiga window, drawn by Android's WebView:
+    address field, back and forward, scroll bars, typing, downloads, YouTube video
   - **AndroidPlay, AndroidView, AndroidBrowser** — open a video, picture or web page
     in a floating Android window over the emulator
 - Light and dark menu themes

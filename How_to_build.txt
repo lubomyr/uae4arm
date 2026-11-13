@@ -138,12 +138,15 @@ Notes
 - Changes to QuarkTex NG's host belong in quarktexng/quarktexng.patch: a git
   diff of its Source folder against the Aminet release.
 - amiga/build.sh builds the Amiga tools (AndroidPlay, AndroidBrowser,
-  AndroidView, HostPlay, and HostView from HostPlay.s with HOSTVIEW set)
-  into amigaApps/, and the MHI driver
+  AndroidView, HostPlay, HostBrowser, and HostView from HostPlay.s with
+  HOSTVIEW set) into amigaApps/, and the MHI driver
   mhiuae.library into amigaApps/Libs/MHI/, for LIBS:MHI/ of the Amiga.
 - HostPlay's video is decoded by MediaCodec on Android (libmediandk) and by
   FFmpeg on the Linux PC: LinuxBuild.sh needs libavformat-dev
   libavcodec-dev libswscale-dev libswresample-dev.
+- HostBrowser's page is a WebView of the wrapper (project/java/HostBrowser.java
+  in androidsdl.patch) on a display of its own, read through an AImageReader:
+  Android 8 or later. The Linux PC has no WebView, and the tool says so there.
 - amigaApps/Libs/minigl.library is QuarkTex NG's with the patch (GLQuake's
   camera turns). It is built in Docker (docker.io, the user in the docker
   group) from step 7's src/, with the include folder of PiStorm3D's MiniGL
