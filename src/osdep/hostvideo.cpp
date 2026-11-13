@@ -1998,8 +1998,8 @@ private:
 	bool bars_were_told = false;
 	int bar_scale[2] = { 1, 1 };
 	int seen_scroll = 0;
-	/* the title is looked at now and then, for it changes without a new
-	   picture too, as a download goes on */
+	/* the title and the address are looked at now and then, for they can
+	   change without a new picture */
 	int polls = 0;
 	int seen_version = 0;
 	jobject browser = NULL;

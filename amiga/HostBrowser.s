@@ -21,8 +21,8 @@
 | page - into a text field, or the cursor keys move it - but for these: the
 | right button or Alt-cursor left go back to the page before, Alt-cursor
 | right forward again, F5 loads the page again. The close gadget or Right
-| Amiga-Q end it. The title of the window is the page's; while a file of the
-| page downloads, it tells how far it is.
+| Amiga-Q end it. The title of the window is the page's. Files of the page
+| download as in AndroidBrowser, with Android's toasts telling it.
 |
 | Scroll bars in the right and bottom borders show where the page is: drag
 | one, click beside its knob for a page, or hold an arrow. Outside a text
