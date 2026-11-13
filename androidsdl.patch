@@ -1225,10 +1225,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..06c55db65
+index 000000000..8685ce694
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,738 @@
+@@ -0,0 +1,742 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1345,9 +1345,12 @@ index 000000000..06c55db65
 +		this.activity = activity;
 +	}
 +
-+	// The page at url, w x h pixels large, its pictures into surface; null without the app's
-+	// activity
-+	static Object open(final Surface surface, final int w, final int h, final String url)
++	// The page at url, w x h pixels large, on a display of dw x dh - the screen it is shown on -
++	// whose pictures go into surface; null without the app's activity. The display keeps its size:
++	// the page is in its top left corner, as large as the window it is shown in. A display that
++	// changes its size HyperOS animates, from a picture of it that shows for a moment on the
++	// device's screen; and the WebView has to stay on the display it was made for.
++	static Object open(final Surface surface, final int w, final int h, final int dw, final int dh, final String url)
 +	{
 +		MainActivity a = MainActivity.instance;
 +		if (a == null)
@@ -1355,7 +1358,7 @@ index 000000000..06c55db65
 +		final HostBrowser b = new HostBrowser(a);
 +		final String u = withScheme(url);
 +		b.ui.post(new Runnable() {
-+			public void run() { b.create(surface, w, h, u); }
++			public void run() { b.create(surface, w, h, dw, dh, u); }
 +		});
 +		return b;
 +	}
@@ -1388,7 +1391,7 @@ index 000000000..06c55db65
 +		return "https://" + text;
 +	}
 +
-+	private void create(Surface surface, int w, int h, String url)
++	private void create(Surface surface, int w, int h, int dw, int dh, String url)
 +	{
 +		if (closed)
 +			return;
@@ -1396,7 +1399,7 @@ index 000000000..06c55db65
 +		{
 +			DisplayManager dm = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
 +			// Private, of this app alone: no permission is needed
-+			display = dm.createVirtualDisplay("HostBrowser", w, h, DPI, surface, 0);
++			display = dm.createVirtualDisplay("HostBrowser", dw, dh, DPI, surface, 0);
 +			presentation = new Presentation(activity, display.getDisplay());
 +			web = new PageView(presentation.getContext());
 +			// The Amiga's window has scroll bars of its own
@@ -1463,7 +1466,9 @@ index 000000000..06c55db65
 +			});
 +			area = new FrameLayout(presentation.getContext());
 +			area.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-+			presentation.setContentView(area);
++			FrameLayout root = new FrameLayout(presentation.getContext());
++			root.addView(area, new FrameLayout.LayoutParams(w, h));
++			presentation.setContentView(root);
 +			// Esc goes to the page, it does not take the page away
 +			presentation.setCancelable(false);
 +			presentation.show();
@@ -1549,16 +1554,15 @@ index 000000000..06c55db65
 +		});
 +	}
 +
-+	// The window got another size: so does the page, its pictures into the new surface
-+	void resize(final Surface surface, final int w, final int h)
++	// The window got another size: so does the page, inside the display
++	void resize(final int w, final int h)
 +	{
 +		ui.post(new Runnable() {
 +			public void run()
 +			{
-+				if (display == null)
++				if (area == null)
 +					return;
-+				display.setSurface(surface);
-+				display.resize(w, h, DPI);
++				area.setLayoutParams(new FrameLayout.LayoutParams(w, h));
 +			}
 +		});
 +	}

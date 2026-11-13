@@ -1909,8 +1909,8 @@ static bool find_hostbrowser(JNIEnv *env)
 		write_log(_T("HostBrowser: no class %s\n"), name.c_str());
 		return false;
 	}
-	hb.open = env->GetStaticMethodID(cls, "open", "(Landroid/view/Surface;IILjava/lang/String;)Ljava/lang/Object;");
-	hb.resize = env->GetMethodID(cls, "resize", "(Landroid/view/Surface;II)V");
+	hb.open = env->GetStaticMethodID(cls, "open", "(Landroid/view/Surface;IIIILjava/lang/String;)Ljava/lang/Object;");
+	hb.resize = env->GetMethodID(cls, "resize", "(II)V");
 	hb.pointer = env->GetMethodID(cls, "pointer", "(III)V");
 	hb.scroll = env->GetMethodID(cls, "scroll", "(III)V");
 	hb.navigate = env->GetMethodID(cls, "navigate", "(I)V");
@@ -2011,12 +2011,10 @@ private:
 	int polls = 0;
 	int seen_version = 0;
 	jobject browser = NULL;
-	/* where the pictures come now, and those it replaced, which go once
-	   the new one gave a picture: till then the display may still draw
-	   into them */
-	std::atomic<AImageReader *> reader{NULL};
-	std::vector<AImageReader *> old;
-	std::atomic<bool> new_came{false};
+	/* where the pictures come: the display, as large as the screen; the
+	   page is in its top left corner, crop_w x crop_h */
+	AImageReader *reader = NULL;
+	std::atomic<int> crop_w{0}, crop_h{0};
 	/* the latest picture, RGBA, taken from the reader on its own thread */
 	std::mutex lock;
 	std::vector<uae_u8> frame;
@@ -2058,12 +2056,18 @@ void browser_source::image_came(void *context, AImageReader *r)
 	AImage *img = NULL;
 	if (imagereader.acquireLatest(r, &img) != AMEDIA_OK || !img)
 		return;
-	if (r == b->reader.load()) {
-		int32_t w = 0, h = 0, stride = 0;
+	{
+		int32_t iw = 0, ih = 0, stride = 0;
 		uint8_t *data = NULL;
 		int len = 0;
-		imagereader.imageWidth(img, &w);
-		imagereader.imageHeight(img, &h);
+		imagereader.imageWidth(img, &iw);
+		imagereader.imageHeight(img, &ih);
+		/* the page's part */
+		int w = b->crop_w.load(), h = b->crop_h.load();
+		if (w > iw)
+			w = iw;
+		if (h > ih)
+			h = ih;
 		if (imagereader.planeData(img, 0, &data, &len) == AMEDIA_OK && data &&
 			imagereader.rowStride(img, 0, &stride) == AMEDIA_OK && w > 0 && h > 0 &&
 			stride >= w * 4 && (int64_t)stride * (h - 1) + w * 4 <= len) {
@@ -2074,7 +2078,6 @@ void browser_source::image_came(void *context, AImageReader *r)
 			b->fw = w;
 			b->fh = h;
 			b->fresh = true;
-			b->new_came = true;
 		}
 	}
 	imagereader.imageDelete(img);
@@ -2089,13 +2092,19 @@ bool browser_source::open(const char *url, int w, int h)
 		return false;
 	width = w;
 	height = h;
-	AImageReader *r = make_reader(w, h);
+	crop_w = w;
+	crop_h = h;
+	/* the display as large as the RTG screen, which the window cannot
+	   outgrow */
+	int dw = picasso96_state.Width > w ? picasso96_state.Width : w;
+	int dh = picasso96_state.Height > h ? picasso96_state.Height : h;
+	AImageReader *r = make_reader(dw, dh);
 	if (!r)
 		return false;
 	reader = r;
 	jobject surface = surface_of(j.env, r);
 	jstring jurl = j.env->NewStringUTF(latin1_utf8(url).c_str());
-	jobject b = surface ? j.env->CallStaticObjectMethod(hb.cls, hb.open, surface, w, h, jurl) : NULL;
+	jobject b = surface ? j.env->CallStaticObjectMethod(hb.cls, hb.open, surface, w, h, dw, dh, jurl) : NULL;
 	if (j.failed() || !b) {
 		write_log(_T("HostBrowser: the page does not open\n"));
 		reader = NULL;
@@ -2103,7 +2112,7 @@ bool browser_source::open(const char *url, int w, int h)
 		return false;
 	}
 	browser = j.env->NewGlobalRef(b);
-	write_log(_T("HostBrowser: %s at %dx%d\n"), url, w, h);
+	write_log(_T("HostBrowser: %s at %dx%d on a display of %dx%d\n"), url, w, h, dw, dh);
 	return true;
 }
 
@@ -2117,40 +2126,23 @@ browser_source::~browser_source()
 			j.env->DeleteGlobalRef(browser);
 		}
 	}
-	AImageReader *r = reader.exchange(NULL);
-	if (r)
-		imagereader.del(r);
-	for (AImageReader *o : old)
-		imagereader.del(o);
+	if (reader)
+		imagereader.del(reader);
 }
 
 void browser_source::resize(int w, int h)
 {
-	/* the replaced ones that can go now */
-	if (new_came && !old.empty()) {
-		for (AImageReader *o : old)
-			imagereader.del(o);
-		old.clear();
-	}
 	if (w == width && h == height)
 		return;
-	jni_env j;
-	if (!j.env)
-		return;
-	AImageReader *r = make_reader(w, h);
-	if (!r)
-		return;
-	jobject surface = surface_of(j.env, r);
-	if (!surface) {
-		imagereader.del(r);
-		return;
-	}
 	width = w;
 	height = h;
-	new_came = false;
-	old.push_back(reader.exchange(r));
-	j.env->CallVoidMethod(browser, hb.resize, surface, w, h);
-	j.failed();
+	crop_w = w;
+	crop_h = h;
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.resize, w, h);
+		j.failed();
+	}
 }
 
 /* The picture scaled to w x h, in a Picasso96 RGBFormat; the same size but
