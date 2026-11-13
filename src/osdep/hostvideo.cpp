@@ -70,6 +70,7 @@ extern "C" {
 #include <dlfcn.h>
 /* not through SDL_android.h, whose JavaVM clashes with jni.h's */
 extern "C" JavaVM *SDL_ANDROID_JavaVM(void);
+extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
 #endif
 
 #define HOSTVIDEO_PLAYERS 2
@@ -101,8 +102,10 @@ extern "C" JavaVM *SDL_ANDROID_JavaVM(void);
 #define HV_CMD_POINTER 15   /* handle, 0 pressed 1 let go 2 moved, x << 16 | y */
 #define HV_CMD_SCROLL 16    /* handle, notches (up > 0), x << 16 | y */
 #define HV_CMD_NAVIGATE 17  /* handle, 0 back 1 forward 2 reload */
+#define HV_CMD_KEY 18       /* handle, a Latin-1 character or 0x100 + a raw
+                               key code, Intuition's qualifiers */
 
-#define HV_API_VERSION 6     /* web pages, for HostBrowser */
+#define HV_API_VERSION 7     /* web pages, for HostBrowser, with the keys */
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -196,6 +199,8 @@ public:
 	virtual void scroll(int notches, int x, int y) {}
 	/* 0 back, 1 forward, 2 reload */
 	virtual void navigate(int what) {}
+	/* a key: a Latin-1 character, or 0x100 + a raw key code */
+	virtual void key(int code, int qualifiers) {}
 	/* the title for the window, in Latin-1: 2 when it changed since the
 	   last time, 1 when not, 0 for no title of its own */
 	virtual int title(char *text, size_t size) { return 0; }
@@ -1794,7 +1799,8 @@ static bool find_imagereader(void)
 static struct {
 	bool tried;
 	jclass cls;
-	jmethodID open, resize, pointer, scroll, navigate, title, close;
+	jmethodID open, resize, pointer, scroll, navigate, key, title, close;
+	jfieldID titleVersion;
 } hb;
 
 /* The emulator's thread is Java's own; should it not be, it is attached
@@ -1877,10 +1883,12 @@ static bool find_hostbrowser(JNIEnv *env)
 	hb.pointer = env->GetMethodID(cls, "pointer", "(III)V");
 	hb.scroll = env->GetMethodID(cls, "scroll", "(III)V");
 	hb.navigate = env->GetMethodID(cls, "navigate", "(I)V");
+	hb.key = env->GetMethodID(cls, "key", "(II)V");
+	hb.titleVersion = env->GetFieldID(cls, "titleVersion", "I");
 	hb.title = env->GetMethodID(cls, "title", "()[B");
 	hb.close = env->GetMethodID(cls, "close", "()V");
 	if (env->ExceptionCheck() || !hb.open || !hb.resize || !hb.pointer || !hb.scroll ||
-		!hb.navigate || !hb.title || !hb.close) {
+		!hb.navigate || !hb.key || !hb.titleVersion || !hb.title || !hb.close) {
 		env->ExceptionClear();
 		write_log(_T("HostBrowser: %s lacks a method\n"), name.c_str());
 		return false;
@@ -1895,7 +1903,7 @@ public:
 	~browser_source();
 	bool open(const char *url, int w, int h);
 	void seek(double t) {}
-	bool take(double t) { return fresh.exchange(false); }
+	bool take(double t);
 	void render(uae_u8 *dst, int w, int h, int stride, int format);
 	bool ended() { return false; }
 	int audio_read(uae_s16 (*out)[2], int n) { return 0; }
@@ -1903,9 +1911,14 @@ public:
 	void pointer(int action, int x, int y);
 	void scroll(int notches, int x, int y);
 	void navigate(int what);
+	void key(int code, int qualifiers);
 	int title(char *text, size_t size);
 
 private:
+	/* the title is looked at now and then, for it changes without a new
+	   picture too, as a download goes on */
+	int polls = 0;
+	int seen_version = 0;
 	jobject browser = NULL;
 	/* where the pictures come now, and those it replaced, which go once
 	   the new one gave a picture: till then the display may still draw
@@ -2102,6 +2115,35 @@ void browser_source::scroll(int notches, int x, int y)
 	jni_env j;
 	if (j.env) {
 		j.env->CallVoidMethod(browser, hb.scroll, notches, x, y);
+		j.failed();
+	}
+}
+
+/* A new picture; or the title changed, which a picture brings the tool
+   to look at */
+bool browser_source::take(double t)
+{
+	bool f = fresh.exchange(false);
+	/* a few times a second, on the hsyncs */
+	if (++polls >= 4096) {
+		polls = 0;
+		jni_env j;
+		if (j.env) {
+			int v = j.env->GetIntField(browser, hb.titleVersion);
+			if (v != seen_version) {
+				seen_version = v;
+				f = true;
+			}
+		}
+	}
+	return f;
+}
+
+void browser_source::key(int code, int qualifiers)
+{
+	jni_env j;
+	if (j.env) {
+		j.env->CallVoidMethod(browser, hb.key, code, qualifiers);
 		j.failed();
 	}
 }
@@ -2472,6 +2514,11 @@ static uae_u32 page_open(uaecptr task, uae_u32 sigmask, uaecptr url, int w, int 
 	if (!n || w <= 0 || h <= 0)
 		return HV_OPEN_CANNOT;
 #ifdef HOSTVIDEO_MEDIACODEC
+	/* files of the page go where AndroidBrowser saves them, as the menu
+	   has it now (Paths -> Browser downloads) */
+	char dir[MAX_DPATH];
+	fetch_downloadpath(dir, sizeof dir);
+	SDL_ANDROID_SetBrowserDownloadDir(dir);
 	browser_source *b = new browser_source();
 	if (b->open(address, w, h))
 		return player_start(i, task, sigmask, b, NULL);
@@ -2691,6 +2738,9 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		return 1;
 	case HV_CMD_NAVIGATE:
 		v->source->navigate((int)arg2);
+		return 1;
+	case HV_CMD_KEY:
+		v->source->key((int)arg2, (int)arg3);
 		return 1;
 	case HV_CMD_DESCRIBE: {
 		char text[256];

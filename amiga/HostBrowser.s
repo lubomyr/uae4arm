@@ -12,10 +12,12 @@
 | p96WritePixelArray(). When the window gets another size, so does the page.
 |
 | The left mouse button goes over as a touch: a click follows a link, a drag
-| moves the page. The wheel and the cursor keys up and down scroll it under
-| the pointer. The right button or Backspace go back to the page before, F5
-| loads the page again. Esc or the close gadget end it. The title of the
-| window is the page's.
+| moves the page. The wheel scrolls it under the pointer. The keys go to the
+| page - into a text field, or the cursor keys move it - but for these: the
+| right button or Alt-cursor left go back to the page before, Alt-cursor
+| right forward again, F5 loads the page again. The close gadget or Right
+| Amiga-Q end it. The title of the window is the page's; while a file of the
+| page downloads, it tells how far it is.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits.
@@ -29,12 +31,13 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 6	| web pages
+	.set	HOSTVIDEO_VERSION, 7	| web pages, with the keys
 
 	.set	HV_OPENURL, 14
 	.set	HV_POINTER, 15
 	.set	HV_SCROLL, 16
 	.set	HV_NAVIGATE, 17
+	.set	HV_KEY, 18
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -66,7 +69,8 @@
 	.set	SCREEN, 40
 	.set	PRESSED, 44		| the left button went down on the page
 	.set	TITLETURN, 48		| which of the two title buffers is free
-	.set	VARSIZE, 52
+	.set	QUAL, 52		| im_Qualifier of the message
+	.set	VARSIZE, 56
 
 	.text
 	.globl	_start
@@ -339,6 +343,10 @@ msgloop:
 	move.l	20(%a1),%d2		| im_Class
 	move.w	24(%a1),%d3		| im_Code
 	move.l	32(%a1),%d4		| im_MouseX, im_MouseY
+	lea	vars(%pc),%a0
+	moveq	#0,%d0
+	move.w	26(%a1),%d0
+	move.l	%d0,QUAL(%a0)
 	jsr	-378(%a6)		| ReplyMsg
 	cmp.l	#IDCMP_CLOSEWINDOW,%d2
 	beq.w	quit
@@ -387,7 +395,7 @@ notrefresh:
 2:	cmp.w	#0x69,%d3		| MENUDOWN: back
 	bne.w	msgloop
 	moveq	#0,%d2
-	bra.s	navigate
+	bra.w	navigate
 notbutton:
 	cmp.l	#IDCMP_MOUSEMOVE,%d2
 	bne.s	notmove
@@ -406,20 +414,31 @@ sendpointer:
 notmove:
 	cmp.l	#IDCMP_RAWKEY,%d2
 	bne.s	notraw
-	moveq	#1,%d2			| up
-	cmp.w	#0x7A,%d3		| the wheel
-	beq.s	scrollit
-	cmp.w	#0x4C,%d3		| cursor up
+	moveq	#1,%d2			| the wheel up
+	cmp.w	#0x7A,%d3
 	beq.s	scrollit
 	moveq	#-1,%d2			| down
 	cmp.w	#0x7B,%d3
 	beq.s	scrollit
-	cmp.w	#0x4D,%d3
-	beq.s	scrollit
 	moveq	#2,%d2			| F5: reload
 	cmp.w	#0x54,%d3
 	beq.s	navigate
-	bra.w	msgloop
+	cmp.w	#0x60,%d3		| the qualifier keys, and keys let go,
+	bcc.w	msgloop			| are left out
+	lea	vars(%pc),%a0
+	move.l	QUAL(%a0),%d0
+	and.w	#0x30,%d0		| Alt with cursor left and right
+	beq.s	1f
+	moveq	#0,%d2			| back
+	cmp.w	#0x4F,%d3
+	beq.s	navigate
+	moveq	#1,%d2			| forward
+	cmp.w	#0x4E,%d3
+	beq.s	navigate
+1:	move.l	%d3,%d2			| to the page, as a key with no character
+	and.l	#0xFF,%d2
+	add.w	#0x100,%d2
+	bra.s	sendkey
 scrollit:
 	bsr.w	innerpos
 	move.l	%d0,%d3
@@ -438,11 +457,23 @@ navigate:
 notraw:
 	cmp.l	#IDCMP_VANILLAKEY,%d2
 	bne.w	msgloop
-	cmp.b	#27,%d3			| Esc
+	moveq	#0,%d2
+	move.b	%d3,%d2			| the character
+	lea	vars(%pc),%a0
+	btst	#7,QUAL+3(%a0)		| Right Amiga
+	beq.s	sendkey
+	move.b	%d2,%d0
+	and.b	#0xDF,%d0
+	cmp.b	#'Q',%d0
 	beq.s	quit
-	moveq	#0,%d2			| Backspace: back
-	cmp.b	#8,%d3
-	beq.s	navigate
+	bra.w	msgloop			| Amiga's own: not for the page
+sendkey:
+	moveq	#HV_KEY,%d0
+	move.l	%d5,%d1
+	lea	vars(%pc),%a0
+	move.l	QUAL(%a0),%d3
+	moveq	#0,%d4
+	bsr.w	callhost
 	bra.w	msgloop
 
 badformat:
@@ -810,9 +841,10 @@ homepage:	.asciz	"https://www.google.com/"
 msg_usage:	.ascii	"Usage: HostBrowser [<address>]\n"
 		.ascii	"Shows a web page in a window, drawn by uae4arm; without an\n"
 		.ascii	"address the home page. A click follows a link, a drag moves\n"
-		.ascii	"the page; the wheel and the cursor keys scroll it. The right\n"
-		.ascii	"button or Backspace go back, F5 loads the page again, Esc\n"
-		.asciz	"ends it.\n"
+		.ascii	"the page, the wheel scrolls it; the keys go to the page. The\n"
+		.ascii	"right button or Alt-cursor left go back, Alt-cursor right\n"
+		.ascii	"forward, F5 loads the page again, Right Amiga-Q ends it.\n"
+		.asciz	"Files of the page go to the folder of Browser downloads.\n"
 msg_cannot:	.asciz	"uae4arm cannot show web pages here - it needs Android 8 or later\n"
 msg_nointuition: .asciz	"this needs intuition.library 39\n"
 msg_nop96:	.asciz	"this needs Picasso96API.library\n"

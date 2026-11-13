@@ -12,10 +12,10 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..32e9dcc70
+index 000000000..208ca6ca8
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
-@@ -0,0 +1,395 @@
+@@ -0,0 +1,423 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a browser window over the app for the Android port
@@ -238,7 +238,7 @@ index 000000000..32e9dcc70
 +		{
 +			public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long length)
 +			{
-+				download(url, userAgent, contentDisposition, mimeType);
++				download(context, url, userAgent, contentDisposition, mimeType, null);
 +			}
 +		});
 +		web.setWebViewClient(new WebViewClient()
@@ -340,12 +340,24 @@ index 000000000..32e9dcc70
 +		return f;
 +	}
 +
-+	// Aside, with the page's cookies, into a file that gets its name when it is whole
-+	private void download(final String url, final String userAgent, final String contentDisposition, final String mimeType)
++	// How far a download is, for HostBrowser's title; on the thread of the download
++	interface Progress
++	{
++		// percent -1 while the length is not known; done with the message at the end
++		void progress(String name, int percent, boolean done, String message);
++	}
++
++	// Aside, with the page's cookies, into a file that gets its name when it is whole. Without
++	// progress, toasts tell it.
++	static void download(final MainActivity context, final String url, final String userAgent, final String contentDisposition,
++		final String mimeType, final Progress progress)
 +	{
 +		if (!url.startsWith("http:") && !url.startsWith("https:"))
 +		{
-+			android.widget.Toast.makeText(context, "Cannot save this link", android.widget.Toast.LENGTH_LONG).show();
++			if (progress != null)
++				progress.progress("", 0, true, "Cannot save this link");
++			else
++				android.widget.Toast.makeText(context, "Cannot save this link", android.widget.Toast.LENGTH_LONG).show();
 +			return;
 +		}
 +		String dirName = downloadDir;
@@ -353,7 +365,10 @@ index 000000000..32e9dcc70
 +			android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
 +		final String name = fileName(url, contentDisposition, mimeType);
 +		final String cookies = android.webkit.CookieManager.getInstance().getCookie(url);
-+		android.widget.Toast.makeText(context, "Downloading " + name, android.widget.Toast.LENGTH_SHORT).show();
++		if (progress != null)
++			progress.progress(name, -1, false, null);
++		else
++			android.widget.Toast.makeText(context, "Downloading " + name, android.widget.Toast.LENGTH_SHORT).show();
 +		new Thread(new Runnable()
 +		{
 +			public void run()
@@ -378,8 +393,16 @@ index 000000000..32e9dcc70
 +					{
 +						byte[] buf = new byte[65536];
 +						int n;
++						long length = c.getContentLength(), got = 0;
++						int shown = -1;
 +						while ((n = in.read(buf)) > 0)
++						{
 +							out.write(buf, 0, n);
++							got += n;
++							int percent = length > 0 ? (int)(got * 100 / length) : -1;
++							if (progress != null && percent != shown && percent >= 0)
++								progress.progress(name, shown = percent, false, null);
++						}
 +					}
 +					finally
 +					{
@@ -400,6 +423,11 @@ index 000000000..32e9dcc70
 +					result = "Cannot download " + name + ": " + e.getMessage();
 +				}
 +				final String message = result;
++				if (progress != null)
++				{
++					progress.progress(name, 100, true, message);
++					return;
++				}
 +				context.runOnUiThread(new Runnable()
 +				{
 +					public void run()
@@ -1223,10 +1251,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..ab039cf93
+index 000000000..063a20e5d
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,438 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1260,6 +1288,8 @@ index 000000000..ab039cf93
 +import android.os.SystemClock;
 +import android.util.Log;
 +import android.view.InputDevice;
++import android.view.KeyCharacterMap;
++import android.view.KeyEvent;
 +import android.view.MotionEvent;
 +import android.view.Surface;
 +import android.view.View;
@@ -1272,7 +1302,8 @@ index 000000000..ab039cf93
 +// A web page that the app shows itself, inside a window of its own drawing - uae4arm's HostBrowser
 +// tool, in a window of the Amiga. The WebView lies on a display of its own that nobody sees; its
 +// pictures go into the Surface the app gives, that of an AImageReader it reads them from. The app
-+// hands over the mouse, and asks for the page's title.
++// hands over the mouse and the keys, and asks for the page's title. Files the page gives go where
++// AndroidBrowser saves them, with how far it is in the title.
 +//
 +// The app calls from its own thread; everything with the WebView happens on the UI thread.
 +class HostBrowser
@@ -1286,8 +1317,14 @@ index 000000000..ab039cf93
 +	private Presentation presentation = null;
 +	private WebView web = null;
 +	private boolean closed = false;
-+	// The title, or the address while there is none, in Latin-1 for the Amiga
++	// The title, or the address while there is none, in Latin-1 for the Amiga; one more each time
++	// it changes, for the app to look at often
 +	private volatile byte[] title = new byte[0];
++	volatile int titleVersion = 0;
++	private String pageTitle = "";
++	// A download, in place of the page's title while it goes and a while after
++	private String status = null;
++	private int statusTurn = 0;
 +	// A press of the mouse goes over as a touch, until the button is let go
 +	private boolean down = false;
 +	private long downTime = 0;
@@ -1366,8 +1403,31 @@ index 000000000..ab039cf93
 +						setTitle(t);
 +				}
 +			});
++			web.setDownloadListener(new android.webkit.DownloadListener() {
++				@Override
++				public void onDownloadStart(String u, String userAgent, String contentDisposition, String mimeType, long length)
++				{
++					BrowserWindow.download(activity, u, userAgent, contentDisposition, mimeType, new BrowserWindow.Progress() {
++						public void progress(final String name, final int percent, final boolean done, final String message)
++						{
++							ui.post(new Runnable() {
++								public void run() { downloadProgress(name, percent, done, message); }
++							});
++						}
++					});
++				}
++			});
 +			presentation.setContentView(web);
++			// Esc goes to the page, it does not take the page away
++			presentation.setCancelable(false);
 +			presentation.show();
++			// The keys go to the page; its window is not the one Android gives the keys to, so it
++			// is told it has them
++			web.setFocusable(true);
++			web.setFocusableInTouchMode(true);
++			web.requestFocus();
++			if (!web.hasWindowFocus())
++				web.onWindowFocusChanged(true);
 +			setTitle(url);
 +			web.loadUrl(url);
 +		}
@@ -1380,6 +1440,13 @@ index 000000000..ab039cf93
 +
 +	private void setTitle(String t)
 +	{
++		pageTitle = t;
++		showTitle();
++	}
++
++	private void showTitle()
++	{
++		String t = status != null ? status : pageTitle;
 +		try
 +		{
 +			title = t.getBytes("ISO-8859-1");
@@ -1387,6 +1454,34 @@ index 000000000..ab039cf93
 +		catch (java.io.UnsupportedEncodingException e)
 +		{
 +		}
++		titleVersion++;
++	}
++
++	private void downloadProgress(String name, int percent, boolean done, String message)
++	{
++		if (closed)
++			return;
++		if (done)
++			status = message;
++		else
++			status = "Downloading " + name + (percent >= 0 ? " " + percent + "%" : "");
++		showTitle();
++		if (done)
++		{
++			// the page's title again after a while
++			final int turn = ++statusTurn;
++			ui.postDelayed(new Runnable() {
++				public void run()
++				{
++					if (turn != statusTurn)
++						return;
++					status = null;
++					showTitle();
++				}
++			}, 8000);
++		}
++		else
++			statusTurn++;
 +	}
 +
 +	// The title for the window, in Latin-1
@@ -1473,6 +1568,93 @@ index 000000000..ab039cf93
 +		});
 +	}
 +
++	// A key of the Amiga: below 0x100 a character in Latin-1, as Intuition's VANILLAKEY has it, else
++	// 0x100 + the raw key code of one with no character; qual Intuition's qualifiers
++	void key(final int code, final int qual)
++	{
++		ui.post(new Runnable() {
++			public void run()
++			{
++				if (web != null)
++					typeKey(code, qual);
++			}
++		});
++	}
++
++	private static final int QUAL_SHIFT = 0x03, QUAL_CONTROL = 0x08, QUAL_ALT = 0x30;
++
++	private void typeKey(int code, int qual)
++	{
++		int meta = 0;
++		if ((qual & QUAL_SHIFT) != 0)
++			meta |= KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON;
++		if ((qual & QUAL_CONTROL) != 0)
++			meta |= KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
++		if ((qual & QUAL_ALT) != 0)
++			meta |= KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON;
++		int kc = 0;
++		if (code >= 0x100)
++		{
++			int raw = code & 0xff;
++			if (raw == 0x4C)
++				kc = KeyEvent.KEYCODE_DPAD_UP;
++			else if (raw == 0x4D)
++				kc = KeyEvent.KEYCODE_DPAD_DOWN;
++			else if (raw == 0x4E)
++				kc = KeyEvent.KEYCODE_DPAD_RIGHT;
++			else if (raw == 0x4F)
++				kc = KeyEvent.KEYCODE_DPAD_LEFT;
++			else if (raw >= 0x50 && raw <= 0x59)
++				kc = KeyEvent.KEYCODE_F1 + raw - 0x50;
++			if (kc != 0)
++				press(kc, meta);
++			return;
++		}
++		switch (code)
++		{
++		case 8: kc = KeyEvent.KEYCODE_DEL; break;
++		case 9: kc = KeyEvent.KEYCODE_TAB; break;
++		case 10: case 13: kc = KeyEvent.KEYCODE_ENTER; break;
++		case 27: kc = KeyEvent.KEYCODE_ESCAPE; break;
++		case 127: kc = KeyEvent.KEYCODE_FORWARD_DEL; break;
++		}
++		if (kc != 0)
++		{
++			press(kc, meta);
++			return;
++		}
++		char c = (char) code;
++		// Ctrl with a letter: Intuition gives the control character
++		if (c >= 1 && c <= 26 && (qual & QUAL_CONTROL) != 0)
++			c = (char) ('a' + c - 1);
++		if (c < 32)
++			return;
++		// ASCII as the keys that make it, so that the page sees them pressed; Ctrl goes along,
++		// for Ctrl-A, -C, -V and so on. Alt is in the character already.
++		if (c < 128)
++		{
++			KeyEvent[] events = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(new char[] { c });
++			if (events != null)
++			{
++				int ctrl = meta & (KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON);
++				long now = SystemClock.uptimeMillis();
++				for (KeyEvent e: events)
++					web.dispatchKeyEvent(new KeyEvent(now, now, e.getAction(), e.getKeyCode(), 0, e.getMetaState() | ctrl));
++				return;
++			}
++		}
++		// The others as text, into what has the focus
++		web.evaluateJavascript("document.execCommand('insertText', false, " +
++			org.json.JSONObject.quote(String.valueOf(c)) + ")", null);
++	}
++
++	private void press(int keyCode, int meta)
++	{
++		long now = SystemClock.uptimeMillis();
++		web.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta));
++		web.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, meta));
++	}
++
 +	// 0 back, 1 forward, 2 reload
 +	void navigate(final int what)
 +	{
@@ -1497,6 +1679,7 @@ index 000000000..ab039cf93
 +			public void run()
 +			{
 +				closed = true;
++				statusTurn++;
 +				if (presentation != null)
 +					presentation.dismiss();
 +				presentation = null;
