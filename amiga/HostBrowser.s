@@ -1901,7 +1901,21 @@ fullon_nomode:
 	bra.s	1f
 fullon_noscreen:
 	lea	msg_noscreen(%pc),%a0
-1:	moveq	#0,%d0
+| The memory of the screen, in MB, rounded up: in 32 bits, then in 16
+1:	move.l	%d4,%d0
+	swap	%d0
+	mulu	%d4,%d0			| width * height
+	move.l	%d0,%d1
+	add.l	%d1,%d1
+	add.l	#0xFFFFF,%d1
+	moveq	#20,%d2
+	lsr.l	%d2,%d1
+	lsl.l	#2,%d0
+	add.l	#0xFFFFF,%d0
+	lsr.l	%d2,%d0
+	move.l	%d0,-(%sp)		| 32 bits
+	move.l	%d1,-(%sp)		| 16 bits
+	moveq	#0,%d0
 	move.w	%d4,%d0
 	move.l	%d0,-(%sp)		| height
 	move.l	%d4,%d0
@@ -1915,7 +1929,7 @@ fullon_noscreen:
 	movea.l	4,%a6
 	jsr	-522(%a6)		| RawDoFmt
 	movem.l	(%sp)+,%a2-%a3
-	addq.l	#8,%sp
+	lea	16(%sp),%sp
 	lea	fullmsg(%pc),%a0
 	bsr.w	report
 fullon_end:
@@ -2381,9 +2395,9 @@ gfxname:	.asciz	"graphics.library"
 msg_nofull:	.asciz	"the emulator does not tell the size of the device\n"
 msg_nomode:	.ascii	"there is no RTG mode of %ldx%ld, the size that is\n"
 		.asciz	"shown pixel for pixel\n"
-msg_noscreen:	.ascii	"the screen of %ldx%ld does not open. It needs RTG\n"
-		.ascii	"memory for it, and for the Workbench beside it: at\n"
-		.asciz	"3200x2136 32 MB in 16 bits, 64 MB in 32 bits.\n"
+msg_noscreen:	.ascii	"the screen of %ldx%ld does not open. It needs %ld MB\n"
+		.ascii	"of RTG memory in 16 bits, %ld MB in 32 bits, beside\n"
+		.asciz	"the Workbench's own.\n"
 	.even
 fullmsg:	.space	256
 title:		.asciz	"HostBrowser"
