@@ -1225,10 +1225,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..8685ce694
+index 000000000..2e08f07db
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,742 @@
+@@ -0,0 +1,773 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1431,9 +1431,16 @@ index 000000000..8685ce694
 +				{
 +					setAddress(u);
 +				}
++				// The zoom of a screen of its own, again on every new page
++				@Override
++				public void onPageCommitVisible(WebView view, String u)
++				{
++					applyZoom();
++				}
 +				@Override
 +				public void onPageFinished(WebView view, String u)
 +				{
++					applyZoom();
 +					String t = view.getTitle();
 +					setTitle(t != null && t.length() > 0 ? t : u);
 +				}
@@ -1574,6 +1581,30 @@ index 000000000..8685ce694
 +	void setTouch(boolean t)
 +	{
 +		touch = t;
++	}
++
++	// On a screen of its own at the device's own size the page is drawn larger, as CSS zoom: the
++	// browser draws the text that large itself, sharp, and lays the page out to the narrower width.
++	// 100 is the page as it is.
++	private volatile int zoom = 100;
++
++	void setZoom(final int percent)
++	{
++		zoom = percent;
++		ui.post(new Runnable() {
++			public void run()
++			{
++				applyZoom();
++			}
++		});
++	}
++
++	private void applyZoom()
++	{
++		if (web == null)
++			return;
++		int z = zoom;
++		web.evaluateJavascript("document.documentElement.style.zoom='" + (z == 100 ? "" : z + "%") + "'", null);
 +	}
 +
 +	// The left mouse button: 0 pressed, 1 let go, 2 moved while pressed, 3 moved with no button;

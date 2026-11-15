@@ -1,6 +1,6 @@
 | HostBrowser - shows a web page in a window of the Amiga, drawn by the host
 |
-| Usage: HostBrowser [HIDEADDRESS] [TOUCH] [<address>]
+| Usage: HostBrowser [HIDEADDRESS] [TOUCH] [FULLSCREEN] [<address>]
 | Without an address - from the Shell, or started from its icon - it opens
 | the home page. "aminet.net" means https://aminet.net.
 |
@@ -8,7 +8,7 @@
 | back and forward before it; another address
 | typed into it and Return go there, and words that are no address search
 | for them. Ctrl-L or F6 put the cursor in it. HIDEADDRESS leaves it out,
-| and puts the buttons in the title bar, left of the zoom gadget.
+| and puts the buttons in the title bar.
 |
 | The page is the host's: on Android a WebView, on a display of its own that
 | nobody sees, whose pictures come to the emulator. As in HostPlay, the tool
@@ -31,6 +31,15 @@
 | one, click beside its knob for a page, or hold an arrow. Outside a text
 | field the cursor keys scroll as well, with Shift by a page.
 |
+| The button with four corners left of the zoom gadget, Right Amiga-F or the
+| parameter FULLSCREEN show the page on a screen of its own, of the device's
+| own size: shown pixel for pixel, the page as sharp as the device draws it.
+| The page is drawn as much larger there as that screen is taller than the
+| Workbench, so it looks as large as in the window. Buttons over its top
+| right corner, see-through, drawn by the emulator, go back, forward and
+| back to the window - as Right Amiga-F does; after FULLSCREEN that ends
+| the tool.
+|
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits.
 |
@@ -43,7 +52,8 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 10	| web pages, with keys, scroll bars, address
+	.set	HOSTVIDEO_VERSION, 11	| web pages, with keys, scroll bars, address,
+					| a screen of their own
 
 	.set	HV_OPENURL, 14
 	.set	HV_POINTER, 15
@@ -56,6 +66,9 @@
 	.set	HV_ADDRESS, 22
 	.set	HV_LOAD, 23
 	.set	HV_TOUCH, 24
+	.set	HV_NATIVE, 25
+	.set	HV_ZOOM, 26
+	.set	HV_OVERLAY, 27
 
 	.set	P96BMA_BYTESPERPIXEL, 5
 	.set	P96BMA_RGBFORMAT, 7
@@ -118,6 +131,7 @@
 	.set	GAD_ADDR, 7		| the address field
 	.set	GAD_BACK, 8		| and the buttons before it
 	.set	GAD_FWD, 9
+	.set	GAD_FULL, 10		| the button for the screen of its own
 
 | The size the window opens at, if the screen has room
 	.set	WINW, 800
@@ -179,7 +193,19 @@
 	.set	GAP, 208		| around the buttons, as above and below them
 	.set	GRAYCLASS, 212		| the class of their images
 	.set	TOUCHMODE, 216		| TOUCH
-	.set	VARSIZE, 220
+	.set	IMGFULL, 220		| the button for the screen of its own
+	.set	GADFULL, 224
+	.set	FULLW, 228		| its width
+	.set	FULLSCR, 232		| the screen of its own, while it is open
+	.set	WBWIN, 236		| the window on Workbench meanwhile
+	.set	GFXBASE, 240
+	.set	SAVEDTOP, 244		| PAGETOP of the window
+	.set	STARTFULL, 248		| FULLSCREEN
+	.set	FULLCLASS, 252		| the class of its image
+	.set	OVLEFT, 256		| the buttons over the page there: their
+	.set	OVSIZE, 260		| left, their size, and the one held + 1
+	.set	OVHELD, 264
+	.set	VARSIZE, 268
 
 	.text
 	.globl	_start
@@ -306,7 +332,7 @@ nameloop:
 nameend:
 	clr.b	(%a2)
 	cmpa.l	%a1,%a2
-	beq.s	haveurl
+	beq.w	haveurl
 	movea.l	%a1,%a0
 	move.l	%a1,-(%sp)
 	lea	kw_hideaddress(%pc),%a1
@@ -321,9 +347,18 @@ nameend:
 	lea	kw_touch(%pc),%a1
 	bsr.w	strieq
 	movea.l	(%sp)+,%a1
-	bne.s	2f
+	bne.s	4f
 	lea	vars(%pc),%a0
 	move.l	#1,TOUCHMODE(%a0)
+	bra.s	nextarg
+4:	movea.l	%a1,%a0
+	move.l	%a1,-(%sp)
+	lea	kw_fullscreen(%pc),%a1
+	bsr.w	strieq
+	movea.l	(%sp)+,%a1
+	bne.s	2f
+	lea	vars(%pc),%a0
+	move.l	#1,STARTFULL(%a0)
 	bra.s	nextarg
 2:	cmp.b	#'?',(%a1)		| "HostBrowser ?"
 	bne.s	1f
@@ -421,24 +456,23 @@ havewindow:
 | The title bar's buttons go before the window's own gadgets in the list:
 | after them the drag bar would take their clicks
 	lea	vars(%pc),%a2
-	tst.l	NOADDR(%a2)
+	moveq	#1,%d2			| the button for the screen of its own,
+	tst.l	NOADDR(%a2)		| back and forward
 	beq.s	1f
-	move.l	GADFWD(%a2),%d0
-	beq.s	1f
-	movea.l	%a3,%a0
-	movea.l	%d0,%a1
+	moveq	#3,%d2
+1:	movea.l	%a3,%a0
+	movea.l	GADFULL(%a2),%a1
 	moveq	#0,%d0			| at the front
-	moveq	#2,%d1
+	move.l	%d2,%d1
 	suba.l	%a2,%a2
 	jsr	-438(%a6)		| AddGList
 	lea	vars(%pc),%a2
-	movea.l	GADFWD(%a2),%a0
+	movea.l	GADFULL(%a2),%a0
 	movea.l	%a3,%a1
 	suba.l	%a2,%a2
-	moveq	#2,%d0
+	move.l	%d2,%d0
 	jsr	-432(%a6)		| RefreshGList
 	lea	vars(%pc),%a2
-1:
 	bsr.w	screenformat
 	tst.l	%d0
 	bne.s	isrtg
@@ -483,6 +517,14 @@ haveopened:
 	bsr.w	drawaddr
 	bsr.w	updatebars
 	bsr.w	newaddress
+	lea	vars(%pc),%a2
+	tst.l	STARTFULL(%a2)
+	beq.s	mainloop
+	bsr.w	fullon
+	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)
+	bne.s	mainloop
+	clr.l	STARTFULL(%a2)		| it did not open: the window stays
 
 | Waits for a picture, the window, or Ctrl-C
 mainloop:
@@ -591,6 +633,8 @@ notdown:
 	moveq	#1,%d2			| forward
 	cmp.w	#GAD_FWD,%d0
 	beq.w	navigate
+	cmp.w	#GAD_FULL,%d0
+	beq.w	togglefull
 	cmp.w	#GAD_H,%d0
 	bls.s	1f
 	clr.l	HELD(%a2)
@@ -619,8 +663,20 @@ notup:
 	bra.w	msgloop
 notticks:
 	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
-	bne.s	notbutton
-	bsr.w	innerpos
+	bne.w	notbutton
+	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)
+	beq.s	6f
+	bsr.w	overlayclick		| the buttons over the page
+	tst.l	%d0
+	beq.s	6f
+	subq.l	#2,%d0
+	bmi.w	msgloop			| taken, nothing more
+	move.l	%d0,%d2			| 0 back, 1 forward
+	cmp.l	#2,%d2
+	bcs.w	navigate
+	bra.w	togglefull		| the window
+6:	bsr.w	innerpos
 	cmp.w	#0x68,%d3		| SELECTDOWN
 	bne.s	1f
 	tst.l	%d1			| not on the page
@@ -667,7 +723,7 @@ sendpointer:
 	bra.w	msgloop
 notmove:
 	cmp.l	#IDCMP_RAWKEY,%d2
-	bne.s	notraw
+	bne.w	notraw
 	moveq	#1,%d2			| the wheel up
 	cmp.w	#0x7A,%d3
 	beq.s	scrollit
@@ -697,7 +753,7 @@ notmove:
 1:	move.l	%d3,%d2			| to the page, as a key with no character
 	and.l	#0xFF,%d2
 	add.w	#0x100,%d2
-	bra.s	sendkey
+	bra.w	sendkey
 scrollit:
 	bsr.w	innerpos
 	move.l	%d0,%d3
@@ -731,7 +787,18 @@ notraw:
 	and.b	#0xDF,%d0
 	cmp.b	#'Q',%d0
 	beq.s	quit
+	cmp.b	#'F',%d0
+	beq.s	togglefull
 	bra.w	msgloop			| Amiga's own: not for the page
+| To the screen of its own, or back - which ends it after FULLSCREEN
+togglefull:
+	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)
+	beq.s	1f
+	tst.l	STARTFULL(%a0)
+	bne.s	quit
+1:	bsr.w	fullswitch
+	bra.w	msgloop
 sendkey:
 	moveq	#HV_KEY,%d0
 	move.l	%d5,%d1
@@ -761,19 +828,34 @@ closeall:
 	bsr.w	callhost
 1:	lea	vars(%pc),%a2
 	movea.l	INTUITIONBASE(%a2),%a6
-	move.l	%a3,%d0
+	tst.l	FULLSCR(%a2)
+	beq.s	11f
+	bsr.w	closefull		| the window on Workbench is left in %a3
+11:	move.l	%a3,%d0
 	beq.s	2f
 	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
 | The gadgets, then the images, now that no window has them
-2:	lea	GADFWD+4(%a2),%a3
+2:	move.l	GADFULL(%a2),%d0
+	beq.s	12f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+12:	lea	GADFWD+4(%a2),%a3
 	moveq	#16,%d2
 7:	move.l	-(%a3),%d0
 	beq.s	8f
 	movea.l	%d0,%a0
 	jsr	-642(%a6)		| DisposeObject
 8:	dbra	%d2,7b
-	move.l	GRAYCLASS(%a2),%d0	| no image of it is left
+	move.l	IMGFULL(%a2),%d0
+	beq.s	13f
+	movea.l	%d0,%a0
+	jsr	-642(%a6)		| DisposeObject
+13:	move.l	FULLCLASS(%a2),%d0	| no image of these is left
+	beq.s	14f
+	movea.l	%d0,%a0
+	jsr	-714(%a6)		| FreeClass
+14:	move.l	GRAYCLASS(%a2),%d0
 	beq.s	10f
 	movea.l	%d0,%a0
 	jsr	-714(%a6)		| FreeClass
@@ -792,6 +874,10 @@ closeall:
 	move.l	SIGBIT(%a2),%d0
 	bmi.s	4f
 	jsr	-336(%a6)		| FreeSignal
+	move.l	GFXBASE(%a2),%d0
+	beq.s	4f
+	movea.l	%d0,%a1
+	jsr	-414(%a6)		| CloseLibrary
 4:	move.l	P96BASE(%a2),%d0
 	beq.s	5f
 	movea.l	%d0,%a1
@@ -876,6 +962,10 @@ newtitle:
 	eori.l	#1,TITLETURN(%a2)
 	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	%a3,%a0
+	tst.l	FULLSCR(%a2)		| on the screen of its own: the window's
+	beq.s	3f			| on Workbench
+	movea.l	WBWIN(%a2),%a0
+3:
 	movea.l	%d2,%a1
 	movea.w	#-1,%a2			| the screen's title stays
 	jsr	-276(%a6)		| SetWindowTitles
@@ -1051,6 +1141,59 @@ makegadgets:
 	bsr.w	newarrow
 	move.l	%d0,GADRIGHT(%a2)
 	beq.w	makegadgets_end
+
+| The title bar's buttons, a list of their own, put before the window's
+| gadgets once it is open: the one for the screen of its own left of the
+| zoom gadget, as one more of the system's
+	tst.l	GFXBASE(%a2)
+	bne.s	1f
+	move.l	%a6,-(%sp)
+	movea.l	4,%a6
+	lea	gfxname(%pc),%a1
+	moveq	#39,%d0
+	jsr	-552(%a6)		| OpenLibrary
+	movea.l	(%sp)+,%a6
+	move.l	%d0,GFXBASE(%a2)
+	beq.w	makegadgets_end
+1:	moveq	#0,%d0			| DEPTHIMAGE
+	bsr.w	newimage
+	beq.w	makegadgets_end
+	bsr.w	widthgone
+	move.l	%d0,%d3
+	moveq	#1,%d0			| ZOOMIMAGE
+	bsr.w	newimage
+	beq.w	makegadgets_end
+	bsr.w	widthgone
+	add.l	%d0,%d3			| the two gadgets overlap by a pixel
+	subq.l	#1,%d3
+	move.l	GFXBASE(%a2),%d0
+	bsr.w	makefullclass
+	move.l	%d0,FULLCLASS(%a2)
+	beq.w	makegadgets_end
+	lea	imagetags(%pc),%a1
+	move.l	#1,20(%a1)		| SYSIA_Which: ZOOMIMAGE
+	movea.l	%d0,%a0
+	bsr.w	newfullimage
+	move.l	%d0,IMGFULL(%a2)
+	beq.w	makegadgets_end
+	movea.l	%d0,%a0
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,FULLW(%a2)
+	add.l	%d0,%d3			| and this one with them
+	subq.l	#1,%d3
+	lea	navtags(%pc),%a1
+	move.l	%d3,%d0
+	neg.l	%d0
+	move.l	%d0,4(%a1)		| GA_RelRight
+	clr.l	12(%a1)			| GA_Top
+	move.l	IMGFULL(%a2),20(%a1)	| GA_Image
+	move.l	#GAD_FULL,28(%a1)	| GA_ID
+	clr.l	36(%a1)			| GA_Previous: the first
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADFULL(%a2)
+	beq.w	makegadgets_end
 	tst.l	NOADDR(%a2)
 	bne.w	titlebuttons
 
@@ -1168,20 +1311,9 @@ makegadgets:
 
 | Without the address field, back and forward go to the title bar: arrows as
 | the scroll bars' in the border's colours, in the middle of its height, a
-| few pixels left of the zoom gadget
+| few pixels left of the button for the screen of its own
 titlebuttons:
-	moveq	#0,%d0			| DEPTHIMAGE
-	bsr.w	newimage
-	beq.w	makegadgets_end
-	bsr.w	widthgone
-	move.l	%d0,%d3
-	moveq	#1,%d0			| ZOOMIMAGE
-	bsr.w	newimage
-	beq.w	makegadgets_end
-	bsr.w	widthgone
-	add.l	%d0,%d3			| the two gadgets overlap by a pixel
-	subq.l	#1,%d3
-	addq.l	#4,%d3			| and the gap
+	addq.l	#4,%d3			| the gap
 	moveq	#0x0A,%d0		| LEFTIMAGE
 	bsr.w	newimage
 	move.l	%d0,IMGBACK(%a2)
@@ -1210,7 +1342,7 @@ titlebuttons:
 	move.l	%d0,4(%a1)		| GA_RelRight of forward
 	move.l	IMGFWD(%a2),20(%a1)	| GA_Image
 	move.l	#GAD_FWD,28(%a1)	| GA_ID
-	clr.l	36(%a1)			| GA_Previous: a list of their own
+	move.l	GADFULL(%a2),36(%a1)	| GA_Previous
 	lea	buttonclass(%pc),%a0
 	bsr.w	newobject
 	move.l	%d0,GADFWD(%a2)
@@ -1324,6 +1456,8 @@ getattr:
 drawaddr:
 	movem.l	%d2-%d4/%a2/%a6,-(%sp)
 	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)
+	bne.s	1f
 	tst.l	GADADDR(%a2)
 	beq.s	1f
 	movea.l	INTUITIONBASE(%a2),%a6
@@ -1359,6 +1493,8 @@ drawaddr:
 newaddress:
 	movem.l	%d2-%d4/%a2-%a3/%a6,-(%sp)
 	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)		| asked again once back in the window
+	bne.s	2f
 	tst.l	GADADDR(%a2)
 	beq.s	2f
 	moveq	#HV_ADDRESS,%d0
@@ -1391,6 +1527,8 @@ newaddress:
 toaddress:
 	movem.l	%a2/%a6,-(%sp)
 	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)
+	bne.s	1f
 	move.l	GADADDR(%a0),%d0
 	beq.s	1f
 	movea.l	INTUITIONBASE(%a0),%a6
@@ -1437,7 +1575,11 @@ strieq:
 
 | The scroll bars to where the page is, if that changed
 updatebars:
-	movem.l	%d2-%d4,-(%sp)
+	lea	vars(%pc),%a0		| asked again once back in the window
+	tst.l	FULLSCR(%a0)
+	beq.s	2f
+	rts
+2:	movem.l	%d2-%d4,-(%sp)
 	moveq	#HV_SCROLLINFO,%d0
 	move.l	%d5,%d1
 	lea	barinfo(%pc),%a0
@@ -1656,6 +1798,310 @@ draw_end:
 	movem.l	(%sp)+,%d2-%d5/%a2/%a6
 	rts
 
+| To the screen of its own, or back to the window. A screen that does not
+| open is told, and the window stays.
+fullswitch:
+	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)
+	bne.w	fulloff
+| The screen of the device's own size, in the depth of the Workbench
+fullon:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	tst.l	GFXBASE(%a2)
+	bne.s	1f
+	movea.l	4,%a6
+	lea	gfxname(%pc),%a1
+	moveq	#39,%d0
+	jsr	-552(%a6)		| OpenLibrary
+	move.l	%d0,GFXBASE(%a2)
+	beq.w	fullon_no
+1:	moveq	#HV_NATIVE,%d0
+	moveq	#0,%d1
+	moveq	#0,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	move.l	%d0,%d4			| the size
+	beq.w	fullon_no
+	bsr.w	findmode
+	cmp.l	#-1,%d0
+	beq.w	fullon_no
+	move.l	%d0,%d3			| the mode
+	lea	vars(%pc),%a2
+	move.l	BPP(%a2),%d1
+	lsl.l	#3,%d1			| the Workbench's depth
+	bsr.w	openfull
+	bne.s	2f
+	lea	vars(%pc),%a2		| or in 16 bits, which need half the
+	cmp.l	#2,BPP(%a2)		| RTG memory
+	bls.w	fullon_no
+	move.l	%d3,%d0
+	moveq	#16,%d1
+	bsr.w	openfull
+	beq.w	fullon_no
+2:
+	lea	vars(%pc),%a2
+	move.l	%a3,WBWIN(%a2)
+	movea.l	%d0,%a3
+	move.l	PAGETOP(%a2),SAVEDTOP(%a2)
+	clr.l	PAGETOP(%a2)
+	clr.l	PRESSED(%a2)
+	clr.l	DRAGGING(%a2)
+	clr.l	HELD(%a2)
+	bsr.w	screenformat
+| The page as much larger as the screen is taller than the Workbench
+	lea	vars(%pc),%a2
+	moveq	#0,%d2
+	move.w	%d4,%d2
+	mulu	#100,%d2
+	movea.l	SCREEN(%a2),%a0
+	moveq	#0,%d0
+	move.w	14(%a0),%d0		| sc_Height
+	move.l	%d0,%d1
+	lsr.l	#1,%d1
+	add.l	%d1,%d2			| rounded
+	divu	%d0,%d2
+	and.l	#0xFFFF,%d2
+	moveq	#HV_ZOOM,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	bsr.w	target
+	tst.l	%d0
+	ble.s	fullon_back
+	moveq	#0,%d0			| the buttons over the page
+	bsr.w	setoverlay
+	bsr.w	draw
+	bra.s	fullon_end
+fullon_back:
+	bsr.w	fulloff
+fullon_no:
+	lea	msg_nofull(%pc),%a0
+	bsr.w	report
+fullon_end:
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| Back to the window, with the page at its own size
+fulloff:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	bsr.w	closefull
+	moveq	#-1,%d0			| no buttons over the page
+	bsr.w	setoverlay
+	lea	vars(%pc),%a2
+	move.l	SAVEDTOP(%a2),PAGETOP(%a2)
+	clr.l	PRESSED(%a2)
+	moveq	#HV_ZOOM,%d0
+	move.l	%d5,%d1
+	moveq	#100,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	bsr.w	screenformat
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	jsr	-450(%a6)		| ActivateWindow
+	bsr.w	target
+	tst.l	%d0
+	ble.s	1f
+	bsr.w	draw
+	bsr.w	drawaddr
+	bsr.w	updatebars
+	bsr.w	newaddress
+1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The buttons over the page: %d0 -1 off, else on with the one held + 1 (0
+| for none). Their place into OVLEFT and OVSIZE.
+setoverlay:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	moveq	#1,%d2
+	move.l	%d0,%d3
+	bpl.s	1f
+	moveq	#0,%d2
+	moveq	#0,%d3
+1:	moveq	#HV_OVERLAY,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+	moveq	#0,%d1
+	move.w	%d0,%d1
+	move.l	%d1,OVSIZE(%a2)
+	clr.w	%d0
+	swap	%d0
+	ext.l	%d0
+	move.l	%d0,OVLEFT(%a2)
+	movem.l	(%sp)+,%d2-%d4/%a2
+	rts
+
+| Which of the buttons over the page the mouse at %d4 (x << 16 | y) is on:
+| %d0 0 back, 1 forward, 2 the window, or -1. As the emulator puts them: a
+| quarter of their size from the top, a fifth of it apart.
+overlayhit:
+	movem.l	%d2-%d3/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	OVSIZE(%a2),%d2
+	beq.s	8f
+	move.w	%d4,%d1
+	ext.l	%d1			| y
+	move.l	%d2,%d0
+	lsr.l	#2,%d0			| the top
+	sub.l	%d0,%d1
+	bmi.s	8f
+	cmp.l	%d2,%d1
+	bcc.s	8f
+	move.l	%d4,%d1
+	swap	%d1
+	ext.l	%d1			| x
+	sub.l	OVLEFT(%a2),%d1
+	bmi.s	8f
+	move.l	%d2,%d3
+	divu	#5,%d3
+	and.l	#0xFFFF,%d3
+	add.l	%d2,%d3			| from one to the next
+	divu	%d3,%d1
+	moveq	#0,%d0
+	move.w	%d1,%d0			| which
+	cmp.l	#2,%d0
+	bhi.s	8f
+	swap	%d1			| how far into it
+	cmp.w	%d2,%d1
+	bcc.s	8f
+	bra.s	9f
+8:	moveq	#-1,%d0
+9:	movem.l	(%sp)+,%d2-%d3/%a2
+	rts
+
+| A mouse button on the screen of its own, %d3 im_Code, %d4 where: %d0 0
+| when it is not for the buttons over the page, 1 taken by them, 2 back,
+| 3 forward, 4 the window - let go on the one pressed
+overlayclick:
+	movem.l	%d2-%d3/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	moveq	#0,%d2
+	cmp.w	#0x68,%d3		| SELECTDOWN
+	bne.s	2f
+	bsr.s	overlayhit
+	tst.l	%d0
+	bmi.s	9f
+	addq.l	#1,%d0
+	move.l	%d0,OVHELD(%a2)
+	bsr.w	setoverlay		| shown held
+	moveq	#1,%d2
+	bra.s	9f
+2:	cmp.w	#0xE8,%d3		| SELECTUP
+	bne.s	9f
+	move.l	OVHELD(%a2),%d3
+	beq.s	9f
+	clr.l	OVHELD(%a2)
+	bsr.w	overlayhit
+	addq.l	#1,%d0
+	moveq	#1,%d2
+	cmp.l	%d3,%d0			| on the one pressed still
+	bne.s	3f
+	move.l	%d0,%d2
+	addq.l	#1,%d2
+3:	moveq	#0,%d0			| none held
+	bsr.w	setoverlay
+9:	move.l	%d2,%d0
+	movem.l	(%sp)+,%d2-%d3/%a2
+	rts
+
+| Closes the window and screen of its own; %a3 the one on Workbench again
+closefull:
+	movem.l	%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	movea.l	%a3,%a0
+	jsr	-72(%a6)		| CloseWindow
+	movea.l	WBWIN(%a2),%a3
+	movea.l	FULLSCR(%a2),%a0
+	clr.l	FULLSCR(%a2)
+	jsr	-66(%a6)		| CloseScreen
+	movem.l	(%sp)+,%a2/%a6
+	rts
+
+| The mode of the size %d0 (width << 16 | height), of 15 bits or more. Names
+| come from the display database, so it needs nothing of Picasso96. %d0 the
+| ModeID or -1.
+findmode:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	GFXBASE(%a2),%a6
+	move.l	%d0,%d4			| the size
+	moveq	#-1,%d2			| INVALID_ID: from the first
+	moveq	#-1,%d3			| none yet
+1:	move.l	%d2,%d0
+	jsr	-732(%a6)		| NextDisplayInfo
+	move.l	%d0,%d2
+	cmp.l	#-1,%d0
+	beq.s	2f
+	suba.l	%a0,%a0
+	lea	diminfo(%pc),%a1
+	moveq	#88,%d0			| sizeof(struct DimensionInfo)
+	move.l	#0x80001000,%d1		| DTAG_DIMS
+	jsr	-756(%a6)		| GetDisplayInfoData
+	tst.l	%d0
+	beq.s	1b
+	lea	diminfo(%pc),%a0
+	moveq	#0,%d0
+	move.w	16(%a0),%d0		| dim_MaxDepth
+	cmp.l	#15,%d0
+	bcs.s	1b
+	move.w	30(%a0),%d1		| Nominal.MaxX
+	sub.w	26(%a0),%d1
+	addq.w	#1,%d1
+	swap	%d1
+	move.w	32(%a0),%d1		| Nominal.MaxY
+	sub.w	28(%a0),%d1
+	addq.w	#1,%d1
+	cmp.l	%d4,%d1
+	bne.s	1b
+	move.l	%d2,%d3
+2:	move.l	%d3,%d0
+	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| A screen of the mode %d0 of depth %d1 and the size %d4, with a window over
+| all of it. %d0: the window, or 0 with Z set; FULLSCR has the screen.
+openfull:
+	movem.l	%d2-%d3/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	movea.l	INTUITIONBASE(%a2),%a6
+	moveq	#0,%d2
+	move.w	%d4,%d2			| height
+	move.l	%d4,%d3
+	clr.w	%d3
+	swap	%d3			| width
+	lea	fullscrtags(%pc),%a1
+	move.l	%d0,4(%a1)		| SA_DisplayID
+	move.l	%d3,12(%a1)		| SA_Width
+	move.l	%d2,20(%a1)		| SA_Height
+	move.l	%d1,28(%a1)		| SA_Depth
+	suba.l	%a0,%a0
+	jsr	-612(%a6)		| OpenScreenTagList
+	move.l	%d0,FULLSCR(%a2)
+	beq.s	1f
+	lea	fullwintags(%pc),%a1
+	move.l	%d3,4(%a1)		| WA_Width
+	move.l	%d2,12(%a1)		| WA_Height
+	move.l	%d0,20(%a1)		| WA_CustomScreen
+	suba.l	%a0,%a0
+	jsr	-606(%a6)		| OpenWindowTagList
+	tst.l	%d0
+	bne.s	1f
+	movea.l	FULLSCR(%a2),%a0
+	clr.l	FULLSCR(%a2)
+	jsr	-66(%a6)		| CloseScreen
+	moveq	#0,%d0
+1:	movem.l	(%sp)+,%d2-%d3/%a2/%a6
+	tst.l	%d0
+	rts
+
 | Calls the emulator: %d0 the command, %d1-%d4 its arguments; %d0 the result
 callhost:
 	move.l	%d4,-(%sp)
@@ -1735,6 +2181,8 @@ print_len:
 print_end:
 	movem.l	(%sp)+,%d2-%d3/%a6
 	rts
+
+	.include "fullimage.s"
 
 	.even
 vars:		.space	VARSIZE
@@ -1831,6 +2279,26 @@ navtags:	.long	GA_RelRight, 0
 		.long	GA_TopBorder, 1
 		.long	GA_RelVerify, 1
 		.long	0
+fullscrtags:	.long	0x80000032, 0	| SA_DisplayID
+		.long	0x80000023, 0	| SA_Width
+		.long	0x80000024, 0	| SA_Height
+		.long	0x80000025, 0	| SA_Depth
+		.long	0x8000002D, 0x000F	| SA_Type: CUSTOMSCREEN
+		.long	0x80000036, 0	| SA_ShowTitle
+		.long	0x80000038, 1	| SA_Quiet
+		.long	0		| TAG_DONE
+fullwintags:	.long	0x80000066, 0	| WA_Width
+		.long	0x80000067, 0	| WA_Height
+		.long	0x80000070, 0	| WA_CustomScreen
+		.long	0x8000006A, IDCMP_MOUSEBUTTONS+IDCMP_MOUSEMOVE+IDCMP_REFRESHWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY
+		.long	0x80000085, 1	| WA_Backdrop
+		.long	0x80000088, 1	| WA_Borderless
+		.long	0x80000086, 1	| WA_ReportMouse
+		.long	0x80000089, 1	| WA_Activate
+		.long	0x8000008A, 1	| WA_RMBTrap
+		.long	0x8000008C, 1	| WA_SimpleRefresh
+		.long	0		| TAG_DONE
+diminfo:	.space	88		| struct DimensionInfo
 framesize:	.long	IA_Width, 0
 		.long	0
 addrtags:	.long	GA_Left, 0
@@ -1865,11 +2333,17 @@ frameiclass:	.asciz	"frameiclass"
 strgclass:	.asciz	"strgclass"
 kw_hideaddress:	.asciz	"HIDEADDRESS"
 kw_touch:	.asciz	"TOUCH"
+kw_fullscreen:	.asciz	"FULLSCREEN"
+gfxname:	.asciz	"graphics.library"
+msg_nofull:	.ascii	"no screen of the device's own size opens. Its mode needs\n"
+		.ascii	"RTG memory for it, and for the Workbench beside it: at\n"
+		.ascii	"3200x2136 32 MB in 16 bits, 64 MB in 32 bits.\n"
+		.byte	0
 title:		.asciz	"HostBrowser"
 colon:		.asciz	": "
 okgadget:	.asciz	"Ok"
 homepage:	.asciz	"https://www.google.com/"
-msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [TOUCH] [<address>]\n"
+msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [TOUCH] [FULLSCREEN] [<address>]\n"
 		.ascii	"Shows a web page in a window, drawn by uae4arm; without an\n"
 		.ascii	"address the home page. The mouse works as on a PC; TOUCH\n"
 		.ascii	"makes the left button a finger, a drag moving the page. The\n"
@@ -1882,6 +2356,10 @@ msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [TOUCH] [<address>]\n"
 		.ascii	"it, or searches for it; Ctrl-L or F6 put the cursor in it.\n"
 		.ascii	"The buttons before it go back and forward.\n"
 		.ascii	"HIDEADDRESS leaves it out, the buttons go to the title bar.\n"
+		.ascii	"The button with corners in the title bar, Right Amiga-F\n"
+		.ascii	"or FULLSCREEN show the page sharp on a screen of the\n"
+		.ascii	"device's own size; Right Amiga-F goes back to the window,\n"
+		.ascii	"or ends it after FULLSCREEN.\n"
 		.asciz	"Files of the page go to the folder of Browser downloads.\n"
 msg_cannot:	.asciz	"uae4arm cannot show web pages here - it needs Android 8 or later\n"
 msg_nointuition: .asciz	"this needs intuition.library 39\n"

@@ -514,12 +514,71 @@ void update_onscreen()
 	  SDL_ANDROID_SetScreenKeyboardButtonShown(SDL_ANDROID_SCREENKEYBOARD_BUTTON_5, changed_prefs.onScreen_button6);
 	}
 }
+
+// The size of RTG mode shown pixel for pixel, as the list of modes has it
+// (see picasso_InitResolutions): the external monitor's while the emulation
+// is on it, else the device's own. 0 x 0 when it is not known.
+static void native_of(int sw, int sh, int *w, int *h)
+{
+  if (sw < sh) {
+    int t = sw; sw = sh; sh = t;
+  }
+  if (sw <= 0 || sh <= 0) {
+    *w = *h = 0;
+    return;
+  }
+  *w = (sw + 8) & ~15;
+  *h = sh;
+}
+
+static void device_native_size(int *w, int *h)
+{
+  const char *ew = getenv("DISPLAY_RESOLUTION_WIDTH");
+  const char *eh = getenv("DISPLAY_RESOLUTION_HEIGHT");
+  native_of(ew ? atoi(ew) : 0, eh ? atoi(eh) : 0, w, h);
+}
+
+void rtg_native_size(int *w, int *h)
+{
+  int mw, mh;
+
+  SDL_ANDROID_ExternalMonitorSize(&mw, &mh);
+  if (last_external_monitor && mw > 0 && mh > 0)
+    native_of(mw, mh, w, h);
+  else
+    device_native_size(w, h);
+}
+
+// The largest of them, the device's and a monitor's, whichever is in use
+void rtg_native_size_max(int *w, int *h)
+{
+  int mw, mh, nw, nh;
+
+  device_native_size(w, h);
+  SDL_ANDROID_ExternalMonitorSize(&mw, &mh);
+  native_of(mw, mh, &nw, &nh);
+  if (nw > *w)
+    *w = nw;
+  if (nh > *h)
+    *h = nh;
+}
 #else
 // A window on the PC: a screen is seen the size it is
 void rtg_shown_shape(int w, int h, int *shown_w, int *shown_h)
 {
   *shown_w = w;
   *shown_h = h;
+}
+
+// and none is shown pixel for pixel more than another
+void rtg_native_size(int *w, int *h)
+{
+  *w = *h = 0;
+}
+
+void rtg_native_size_max(int *w, int *h)
+{
+  *w = *h = 0;
 }
 #endif
 
@@ -1242,9 +1301,10 @@ void picasso_InitResolutions (void)
       int k;
 
       for (k = 0; k < 5 && num_modes < MAX_SCREEN_MODES + 9; k++) {
+        /* The last, the screen's own size, is the one shown pixel for
+           pixel: on the device too, where HostBrowser opens its screen of
+           its own in it, for pages as sharp as the device draws them */
         int h = k < 4 ? heights[k] : screen_h;
-        if (k == 4 && shape == 0)
-          continue;
         /* Picasso96 wants the width in multiples of 16 - every size in the
            table above is one, and 600x400 came out as the one generated size
            that was not, and was the one mode that would not start. The

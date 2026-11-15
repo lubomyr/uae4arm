@@ -18,6 +18,11 @@ extern void hostvideo_install(void);
 /* uaelib function 202 */
 /* the shape a screen of w x h pixels is seen in (pandora_gfx.cpp) */
 extern void rtg_shown_shape(int w, int h, int *shown_w, int *shown_h);
+/* the size of RTG mode shown pixel for pixel now - the external monitor's
+   while the emulation is on it, else the device's - and the largest of the
+   two; 0 x 0 when not known (pandora_gfx.cpp) */
+extern void rtg_native_size(int *w, int *h);
+extern void rtg_native_size_max(int *w, int *h);
 extern uae_u32 hostvideo_call(struct TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2, uae_u32 arg3, uae_u32 arg4);
 
 #endif /* UAE_HOSTVIDEO_H */

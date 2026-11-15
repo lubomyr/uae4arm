@@ -121,8 +121,32 @@ extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
                                search for */
 
 #define HV_CMD_TOUCH 24     /* handle, 1: the left button as a finger, not a mouse */
+#define HV_CMD_NATIVE 25    /* the size of RTG mode shown pixel for pixel:
+                               width << 16 | height - the external
+                               monitor's while the emulation is on it, else
+                               the device's own */
+#define HV_CMD_ZOOM 26      /* handle, per cent: the page drawn that much
+                               larger, for a screen of the device's own size */
+#define HV_CMD_OVERLAY 27   /* handle, 1 on / 0 off, the button held + 1 or 0:
+                               the buttons back, forward and back to the
+                               window, see-through over the top right of the
+                               page on a screen of its own; gives their left
+                               << 16 | their size, see overlay_place() */
 
-#define HV_API_VERSION 10    /* web pages, for HostBrowser, with the mouse as a mouse */
+#define HV_API_VERSION 11    /* web pages, for HostBrowser, with a screen of their own */
+
+/* Where the buttons over the page go on a screen of w x h: three squares of
+   the size *size, a fifth of it apart, a quarter of it from the top and the
+   right; *left the left of the first. The tool works the same out of the
+   left and the size. */
+static void overlay_place(int w, int h, int *left, int *size)
+{
+	int s = h / 24;
+	if (s < 24)
+		s = 24;
+	*size = s;
+	*left = w - s / 4 - 3 * s - 2 * (s / 5);
+}
 
 /* what HV_CMD_OPEN gives back besides a handle */
 #define HV_OPEN_BUSY 0
@@ -232,6 +256,10 @@ public:
 	virtual void load(const char *text) {}
 	/* the left button as a finger, not a mouse */
 	virtual void set_touch(bool touch) {}
+	/* the page drawn larger, in per cent */
+	virtual void set_zoom(int percent) {}
+	/* the buttons over the page: on, and the one held + 1 */
+	virtual void set_overlay(bool on, int held) {}
 	/* the title for the window, in Latin-1: 2 when it changed since the
 	   last time, 1 when not, 0 for no title of its own */
 	virtual int title(char *text, size_t size) { return 0; }
@@ -1830,7 +1858,7 @@ static bool find_imagereader(void)
 static struct {
 	bool tried;
 	jclass cls;
-	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, address, load, setTouch, close;
+	jmethodID open, resize, pointer, scroll, scrollAcross, scrollNumbers, scrollTo, navigate, key, title, address, load, setTouch, setZoom, close;
 	jfieldID titleVersion, scrollVersion;
 } hb;
 
@@ -1924,11 +1952,12 @@ static bool find_hostbrowser(JNIEnv *env)
 	hb.address = env->GetMethodID(cls, "address", "()[B");
 	hb.load = env->GetMethodID(cls, "load", "(Ljava/lang/String;)V");
 	hb.setTouch = env->GetMethodID(cls, "setTouch", "(Z)V");
+	hb.setZoom = env->GetMethodID(cls, "setZoom", "(I)V");
 	hb.close = env->GetMethodID(cls, "close", "()V");
 	if (env->ExceptionCheck() || !hb.open || !hb.resize || !hb.pointer || !hb.scroll ||
 		!hb.navigate || !hb.key || !hb.titleVersion || !hb.title || !hb.close ||
 		!hb.scrollAcross || !hb.scrollNumbers || !hb.scrollTo || !hb.scrollVersion ||
-		!hb.address || !hb.load || !hb.setTouch) {
+		!hb.address || !hb.load || !hb.setTouch || !hb.setZoom) {
 		env->ExceptionClear();
 		write_log(_T("HostBrowser: %s lacks a method\n"), name.c_str());
 		return false;
@@ -1997,8 +2026,13 @@ public:
 	int address(char *text, size_t size);
 	void load(const char *text);
 	void set_touch(bool touch);
+	void set_zoom(int percent);
+	void set_overlay(bool on, int held);
 
 private:
+	std::atomic<bool> overlay_on{false};
+	std::atomic<int> overlay_held{0};
+	void draw_overlay(uae_u8 *dst, int w, int h, int stride, int format);
 	std::string last_address;
 	bool address_told = false;
 	/* the scroll bars told last, and the pixels of their units */
@@ -2095,9 +2129,17 @@ bool browser_source::open(const char *url, int w, int h)
 	crop_w = w;
 	crop_h = h;
 	/* the display as large as the RTG screen, which the window cannot
-	   outgrow */
+	   outgrow, or as a screen of the device's or the monitor's own size,
+	   for the page on a screen of its own: the display keeps its size for
+	   life */
 	int dw = picasso96_state.Width > w ? picasso96_state.Width : w;
 	int dh = picasso96_state.Height > h ? picasso96_state.Height : h;
+	int nw, nh;
+	rtg_native_size_max(&nw, &nh);
+	if (nw > dw)
+		dw = nw;
+	if (nh > dh)
+		dh = nh;
 	AImageReader *r = make_reader(dw, dh);
 	if (!r)
 		return false;
@@ -2172,6 +2214,8 @@ void browser_source::render(uae_u8 *dst, int w, int h, int stride, int format)
 			put_pixel(d, format, s[0], s[1], s[2]);
 		}
 	}
+	if (overlay_on)
+		draw_overlay(dst, w, h, stride, format);
 }
 
 void browser_source::pointer(int action, int x, int y)
@@ -2302,6 +2346,81 @@ int browser_source::address(char *text, size_t size)
 	last_address = t;
 	address_told = true;
 	return changed ? 2 : 1;
+}
+
+void browser_source::set_overlay(bool on, int held)
+{
+	overlay_on = on;
+	overlay_held = held;
+	/* drawn with the next picture: there is one now */
+	fresh = true;
+}
+
+/* The buttons, see-through, over the page just drawn: back, forward and the
+   window, white signs on dark squares with round corners */
+void browser_source::draw_overlay(uae_u8 *dst, int w, int h, int stride, int format)
+{
+	int left, s;
+	overlay_place(w, h, &left, &s);
+	int gap = s / 5, top = s / 4, held = overlay_held, bpp = format_bpp(format);
+	int r = s / 6;				/* the corners' radius */
+	int t = s / 16 > 2 ? s / 16 : 2;	/* the lines of the window's sign */
+	for (int b = 0; b < 3; b++) {
+		int bx = left + b * (s + gap);
+		for (int v = 0; v < s; v++) {
+			int y = top + v;
+			if (y < 0 || y >= h)
+				continue;
+			const uae_u8 *row = &frame[(size_t)((int64_t)y * fh / h) * fw * 4];
+			for (int u = 0; u < s; u++) {
+				int x = bx + u;
+				if (x < 0 || x >= w)
+					continue;
+				/* outside the round corners */
+				int cu = u < r ? r - u : u >= s - r ? u - (s - r - 1) : 0;
+				int cv = v < r ? r - v : v >= s - r ? v - (s - r - 1) : 0;
+				if (cu * cu + cv * cv > r * r)
+					continue;
+				bool sign;
+				if (b < 2) {
+					/* a triangle, pointing left for back, right for on */
+					int a = b == 0 ? u : s - 1 - u;
+					int tip = s * 3 / 10, end = s * 13 / 20, half = s / 4;
+					int dv = v - s / 2;
+					if (dv < 0)
+						dv = -dv;
+					sign = a >= tip && a <= end && dv * (end - tip) <= (a - tip) * half;
+				} else {
+					/* a window: a frame with a thick bar on top */
+					int lo = s / 4, hi = s - 1 - s / 4;
+					bool in = u >= lo && u <= hi && v >= lo && v <= hi;
+					sign = in && (u < lo + t || u > hi - t || v < lo + 3 * t || v > hi - t);
+				}
+				const uae_u8 *p = row + (size_t)((int64_t)x * fw / w) * 4;
+				int cr, a;
+				if (sign) {
+					cr = 255;
+					a = 230;
+				} else {
+					cr = b + 1 == held ? 110 : 0;
+					a = b + 1 == held ? 200 : 120;
+				}
+				int pr = (p[0] * (255 - a) + cr * a) / 255;
+				int pg = (p[1] * (255 - a) + cr * a) / 255;
+				int pb = (p[2] * (255 - a) + cr * a) / 255;
+				put_pixel(dst + (size_t)y * stride + (size_t)x * bpp, format, pr, pg, pb);
+			}
+		}
+	}
+}
+
+void browser_source::set_zoom(int percent)
+{
+	jni_env j;
+	if (j.env && browser) {
+		j.env->CallVoidMethod(browser, hb.setZoom, (jint)percent);
+		j.failed();
+	}
 }
 
 void browser_source::set_touch(bool touch)
@@ -2802,6 +2921,11 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		return arg3 ? player_open(ctx, arg1, arg2, arg3) : HV_OPEN_NOPATH;
 	if (cmd == HV_CMD_OPENCOPY)
 		return player_open(ctx, arg1, arg2, 0);
+	if (cmd == HV_CMD_NATIVE) {
+		int w, h;
+		rtg_native_size(&w, &h);
+		return (w << 16) | h;
+	}
 	if (cmd == HV_CMD_OPENURL)
 		return page_open(arg1, arg2, arg3, arg4 >> 16, arg4 & 0xffff);
 
@@ -2914,6 +3038,15 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	case HV_CMD_TOUCH:
 		v->source->set_touch(arg2 != 0);
 		return 1;
+	case HV_CMD_ZOOM:
+		v->source->set_zoom(arg2 >= 25 && arg2 <= 800 ? (int)arg2 : 100);
+		return 1;
+	case HV_CMD_OVERLAY: {
+		int left, size;
+		v->source->set_overlay(arg2 != 0, arg3 <= 3 ? (int)arg3 : 0);
+		overlay_place(v->target_w, v->target_h, &left, &size);
+		return ((uae_u32)(left & 0xffff) << 16) | (uae_u32)size;
+	}
 	case HV_CMD_LOAD: {
 		char text[1024];
 		size_t n = 0;

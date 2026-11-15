@@ -3,7 +3,8 @@
 |            HOSTVIEW set (see build.sh), without the slider, the play
 |            button and the sound; buttons in the border, the cursor
 |            keys and space go to the pictures before and after it in
-|            its drawer, by name. A button beside them, the key F, or the
+|            its drawer, by name. A button with four corners in the title
+|            bar, left of the zoom gadget, the key F, or the
 |            parameter FULLSCREEN show the picture on a screen of its own:
 |            an RTG mode near its size in the proportions of the Workbench,
 |            the emulator keeping its shape. There the left button goes to
@@ -81,6 +82,8 @@
 	.set	PGA_Total, 0x80031007
 	.set	PGA_Visible, 0x80031008
 	.set	PGA_Top, 0x80031009
+	.set	GA_Top, 0x80030003
+	.set	GA_TopBorder, 0x8003001A
 	.set	PGA_NewLook, 0x8003100A
 	.set	IA_Width, 0x80020003
 	.set	IA_Height, 0x80020004
@@ -140,7 +143,8 @@
 	.set	FULLSCR, 176		| the screen of its own, while it is shown
 	.set	WBWIN, 180		| and the window on Workbench behind it
 	.set	STARTFULL, 184		| the parameter FULLSCREEN
-	.set	VARSIZE, 188
+	.set	FULLCLASS, 188		| the class of the button's image
+	.set	VARSIZE, 192
 | HostView's buttons for the pictures after and before take the places of
 | the slider and the play button; the image of the play button is the
 | arrow of the one after
@@ -415,6 +419,23 @@ havegadgets:
 
 | The screen's bitmap: an RTG one, in a format the host makes
 havewindow:
+	.ifdef	HOSTVIEW
+	lea	vars(%pc),%a2		| the title bar's button before the
+	movea.l	INTUITIONBASE(%a2),%a6	| window's own gadgets
+	movea.l	%a3,%a0
+	movea.l	GADFULL(%a2),%a1
+	moveq	#0,%d0
+	moveq	#1,%d1
+	suba.l	%a2,%a2
+	jsr	-438(%a6)		| AddGList
+	lea	vars(%pc),%a2
+	movea.l	GADFULL(%a2),%a0
+	movea.l	%a3,%a1
+	suba.l	%a2,%a2
+	moveq	#1,%d0
+	jsr	-432(%a6)		| RefreshGList
+	lea	vars(%pc),%a2
+	.endif
 	bsr.w	screenformat
 	tst.l	%d0
 	bne.s	isrtg
@@ -687,6 +708,10 @@ closeall:
 	beq.s	4f
 	movea.l	%d0,%a0
 	jsr	-642(%a6)		| DisposeObject
+4:	move.l	FULLCLASS(%a2),%d0
+	beq.s	4f
+	movea.l	%d0,%a0
+	jsr	-714(%a6)		| FreeClass
 4:	move.l	DRAWINFO(%a2),%d0
 	beq.s	5f
 	movea.l	%d0,%a1
@@ -1664,17 +1689,54 @@ makegadgets:
 	bsr.w	getattr
 	move.l	%d0,OPENW(%a2)
 	.ifdef	HOSTVIEW
-| The look of the zoom gadget, at the height of the border
-	lea	zoomimagetags(%pc),%a1
-	move.l	DRAWINFO(%a2),4(%a1)	| SYSIA_DrawInfo
-	move.l	%d2,12(%a1)		| SYSIA_Size
-	move.l	PLAYW(%a2),28(%a1)	| IA_Width
-	move.l	SIZEH(%a2),36(%a1)	| IA_Height
-	lea	sysiclass(%pc),%a0
-	bsr.w	newobject
+| The button for the screen of its own: in the title bar, left of the zoom
+| gadget, as one more of the system's; a list of its own, put before the
+| window's gadgets once it is open, or the drag bar would take its clicks
+	tst.l	GFXBASE(%a2)
+	bne.s	1f
+	move.l	%a6,-(%sp)
+	movea.l	4,%a6
+	lea	gfxname(%pc),%a1
+	moveq	#39,%d0
+	jsr	-552(%a6)		| OpenLibrary
+	movea.l	(%sp)+,%a6
+	move.l	%d0,GFXBASE(%a2)
+	beq.w	makegadgets_end
+1:	moveq	#0,%d0			| DEPTHIMAGE
+	bsr.w	newimage
+	beq.w	makegadgets_end
+	bsr.w	widthgone
+	move.l	%d0,%d3
+	moveq	#1,%d0			| ZOOMIMAGE
+	bsr.w	newimage
+	beq.w	makegadgets_end
+	bsr.w	widthgone
+	add.l	%d0,%d3			| the two gadgets overlap by a pixel
+	subq.l	#1,%d3
+	move.l	GFXBASE(%a2),%d0
+	bsr.w	makefullclass
+	move.l	%d0,FULLCLASS(%a2)
+	beq.w	makegadgets_end
+	lea	imagetags(%pc),%a1
+	move.l	#1,20(%a1)		| SYSIA_Which: ZOOMIMAGE
+	movea.l	%d0,%a0
+	bsr.w	newfullimage
 	move.l	%d0,IMGFULL(%a2)
 	beq.w	makegadgets_end
-	move.l	PLAYW(%a2),FULLW(%a2)
+	movea.l	%d0,%a0
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,FULLW(%a2)
+	add.l	%d0,%d3			| and this one with them
+	subq.l	#1,%d3
+	lea	titletags(%pc),%a1
+	neg.l	%d3
+	move.l	%d3,4(%a1)		| GA_RelRight
+	move.l	IMGFULL(%a2),12(%a1)	| GA_Image
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADFULL(%a2)
+	beq.w	makegadgets_end
 	.endif
 
 	.ifndef	HOSTVIEW
@@ -1731,14 +1793,13 @@ makegadgets:
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
 	move.l	GADPLAY(%a2),36(%a0)	| GA_Previous
 	.else
-| The buttons, left of the size gadget: back, on, full screen, another file
+| The buttons, left of the size gadget: back, on, another file
 	lea	buttontags(%pc),%a0
 	moveq	#1,%d1
 	sub.l	SIZEH(%a2),%d1
 	move.l	%d1,12(%a0)		| GA_RelBottom
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
-	add.l	FULLW(%a2),%d0
 	add.l	PLAYW(%a2),%d0
 	add.l	PREVW(%a2),%d0
 	moveq	#1,%d1
@@ -1755,7 +1816,6 @@ makegadgets:
 	lea	buttontags(%pc),%a0
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
-	add.l	FULLW(%a2),%d0
 	add.l	PLAYW(%a2),%d0
 	moveq	#1,%d1
 	sub.l	%d0,%d1
@@ -1771,27 +1831,12 @@ makegadgets:
 	lea	buttontags(%pc),%a0
 	move.l	SIZEW(%a2),%d0
 	add.l	OPENW(%a2),%d0
-	add.l	FULLW(%a2),%d0
-	moveq	#1,%d1
-	sub.l	%d0,%d1
-	move.l	%d1,4(%a0)		| GA_RelRight
-	move.l	IMGFULL(%a2),20(%a0)	| GA_Image
-	move.l	#GAD_FULL,28(%a0)	| GA_ID
-	move.l	GADNEXT(%a2),36(%a0)	| GA_Previous
-	movea.l	%a0,%a1
-	lea	buttonclass(%pc),%a0
-	bsr.w	newobject
-	move.l	%d0,GADFULL(%a2)
-	beq.w	makegadgets_end
-	lea	buttontags(%pc),%a0
-	move.l	SIZEW(%a2),%d0
-	add.l	OPENW(%a2),%d0
 	moveq	#1,%d1
 	sub.l	%d0,%d1
 	move.l	%d1,4(%a0)		| GA_RelRight
 	move.l	IMGOPEN(%a2),20(%a0)	| GA_Image
 	move.l	#GAD_OPEN,28(%a0)	| GA_ID
-	move.l	GADFULL(%a2),36(%a0)	| GA_Previous
+	move.l	GADNEXT(%a2),36(%a0)	| GA_Previous
 	.endif
 	movea.l	%a0,%a1
 	lea	buttonclass(%pc),%a0
@@ -2242,6 +2287,21 @@ print_end:
 	movem.l	(%sp)+,%d2-%d3/%a6
 	rts
 
+	.ifdef	HOSTVIEW
+| The width of the image %a0, which is disposed of; in %d0
+widthgone:
+	move.l	%a0,-(%sp)
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	movea.l	(%sp)+,%a0
+	move.l	%d0,-(%sp)
+	jsr	-642(%a6)		| DisposeObject
+	move.l	(%sp)+,%d0
+	rts
+
+	.include "fullimage.s"
+	.endif
+
 	.even
 vars:		.space	VARSIZE
 zoombox:	.word	0, 0, 0, 0	| struct IBox
@@ -2280,11 +2340,12 @@ imagetags:	.long	SYSIA_DrawInfo, 0
 		.long	SYSIA_Which, 0
 		.long	0
 	.ifdef	HOSTVIEW
-zoomimagetags:	.long	SYSIA_DrawInfo, 0
-		.long	SYSIA_Size, 0
-		.long	SYSIA_Which, 1	| ZOOMIMAGE
-		.long	IA_Width, 0
-		.long	IA_Height, 0
+titletags:	.long	GA_RelRight, 0
+		.long	GA_Image, 0
+		.long	GA_Top, 0
+		.long	GA_ID, GAD_FULL
+		.long	GA_TopBorder, 1
+		.long	GA_RelVerify, 1
 		.long	0
 fullscrtags:	.long	0x80000032, 0	| SA_DisplayID
 		.long	0x80000023, 0	| SA_Width
