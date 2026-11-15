@@ -1341,6 +1341,15 @@ void picasso_InitResolutions (void)
   }
 #endif
 
+  /* SDL's largest mode is the size of its window when it started - with the
+     menu's 4:3 on, narrower than the device - and grows to the device's own
+     size with the first mode set. The list is made before that, so a mode
+     the device holds is taken without asking SDL: else the device's own size
+     was there or not by how the app had started. */
+  int device_w = 0, device_h = 0;
+#ifdef ANDROIDSDL
+  device_native_size(&device_w, &device_h);
+#endif
   for (i = 0; i < num_modes && count < MAX_PICASSO_MODES; i++) {
     for(bit_idx = 0; bit_idx < 3; ++bit_idx) {
       int bitdepth = bits[bit_idx];
@@ -1349,7 +1358,8 @@ void picasso_InitResolutions (void)
       int pixelFormat = 1 << rgbFormat;
   	  pixelFormat |= RGBFF_CHUNKY;
       
-  	  if (SDL_VideoModeOK (mode_width[i], mode_height[i], 16, SDL_SWSURFACE))
+  	  if ((mode_width[i] <= device_w && mode_height[i] <= device_h) ||
+  	      SDL_VideoModeOK (mode_width[i], mode_height[i], 16, SDL_SWSURFACE))
   	  {
   	    DisplayModes[count].res.width = mode_width[i];
   	    DisplayModes[count].res.height = mode_height[i];
