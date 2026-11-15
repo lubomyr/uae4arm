@@ -1840,7 +1840,7 @@ fullon:
 	beq.w	fullon_no
 	bsr.w	findmode
 	cmp.l	#-1,%d0
-	beq.w	fullon_no
+	beq.w	fullon_nomode
 	move.l	%d0,%d3			| the mode
 	lea	vars(%pc),%a2
 	move.l	BPP(%a2),%d1
@@ -1849,11 +1849,11 @@ fullon:
 	bne.s	2f
 	lea	vars(%pc),%a2		| or in 16 bits, which need half the
 	cmp.l	#2,BPP(%a2)		| RTG memory
-	bls.w	fullon_no
+	bls.w	fullon_noscreen
 	move.l	%d3,%d0
 	moveq	#16,%d1
 	bsr.w	openfull
-	beq.w	fullon_no
+	beq.w	fullon_noscreen
 2:
 	lea	vars(%pc),%a2
 	move.l	%a3,WBWIN(%a2)
@@ -1894,8 +1894,37 @@ fullon_back:
 fullon_no:
 	lea	msg_nofull(%pc),%a0
 	bsr.w	report
+	bra.s	fullon_end
+| Which size it was, told: no mode of it, or its screen did not open
+fullon_nomode:
+	lea	msg_nomode(%pc),%a0
+	bra.s	1f
+fullon_noscreen:
+	lea	msg_noscreen(%pc),%a0
+1:	moveq	#0,%d0
+	move.w	%d4,%d0
+	move.l	%d0,-(%sp)		| height
+	move.l	%d4,%d0
+	clr.w	%d0
+	swap	%d0
+	move.l	%d0,-(%sp)		| width
+	movea.l	%sp,%a1
+	movem.l	%a2-%a3,-(%sp)
+	lea	fullstuff(%pc),%a2
+	lea	fullmsg(%pc),%a3
+	movea.l	4,%a6
+	jsr	-522(%a6)		| RawDoFmt
+	movem.l	(%sp)+,%a2-%a3
+	addq.l	#8,%sp
+	lea	fullmsg(%pc),%a0
+	bsr.w	report
 fullon_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| RawDoFmt's PutChProc
+fullstuff:
+	move.b	%d0,(%a3)+
 	rts
 
 | Back to the window, with the page at its own size
@@ -2349,10 +2378,14 @@ kw_hideaddress:	.asciz	"HIDEADDRESS"
 kw_touch:	.asciz	"TOUCH"
 kw_fullscreen:	.asciz	"FULLSCREEN"
 gfxname:	.asciz	"graphics.library"
-msg_nofull:	.ascii	"no screen of the device's own size opens. Its mode needs\n"
-		.ascii	"RTG memory for it, and for the Workbench beside it: at\n"
-		.ascii	"3200x2136 32 MB in 16 bits, 64 MB in 32 bits.\n"
-		.byte	0
+msg_nofull:	.asciz	"the emulator does not tell the size of the device\n"
+msg_nomode:	.ascii	"there is no RTG mode of %ldx%ld, the size that is\n"
+		.asciz	"shown pixel for pixel\n"
+msg_noscreen:	.ascii	"the screen of %ldx%ld does not open. It needs RTG\n"
+		.ascii	"memory for it, and for the Workbench beside it: at\n"
+		.asciz	"3200x2136 32 MB in 16 bits, 64 MB in 32 bits.\n"
+	.even
+fullmsg:	.space	256
 title:		.asciz	"HostBrowser"
 colon:		.asciz	": "
 okgadget:	.asciz	"Ok"

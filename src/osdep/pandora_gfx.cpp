@@ -1244,8 +1244,11 @@ void picasso_InitResolutions (void)
   int i, count = 0;
   char tmp[200];
   int bit_idx;
-  int mode_width[MAX_SCREEN_MODES + 9];
-  int mode_height[MAX_SCREEN_MODES + 9];
+  /* the fixed ones, and those in the shape of the device and of a monitor:
+     five each, the last the screen's own size */
+#define SHAPED_MODES 10
+  int mode_width[MAX_SCREEN_MODES + SHAPED_MODES];
+  int mode_height[MAX_SCREEN_MODES + SHAPED_MODES];
   int num_modes = 0;
   int bits[] = { 8, 16, 32 };
   
@@ -1300,7 +1303,7 @@ void picasso_InitResolutions (void)
     if (screen_w > 0 && screen_h > 0) {
       int k;
 
-      for (k = 0; k < 5 && num_modes < MAX_SCREEN_MODES + 9; k++) {
+      for (k = 0; k < 5 && num_modes < MAX_SCREEN_MODES + SHAPED_MODES; k++) {
         /* The last, the screen's own size, is the one shown pixel for
            pixel: on the device too, where HostBrowser opens its screen of
            its own in it, for pages as sharp as the device draws them */
