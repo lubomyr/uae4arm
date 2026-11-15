@@ -1225,10 +1225,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..2e08f07db
+index 000000000..3d966db3e
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,773 @@
+@@ -0,0 +1,803 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1475,6 +1475,8 @@ index 000000000..2e08f07db
 +			area.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 +			FrameLayout root = new FrameLayout(presentation.getContext());
 +			root.addView(area, new FrameLayout.LayoutParams(w, h));
++			areaW = w;
++			areaH = h;
 +			presentation.setContentView(root);
 +			// Esc goes to the page, it does not take the page away
 +			presentation.setCancelable(false);
@@ -1570,6 +1572,9 @@ index 000000000..2e08f07db
 +				if (area == null)
 +					return;
 +				area.setLayoutParams(new FrameLayout.LayoutParams(w, h));
++				areaW = w;
++				areaH = h;
++				applyZoom();
 +			}
 +		});
 +	}
@@ -1599,12 +1604,37 @@ index 000000000..2e08f07db
 +		});
 +	}
 +
++	// The page's own size and zoom, and its screen made the window, as AndroidBrowser does it: the
++	// display is as large as the device, and YouTube takes its player for one in picture in picture
++	// in a window that covers too little of the screen, and pauses it at every start; its player in
++	// its full screen it lays out to the screen too. The size is in the page's pixels: smaller by
++	// the zoom.
++	private int areaW = 0, areaH = 0;
++
++	private static final String SCREEN_IS_WINDOW =
++		"(function() {" +
++		" if (window.__uae4armScreen) return; window.__uae4armScreen = true;" +
++		" var p = Object.getPrototypeOf(screen);" +
++		" var sw = Object.getOwnPropertyDescriptor(p, 'width').get, sh = Object.getOwnPropertyDescriptor(p, 'height').get;" +
++		" var w = function() { return window.__uae4armW || window.innerWidth; }, h = function() { return window.__uae4armH || window.innerHeight; };" +
++		" function forPlayer() { return /getPlayerSize/.test(String(new Error().stack)); }" +
++		" try {" +
++		"  Object.defineProperty(window, 'outerWidth', { get: function() { return forPlayer() ? w() : sw.call(screen); }, configurable: true });" +
++		"  Object.defineProperty(window, 'outerHeight', { get: function() { return forPlayer() ? h() : sh.call(screen); }, configurable: true });" +
++		" } catch (e) { }" +
++		" ['width', 'availWidth'].forEach(function(n) { Object.defineProperty(p, n, { get: w, configurable: true }); });" +
++		" ['height', 'availHeight'].forEach(function(n) { Object.defineProperty(p, n, { get: h, configurable: true }); });" +
++		"})();";
++
 +	private void applyZoom()
 +	{
 +		if (web == null)
 +			return;
 +		int z = zoom;
-+		web.evaluateJavascript("document.documentElement.style.zoom='" + (z == 100 ? "" : z + "%") + "'", null);
++		String js = "window.__uae4armW=" + (areaW * 100 / z) + ";window.__uae4armH=" + (areaH * 100 / z) + ";" +
++			SCREEN_IS_WINDOW +
++			"document.documentElement.style.zoom='" + (z == 100 ? "" : z + "%") + "'";
++		web.evaluateJavascript(js, null);
 +	}
 +
 +	// The left mouse button: 0 pressed, 1 let go, 2 moved while pressed, 3 moved with no button;

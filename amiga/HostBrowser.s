@@ -1775,27 +1775,41 @@ freebuffer:
 1:	movem.l	(%sp)+,%a2/%a6
 	rts
 
-| Blits the buffer into the inside of the window
+| Blits the buffer into the inside of the window, in bands of BAND rows:
+| Picasso96 draws the mouse pointer itself, and takes it away while it draws
+| over it - for the whole of one blit. A page of the screen of its own in
+| one, again and again while a video plays, left it gone nearly all the time.
+	.set	BAND, 64
 draw:
-	movem.l	%d2-%d5/%a2/%a6,-(%sp)
+	movem.l	%d2-%d7/%a2/%a6,-(%sp)
 	lea	vars(%pc),%a2
 	tst.l	BUFFER(%a2)
 	beq.s	draw_end
 	movea.l	P96BASE(%a2),%a6
-	move.l	WIDTH(%a2),%d4
-	move.l	HEIGHT(%a2),%d5
+	moveq	#0,%d6			| the first row of the band
+1:	move.l	HEIGHT(%a2),%d5
+	sub.l	%d6,%d5			| the rows left
+	ble.s	draw_end
+	cmp.l	#BAND,%d5
+	bls.s	2f
+	moveq	#BAND,%d5
+2:	move.l	WIDTH(%a2),%d4
 	lea	renderinfo(%pc),%a0
 	moveq	#0,%d0
-	moveq	#0,%d1
+	move.l	%d6,%d1			| from that row
 	movea.l	50(%a3),%a1		| wd_RPort
 	moveq	#0,%d2
 	move.b	54(%a3),%d2		| wd_BorderLeft
 	moveq	#0,%d3
 	move.b	55(%a3),%d3		| wd_BorderTop
 	add.l	PAGETOP(%a2),%d3
+	add.l	%d6,%d3
+	move.l	%d5,%d7
 	jsr	-102(%a6)		| p96WritePixelArray
+	add.l	%d7,%d6
+	bra.s	1b
 draw_end:
-	movem.l	(%sp)+,%d2-%d5/%a2/%a6
+	movem.l	(%sp)+,%d2-%d7/%a2/%a6
 	rts
 
 | To the screen of its own, or back to the window. A screen that does not
