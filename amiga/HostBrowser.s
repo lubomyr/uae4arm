@@ -7,7 +7,8 @@
 | Above the page an address field shows where the page is, with buttons
 | back and forward before it; another address
 | typed into it and Return go there, and words that are no address search
-| for them. Ctrl-L or F6 put the cursor in it. HIDEADDRESS leaves it out.
+| for them. Ctrl-L or F6 put the cursor in it. HIDEADDRESS leaves it out,
+| and puts the buttons in the title bar, left of the zoom gadget.
 |
 | The page is the host's: on Android a WebView, on a display of its own that
 | nobody sees, whose pictures come to the emulator. As in HostPlay, the tool
@@ -85,6 +86,7 @@
 	.set	GA_RelVerify, 0x80030016
 	.set	GA_FollowMouse, 0x80030017
 	.set	GA_RightBorder, 0x80030018
+	.set	GA_TopBorder, 0x8003001A
 	.set	GA_BottomBorder, 0x8003001B
 	.set	GA_Previous, 0x8003001F
 	.set	PGA_Freedom, 0x80031001
@@ -416,6 +418,27 @@ havescreen:
 
 | The screen's bitmap: an RTG one, in a format the host makes
 havewindow:
+| The title bar's buttons go before the window's own gadgets in the list:
+| after them the drag bar would take their clicks
+	lea	vars(%pc),%a2
+	tst.l	NOADDR(%a2)
+	beq.s	1f
+	move.l	GADFWD(%a2),%d0
+	beq.s	1f
+	movea.l	%a3,%a0
+	movea.l	%d0,%a1
+	moveq	#0,%d0			| at the front
+	moveq	#2,%d1
+	suba.l	%a2,%a2
+	jsr	-438(%a6)		| AddGList
+	lea	vars(%pc),%a2
+	movea.l	GADFWD(%a2),%a0
+	movea.l	%a3,%a1
+	suba.l	%a2,%a2
+	moveq	#2,%d0
+	jsr	-432(%a6)		| RefreshGList
+	lea	vars(%pc),%a2
+1:
 	bsr.w	screenformat
 	tst.l	%d0
 	bne.s	isrtg
@@ -1029,7 +1052,7 @@ makegadgets:
 	move.l	%d0,GADRIGHT(%a2)
 	beq.w	makegadgets_end
 	tst.l	NOADDR(%a2)
-	bne.w	makegadgets_end
+	bne.w	titlebuttons
 
 | Back and forward: arrows as those of the scroll bars, at the left of the
 | row, in the middle of the field's height; as far apart, and from the
@@ -1109,7 +1132,7 @@ makegadgets:
 	lea	strgclass(%pc),%a0
 	bsr.w	newobject
 	move.l	%d0,GADADDR(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 | the buttons, after the field in the list
 	lea	btntags(%pc),%a1
 	moveq	#0,%d0
@@ -1130,7 +1153,7 @@ makegadgets:
 	lea	buttonclass(%pc),%a0
 	bsr.w	newobject
 	move.l	%d0,GADBACK(%a2)
-	beq.s	makegadgets_end
+	beq.w	makegadgets_end
 	lea	btntags(%pc),%a1
 	move.l	BACKW(%a2),%d0
 	add.l	GAP(%a2),%d0
@@ -1141,8 +1164,80 @@ makegadgets:
 	lea	buttonclass(%pc),%a0
 	bsr.w	newobject
 	move.l	%d0,GADFWD(%a2)
+	bra.w	makegadgets_end
+
+| Without the address field, back and forward go to the title bar: arrows as
+| the scroll bars' in the border's colours, in the middle of its height, a
+| few pixels left of the zoom gadget
+titlebuttons:
+	moveq	#0,%d0			| DEPTHIMAGE
+	bsr.w	newimage
+	beq.w	makegadgets_end
+	bsr.w	widthgone
+	move.l	%d0,%d3
+	moveq	#1,%d0			| ZOOMIMAGE
+	bsr.w	newimage
+	beq.w	makegadgets_end
+	bsr.w	widthgone
+	add.l	%d0,%d3			| the two gadgets overlap by a pixel
+	subq.l	#1,%d3
+	addq.l	#4,%d3			| and the gap
+	moveq	#0x0A,%d0		| LEFTIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGBACK(%a2)
+	beq.w	makegadgets_end
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	move.l	%d0,BACKW(%a2)
+	move.l	#IA_Height,%d0
+	movea.l	IMGBACK(%a2),%a0
+	bsr.w	getattr
+	move.l	%d0,BACKH(%a2)
+	moveq	#0x0C,%d0		| RIGHTIMAGE
+	bsr.w	newimage
+	move.l	%d0,IMGFWD(%a2)
+	beq.s	makegadgets_end
+	lea	navtags(%pc),%a1
+	move.l	BARTOP(%a2),%d1
+	sub.l	BACKH(%a2),%d1
+	asr.l	#1,%d1
+	bpl.s	1f
+	moveq	#0,%d1
+1:	move.l	%d1,12(%a1)		| GA_Top
+	add.l	BACKW(%a2),%d3
+	move.l	%d3,%d0
+	neg.l	%d0
+	move.l	%d0,4(%a1)		| GA_RelRight of forward
+	move.l	IMGFWD(%a2),20(%a1)	| GA_Image
+	move.l	#GAD_FWD,28(%a1)	| GA_ID
+	clr.l	36(%a1)			| GA_Previous: a list of their own
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADFWD(%a2)
+	beq.s	makegadgets_end
+	lea	navtags(%pc),%a1
+	add.l	BACKW(%a2),%d3
+	neg.l	%d3
+	move.l	%d3,4(%a1)		| back, left of it
+	move.l	IMGBACK(%a2),20(%a1)
+	move.l	#GAD_BACK,28(%a1)
+	move.l	GADFWD(%a2),36(%a1)
+	lea	buttonclass(%pc),%a0
+	bsr.w	newobject
+	move.l	%d0,GADBACK(%a2)
 makegadgets_end:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+
+| The width of the image %a0, which is disposed of; in %d0
+widthgone:
+	move.l	%a0,-(%sp)
+	move.l	#IA_Width,%d0
+	bsr.w	getattr
+	movea.l	(%sp)+,%a0
+	move.l	%d0,-(%sp)
+	jsr	-642(%a6)		| DisposeObject
+	move.l	(%sp)+,%d0
 	rts
 
 | An arrow: %d0 GA_RelRight, %d1 GA_RelBottom, %d2 its GAD_, %d3 the tag of
@@ -1728,6 +1823,14 @@ btntags:	.long	GA_Left, 0
 		.long	GA_Previous, 0
 		.long	GA_RelVerify, 1
 		.long	0
+navtags:	.long	GA_RelRight, 0
+		.long	GA_Top, 0
+		.long	GA_Image, 0
+		.long	GA_ID, 0
+		.long	GA_Previous, 0
+		.long	GA_TopBorder, 1
+		.long	GA_RelVerify, 1
+		.long	0
 framesize:	.long	IA_Width, 0
 		.long	0
 addrtags:	.long	GA_Left, 0
@@ -1778,7 +1881,7 @@ msg_usage:	.ascii	"Usage: HostBrowser [HIDEADDRESS] [TOUCH] [<address>]\n"
 		.ascii	"The address field above the page goes to what is typed into\n"
 		.ascii	"it, or searches for it; Ctrl-L or F6 put the cursor in it.\n"
 		.ascii	"The buttons before it go back and forward.\n"
-		.ascii	"HIDEADDRESS leaves it out.\n"
+		.ascii	"HIDEADDRESS leaves it out, the buttons go to the title bar.\n"
 		.asciz	"Files of the page go to the folder of Browser downloads.\n"
 msg_cannot:	.asciz	"uae4arm cannot show web pages here - it needs Android 8 or later\n"
 msg_nointuition: .asciz	"this needs intuition.library 39\n"
