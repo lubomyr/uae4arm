@@ -2054,6 +2054,10 @@ private:
 	std::vector<uae_u8> frame;
 	int fw = 0, fh = 0;
 	std::atomic<bool> fresh{false};
+	/* going: the reader's callbacks leave its images alone; those under
+	   way, which do not yet */
+	std::atomic<bool> closing{false};
+	std::atomic<int> callbacks{0};
 	std::string last_title;
 	bool title_told = false;
 
@@ -2087,6 +2091,15 @@ jobject browser_source::surface_of(JNIEnv *env, AImageReader *r)
 void browser_source::image_came(void *context, AImageReader *r)
 {
 	browser_source *b = (browser_source *)context;
+	/* AImageReader_delete() waits for its callbacks with its lock held,
+	   which acquiring an image and deleting it take too */
+	struct under_way {
+		std::atomic<int> &n;
+		under_way(std::atomic<int> &c) : n(c) { n++; }
+		~under_way() { n--; }
+	} counted(b->callbacks);
+	if (b->closing)
+		return;
 	AImage *img = NULL;
 	if (imagereader.acquireLatest(r, &img) != AMEDIA_OK || !img)
 		return;
@@ -2160,6 +2173,18 @@ bool browser_source::open(const char *url, int w, int h)
 
 browser_source::~browser_source()
 {
+	/* First the pictures stop: AImageReader_delete() holds the reader's
+	   lock while it waits for the thread of its callbacks to end, and a
+	   callback that acquires an image then waits for that lock - for ever,
+	   and the emulation with it. The display goes on drawing into the
+	   reader till Java gets to close it, so a callback comes nearly
+	   always while a video plays. */
+	closing = true;
+	if (reader)
+		imagereader.setListener(reader, NULL);
+	/* one that began before, copying a picture, a moment at most */
+	for (int i = 0; callbacks > 0 && i < 2000; i++)
+		usleep(1000);
 	if (browser) {
 		jni_env j;
 		if (j.env) {
