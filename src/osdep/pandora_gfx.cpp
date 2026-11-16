@@ -857,6 +857,9 @@ uae_u32 target_lastsynctime(void)
 
 void black_screen_now(void)
 {
+	/* no screen when a mode could not be set */
+	if (prSDLScreen == NULL)
+		return;
 	SDL_FillRect(prSDLScreen,NULL,0);
 	SDL_Flip(prSDLScreen);
 }

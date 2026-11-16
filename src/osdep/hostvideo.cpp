@@ -2373,6 +2373,60 @@ int browser_source::address(char *text, size_t size)
 	return changed ? 2 : 1;
 }
 
+/* The scroll bar of an axis (0 up and down, 1 across) over the page, with
+   the numbers of HV_CMD_SCROLLINFO: false when the page fits. Its track
+   from *t0 along *len pixels, across from *c0 to *c1, the knob from *k0
+   along *klen. A quarter of the buttons' size wide, as far from the edge;
+   up and down below the buttons, across short of the other bar. The tool
+   works out the same. */
+static bool overlay_bar(int w, int h, int size, const uae_u32 bars[6], int axis,
+	int *t0, int *len, int *c0, int *c1, int *k0, int *klen)
+{
+	int m = size / 4, bw = size / 4;
+	bool v = bars[0] > bars[1], hz = bars[3] > bars[4];
+	if (!(axis ? hz : v))
+		return false;
+	if (axis == 0) {
+		*t0 = size + 2 * m;
+		*len = h - m - *t0 - (hz ? bw + m : 0);
+		*c0 = w - m - bw;
+	} else {
+		*t0 = m;
+		*len = w - m - *t0 - (v ? bw + m : 0);
+		*c0 = h - m - bw;
+	}
+	*c1 = *c0 + bw - 1;
+	if (*len < bw)
+		return false;
+	uae_u32 total = bars[axis * 3], visible = bars[axis * 3 + 1], top = bars[axis * 3 + 2];
+	*klen = (int)((int64_t)*len * visible / total);
+	if (*klen < bw)
+		*klen = bw;
+	if (*klen > *len)
+		*klen = *len;
+	uae_u32 room = total - visible;
+	if (top > room)
+		top = room;
+	*k0 = *t0 + (int)((int64_t)(*len - *klen) * top / room);
+	return true;
+}
+
+/* A see-through rectangle over the page, colour c of strength a */
+static void overlay_rect(uae_u8 *dst, int w, int h, int stride, int format,
+	const std::vector<uae_u8> &frame, int fw, int fh, int x0, int y0, int x1, int y1, int c, int a)
+{
+	int bpp = format_bpp(format);
+	for (int y = y0 < 0 ? 0 : y0; y <= y1 && y < h; y++) {
+		const uae_u8 *row = &frame[(size_t)((int64_t)y * fh / h) * fw * 4];
+		for (int x = x0 < 0 ? 0 : x0; x <= x1 && x < w; x++) {
+			const uae_u8 *p = row + (size_t)((int64_t)x * fw / w) * 4;
+			put_pixel(dst + (size_t)y * stride + (size_t)x * bpp, format,
+				(p[0] * (255 - a) + c * a) / 255, (p[1] * (255 - a) + c * a) / 255,
+				(p[2] * (255 - a) + c * a) / 255);
+		}
+	}
+}
+
 void browser_source::set_overlay(bool on, int held)
 {
 	overlay_on = on;
@@ -2435,6 +2489,21 @@ void browser_source::draw_overlay(uae_u8 *dst, int w, int h, int stride, int for
 				int pb = (p[2] * (255 - a) + cr * a) / 255;
 				put_pixel(dst + (size_t)y * stride + (size_t)x * bpp, format, pr, pg, pb);
 			}
+		}
+	}
+	/* the scroll bars: a dark track, a light knob */
+	for (int axis = 0; axis < 2; axis++) {
+		int t0, len, c0, c1, k0, klen;
+		if (!overlay_bar(w, h, s, bars_told, axis, &t0, &len, &c0, &c1, &k0, &klen))
+			continue;
+		if (axis == 0) {
+			overlay_rect(dst, w, h, stride, format, frame, fw, fh, c0, t0, c1, k0 - 1, 0, 110);
+			overlay_rect(dst, w, h, stride, format, frame, fw, fh, c0, k0, c1, k0 + klen - 1, 255, 170);
+			overlay_rect(dst, w, h, stride, format, frame, fw, fh, c0, k0 + klen, c1, t0 + len - 1, 0, 110);
+		} else {
+			overlay_rect(dst, w, h, stride, format, frame, fw, fh, t0, c0, k0 - 1, c1, 0, 110);
+			overlay_rect(dst, w, h, stride, format, frame, fw, fh, k0, c0, k0 + klen - 1, c1, 255, 170);
+			overlay_rect(dst, w, h, stride, format, frame, fw, fh, k0 + klen, c0, t0 + len - 1, c1, 0, 110);
 		}
 	}
 }

@@ -1225,10 +1225,10 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..3d966db3e
+index 000000000..6b76887a4
 --- /dev/null
 +++ b/project/java/HostBrowser.java
-@@ -0,0 +1,803 @@
+@@ -0,0 +1,832 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a web page shown inside a window of the app for the Android port
@@ -1639,6 +1639,9 @@ index 000000000..3d966db3e
 +
 +	// The left mouse button: 0 pressed, 1 let go, 2 moved while pressed, 3 moved with no button;
 +	// at x, y in the page
++	private boolean dragging = false;
++	private long dragTime = 0;
++
 +	void pointer(final int action, final int x, final int y)
 +	{
 +		ui.post(new Runnable() {
@@ -1647,6 +1650,32 @@ index 000000000..3d966db3e
 +				if (presentation == null)
 +					return;
 +				long now = SystemClock.uptimeMillis();
++				// 4, 5, 6: a finger down, moved, up whatever the mode - the right mouse button
++				// dragging the page along
++				if (action == 4)
++				{
++					if (dragging)
++						finger(MotionEvent.ACTION_UP, now, x, y);
++					dragging = true;
++					dragTime = now;
++					long t = downTime;
++					downTime = now;
++					finger(MotionEvent.ACTION_DOWN, now, x, y);
++					downTime = t;
++					return;
++				}
++				if (action == 5 || action == 6)
++				{
++					if (!dragging)
++						return;
++					long t = downTime;
++					downTime = dragTime;
++					finger(action == 5 ? MotionEvent.ACTION_MOVE : MotionEvent.ACTION_UP, now, x, y);
++					downTime = t;
++					if (action == 6)
++						dragging = false;
++					return;
++				}
 +				if (action == 3)
 +				{
 +					if (!touch && !down)
@@ -4638,10 +4667,24 @@ index e60943edf..9a7accf6d 100644
  extern void SDL_ANDROID_MainThreadPushMultitouchMotion(int id, int x, int y, int force); // SDL 1.3 only
  extern void SDL_ANDROID_MainThreadPushJoystickAxis(int joy, int axis, int value);
 diff --git a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c
-index 43e7bb12d..4e393b75a 100644
+index 43e7bb12d..d2fe9805a 100644
 --- a/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c
 +++ b/project/jni/sdl-1.2/src/video/android/SDL_androidvideo-1.2.c
-@@ -1264,10 +1264,25 @@ void SDL_ANDROID_VideoContextRecreated()
+@@ -295,6 +295,13 @@ int ANDROID_VideoInit(_THIS, SDL_PixelFormat *vformat)
+ 	i = 0;
+ 	/* Modes sorted largest to smallest */
+ 	SDL_modelist[i]->w = SDL_ANDROID_sWindowWidth; SDL_modelist[i]->h = SDL_ANDROID_sWindowHeight;
++	// The largest mode an app may ask for is the screen's own size from the start, as after the
++	// video context is made again: with the 4:3 ratio on, sWindowWidth is narrower, and a mode of
++	// the screen's size failed till then
++	if( SDL_modelist[i]->w < SDL_ANDROID_sRealWindowWidth )
++		SDL_modelist[i]->w = SDL_ANDROID_sRealWindowWidth;
++	if( SDL_modelist[i]->h < SDL_ANDROID_sRealWindowHeight )
++		SDL_modelist[i]->h = SDL_ANDROID_sRealWindowHeight;
+ 	// These modes come first, because they preserve aspect ratio and keep pixels square
+ 	i++; SDL_modelist[i]->w = SDL_ANDROID_sWindowWidth * 8 / 9; SDL_modelist[i]->h = SDL_ANDROID_sWindowHeight * 8 / 9; // 8 / 9 : 1920x1080 -> 1706x960
+ 	i++; SDL_modelist[i]->w = SDL_ANDROID_sWindowWidth * 7 / 8; SDL_modelist[i]->h = SDL_ANDROID_sWindowHeight * 7 / 8; // 7 / 8 : 1920x1080 -> 1680x945
+@@ -1264,10 +1271,25 @@ void SDL_ANDROID_VideoContextRecreated()
  		}
  	}
  

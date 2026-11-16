@@ -39,7 +39,11 @@
 | right corner, see-through, drawn by the emulator, go back, forward and
 | back to the window - as Right Amiga-F does; after FULLSCREEN that ends
 | the tool. They show when the mouse moves or a button is pressed, and go
-| two seconds after.
+| two seconds after; with them scroll bars along the right and bottom edges:
+| drag a knob, or click beside it for a page.
+|
+| The right button dragged drags the page along, as a finger; a click of it
+| with no move goes back.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits.
@@ -208,7 +212,13 @@
 	.set	OVHELD, 264
 	.set	OVSHOWN, 268		| they are shown: the mouse moved lately
 	.set	OVTICKS, 272		| IntuiTicks since it moved
-	.set	VARSIZE, 276
+	.set	RPRESS, 276		| the right button is down
+	.set	RMOVED, 280		| and moved: the page is dragged
+	.set	RSTARTRAW, 284		| where it went down, in the window
+	.set	RSTARTIN, 288		| and on the page
+	.set	OVDRAG, 292		| the bar over the page dragged, axis + 1
+	.set	OVGRAB, 296		| where on its knob
+	.set	VARSIZE, 300
 
 	.text
 	.globl	_start
@@ -685,7 +695,13 @@ notticks:
 	cmp.l	#2,%d2
 	bcs.w	navigate
 	bra.w	togglefull		| the window
-6:	bsr.w	innerpos
+6:	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)
+	beq.s	7f
+	bsr.w	barclick		| the scroll bars over the page
+	tst.l	%d0
+	bne.w	msgloop
+7:	bsr.w	innerpos
 	cmp.w	#0x68,%d3		| SELECTDOWN
 	bne.s	1f
 	tst.l	%d1			| not on the page
@@ -693,7 +709,7 @@ notticks:
 	lea	vars(%pc),%a0
 	move.l	#1,PRESSED(%a0)
 	moveq	#0,%d2			| pressed
-	bra.s	sendpointer
+	bra.w	sendpointer
 1:	cmp.w	#0xE8,%d3		| SELECTUP
 	bne.s	2f
 	lea	vars(%pc),%a0
@@ -701,11 +717,27 @@ notticks:
 	beq.w	msgloop
 	clr.l	PRESSED(%a0)
 	moveq	#1,%d2			| let go
-	bra.s	sendpointer
-2:	cmp.w	#0x69,%d3		| MENUDOWN: back
+	bra.w	sendpointer
+2:	cmp.w	#0x69,%d3		| MENUDOWN: back when let go unmoved, else
+	bne.s	5f			| a drag of the page
+	lea	vars(%pc),%a0
+	move.l	#1,RPRESS(%a0)
+	clr.l	RMOVED(%a0)
+	move.l	%d4,RSTARTRAW(%a0)
+	move.l	%d0,RSTARTIN(%a0)
+	bra.w	msgloop
+5:	cmp.w	#0xE9,%d3		| MENUUP
 	bne.w	msgloop
-	moveq	#0,%d2
+	lea	vars(%pc),%a0
+	tst.l	RPRESS(%a0)
+	beq.w	msgloop
+	clr.l	RPRESS(%a0)
+	tst.l	RMOVED(%a0)
+	bne.s	6f
+	moveq	#0,%d2			| back
 	bra.w	navigate
+6:	moveq	#6,%d2			| the finger up
+	bra.w	sendpointer
 notbutton:
 	cmp.l	#IDCMP_MOUSEMOVE,%d2
 	bne.s	notmove
@@ -714,7 +746,15 @@ notbutton:
 	beq.s	3f
 	bsr.w	overlaywake
 	lea	vars(%pc),%a0
-3:
+	tst.l	OVDRAG(%a0)		| a bar over the page dragged
+	beq.s	3f
+	bsr.w	bardrag
+	bra.w	msgloop
+3:	tst.l	RPRESS(%a0)		| the right button: the page dragged
+	beq.s	4f
+	bsr.w	rightdrag
+	bra.w	msgloop
+4:
 	move.l	DRAGGING(%a0),%d0
 	beq.s	1f
 	bsr.w	propmove
@@ -1589,11 +1629,7 @@ strieq:
 
 | The scroll bars to where the page is, if that changed
 updatebars:
-	lea	vars(%pc),%a0		| asked again once back in the window
-	tst.l	FULLSCR(%a0)
-	beq.s	2f
-	rts
-2:	movem.l	%d2-%d4,-(%sp)
+	movem.l	%d2-%d4,-(%sp)
 	moveq	#HV_SCROLLINFO,%d0
 	move.l	%d5,%d1
 	lea	barinfo(%pc),%a0
@@ -1601,9 +1637,16 @@ updatebars:
 	moveq	#0,%d3
 	moveq	#0,%d4
 	bsr.w	callhost
+	lea	vars(%pc),%a0		| on the screen of its own the numbers
+	tst.l	FULLSCR(%a0)		| are for the bars over the page; the
+	bne.s	1f			| window's are set when back in it
 	tst.l	%d0
 	beq.s	1f
-	moveq	#GAD_V,%d0
+	bra.s	3f
+| The window's scroll bars to the numbers in barinfo, changed or not
+forcebars:
+	movem.l	%d2-%d4,-(%sp)
+3:	moveq	#GAD_V,%d0
 	lea	barinfo(%pc),%a0
 	bsr.s	setbar
 	moveq	#GAD_H,%d0
@@ -1981,6 +2024,7 @@ fulloff:
 	bsr.w	draw
 	bsr.w	drawaddr
 	bsr.w	updatebars
+	bsr.w	forcebars
 	bsr.w	newaddress
 1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
@@ -2031,6 +2075,8 @@ overlaytick:
 	tst.l	OVSHOWN(%a2)
 	beq.s	1f
 	tst.l	OVHELD(%a2)
+	bne.s	1f
+	tst.l	OVDRAG(%a2)
 	bne.s	1f
 	addq.l	#1,OVTICKS(%a2)
 	cmp.l	#20,OVTICKS(%a2)
@@ -2203,6 +2249,303 @@ openfull:
 	moveq	#0,%d0
 1:	movem.l	(%sp)+,%d2-%d3/%a2/%a6
 	tst.l	%d0
+	rts
+
+| The scroll bar %d0 (0 up and down, 1 across) over the page on the screen
+| of its own, worked out as the emulator draws it (overlay_bar): %d0 0 when
+| the page fits, else its numbers in bart0 and on - the track from bart0
+| along barlen, across from barc0 to barc1, the knob from bark0 along
+| barklen. A quarter of the buttons' size wide, as far from the edge; up
+| and down below the buttons, across short of the other bar.
+barcalc:
+	movem.l	%d2-%d7/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	%d0,%d7			| the axis
+	move.l	OVSIZE(%a2),%d6		| the buttons' size
+	move.l	%d6,%d5
+	lsr.l	#2,%d5			| the margin, the width
+	lea	barinfo(%pc),%a0
+	moveq	#0,%d2			| up and down there
+	move.l	(%a0),%d0
+	cmp.l	4(%a0),%d0
+	bls.s	1f
+	moveq	#1,%d2
+1:	moveq	#0,%d3			| across there
+	move.l	12(%a0),%d0
+	cmp.l	16(%a0),%d0
+	bls.s	2f
+	moveq	#1,%d3
+2:	tst.l	%d7
+	bne.s	3f
+	tst.l	%d2
+	beq.w	9f
+	move.l	%d6,%d0			| up and down
+	add.l	%d5,%d0
+	add.l	%d5,%d0
+	move.l	HEIGHT(%a2),%d1
+	sub.l	%d5,%d1
+	sub.l	%d0,%d1
+	tst.l	%d3
+	beq.s	4f
+	sub.l	%d5,%d1
+	sub.l	%d5,%d1
+4:	move.l	WIDTH(%a2),%d4
+	sub.l	%d5,%d4
+	sub.l	%d5,%d4
+	bra.s	5f
+3:	tst.l	%d3
+	beq.w	9f
+	move.l	%d5,%d0			| across
+	move.l	WIDTH(%a2),%d1
+	sub.l	%d5,%d1
+	sub.l	%d0,%d1
+	tst.l	%d2
+	beq.s	6f
+	sub.l	%d5,%d1
+	sub.l	%d5,%d1
+6:	move.l	HEIGHT(%a2),%d4
+	sub.l	%d5,%d4
+	sub.l	%d5,%d4
+5:	cmp.l	%d5,%d1
+	blt.w	9f
+	lea	bart0(%pc),%a1
+	move.l	%d0,(%a1)		| bart0
+	move.l	%d1,4(%a1)		| barlen
+	move.l	%d4,8(%a1)		| barc0
+	add.l	%d5,%d4
+	subq.l	#1,%d4
+	move.l	%d4,12(%a1)		| barc1
+	move.l	%d7,%d0
+	mulu	#12,%d0
+	lea	barinfo(%pc),%a0
+	adda.l	%d0,%a0
+	move.l	(%a0),%d2		| total
+	move.l	4(%a0),%d3		| visible
+	move.l	8(%a0),%d4		| top
+	move.l	%d1,%d0
+	mulu	%d3,%d0
+	divu	%d2,%d0
+	and.l	#0xFFFF,%d0		| the knob as long as what shows
+	cmp.l	%d5,%d0
+	bge.s	7f
+	move.l	%d5,%d0
+7:	cmp.l	%d1,%d0
+	ble.s	8f
+	move.l	%d1,%d0
+8:	move.l	%d0,20(%a1)		| barklen
+	sub.l	%d3,%d2			| the room
+	cmp.l	%d2,%d4
+	bls.s	10f
+	move.l	%d2,%d4
+10:	move.l	%d1,%d0
+	sub.l	20(%a1),%d0
+	mulu	%d4,%d0
+	divu	%d2,%d0
+	and.l	#0xFFFF,%d0
+	add.l	(%a1),%d0
+	move.l	%d0,16(%a1)		| bark0
+	moveq	#1,%d0
+	bra.s	11f
+9:	moveq	#0,%d0
+11:	movem.l	(%sp)+,%d2-%d7/%a2
+	rts
+
+| Which bar over the page the mouse at %d4 is on: %d0 its axis + 1, or 0;
+| %d1 where along it. Its numbers in bart0 and on.
+barhit:
+	movem.l	%d2-%d3,-(%sp)
+	moveq	#0,%d2			| up and down: x across it, y along
+	bsr.s	1f
+	bne.s	9f
+	moveq	#1,%d2			| across: y across it, x along
+	bsr.s	1f
+	bne.s	9f
+	moveq	#0,%d0
+	bra.s	9f
+1:	move.l	%d2,%d0
+	bsr.w	barcalc
+	tst.l	%d0
+	beq.s	3f
+	move.l	%d4,%d0
+	swap	%d0
+	ext.l	%d0			| x
+	move.w	%d4,%d1
+	ext.l	%d1			| y
+	tst.l	%d2
+	beq.s	2f
+	exg	%d0,%d1
+2:	cmp.l	barc0(%pc),%d0		| across it
+	blt.s	3f
+	cmp.l	barc1(%pc),%d0
+	bgt.s	3f
+	move.l	%d1,%d3
+	sub.l	bart0(%pc),%d3		| along it
+	bmi.s	3f
+	cmp.l	barlen(%pc),%d3
+	bge.s	3f
+	move.l	%d2,%d0
+	addq.l	#1,%d0
+	rts
+3:	moveq	#0,%d0
+	rts
+9:	movem.l	(%sp)+,%d2-%d3
+	tst.l	%d0
+	rts
+
+| A mouse button on the screen of its own, %d3 im_Code, %d4 where: %d0 1
+| when it was for the bars over the page - a knob taken, a page scrolled,
+| a knob let go - else 0
+barclick:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	cmp.w	#0xE8,%d3		| SELECTUP: a knob let go
+	bne.s	1f
+	moveq	#0,%d0
+	tst.l	OVDRAG(%a2)
+	beq.w	9f
+	clr.l	OVDRAG(%a2)
+	moveq	#1,%d0
+	bra.s	9f
+1:	moveq	#0,%d0
+	cmp.w	#0x68,%d3		| SELECTDOWN, while they show
+	bne.s	9f
+	tst.l	OVSHOWN(%a2)
+	beq.s	9f
+	bsr.w	barhit
+	beq.s	9f
+	move.l	%d0,%d2			| the axis + 1
+	cmp.l	bark0(%pc),%d1
+	blt.s	2f
+	move.l	bark0(%pc),%d0
+	add.l	barklen(%pc),%d0
+	cmp.l	%d0,%d1
+	bge.s	2f
+	move.l	%d2,OVDRAG(%a2)		| on the knob: it is dragged
+	sub.l	bark0(%pc),%d1
+	move.l	%d1,OVGRAB(%a2)
+	moveq	#1,%d0
+	bra.s	9f
+| beside it: a page up or down
+2:	move.l	%d2,%d0
+	subq.l	#1,%d0
+	mulu	#12,%d0
+	lea	barinfo(%pc),%a0
+	adda.l	%d0,%a0
+	move.l	8(%a0),%d3		| the top
+	move.l	(%a0),%d4
+	sub.l	4(%a0),%d4		| the room
+	cmp.l	bark0(%pc),%d1
+	bge.s	3f
+	sub.l	4(%a0),%d3		| above: back by what shows
+	bpl.s	4f
+	moveq	#0,%d3
+	bra.s	4f
+3:	add.l	4(%a0),%d3		| below: on
+	cmp.l	%d4,%d3
+	ble.s	4f
+	move.l	%d4,%d3
+4:	move.l	%d3,8(%a0)
+	subq.l	#1,%d2			| the axis
+	moveq	#HV_SCROLLTO,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+	moveq	#1,%d0
+9:	movem.l	(%sp)+,%d2-%d4/%a2
+	rts
+
+| The mouse at %d4 moved with a bar's knob over the page held: the page
+| goes where the knob is
+bardrag:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	move.l	OVDRAG(%a2),%d2
+	subq.l	#1,%d2			| the axis
+	move.l	%d2,%d0
+	bsr.w	barcalc
+	tst.l	%d0
+	beq.s	9f
+	move.l	%d4,%d0
+	swap	%d0
+	ext.l	%d0			| x
+	move.w	%d4,%d1
+	ext.l	%d1			| y
+	tst.l	%d2
+	bne.s	1f
+	move.l	%d1,%d0			| up and down: y
+1:	sub.l	OVGRAB(%a2),%d0
+	sub.l	bart0(%pc),%d0		| where the knob's start goes
+	bpl.s	2f
+	moveq	#0,%d0
+2:	move.l	barlen(%pc),%d1
+	sub.l	barklen(%pc),%d1	| its way
+	ble.s	9f
+	cmp.l	%d1,%d0
+	ble.s	3f
+	move.l	%d1,%d0
+3:	move.l	%d2,%d3
+	mulu	#12,%d3
+	lea	barinfo(%pc),%a0
+	adda.l	%d3,%a0
+	move.l	(%a0),%d3
+	sub.l	4(%a0),%d3		| the room
+	mulu	%d3,%d0
+	divu	%d1,%d0
+	and.l	#0xFFFF,%d0		| the top
+	cmp.l	8(%a0),%d0
+	beq.s	9f
+	move.l	%d0,8(%a0)
+	move.l	%d0,%d3
+	moveq	#HV_SCROLLTO,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+9:	movem.l	(%sp)+,%d2-%d4/%a2
+	rts
+
+| The mouse at %d4 moved with the right button down: once it is a few
+| pixels from where it went down, the page is dragged along as by a finger
+rightdrag:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	bsr.w	innerpos
+	move.l	%d0,-(%sp)		| where on the page now
+	tst.l	RMOVED(%a2)
+	bne.s	2f
+	move.l	%d4,%d0
+	swap	%d0
+	ext.l	%d0
+	move.l	RSTARTRAW(%a2),%d1
+	swap	%d1
+	ext.l	%d1
+	sub.l	%d1,%d0
+	bpl.s	3f
+	neg.l	%d0
+3:	move.w	%d4,%d1
+	ext.l	%d1
+	move.l	RSTARTRAW(%a2),%d2
+	ext.l	%d2
+	sub.l	%d2,%d1
+	bpl.s	4f
+	neg.l	%d1
+4:	add.l	%d1,%d0
+	cmp.l	#4,%d0
+	bcs.s	9f
+	move.l	#1,RMOVED(%a2)
+	moveq	#4,%d2			| the finger down, where it went down
+	move.l	RSTARTIN(%a2),%d3
+	moveq	#HV_POINTER,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+2:	moveq	#5,%d2			| and moved
+	move.l	(%sp),%d3
+	moveq	#HV_POINTER,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d4
+	bsr.w	callhost
+9:	addq.l	#4,%sp
+	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
 
 | Calls the emulator: %d0 the command, %d1-%d4 its arguments; %d0 the result
@@ -2420,6 +2763,12 @@ bartags:	.long	PGA_Total, 0
 		.long	PGA_Top, 0
 		.long	0
 barinfo:	.long	0, 0, 0, 0, 0, 0
+bart0:		.long	0		| a bar over the page: its track,
+barlen:		.long	0
+barc0:		.long	0		| across it,
+barc1:		.long	0
+bark0:		.long	0		| its knob
+barklen:	.long	0
 addrbuf:	.space	ADDRSIZE
 
 	.set	TITLESIZE, 256
