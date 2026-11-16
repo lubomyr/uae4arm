@@ -38,7 +38,8 @@
 | Workbench, so it looks as large as in the window. Buttons over its top
 | right corner, see-through, drawn by the emulator, go back, forward and
 | back to the window - as Right Amiga-F does; after FULLSCREEN that ends
-| the tool.
+| the tool. They show when the mouse moves or a button is pressed, and go
+| two seconds after.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits.
@@ -205,7 +206,9 @@
 	.set	OVLEFT, 256		| the buttons over the page there: their
 	.set	OVSIZE, 260		| left, their size, and the one held + 1
 	.set	OVHELD, 264
-	.set	VARSIZE, 268
+	.set	OVSHOWN, 268		| they are shown: the mouse moved lately
+	.set	OVTICKS, 272		| IntuiTicks since it moved
+	.set	VARSIZE, 276
 
 	.text
 	.globl	_start
@@ -647,6 +650,11 @@ notup:
 	cmp.l	#IDCMP_INTUITICKS,%d2
 	bne.s	notticks
 	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)		| the buttons over the page go, a while
+	beq.s	1f			| after the mouse moved
+	bsr.w	overlaytick
+	bra.w	msgloop
+1:
 	move.l	HELD(%a2),%d0
 	beq.w	msgloop
 	move.l	%d0,%d1
@@ -668,6 +676,7 @@ notticks:
 	tst.l	FULLSCR(%a0)
 	beq.s	6f
 	bsr.w	overlayclick		| the buttons over the page
+	bsr.w	overlaywake		| which show, if they did not
 	tst.l	%d0
 	beq.s	6f
 	subq.l	#2,%d0
@@ -701,6 +710,11 @@ notbutton:
 	cmp.l	#IDCMP_MOUSEMOVE,%d2
 	bne.s	notmove
 	lea	vars(%pc),%a0
+	tst.l	FULLSCR(%a0)		| the buttons over the page show
+	beq.s	3f
+	bsr.w	overlaywake
+	lea	vars(%pc),%a0
+3:
 	move.l	DRAGGING(%a0),%d0
 	beq.s	1f
 	bsr.w	propmove
@@ -1992,8 +2006,38 @@ setoverlay:
 	swap	%d0
 	ext.l	%d0
 	move.l	%d0,OVLEFT(%a2)
+	move.l	%d2,OVSHOWN(%a2)
+	clr.l	OVTICKS(%a2)
 	movem.l	(%sp)+,%d2-%d4/%a2
 	rts
+
+| The mouse moved, or a button went: the buttons over the page show, for
+| two seconds more. All registers kept.
+overlaywake:
+	movem.l	%d0-%d1/%a0-%a2,-(%sp)
+	lea	vars(%pc),%a2
+	clr.l	OVTICKS(%a2)
+	tst.l	OVSHOWN(%a2)
+	bne.s	1f
+	move.l	OVHELD(%a2),%d0
+	bsr.w	setoverlay
+1:	movem.l	(%sp)+,%d0-%d1/%a0-%a2
+	rts
+
+| An IntuiTick, ten a second: two seconds after the mouse moved the buttons
+| over the page go, but not while one is held
+overlaytick:
+	lea	vars(%pc),%a2
+	tst.l	OVSHOWN(%a2)
+	beq.s	1f
+	tst.l	OVHELD(%a2)
+	bne.s	1f
+	addq.l	#1,OVTICKS(%a2)
+	cmp.l	#20,OVTICKS(%a2)
+	bcs.s	1f
+	moveq	#-1,%d0
+	bsr.w	setoverlay
+1:	rts
 
 | Which of the buttons over the page the mouse at %d4 (x << 16 | y) is on:
 | %d0 0 back, 1 forward, 2 the window, or -1. As the emulator puts them: a
@@ -2001,6 +2045,8 @@ setoverlay:
 overlayhit:
 	movem.l	%d2-%d3/%a2,-(%sp)
 	lea	vars(%pc),%a2
+	tst.l	OVSHOWN(%a2)		| hidden, the page has the clicks
+	beq.s	8f
 	move.l	OVSIZE(%a2),%d2
 	beq.s	8f
 	move.w	%d4,%d1
@@ -2347,7 +2393,7 @@ fullscrtags:	.long	0x80000032, 0	| SA_DisplayID
 fullwintags:	.long	0x80000066, 0	| WA_Width
 		.long	0x80000067, 0	| WA_Height
 		.long	0x80000070, 0	| WA_CustomScreen
-		.long	0x8000006A, IDCMP_MOUSEBUTTONS+IDCMP_MOUSEMOVE+IDCMP_REFRESHWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY
+		.long	0x8000006A, IDCMP_MOUSEBUTTONS+IDCMP_MOUSEMOVE+IDCMP_REFRESHWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY+IDCMP_INTUITICKS
 		.long	0x80000085, 1	| WA_Backdrop
 		.long	0x80000088, 1	| WA_Borderless
 		.long	0x80000086, 1	| WA_ReportMouse
