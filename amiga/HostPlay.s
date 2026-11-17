@@ -12,7 +12,7 @@
 |            on the right half; the right button or Esc go back to the
 |            window, or end it after FULLSCREEN, and F changes over.
 |
-| Usage: HostPlay [<file>]
+| Usage: HostPlay [<file>] [FULLSCREEN]
 | Without a file - from the Shell, or started from its icon - it asks for one
 | with the file requester of asl.library. Set as the default tool of a
 | video's icon, a double click on the video plays it. A file of a folder
@@ -27,6 +27,12 @@
 | asks for another file. Space pauses too, Esc or the close gadget ends it.
 | The zoom gadget makes the window fill the screen, and gives it its size
 | back. The title tells the time played and the length of the video.
+|
+| The button with a box in the title bar, left of the zoom gadget, the key F
+| or the parameter FULLSCREEN show the video on a screen of its own, an RTG
+| mode near its size in the proportions of the Workbench, as HostView does
+| it. There a click of the left button or space pause and play on; the
+| right button or Esc go back to the window, or end it after FULLSCREEN.
 |
 | The window opens on the Workbench screen, which has to be an RTG one
 | (uaegfx) with 16 or 32 bits; the emulator makes Picasso96's 15 and 24 bit
@@ -46,11 +52,7 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.ifdef	HOSTVIEW
-	.set	HOSTVIDEO_VERSION, 5	| pictures, on a screen of their own
-	.else
-	.set	HOSTVIDEO_VERSION, 3	| the seek, the time, the copy
-	.endif
+	.set	HOSTVIDEO_VERSION, 5	| pictures and videos, on a screen of their own
 	.set	HOSTSHOW, 200		| uaelib function that makes the copy
 
 	.set	P96BMA_BYTESPERPIXEL, 5
@@ -294,7 +296,6 @@ nameend:
 	clr.b	(%a2)
 	cmpa.l	%a1,%a2
 	beq.w	askfirst
-	.ifdef	HOSTVIEW
 | Any order: the file, and FULLSCREEN
 	tst.l	%d3
 	beq.s	1f
@@ -306,7 +307,6 @@ nameend:
 	move.l	#1,STARTFULL(%a0)
 	bra.w	shellargs
 2:
-	.endif
 	lea	vars(%pc),%a0
 	move.l	%a1,NAME(%a0)
 	cmp.b	#'?',(%a1)		| "HostPlay ?"
@@ -318,17 +318,11 @@ nameend:
 	moveq	#0,%d7
 	bra.w	closeall
 gotname:
-	.ifdef	HOSTVIEW
 	bra.w	shellargs
-	.else
-	bra.s	havename
-	.endif
 shellend:
-	.ifdef	HOSTVIEW
 	lea	vars(%pc),%a0
 	tst.l	NAME(%a0)
 	bne.s	havename
-	.endif
 
 askfirst:
 	bsr.w	askfile
@@ -419,7 +413,6 @@ havegadgets:
 
 | The screen's bitmap: an RTG one, in a format the host makes
 havewindow:
-	.ifdef	HOSTVIEW
 	lea	vars(%pc),%a2		| the title bar's button before the
 	movea.l	INTUITIONBASE(%a2),%a6	| window's own gadgets
 	movea.l	%a3,%a0
@@ -435,7 +428,6 @@ havewindow:
 	moveq	#1,%d0
 	jsr	-432(%a6)		| RefreshGList
 	lea	vars(%pc),%a2
-	.endif
 	bsr.w	screenformat
 	tst.l	%d0
 	bne.s	isrtg
@@ -449,12 +441,11 @@ isrtg:
 	bsr.w	draw
 	.ifndef	HOSTVIEW
 	bsr.w	newslider
-	.else
+	.endif
 	lea	vars(%pc),%a2
 	tst.l	STARTFULL(%a2)
 	beq.s	mainloop
 	bsr.w	fullswitch
-	.endif
 
 | Waits for a frame, the window, or Ctrl-C
 mainloop:
@@ -570,9 +561,10 @@ notplay:
 	tst.l	%d0
 	bmi.w	badformat
 	bra.w	msgloop
-2:	cmp.w	#GAD_FULL,%d0
-	beq.w	doswitch
+2:
 	.endif
+	cmp.w	#GAD_FULL,%d0
+	beq.w	doswitch
 	cmp.w	#GAD_OPEN,%d0
 	bne.w	msgloop
 	bsr.w	newfile
@@ -580,7 +572,19 @@ notplay:
 	bmi.w	badformat
 	bra.w	msgloop
 notup:
-	.ifdef	HOSTVIEW
+	.ifndef	HOSTVIEW
+| On the screen of its own: the left button pauses and plays on, the right
+| one goes back, as Esc
+	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
+	bne.s	notmouse
+	cmp.w	#0xE9,%d3		| MENUUP
+	beq.w	goback
+	cmp.w	#0xE8,%d3		| SELECTUP
+	bne.w	msgloop
+	bsr.w	playpause
+	bra.w	msgloop
+notmouse:
+	.else
 	cmp.l	#IDCMP_RAWKEY,%d2
 	bne.s	notraw
 	moveq	#1,%d0
@@ -619,7 +623,6 @@ notmouse:
 	cmp.l	#IDCMP_VANILLAKEY,%d2
 	bne.w	msgloop
 	cmp.b	#27,%d3			| Esc
-	.ifdef	HOSTVIEW
 	bne.s	1f
 | Back: to the window it came from; started on the screen, or in the window,
 | it ends
@@ -634,9 +637,6 @@ goback:
 	and.b	#0xDF,%d0
 	cmp.b	#'F',%d0
 	beq.w	doswitch
-	.else
-	beq.s	quit
-	.endif
 	cmp.b	#' ',%d3
 	bne.w	msgloop
 	.ifdef	HOSTVIEW
@@ -649,14 +649,12 @@ goback:
 	.endif
 	bra.w	msgloop
 
-	.ifdef	HOSTVIEW
 doswitch:
 	bsr.w	fullswitch
 	tst.l	%d0
 	bmi.s	badformat
 	beq.s	nomem
 	bra.w	msgloop
-	.endif
 
 badformat:
 	lea	msg_format(%pc),%a0
@@ -680,13 +678,10 @@ closeall:
 	movea.l	INTUITIONBASE(%a2),%a6
 	move.l	%a3,%d0
 	beq.s	2f
-	.ifdef	HOSTVIEW
 	tst.l	FULLSCR(%a2)
 	beq.s	1f
 	bsr.w	closefull
-1:
-	.endif
-	movea.l	%a3,%a0
+1:	movea.l	%a3,%a0
 	jsr	-72(%a6)		| CloseWindow
 | The gadgets, then the images, now that no window has them
 2:	lea	GADOPEN+4(%a2),%a3
@@ -1100,10 +1095,8 @@ newfile_open:
 	move.l	(%sp)+,%d5
 	lea	vars(%pc),%a2
 	clr.l	ATEND(%a2)
-	.ifdef	HOSTVIEW
 	tst.l	FULLSCR(%a2)		| the window waits until it is back
 	bne.s	1f
-	.endif
 	bsr.w	fitwindow
 	.ifndef	HOSTVIEW
 	bsr.w	newslider
@@ -1174,7 +1167,6 @@ fitwindow:
 	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
 
-	.ifdef	HOSTVIEW
 | To the screen of its own, or back to the window. %d0 as from target; 1 too
 | when the screen does not open, which it tells, and the window stays.
 fullswitch:
@@ -1252,6 +1244,7 @@ fulloff:
 	bsr.w	screenformat
 	bsr.w	fitwindow
 	lea	vars(%pc),%a2
+	move.l	#-1,SHOWN(%a2)		| HostPlay: the slider and the time anew
 	movea.l	INTUITIONBASE(%a2),%a6
 	movea.l	%a3,%a0
 	jsr	-450(%a6)		| ActivateWindow
@@ -1377,6 +1370,7 @@ isfullword:
 3:	movea.l	(%sp)+,%a1
 	rts
 
+	.ifdef	HOSTVIEW
 | The next picture of the drawer by name with %d0 1, or the one before with
 | -1; past the last the first again. %d0 as from newfile; nothing when the
 | picture is the only one.
@@ -1688,7 +1682,6 @@ makegadgets:
 	move.l	#IA_Width,%d0
 	bsr.w	getattr
 	move.l	%d0,OPENW(%a2)
-	.ifdef	HOSTVIEW
 | The button for the screen of its own: in the title bar, left of the zoom
 | gadget, as one more of the system's; a list of its own, put before the
 | window's gadgets once it is open, or the drag bar would take its clicks
@@ -1737,7 +1730,6 @@ makegadgets:
 	bsr.w	newobject
 	move.l	%d0,GADFULL(%a2)
 	beq.w	makegadgets_end
-	.endif
 
 	.ifndef	HOSTVIEW
 | The slider: from the left border up to the buttons
@@ -1907,6 +1899,8 @@ newslider:
 moveslider:
 	movem.l	%d2-%d4/%a2,-(%sp)
 	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)		| the window's, once back in it
+	bne.s	1f
 	tst.l	DRAGGING(%a2)
 	bne.s	1f
 	moveq	#7,%d0			| the time
@@ -2287,7 +2281,6 @@ print_end:
 	movem.l	(%sp)+,%d2-%d3/%a6
 	rts
 
-	.ifdef	HOSTVIEW
 | The width of the image %a0, which is disposed of; in %d0
 widthgone:
 	move.l	%a0,-(%sp)
@@ -2300,7 +2293,6 @@ widthgone:
 	rts
 
 	.include "fullimage.s"
-	.endif
 
 	.even
 vars:		.space	VARSIZE
@@ -2339,7 +2331,6 @@ imagetags:	.long	SYSIA_DrawInfo, 0
 		.long	SYSIA_Size, 0
 		.long	SYSIA_Which, 0
 		.long	0
-	.ifdef	HOSTVIEW
 titletags:	.long	GA_RelRight, 0
 		.long	GA_Image, 0
 		.long	GA_Top, 0
@@ -2366,7 +2357,6 @@ fullwintags:	.long	0x80000066, 0	| WA_Width
 		.long	0x8000008C, 1	| WA_SimpleRefresh
 		.long	0		| TAG_DONE
 diminfo:	.space	88		| struct DimensionInfo
-	.endif
 slidertags:	.long	GA_Left, 0
 		.long	GA_RelBottom, 0
 		.long	GA_RelWidth, 0
@@ -2448,10 +2438,13 @@ msg_usage:	.ascii	"Usage: HostView [<file>] [FULLSCREEN]\n"
 msg_cannot:	.asciz	"uae4arm cannot show this file\n"
 	.else
 pattern:	.asciz	"#?.(mp4|m4v|mkv|webm|avi|mov|mpg|mpeg|ts|wmv|flv|3gp|ogv)"
-msg_usage:	.ascii	"Usage: HostPlay [<file>]\n"
+msg_usage:	.ascii	"Usage: HostPlay [<file>] [FULLSCREEN]\n"
 		.ascii	"Plays a video in a window, decoded by uae4arm; without a file\n"
 		.ascii	"it asks for one. In the bottom border: where the video is,\n"
 		.ascii	"play and pause, another file. Space pauses, Esc ends it.\n"
+		.ascii	"The button in the title bar or F: full screen and back.\n"
+		.ascii	"There a click or space pauses, the right button or Esc go\n"
+		.ascii	"back to the window; FULLSCREEN starts there, and they end it.\n"
 		.ascii	"A file the host cannot reach, such as one inside a hardfile,\n"
 		.asciz	"goes over to it first; Ctrl-C stops that.\n"
 msg_cannot:	.asciz	"uae4arm cannot play this file\n"
@@ -2473,5 +2466,5 @@ msg_nowindow:	.asciz	"the window does not open\n"
 msg_notrtg:	.asciz	"the Workbench screen has to be an RTG one\n"
 msg_format:	.asciz	"the screen needs 16 or 32 bits\n"
 msg_nomem:	.asciz	"not enough memory for the window\n"
-msg_nofull:	.asciz	"no screen of the picture's own opens\n"
+msg_nofull:	.asciz	"no screen of its own opens\n"
 		.even
