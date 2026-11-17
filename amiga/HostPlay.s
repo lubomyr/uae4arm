@@ -52,7 +52,13 @@
 | return code.
 
 	.set	HOSTVIDEO, 202		| uaelib function
-	.set	HOSTVIDEO_VERSION, 5	| pictures and videos, on a screen of their own
+	.ifdef	HOSTVIEW
+	.set	HOSTVIDEO_VERSION, 5	| pictures on a screen of their own
+	.else
+	.set	HOSTVIDEO_VERSION, 12	| videos on a screen of their own, kept up with
+	.endif
+	.set	HV_PACE, 28
+	.set	HV_SLOWER, 29
 	.set	HOSTSHOW, 200		| uaelib function that makes the copy
 
 	.set	P96BMA_BYTESPERPIXEL, 5
@@ -67,6 +73,7 @@
 	.set	IDCMP_CLOSEWINDOW, 0x200
 	.set	IDCMP_VANILLAKEY, 0x200000
 	.set	IDCMP_RAWKEY, 0x400
+	.set	IDCMP_INTUITICKS, 0x400000
 
 	.set	GA_Left, 0x80030001
 	.set	GA_RelRight, 0x80030002
@@ -146,7 +153,9 @@
 	.set	WBWIN, 180		| and the window on Workbench behind it
 	.set	STARTFULL, 184		| the parameter FULLSCREEN
 	.set	FULLCLASS, 188		| the class of the button's image
-	.set	VARSIZE, 192
+	.set	PACETICKS, 192		| HostPlay: IntuiTicks since the frames were
+	.set	PACEWAIT, 196		| counted; the first count after a screen
+	.set	VARSIZE, 200		| opened, which is left alone
 | HostView's buttons for the pictures after and before take the places of
 | the slider and the play button; the image of the play button is the
 | arrow of the one after
@@ -573,9 +582,13 @@ notplay:
 	bra.w	msgloop
 notup:
 	.ifndef	HOSTVIEW
+	cmp.l	#IDCMP_INTUITICKS,%d2	| on the screen of its own: does it keep
+	bne.s	1f			| up?
+	bsr.w	pacecheck
+	bra.w	msgloop
 | On the screen of its own: the left button pauses and plays on, the right
 | one goes back, as Esc
-	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
+1:	cmp.l	#IDCMP_MOUSEBUTTONS,%d2
 	bne.s	notmouse
 	cmp.w	#0xE9,%d3		| MENUUP
 	beq.w	goback
@@ -1219,6 +1232,15 @@ fullon_open:
 	tst.l	%d0
 	ble.s	fullon_back
 	bsr.w	draw
+	lea	vars(%pc),%a2		| the frames counted from now, the first
+	clr.l	PACETICKS(%a2)		| two seconds left alone
+	move.l	#1,PACEWAIT(%a2)
+	moveq	#HV_PACE,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
 	moveq	#1,%d0
 	bra.s	fullon_end
 fullon_back:
@@ -1233,8 +1255,10 @@ fullon_end:
 
 | Back to the window, at the size of the picture of now
 fulloff:
-	movem.l	%d2-%d4/%a2/%a6,-(%sp)
 	bsr.w	closefull
+| The window again after the screen of its own closed
+towindow:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
 	moveq	#13,%d0			| HV_CMD_FULLSCREEN
 	move.l	%d5,%d1
 	moveq	#0,%d2
@@ -1255,6 +1279,71 @@ fulloff:
 	moveq	#1,%d0
 1:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
 	rts
+
+	.ifndef	HOSTVIEW
+| An IntuiTick on the screen of its own: every two seconds the emulator
+| tells whether the video kept up - not when it dropped more than a tenth of
+| its frames, or the emulation fell behind real time; then it goes to a
+| smaller mode, if there is one
+pacecheck:
+	movem.l	%d2-%d4/%a2,-(%sp)
+	lea	vars(%pc),%a2
+	addq.l	#1,PACETICKS(%a2)
+	cmp.l	#20,PACETICKS(%a2)
+	bcs.s	9f
+	clr.l	PACETICKS(%a2)
+	moveq	#HV_PACE,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d2
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	tst.l	PACEWAIT(%a2)		| the first after it opened: left alone
+	beq.s	1f
+	clr.l	PACEWAIT(%a2)
+	bra.s	9f
+1:	tst.l	%d0			| the emulator tells: kept up or not
+	beq.s	9f
+	move.l	WIDTH(%a2),%d2		| too slow on this one
+	swap	%d2
+	move.w	HEIGHT+2(%a2),%d2
+	moveq	#HV_SLOWER,%d0
+	move.l	%d5,%d1
+	moveq	#0,%d3
+	moveq	#0,%d4
+	bsr.w	callhost
+	bsr.s	fullsmaller
+9:	movem.l	(%sp)+,%d2-%d4/%a2
+	rts
+
+| The screen of its own again, in the mode the emulator names now, if that
+| is another; back in the window if none opens
+fullsmaller:
+	movem.l	%d2-%d4/%a2/%a6,-(%sp)
+	lea	vars(%pc),%a2
+	moveq	#12,%d0			| HV_CMD_MODE: the first
+	move.l	%d5,%d1
+	moveq	#0,%d2
+	movea.l	SCREEN(%a2),%a0
+	move.w	12(%a0),%d3		| sc_Width
+	swap	%d3
+	move.w	14(%a0),%d3		| sc_Height
+	moveq	#0,%d4
+	bsr.w	callhost
+	move.l	WIDTH(%a2),%d1
+	swap	%d1
+	move.w	HEIGHT+2(%a2),%d1
+	cmp.l	%d1,%d0			| the same: it stays
+	beq.s	9f
+	bsr.w	closefull
+	bsr.w	fullon
+	lea	vars(%pc),%a2
+	tst.l	FULLSCR(%a2)
+	bne.s	9f
+	bsr.w	towindow
+9:	movem.l	(%sp)+,%d2-%d4/%a2/%a6
+	rts
+	.endif
 
 | Closes the window and screen of its own; %a3 the one on Workbench again
 closefull:
@@ -2349,7 +2438,7 @@ fullscrtags:	.long	0x80000032, 0	| SA_DisplayID
 fullwintags:	.long	0x80000066, 0	| WA_Width
 		.long	0x80000067, 0	| WA_Height
 		.long	0x80000070, 0	| WA_CustomScreen
-		.long	0x8000006A, IDCMP_MOUSEBUTTONS+IDCMP_REFRESHWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY
+		.long	0x8000006A, IDCMP_MOUSEBUTTONS+IDCMP_REFRESHWINDOW+IDCMP_VANILLAKEY+IDCMP_RAWKEY+IDCMP_INTUITICKS
 		.long	0x80000085, 1	| WA_Backdrop
 		.long	0x80000088, 1	| WA_Borderless
 		.long	0x80000089, 1	| WA_Activate

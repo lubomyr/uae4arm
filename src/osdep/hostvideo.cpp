@@ -35,6 +35,7 @@
 #include <memory>
 #include <string>
 #include <chrono>
+#include <functional>
 #include <unistd.h>
 
 #include "options.h"
@@ -133,7 +134,15 @@ extern "C" void SDL_ANDROID_SetBrowserDownloadDir(const char *path);
                                page on a screen of its own; gives their left
                                << 16 | their size, see overlay_place() */
 
-#define HV_API_VERSION 11    /* web pages, for HostBrowser, with a screen of their own */
+#define HV_CMD_PACE 28      /* handle: 1 when the video did not keep up since
+                               the last time - more than a tenth of its
+                               frames dropped, or the emulation, the video's
+                               clock, 15% behind real time - else 0 */
+#define HV_CMD_SLOWER 29    /* handle, width << 16 | height of a screen of
+                               its own on which the video could not keep
+                               up: no larger one for videos, this session */
+
+#define HV_API_VERSION 12    /* videos on a screen of their own, kept up with */
 
 /* Where the buttons over the page go on a screen of w x h: three squares of
    the size *size, a fifth of it apart, a quarter of it from the top and the
@@ -1151,6 +1160,77 @@ struct yuv_frame {
 
 /* Scales a picture to w x h in a Picasso96 RGBFormat: luma bilinear,
    chroma from the nearest sample. */
+/* Threads that share out the rows of a frame to scale: a frame of a screen
+   of the device's own size is millions of pixels, more than one core turns
+   from YUV into RGB in a frame's time - and the emulation waits for it. Made
+   on the first frame, one fewer than the cores, at most six; the emulation's
+   thread does a part too. They wait for the next frame, never to end, so
+   they are detached. */
+class row_pool {
+public:
+	/* work(from, to) for the rows from..to-1 of rows, in parts at once */
+	void run(int rows, const std::function<void(int, int)> &work)
+	{
+		if (!made) {
+			made = true;
+			int n = (int)std::thread::hardware_concurrency() - 1;
+			if (n > 6)
+				n = 6;
+			for (int i = 0; i < n; i++)
+				std::thread(&row_pool::loop, this).detach();
+			workers = n > 0 ? n : 0;
+		}
+		int parts = workers + 1;
+		if (parts == 1 || rows < 64) {
+			work(0, rows);
+			return;
+		}
+		{
+			std::lock_guard<std::mutex> g(lock);
+			job = &work;
+			total = rows;
+			count = parts;
+			next = 1;
+			left = parts - 1;
+			generation++;
+		}
+		go.notify_all();
+		work(0, rows / parts);
+		std::unique_lock<std::mutex> g(lock);
+		finished.wait(g, [this] { return left == 0; });
+		job = NULL;
+	}
+
+private:
+	void loop()
+	{
+		unsigned seen = 0;
+		std::unique_lock<std::mutex> g(lock);
+		for (;;) {
+			go.wait(g, [&] { return generation != seen && job && next < count; });
+			int k = next++;
+			if (next >= count)
+				seen = generation;
+			const std::function<void(int, int)> *w = job;
+			int rows = total, parts = count;
+			g.unlock();
+			(*w)((int)((int64_t)rows * k / parts), (int)((int64_t)rows * (k + 1) / parts));
+			g.lock();
+			if (--left == 0)
+				finished.notify_one();
+		}
+	}
+
+	bool made = false;
+	int workers = 0;
+	std::mutex lock;
+	std::condition_variable go, finished;
+	const std::function<void(int, int)> *job = NULL;
+	int total = 0, count = 0, next = 0, left = 0;
+	unsigned generation = 0;
+};
+static row_pool frame_rows;
+
 static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int stride, int format, bool bt709, bool full_range)
 {
 	/* the colour matrix, in 1/1024 */
@@ -1180,7 +1260,9 @@ static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int stride
 			xf[x] = 0;
 		}
 	}
-	for (int y = 0; y < h; y++) {
+	/* the rows, shared out among the threads */
+	frame_rows.run(h, [&](int from, int to) {
+	for (int y = from; y < to; y++) {
 		int sy = (int)(((2 * y + 1) * (int64_t)f->h * 128) / h) - 128;
 		if (sy < 0)
 			sy = 0;
@@ -1208,6 +1290,7 @@ static void yuv_render(const yuv_frame *f, uae_u8 *dst, int w, int h, int stride
 				clamp255((yy + kub * u) >> 10));
 		}
 	}
+	});
 }
 
 /* A second reader of the file, which goes through it to the end in the
@@ -2602,6 +2685,16 @@ struct hostvideo {
 
 	int stat_shown;
 	int stat_time;
+	/* for HV_CMD_PACE: frames shown and dropped since it last asked; and in
+	   the window, since its size was set */
+	int pace_shown, pace_dropped;
+	int win_shown, win_dropped;
+	std::chrono::steady_clock::time_point pace_since;
+	uae_s64 pace_played;
+	/* the frame taken is scaled into pixels on a thread of its own, while
+	   the Amiga still draws the one before: RENDER_BUSY till it is done,
+	   RENDER_DONE then, and the next hsync makes it ready */
+	std::atomic<int> rstate;
 
 	std::vector<uae_u8> pixels;
 
@@ -2726,9 +2819,12 @@ static void copy_to_amiga(uaecptr dst, const uae_u8 *src, uae_u32 size)
 	}
 }
 
+enum { RENDER_IDLE, RENDER_BUSY, RENDER_DONE };
+
 /* The frame in the shape of the video, in the middle of the window, with
-   black bars where the window's shape differs. */
-static void render(struct hostvideo *v)
+   black bars where the window's shape differs, into pixels; the tool's
+   buffer gets it from copy_frame() */
+static void render_frame(struct hostvideo *v)
 {
 	if (!v->buffer || !v->bpp)
 		return;
@@ -2763,7 +2859,43 @@ static void render(struct hostvideo *v)
 		clear(v->pixels.data(), w, h, stride, v->format);
 	uae_u8 *at = v->pixels.data() + (size_t)((h - fh) / 2) * stride + (size_t)((w - fw) / 2) * v->bpp;
 	v->source->render(at, fw, fh, stride, v->format);
+}
+
+static void copy_frame(struct hostvideo *v)
+{
 	copy_to_amiga(v->buffer, v->pixels.data(), (uae_u32)v->pixels.size());
+}
+
+static void render(struct hostvideo *v)
+{
+	render_frame(v);
+	copy_frame(v);
+}
+
+/* The thread that scales the frames taken - one for all players: it scales
+   the frame of each that waits, then waits itself */
+static std::mutex render_lock;
+static std::condition_variable render_wake, render_idle;
+static bool render_thread_made;
+static void render_loop(void);
+
+static void render_start(struct hostvideo *v)
+{
+	std::lock_guard<std::mutex> g(render_lock);
+	if (!render_thread_made) {
+		render_thread_made = true;
+		std::thread(render_loop).detach();
+	}
+	v->rstate = RENDER_BUSY;
+	render_wake.notify_one();
+}
+
+/* Waits till the frame being scaled for v is done, before what it reads
+   changes: the window's size, a seek, the end */
+static void render_wait(struct hostvideo *v)
+{
+	std::unique_lock<std::mutex> g(render_lock);
+	render_idle.wait(g, [v] { return v->rstate != RENDER_BUSY; });
 }
 
 /* Runs the video's clock up to the current emulated time and takes the
@@ -2783,8 +2915,22 @@ static void catchup(struct hostvideo *v)
 	if (!v->paused && !v->seeking)
 		v->played += delta;
 	double t = v->played / second;
-	if (v->source->take(t)) {
-		v->ready = true;
+	/* the next frame once the one before was scaled and the tool took it:
+	   the decoder frees the frame before as it takes the next */
+	if (v->rstate != RENDER_IDLE || v->ready)
+		return;
+	int dropped = v->source->dropped;
+	bool came = v->source->take(t);
+	/* frames the decoder passed over, the tool too slow for them */
+	int lost = v->source->dropped - dropped;
+	v->pace_dropped += lost;
+	if (!v->fullscreen)
+		v->win_dropped += lost;
+	if (came) {
+		if (v->buffer && v->bpp)
+			render_start(v);
+		else
+			v->ready = true;
 		if (v->seeking) {
 			v->seeking = false;
 			write_log(_T("HostPlay: seek to %.1f s played in %d ms\n"), t,
@@ -2802,6 +2948,27 @@ static void catchup(struct hostvideo *v)
 	}
 }
 
+static void render_loop(void)
+{
+	std::unique_lock<std::mutex> g(render_lock);
+	for (;;) {
+		struct hostvideo *v = NULL;
+		render_wake.wait(g, [&v] {
+			for (int i = 0; i < HOSTVIDEO_PLAYERS; i++)
+				if (players[i].used && players[i].rstate == RENDER_BUSY) {
+					v = &players[i];
+					return true;
+				}
+			return false;
+		});
+		g.unlock();
+		render_frame(v);
+		g.lock();
+		v->rstate = RENDER_DONE;
+		render_idle.notify_all();
+	}
+}
+
 static void hostvideo_hsync(void)
 {
 	bool loud = false;
@@ -2810,6 +2977,11 @@ static void hostvideo_hsync(void)
 		if (!v->used)
 			continue;
 		catchup(v);
+		/* a frame scaled: the tool's to take */
+		if (v->rstate == RENDER_DONE) {
+			v->rstate = RENDER_IDLE;
+			v->ready = true;
+		}
 		if (sounding(v)) {
 			/* also without sound output, so that the sound is used up */
 			audio_catchup(v);
@@ -2830,6 +3002,8 @@ static void hostvideo_hsync(void)
 
 static void player_close(struct hostvideo *v)
 {
+	render_wait(v);
+	v->rstate = RENDER_IDLE;
 	delete v->source;
 	v->source = NULL;
 	if (v->copy[0]) {
@@ -2947,6 +3121,9 @@ static uae_u32 player_start(int i, uaecptr task, uae_u32 sigmask, video_source *
 	v->seeking = false;
 	v->fullscreen = false;
 	v->stat_shown = v->stat_time = 0;
+	v->pace_shown = v->pace_dropped = v->win_shown = v->win_dropped = 0;
+	v->pace_since = std::chrono::steady_clock::now();
+	v->pace_played = -1;
 	v->apos = v->alen = v->missed = 0;
 	v->quiet = RS_HIST;
 	if (source->audio_rate > 0)
@@ -2955,13 +3132,39 @@ static uae_u32 player_start(int i, uaecptr task, uae_u32 sigmask, video_source *
 	return i + 1;
 }
 
+/* A video on a screen of its own is drawn whole every frame, by the host
+   and by the Amiga, which copies it: a large mode is more than either keeps
+   up with. Its modes have no more pixels than this - the screen the device
+   shows scales a smaller one up for nothing. HV_CMD_SLOWER lowers it for
+   the session, below a screen the video did not keep up on. */
+#define VIDEO_PIXELS (1280 * 800)
+static int64_t video_cap_session = 0;
+
+/* The pixels a video's mode may have: VIDEO_PIXELS, or less after a screen
+   it did not keep up on; less too when it did not keep up even in its window
+   - a tenth of its frames dropped there - by what the window had */
+static int64_t video_cap(struct hostvideo *v)
+{
+	int64_t cap = VIDEO_PIXELS;
+	if (video_cap_session > 0 && video_cap_session < cap)
+		cap = video_cap_session;
+	int seen = v->win_shown + v->win_dropped;
+	if (seen >= 50 && v->win_dropped * 10 > seen) {
+		int64_t win = (int64_t)v->target_w * v->target_h * 4 / 5;
+		if (win < cap)
+			cap = win;
+	}
+	return cap;
+}
+
 /* The n-th size of RTG mode for showing a picture of pw x ph on a screen of
    its own. Only sizes of the Workbench's proportions, which it has itself
    among them: they are shown the way it is. First those that hold the whole
    picture, the smallest first, then the others, the largest first. A mode
    with more pixels than the device shows gives nothing but a shrunk screen,
-   so such a size counts as holding the picture. */
-static uae_u32 pick_mode(int pw, int ph, int n, int wbw, int wbh)
+   so such a size counts as holding the picture. A cap above 0 leaves out
+   larger modes, but for the smallest of all, should none be smaller. */
+static uae_u32 pick_mode(int pw, int ph, int n, int wbw, int wbh, int64_t cap)
 {
 	int sw, sh;
 	if (wbw <= 0 || wbh <= 0 || !DisplayModes)
@@ -2985,6 +3188,8 @@ static uae_u32 pick_mode(int pw, int ph, int n, int wbw, int wbh)
 		bool have = false;
 		for (int j = 0; j < count; j++)
 			have = have || (modes[j].w == w && modes[j].h == h);
+		if (cap > 0 && (int64_t)w * h > cap)
+			continue;
 		if (!have) {
 			modes[count].w = w;
 			modes[count].h = h;
@@ -3001,6 +3206,14 @@ static uae_u32 pick_mode(int pw, int ph, int n, int wbw, int wbh)
 				t = modes[i].h; modes[i].h = modes[j].h; modes[j].h = t;
 			}
 		}
+	}
+	if (count == 0 && cap > 0) {
+		/* none that small: the smallest of all, alone */
+		uae_u32 best = 0, m;
+		for (int k = 0; n == 0 && (m = pick_mode(pw, ph, k, wbw, wbh, 0)) != 0; k++)
+			if (!best || (int64_t)(m >> 16) * (m & 0xffff) < (int64_t)(best >> 16) * (best & 0xffff))
+				best = m;
+		return best;
 	}
 	if (n < 0 || n >= count)
 		return 0;
@@ -3035,12 +3248,44 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	case HV_CMD_INFO:
 		return (v->source->width << 16) | v->source->height;
 	case HV_CMD_MODE:
-		return pick_mode(v->source->width, v->source->height, (int)arg2, arg3 >> 16, arg3 & 0xffff);
+		/* a video is one with a length */
+		return pick_mode(v->source->width, v->source->height, (int)arg2, arg3 >> 16, arg3 & 0xffff,
+			v->source->duration > 0 ? video_cap(v) : 0);
+	case HV_CMD_PACE: {
+		auto now = std::chrono::steady_clock::now();
+		double real = std::chrono::duration<double>(now - v->pace_since).count();
+		double emu = (v->played - v->pace_played) / (resampler_clock() * CYCLE_UNIT);
+		int seen = v->pace_shown + v->pace_dropped;
+		uae_u32 slow = 0;
+		/* a while that played, from a time it was asked before */
+		if (!v->paused && !v->ended && !v->seeking && v->pace_played >= 0 && real >= 1.0) {
+			if (emu < real * 0.85)
+				slow = 1;
+			else if (seen >= 10 && v->pace_dropped * 10 > seen)
+				slow = 1;
+			if (slow)
+				write_log(_T("HostPlay: %.1f s played in %.1f s, %d of %d frames dropped: too slow\n"),
+					emu, real, v->pace_dropped, seen);
+		}
+		v->pace_shown = v->pace_dropped = 0;
+		v->pace_since = now;
+		v->pace_played = v->played;
+		return slow;
+	}
+	case HV_CMD_SLOWER: {
+		int64_t px = (int64_t)(arg2 >> 16) * (arg2 & 0xffff) - 1;
+		if (px > 0 && (video_cap_session == 0 || px < video_cap_session))
+			video_cap_session = px;
+		write_log(_T("HostPlay: no screen of %dx%d or larger for videos now\n"), arg2 >> 16, arg2 & 0xffff);
+		return 1;
+	}
 	case HV_CMD_FULLSCREEN:
 		v->fullscreen = arg2 != 0;
 		return 1;
 	case HV_CMD_TARGET: {
 		int w = arg3 >> 16, h = arg3 & 0xffff, bpp = format_bpp(arg4);
+		render_wait(v);
+		v->rstate = RENDER_IDLE;
 		v->buffer = 0;
 		if (!arg2 || w <= 0 || h <= 0 || !bpp) {
 			write_log(_T("HostPlay: no window of %dx%d in RGBFormat %d\n"), w, h, arg4);
@@ -3053,6 +3298,7 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		v->bpp = bpp;
 		v->pixels.resize((size_t)w * h * bpp);
 		v->source->resize(w, h);
+		v->win_shown = v->win_dropped = 0;
 		/* the frame of now, for the window to show at once */
 		render(v);
 		v->ready = v->signalled = false;
@@ -3061,9 +3307,12 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 	case HV_CMD_FRAME:
 		v->signalled = false;
 		if (v->ready) {
-			render(v);
+			copy_frame(v);
 			v->ready = false;
 			v->stat_shown++;
+			v->pace_shown++;
+			if (!v->fullscreen)
+				v->win_shown++;
 			return HV_FRAME_NEW;
 		}
 		if (v->ended) {
@@ -3073,6 +3322,7 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		return HV_FRAME_NONE;
 	case HV_CMD_PAUSE:
 		v->paused = !v->paused;
+		v->pace_played = -1;	/* HV_CMD_PACE counts anew */
 		return v->paused ? 1 : 0;
 	case HV_CMD_TIME: {
 		double t = v->played / (resampler_clock() * CYCLE_UNIT);
@@ -3084,12 +3334,15 @@ uae_u32 hostvideo_call(TrapContext *ctx, uae_u32 cmd, uae_u32 arg1, uae_u32 arg2
 		return (uae_u32)(v->source->duration * 1000);
 	case HV_CMD_SEEK: {
 		double t = arg2 / 1000.0;
+		render_wait(v);
+		v->rstate = RENDER_IDLE;
 		if (v->source->duration > 0 && t > v->source->duration)
 			t = v->source->duration;
 		v->source->seek(t);
 		v->played = (uae_s64)(t * resampler_clock() * CYCLE_UNIT);
 		v->ready = v->ended = v->signalled = v->end_told = false;
 		v->seeking = true;
+		v->pace_played = -1;
 		v->seek_began = std::chrono::steady_clock::now();
 		v->stat_time = (int)t;
 		v->apos = v->alen = v->missed = 0;
