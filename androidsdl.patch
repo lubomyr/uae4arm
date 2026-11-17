@@ -12,10 +12,10 @@ index d41308eaf..bfa820fc5 100644
  	>
 diff --git a/project/java/BrowserWindow.java b/project/java/BrowserWindow.java
 new file mode 100644
-index 000000000..a90056b9f
+index 000000000..824745bc2
 --- /dev/null
 +++ b/project/java/BrowserWindow.java
-@@ -0,0 +1,397 @@
+@@ -0,0 +1,422 @@
 +/*
 +Simple DirectMedia Layer
 +Java source code, a browser window over the app for the Android port
@@ -108,6 +108,31 @@ index 000000000..a90056b9f
 +	// YouTube takes its player for one in picture in picture, and pauses it at every start, when the
 +	// window covers too little of the largest of the screen and the window it has seen - with the
 +	// window as large as the page it did after the page was made larger and smaller again.
++	// YouTube's page for phones puts an "Open app" button into its top bar, which would leave the
++	// browser for YouTube's app: a link to an intent: of it. Such links go, with their button, by a
++	// style of the page's - whatever the button is called and wherever it is. Another way of the
++	// page turns the sign-in button into "Open app": that one goes too, the sign-in one stays. The
++	// page builds its top bar again as it goes from page to page, so it is watched. Its own words
++	// for "Open app" are those of the page's language, in its messages; the English and Ukrainian
++	// ones too, should those not be found.
++	static final String NO_APP_BUTTON =
++		"(function() {" +
++		" if (window.__uae4armNoApp || !/(^|\\.)youtube\\.com$/.test(location.hostname)) return; window.__uae4armNoApp = true;" +
++		" var s = document.createElement('style');" +
++		" s.textContent = 'a[href^=\"intent:\"], ytm-button-renderer:has(> a[href^=\"intent:\"]) { display: none !important; }';" +
++		" document.documentElement.appendChild(s);" +
++		" function label() { try { return (window.yt && yt.msgs_ && yt.msgs_.OPEN_APP) || (window.ytcfg && ytcfg.msgs && ytcfg.msgs.OPEN_APP); } catch (e) { return null; } }" +
++		" function hide() {" +
++		"  var l = label();" +
++		"  document.querySelectorAll('.mobile-topbar-header-sign-in-button').forEach(function(d) {" +
++		"   var t = (d.textContent || '').trim();" +
++		"   d.style.display = (t && (t == l || /^(open app|у додаток)$/i.test(t))) ? 'none' : '';" +
++		"  });" +
++		" }" +
++		" hide();" +
++		" new MutationObserver(hide).observe(document.documentElement, { childList: true, subtree: true, characterData: true });" +
++		"})();";
++
 +	private static final String SCREEN_IS_WINDOW =
 +		"(function() {" +
 +		" if (window.__uae4armScreen) return; window.__uae4armScreen = true;" +
@@ -261,7 +286,7 @@ index 000000000..a90056b9f
 +			@Override
 +			public void onPageFinished(WebView view, String url)
 +			{
-+				view.evaluateJavascript(SCREEN_IS_WINDOW, null);
++				view.evaluateJavascript(SCREEN_IS_WINDOW + NO_APP_BUTTON, null);
 +			}
 +			@Override
 +			public void onPageStarted(WebView view, String url, Bitmap favicon)
@@ -1225,7 +1250,7 @@ index 022b96f02..3877b335a 100644
  	// ----------------------------------------------------------------------
 diff --git a/project/java/HostBrowser.java b/project/java/HostBrowser.java
 new file mode 100644
-index 000000000..6b76887a4
+index 000000000..3fd9433de
 --- /dev/null
 +++ b/project/java/HostBrowser.java
 @@ -0,0 +1,832 @@
@@ -1632,7 +1657,7 @@ index 000000000..6b76887a4
 +			return;
 +		int z = zoom;
 +		String js = "window.__uae4armW=" + (areaW * 100 / z) + ";window.__uae4armH=" + (areaH * 100 / z) + ";" +
-+			SCREEN_IS_WINDOW +
++			SCREEN_IS_WINDOW + BrowserWindow.NO_APP_BUTTON +
 +			"document.documentElement.style.zoom='" + (z == 100 ? "" : z + "%") + "'";
 +		web.evaluateJavascript(js, null);
 +	}
