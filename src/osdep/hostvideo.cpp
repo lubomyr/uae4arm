@@ -1475,7 +1475,7 @@ bool mediacodec_source::open(const char *path)
 		AMediaFormat_delete(vfmt);
 	if (afmt)
 		AMediaFormat_delete(afmt);
-	if (!ok || width <= 0 || height <= 0 || width > 0xffff || height > 0xffff)
+	if (!ok || width <= 0 || height <= 0 || width > 16384 || height > 16384)
 		return false;
 	/* The rate of the sound comes with the decoder's first output, which can
 	   differ from the file's: decoded up to there before the player starts
@@ -1483,6 +1483,18 @@ bool mediacodec_source::open(const char *path)
 	for (int i = 0; i < 500 && acodec && !audio_rate && !audio_done && queued() < QUEUE_FRAMES_MAX; i++) {
 		if (!decode_some())
 			break;
+	}
+	/* A decoder that takes the track does not always decode it - Android's
+	   for MPEG-2 takes an MPEG-1 one and puts out nothing: no picture in two
+	   seconds, and the file does not play */
+	auto began = std::chrono::steady_clock::now();
+	while (!queued() && !video_done && std::chrono::steady_clock::now() - began < std::chrono::seconds(2)) {
+		if (!decode_some())
+			break;
+	}
+	if (!queued()) {
+		write_log(_T("HostPlay: %s: no picture came out of the decoder\n"), path);
+		return false;
 	}
 	if (acodec && !audio_rate)
 		write_log(_T("HostPlay: no sound came out\n"));
@@ -1850,6 +1862,10 @@ bool image_source::open(const char *path)
 		height = imagedecoder.getHeight(info);
 		const char *mime = imagedecoder.getMimeType(info);
 		snprintf(codec, sizeof codec, "%s", mime && !strncmp(mime, "image/", 6) ? mime + 6 : (mime ? mime : "?"));
+		/* WBMP has no mark of its own: any file that begins with two zero
+		   bytes passes for one - an MPEG one did, 1x7457 */
+		if (mime && !strcmp(mime, "image/vnd.wap.wbmp"))
+			ok = false;
 		pw = width;
 		ph = height;
 		if (pw > IMAGE_MAX_SIDE || ph > IMAGE_MAX_SIDE) {
@@ -1865,7 +1881,7 @@ bool image_source::open(const char *path)
 			if (ph < 1)
 				ph = 1;
 		}
-		ok = width > 0 && height > 0 && width <= 0xffff && height <= 0xffff &&
+		ok = ok && width > 0 && height > 0 && width <= 0xffff && height <= 0xffff &&
 			imagedecoder.setFormat(dec, ANDROID_BITMAP_FORMAT_RGBA_8888) == ANDROID_IMAGE_DECODER_SUCCESS &&
 			((pw == width && ph == height) || imagedecoder.setTargetSize(dec, pw, ph) == ANDROID_IMAGE_DECODER_SUCCESS);
 	}
