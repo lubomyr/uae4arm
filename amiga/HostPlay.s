@@ -2264,9 +2264,13 @@ draw:
 	lea	vars(%pc),%a2
 	tst.l	BUFFER(%a2)
 	beq.s	draw_end
+	bsr.w	drawlock
+	bsr.w	drawsize		| as the window is now
+	move.l	%d0,%d4
+	ble.s	1f
+	move.l	%d1,%d5
+	ble.s	1f
 	movea.l	P96BASE(%a2),%a6
-	move.l	WIDTH(%a2),%d4
-	move.l	HEIGHT(%a2),%d5
 	lea	renderinfo(%pc),%a0
 	moveq	#0,%d0
 	moveq	#0,%d1
@@ -2276,6 +2280,7 @@ draw:
 	moveq	#0,%d3
 	move.b	55(%a3),%d3		| wd_BorderTop
 	jsr	-102(%a6)		| p96WritePixelArray
+1:	bsr.w	drawunlock
 draw_end:
 	movem.l	(%sp)+,%d2-%d5/%a2/%a6
 	rts
@@ -2288,6 +2293,55 @@ callshow:
 	move.l	#HOSTSHOW,-(%sp)
 	jsr	(%a4)
 	lea	16(%sp),%sp
+	rts
+
+| The layer of the window locked for a frame, and unlocked: Intuition sizes
+| the window only with it free, so the size read under the lock holds till
+| the frame is drawn. Needs vars in %a2; all registers kept.
+drawlock:
+	movem.l	%d0-%d1/%a0-%a1/%a5-%a6,-(%sp)
+	move.l	#-432,%d0		| LockLayerRom
+	bra.s	1f
+drawunlock:
+	movem.l	%d0-%d1/%a0-%a1/%a5-%a6,-(%sp)
+	move.l	#-438,%d0		| UnlockLayerRom
+1:	movea.l	GFXBASE(%a2),%a6
+	cmpa.w	#0,%a6
+	beq.s	2f
+	movea.l	50(%a3),%a0		| wd_RPort
+	movea.l	(%a0),%a5		| rp_Layer
+	cmpa.w	#0,%a5
+	beq.s	2f
+	jsr	0(%a6,%d0.l)
+2:	movem.l	(%sp)+,%d0-%d1/%a0-%a1/%a5-%a6
+	rts
+
+| The size to draw: WIDTH x HEIGHT, but no more than the inside of the window
+| has now. Made smaller, the window has its new borders before its NEWSIZE
+| comes, and a frame drawn at the old size went over them. %d0 the width,
+| %d1 the height; needs vars in %a2.
+drawsize:
+	move.l	%d2,-(%sp)
+	moveq	#0,%d0
+	move.w	8(%a3),%d0		| wd_Width
+	moveq	#0,%d2
+	move.b	54(%a3),%d2		| wd_BorderLeft
+	sub.l	%d2,%d0
+	move.b	56(%a3),%d2		| wd_BorderRight
+	sub.l	%d2,%d0
+	cmp.l	WIDTH(%a2),%d0
+	ble.s	1f
+	move.l	WIDTH(%a2),%d0
+1:	moveq	#0,%d1
+	move.w	10(%a3),%d1		| wd_Height
+	move.b	55(%a3),%d2		| wd_BorderTop
+	sub.l	%d2,%d1
+	move.b	57(%a3),%d2		| wd_BorderBottom
+	sub.l	%d2,%d1
+	cmp.l	HEIGHT(%a2),%d1
+	ble.s	2f
+	move.l	HEIGHT(%a2),%d1
+2:	move.l	(%sp)+,%d2
 	rts
 
 | Calls the emulator: %d0 the command, %d1-%d4 its arguments; %d0 the result
