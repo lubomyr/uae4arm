@@ -74,26 +74,28 @@ uaenative.library then finds no host library for QuarkTex, and the rest works
 as ever.
 
 uaenative.library (Misc in the menu) lets QuarkTex NG's Amiga libraries draw
-3D with the GPU. Its host library is QuarkTex NG 1.0 beta 3 (Aminet
-driver/video/QuarkTexNG.lha) with the changes for Linux and Android in
-quarktexng/ of this repository. On Android it is two libraries: one for
-ogles2.library and Warp3D.library on OpenGL ES 3, and one for QuarkTex's
-minigl.library and agl.library on gl4es. Get QuarkTexNG.lha from https://aminet.net/package/driver/video/QuarkTexNG
-into ~/androidsdl/project/jni, then:
+3D with the GPU. Its host library is QuarkTex NG 1.2 beta 2
+(github.com/Sdursun/QuarkTexNG, commit 85bce3b) with the changes for Linux
+and Android in quarktexng/ of this repository. On Android it is two
+libraries: one for ogles2.library, ogles3.library and Warp3D.library on
+OpenGL ES 3, and one for QuarkTex's minigl.library and agl.library on gl4es.
 
 cd ~/androidsdl/project/jni
-lha x QuarkTexNG.lha
 mkdir quarktexng
-mv QuarkTexNG/Source quarktexng/src
 cd quarktexng
+git clone https://github.com/Sdursun/QuarkTexNG src
+cd src
+git checkout 85bce3b
+patch -p1 < ../../application/uae4arm/quarktexng/quarktexng.patch
+cd ..
 cp ../application/uae4arm/quarktexng/Android.mk .
-patch -p1 -d src < ../application/uae4arm/quarktexng/quarktexng.patch
 git clone https://github.com/ptitseb/gl4es
 cd gl4es
 git checkout bc4314d8
 
-The patch is for 1.0 beta 3: if Aminet has a newer QuarkTex NG by then, its
-Source folder may not take it.
+The Amiga libraries must be of the same version as the host library: those
+of QuarkTex NG 1.2 beta 2 (Libs of QuarkTexNG.lha on the project's GitHub
+releases page).
 
 
 8. The patch to androidsdl
@@ -136,7 +138,7 @@ Notes
           host/ogles2.cpp host/ffp.cpp host/gl3.cpp host/present.cpp \
           -lEGL -lGL -lGLU
 - Changes to QuarkTex NG's host belong in quarktexng/quarktexng.patch: a git
-  diff of its Source folder against the Aminet release.
+  diff against commit 85bce3b of its repository (step 7).
 - amiga/build.sh builds the Amiga tools (AndroidPlay, AndroidBrowser,
   AndroidView, HostPlay, HostBrowser, and HostView from HostPlay.s with
   HOSTVIEW set) into amigaApps/, and the MHI driver
@@ -150,15 +152,3 @@ Notes
 - HostBrowser's page is a WebView of the wrapper (project/java/HostBrowser.java
   in androidsdl.patch) on a display of its own, read through an AImageReader:
   Android 8 or later. The Linux PC has no WebView, and the tool says so there.
-- amigaApps/Libs/minigl.library is QuarkTex NG's with the patch (GLQuake's
-  camera turns). It is built in Docker (docker.io, the user in the docker
-  group) from step 7's src/, with the include folder of PiStorm3D's MiniGL
-  SDK (SDK/minigl-shared-library/include of the PiStorm3D archive):
-      cd ~/androidsdl/project/jni/quarktexng/src
-      MINIGL_SDK=<SDK include folder> sh ./build.sh amiga
-      docker run --rm -u $(id -u):$(id -g) -v $PWD:/w \
-          -v <SDK include folder>:/sdk:ro -w /w amigadev/crosstools:m68k-amigaos \
-          make -f amiga/Makefile build/amiga/minigl.library
-  The first stops at Warp3D.library, which the Aminet archive has no source
-  of, after making minigl.library's generated files; the second builds
-  build/amiga/minigl.library.

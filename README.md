@@ -28,7 +28,7 @@ Kickstart ROMs are not included; without them the built-in AROS ROM is used.
 - On-screen joystick and buttons, gamepads, physical keyboards, mouse from the touch screen
 - Second screen over HDMI / USB-C (Misc → Use External Display)
 - `mhiuae.library`: MP3 decoding on the host for AmigaAMP, HippoPlayer and other MHI players
-- QuarkTex NG through `uaenative.library`: Warp3D, MiniGL and ogles2 drawn with the device's GPU
+- QuarkTex NG 1.2 through `uaenative.library`: Warp3D, MiniGL, ogles2 and ogles3 drawn with the device's GPU
 - Host tools in `amigaApps/` for the Amiga side:
   - **HostPlay / HostVideoPlay** — plays a video file in a native Amiga window, decoded by MediaCodec
   - **HostView / HostImageView** — shows images (including IFF ILBM) in a native Amiga window
