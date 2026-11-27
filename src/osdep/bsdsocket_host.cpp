@@ -1572,11 +1572,22 @@ void host_closesocketquick (int s)
 
 uae_u32 host_gethostname (TrapContext *ctx, uae_u32 name, uae_u32 namelen)
 {
-	if (!trap_valid_address(ctx, name, namelen))
+	/* The host's name goes into the program's buffer, cut to namelen with
+	   the 0 at the end. It used to read that buffer instead (as WinUAE since
+	   3.3.0 beta 6), up to a 0 that an uncleared buffer need not have within
+	   the 256 bytes of buf. */
+	if (namelen == 0 || !trap_valid_address(ctx, name, namelen))
 		return -1;
 	uae_char buf[256];
-	trap_get_string(ctx, buf, name, sizeof buf);
-	return gethostname(buf, namelen);
+	if (gethostname(buf, sizeof buf) != 0)
+		return -1;
+	buf[sizeof buf - 1] = 0;
+	size_t len = strlen(buf);
+	if (len > namelen - 1)
+		len = namelen - 1;
+	buf[len] = 0;
+	trap_put_bytes(ctx, buf, name, len + 1);
+	return 0;
 }
 
 int init_socket_layer(void)
