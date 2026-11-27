@@ -413,12 +413,38 @@ static uae_u32 REGPARAM2 bsdsocklib_Open (TrapContext *ctx)
 	return result;
 }
 
+/* Whether sb is one of the open bases' state, and not one freed already */
+static bool socketbase_open (struct socketbase *sb)
+{
+	struct socketbase *nsb;
+	bool open = false;
+
+	locksigqueue ();
+	for (nsb = socketbases; nsb; nsb = nsb->next) {
+		if (nsb == sb) {
+			open = true;
+			break;
+		}
+	}
+	unlocksigqueue ();
+	return open;
+}
+
 static uae_u32 REGPARAM2 bsdsocklib_Close (TrapContext *ctx)
 {
 	int opencount;
 
 	uae_u32 base = trap_get_areg(ctx, 6);
 	uae_u32 negsize = get_word (base + 16);
+
+	/* A program that closes its base twice (GLQuake does) hands over freed
+	   memory the second time: the state it points to was freed with it, and
+	   freeing that again freed the 68k's memory and closed descriptors that
+	   belong to others by then (a Guru, or Android's fdsan ending the app). */
+	if (!socketbase_open (get_socketbase (ctx))) {
+		write_log (_T("bsdsocket: CloseLibrary() of a base that is not open (0x%08x), ignored\n"), base);
+		return 0;
+	}
 
 	free_socketbase(ctx);
 
