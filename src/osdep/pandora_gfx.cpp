@@ -586,6 +586,14 @@ static void open_screen(struct uae_prefs *p)
 {
   char layersize[20];
 
+#ifdef WITH_UAENATIVE
+  /* SDL makes its screen with its own OpenGL context, so it must be current
+     again here and not first at show_screen(): a program that ends with a
+     host library (QuarkTex's MiniGL) frees its host context - the thread is
+     left with none - and closes its screen, which changes the mode right
+     after. SDL's screen made then stayed white until the menu set it again. */
+  uaenative_restore_own_context();
+#endif
   graphics_subshutdown();
   
   if(!screen_is_picasso)
@@ -860,6 +868,9 @@ void black_screen_now(void)
 	/* no screen when a mode could not be set */
 	if (prSDLScreen == NULL)
 		return;
+#ifdef WITH_UAENATIVE
+	uaenative_restore_own_context();
+#endif
 	SDL_FillRect(prSDLScreen,NULL,0);
 	SDL_Flip(prSDLScreen);
 }
